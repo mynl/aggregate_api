@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# uv / virtualenvs
+.venv/
+venv/
+
+# pyenv
+.python-version
+
+# Editors / IDEs
+.idea/
+.vscode/
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local scratch (ad-hoc throwaway files)
+scratch_*
+hacks/
+
+# Runtime artifacts
+*.db
+*.sqlite3
+
+# web SPA build artifacts
+web/node_modules/
+web/dist/
+
+# The built SPA lands in src/aggregate_api/static/ (output of
+# `npm run build`); not committed. Only the icons + webmanifest are.
+src/aggregate_api/static/assets/
+src/aggregate_api/static/index.html
