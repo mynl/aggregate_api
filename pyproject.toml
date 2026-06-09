@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aggregate_api"
-version = "1.0.0a1"
+version = "1.0.0a2"
 description = "FastAPI service and single-page web playground for the aggregate actuarial library."
 readme = "README.md"
 authors = [
@@ -61,8 +61,8 @@ aggregate-api = "aggregate_api.__main__:main"
 # tree as an editable install. Edit the path to match your checkout, then
 # `uv sync`. plan-0001 settles the canonical path for this machine.
 # ---------------------------------------------------------------------------
-# [tool.uv.sources]
-# aggregate = { path = "../aggregate_REFACTOR", editable = true }
+[tool.uv.sources]
+aggregate = { path = "../aggregate_REFACTOR", editable = true }
 
 [tool.setuptools]
 include-package-data = true

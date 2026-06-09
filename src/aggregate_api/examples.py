@@ -124,7 +124,7 @@ def load_examples() -> dict:
     Returns
     -------
     dict
-        Matches :class:`aggregate.api.models.ExamplesResponse`:
+        Matches :class:`aggregate_api.models.ExamplesResponse`:
         ``{"categories": [...]}``.
     """
     text = _read_suite_text()

@@ -1,4 +1,4 @@
-"""Entry point for ``python -m aggregate.api`` and ``aggregate-api``.
+"""Entry point for ``python -m aggregate_api`` and ``aggregate-api``.
 
 This is the bootstrap that turns the :func:`create_app` factory
 into a running uvicorn process. CLI flags (``--host``, ``--port``,
@@ -53,11 +53,11 @@ def main() -> None:
     settings = get_settings()
     # The ``factory=True`` flag tells uvicorn that the target is a
     # *callable* returning an app rather than an app instance --
-    # so we hand it ``aggregate.api.app:create_app`` and it calls
+    # so we hand it ``aggregate_api.app:create_app`` and it calls
     # the factory itself. This plays nicely with --reload: the
     # factory re-runs on each worker restart, picking up code edits.
     uvicorn.run(
-        "aggregate.api.app:create_app",
+        "aggregate_api.app:create_app",
         factory=True,
         host=args.host or settings.host,
         port=args.port or settings.port,

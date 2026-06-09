@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build --outDir ../src/aggregate/api/static --emptyOutDir",
+    "build": "vite build --outDir ../src/aggregate_api/static --emptyOutDir",
     "preview": "vite preview"
   },
   "devDependencies": {

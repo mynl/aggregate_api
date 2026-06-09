@@ -193,7 +193,7 @@ def test_log2_cap_rejected(client, monkeypatch):
     # Lower the cap below the request value.
     monkeypatch.setenv("AGGAPI_LOG2_CAP", "8")
     # Rebuild the app so the new env is honored.
-    from aggregate.api.app import create_app
+    from aggregate_api.app import create_app
     from fastapi.testclient import TestClient
 
     with TestClient(create_app()) as c:

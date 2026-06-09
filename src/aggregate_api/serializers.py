@@ -2,7 +2,7 @@
 
 Centralized so route handlers stay thin: one ``frame_to_payload``
 call converts a pandas DataFrame to the ``(columns, rows)`` shape
-expected by :class:`aggregate.api.models.FrameResponse`.
+expected by :class:`aggregate_api.models.FrameResponse`.
 
 Numeric/string coercion notes
 -----------------------------

@@ -40,3 +40,6 @@ web/dist/
 # `npm run build`); not committed. Only the icons + webmanifest are.
 src/aggregate_api/static/assets/
 src/aggregate_api/static/index.html
+
+# obsidian
+.obsidian

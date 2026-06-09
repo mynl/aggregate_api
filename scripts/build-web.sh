@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the aggregate SPA into src/aggregate/api/static/.
+# Build the aggregate SPA into src/aggregate_api/static/.
 #
 # Usage:
 #   ./scripts/build-web.sh

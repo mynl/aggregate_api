@@ -260,13 +260,18 @@ class HealthResponse(BaseModel):
     model_config = _RESPONSE_CFG
 
     ok: bool
+    # ``version`` is this api package's version; ``aggregate_version``
+    # is the wrapped library's. Reported separately so a deploy can be
+    # pinned/debugged against both.
     version: str
+    aggregate_version: str
 
 
 class MetaResponse(BaseModel):
     model_config = _RESPONSE_CFG
 
     version: str
+    aggregate_version: str
     log2_cap: int
     log2_default: int
     build_timeout_s: float

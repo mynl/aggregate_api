@@ -62,7 +62,7 @@ from fastapi.responses import Response
 from lark.exceptions import UnexpectedInput
 
 from aggregate import build as _build_singleton
-from aggregate.parser_errors import format_error
+from aggregate.parser_errors import ErrorReport, format_error
 
 from .. import models
 from ..audit import AuditLog
@@ -257,13 +257,17 @@ def post_object(
             )
             raise HTTPException(status_code=504, detail="build timeout")
         except ValueError as exc:
-            # The parser wraps Lark exceptions in ValueError via
-            # ``raise ... from``. Use format_error to recover a
-            # structured ErrorReport when the underlying cause was
-            # a parse failure; otherwise it's a build-time validation
-            # error and we fall through.
-            unwrapped = exc.__cause__
-            if isinstance(unwrapped, UnexpectedInput):
+            # A DecL parse failure surfaces as a ValueError. Newer
+            # ``aggregate`` attaches the structured ErrorReport as
+            # ``exc.report`` and raises with ``from None`` (so
+            # ``__cause__`` is empty); older builds left the Lark
+            # UnexpectedInput on ``__cause__``. Treat either as a parse
+            # error and recover the rich report via format_error (which
+            # honors both conventions). Anything else is a build-time
+            # validation error and we fall through.
+            is_parse_error = isinstance(getattr(exc, "report", None), ErrorReport) or \
+                isinstance(exc.__cause__, UnexpectedInput)
+            if is_parse_error:
                 report = format_error(req.decl, exc)
                 elapsed = int((time.monotonic() - t0) * 1000)
                 audit.record_build(

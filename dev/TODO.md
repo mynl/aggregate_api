@@ -6,9 +6,9 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Near term (get it healthy)
 
-- [ ] **plan-0001 — bootstrap standalone** (→ 1.0.0a2). Make the extracted code
+- [x] **plan-0001 — bootstrap standalone** (→ 1.0.0a2). Make the extracted code
       import, run, and pass tests as `aggregate_api`. Wire the `aggregate`
-      editable source. *(plan written; not started)*
+      editable source. *(done; moved to `dev/done/`)*
 - [ ] **plan-0002 — dev workflow & smoke test** (→ 1.0.0a3). Document/verify the
       end-to-end loop: `uv run aggregate-api --reload` + `npm run dev`, build the
       SPA, hit `/docs`, build an object in the playground. Add a `ruff` pass.
@@ -23,6 +23,7 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 - [ ] Auth / rate limiting if this is ever exposed beyond localhost.
 - [ ] Expand the example library and DecL completion coverage.
 - [ ] Persist object cache across restarts (currently in-memory only).
-- [ ] Revisit `meta` version reporting: report both the `aggregate_api` version
-      and the underlying `aggregate` version.
+- [x] Revisit `meta` version reporting: report both the `aggregate_api` version
+      and the underlying `aggregate` version. *(done in 1.0.0a2 —
+      `health`/`meta` carry `version` + `aggregate_version`.)*
 - [ ] Frontend polish: keyboard-shortcut help, sharable URLs for a DecL program.

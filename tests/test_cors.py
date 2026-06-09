@@ -10,7 +10,7 @@ def _build_client(tmp_path, monkeypatch, *, origins: str):
     """Build a fresh client with an explicit AGGAPI_CORS_ORIGINS value."""
     monkeypatch.setenv("AGGAPI_AUDIT_DB", str(tmp_path / "audit.db"))
     monkeypatch.setenv("AGGAPI_CORS_ORIGINS", origins)
-    from aggregate.api.app import create_app
+    from aggregate_api.app import create_app
 
     return TestClient(create_app())
 

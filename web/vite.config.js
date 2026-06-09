@@ -1,7 +1,7 @@
 // Vite build config for the aggregate web SPA.
 //
-// Build output lands at ../src/aggregate/api/static/ -- the directory
-// the FastAPI `StaticFiles` mount in src/aggregate/api/app.py serves
+// Build output lands at ../src/aggregate_api/static/ -- the directory
+// the FastAPI `StaticFiles` mount in src/aggregate_api/app.py serves
 // at '/' when present. That gives the same-origin deploy mode out of
 // the box: a single `aggregate-api` process serves both the SPA and
 // the /v1 endpoints.
@@ -19,7 +19,7 @@ import { defineConfig } from 'vite';
 export default defineConfig({
     base: './',
     build: {
-        outDir: '../src/aggregate/api/static',
+        outDir: '../src/aggregate_api/static',
         emptyOutDir: true,
         target: 'es2020',
         // Keep the assets/ subdir name stable for the FastAPI mount.

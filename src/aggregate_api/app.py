@@ -71,7 +71,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "Stand up DecL parsing, FFT-based compound distributions, "
             "and risk-pricing as a web service."
         ),
-        version=_pkg_version("aggregate"),
+        version=_pkg_version("aggregate_api"),
         # Disable the default Pydantic-validation 422 schema in
         # OpenAPI -- it's noisy and we override the parse path
         # with our own ErrorReport response model.
@@ -111,7 +111,7 @@ def _resolve_static_dir(settings: Settings) -> Path | None:
 
     1. ``AGGAPI_STATIC_DIR`` env var (handed via ``settings.static_dir``).
        Useful for developing the SPA out of a separate tree.
-    2. ``src/aggregate/api/static`` inside the installed package.
+    2. ``src/aggregate_api/static`` inside the installed package.
 
     Returns None if neither is set / exists.
     """

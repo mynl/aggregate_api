@@ -29,7 +29,7 @@ def client(tmp_path, monkeypatch):
 
     # Import after monkeypatching so the cache_clear inside
     # create_app() picks up the new env.
-    from aggregate.api.app import create_app
+    from aggregate_api.app import create_app
 
     app = create_app()
     with TestClient(app) as client_obj:

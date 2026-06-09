@@ -1,6 +1,6 @@
 """FastAPI service for the :mod:`aggregate` library.
 
-This subpackage stands up an HTTP/JSON wrapper around ``build()``,
+This package stands up an HTTP/JSON wrapper around ``build()``,
 the live ``Aggregate`` / ``Portfolio`` objects, plotting, pricing,
 and DecL helpers (completions, lexing, grammar).
 
@@ -9,7 +9,7 @@ Quickstart
 
 ::
 
-    pip install 'aggregate[api]'
+    pip install aggregate_api
     aggregate-api --port 8001
 
 Then ``POST http://127.0.0.1:8001/v1/objects`` with body

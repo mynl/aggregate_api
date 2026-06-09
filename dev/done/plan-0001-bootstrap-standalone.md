@@ -1,7 +1,7 @@
 # plan-0001 — bootstrap the standalone package
 
 **Target version:** 1.0.0a2
-**Status:** not started
+**Status:** done
 **Goal:** turn the verbatim extraction (1.0.0a1) into a package that imports,
 runs under uvicorn, serves the SPA, and passes `uv run pytest` — under the new
 name `aggregate_api`.
