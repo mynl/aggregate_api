@@ -30,20 +30,25 @@ export async function declCompletionSource(context) {
     const decl = context.state.doc.toString();
     const cursor = context.pos;
 
+    // Only hit the network when the user explicitly invoked completion
+    // (Ctrl-Space). For any implicit trigger we serve the static pool
+    // synchronously -- no per-keystroke round-trip to /v1/decl/complete.
     let serverOptions = null;
-    try {
-        const res = await api.complete(decl, cursor);
-        if (res && Array.isArray(res.completions)) {
-            serverOptions = res.completions.map(c => ({
-                label: c.label,
-                type: c.kind || 'keyword',
-                // boost server-supplied entries so they outrank the
-                // local fallback in mixed lists.
-                boost: 5,
-            }));
+    if (context.explicit) {
+        try {
+            const res = await api.complete(decl, cursor);
+            if (res && Array.isArray(res.completions)) {
+                serverOptions = res.completions.map(c => ({
+                    label: c.label,
+                    type: c.kind || 'keyword',
+                    // boost server-supplied entries so they outrank the
+                    // local fallback in mixed lists.
+                    boost: 5,
+                }));
+            }
+        } catch {
+            serverOptions = null;
         }
-    } catch {
-        serverOptions = null;
     }
 
     // Always include the static pool too -- the server returns only

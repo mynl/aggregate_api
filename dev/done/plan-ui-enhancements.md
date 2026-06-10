@@ -1,7 +1,7 @@
 # plan-ui-enhancements — SPA editor & UI redesign
 
 **Target version:** 1.0.0a3 (bump on first code change landed from this plan)
-**Status:** in progress
+**Status:** done — landed in 1.0.0a3 (see CHANGELOG)
 **Goal:** batch the front-end usability + look-and-feel work for the DecL
 playground. Tame the editor first (Item 1), then rebuild the layout to mirror the
 **archivum** web app (Items 2–4), then wire the backend tab data (Item 5).

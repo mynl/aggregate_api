@@ -52,15 +52,37 @@ export function renderTable(frame, opts = {}) {
 }
 
 /**
+ * Render a FrameResponse as the dense "booktabs" table used by the
+ * redesigned playground (`.tbl`): horizontal rules only, tabular
+ * numerics, the first column treated as the row label (left-aligned,
+ * bold) and the rest right-aligned through fmt().
+ *
+ * Returns the bare ``<table class="tbl">`` -- callers drop it straight
+ * into a tab pane. ``.tbl`` is ``display:block; overflow-x:auto`` so it
+ * scrolls horizontally on narrow viewports without a wrapper.
+ */
+export function renderFrameTable(frame) {
+    const { columns = [], rows = [] } = frame || {};
+
+    const thead = el('thead', {},
+        el('tr', {}, columns.map((c, i) =>
+            el('th', { className: i === 0 ? 'lbl' : '' }, c))),
+    );
+    const tbody = el('tbody', {}, rows.map(row =>
+        el('tr', {}, row.map((cell, i) =>
+            el('td', { className: i === 0 ? 'lbl' : '' }, fmt(cell)))),
+    ));
+    return el('table', { className: 'tbl' }, thead, tbody);
+}
+
+/**
  * Render the InfoResponse {info: string} as a <pre> block. The api
  * ships the multi-line Aggregate.info / Portfolio.info verbatim;
  * users expect to see it the same way they'd see it in Jupyter.
  */
 export function renderInfo(payload) {
     const text = (payload && payload.info) || '';
-    return el('pre', {
-        className: 'agg-info-pane border rounded p-3 bg-light',
-    }, text);
+    return el('pre', { className: 'info' }, text);
 }
 
 /**

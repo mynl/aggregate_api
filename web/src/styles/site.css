@@ -1,105 +1,165 @@
 /* Site CSS overlay for the aggregate SPA.
  *
- * Brings the mynl.com visual language to Bootstrap 5: STIX Two Text
- * serif body, Inter for major headings, Helvetica for minor
- * headings, Cascadia Mono for code -- and the aliceblue / steel-blue
- * accent palette from aggregate.style. Loaded *after* Bootstrap so
- * the cascade resolves in our favor.
+ * archivum-derived visual language (see dev/plan-ui-enhancements.md):
+ * one UI font (system sans), monospace only for code / the editor / the
+ * feedback line / numeric table cells, blue #0d6efd primary, dense
+ * "booktabs" tables (horizontal rules only). Loaded *after* Bootstrap so
+ * the cascade resolves in our favor. Ported from hacks/mockup-07.html.
  */
 
 :root {
-    --agg-code:  #a81313;            /* mynl code red */
-    --agg-rule:  #1a1a1a;            /* table rules */
-    --agg-accent: #4682b4;           /* steelblue */
-    --agg-soft:  #f0f6fb;            /* aliceblue-ish */
+    --ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "Cascadia Mono", SFMono-Regular, Consolas, Menlo, monospace;
+    --primary: #0d6efd;
+    --rule: #1a1a1a;     /* table rules */
+    --grid: #dee2e6;     /* light borders */
+    --mut:  #6c757d;     /* muted text */
+    --code: #a81313;     /* mynl code red */
+    --soft: #f8f9fa;
+    --dot:  #6c757d;     /* separator dots — match the feedback row */
 }
 
-html { font-size: 16.5px; }
+body { font-family: var(--ui); color: #212529; background: #fff; }
+code, .mono { font-family: var(--mono); }
+code { color: var(--code); }
 
-body {
-    font-family: "STIX Two Text", "Calisto MT", Georgia, serif;
-    color: #1c1c1c;
-    background-color: #fdfdfd;
-}
+/* ---- Header ---- */
+header .navbar { min-height: 56px; }
+.brand-title  { line-height: 1; font-size: 1.25rem; font-weight: 700; }
+.brand-kicker { font-family: var(--mono); font-size: .52rem; letter-spacing: .3em;
+                color: var(--mut); margin-top: 2px; }
+.nav-meta     { display: flex; align-items: center; gap: .45rem; font-size: .74rem; color: var(--mut); }
+.nav-meta a   { color: var(--mut); text-decoration: none; }
+.nav-meta a:hover { color: var(--primary); }
+.nav-meta .dot  { color: var(--dot); font-family: var(--mono); }
+.nav-meta .mono { font-family: var(--mono); }
 
-h1, h2 {
-    font-family: Inter, "Helvetica Neue", Helvetica, sans-serif;
-    font-weight: 600;
+/* ---- Editor box (CM6 mounts inside) ---- */
+.editor-wrap { position: relative; }
+.editor-box {
+    border: 1px solid var(--grid);
+    border-radius: .75rem;
+    background: #fff;
+    box-shadow: 0 .125rem .35rem rgba(0, 0, 0, .06);
+    overflow: hidden;
+    transition: border-color .2s, box-shadow .2s;
 }
-h3, h4, h5, h6,
-.navbar-brand, .dropdown-header,
-.btn, .form-label, .badge {
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+.editor-box:focus-within {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 .2rem rgba(13, 110, 253, .12);
 }
+.editor-box .cm-editor { border-radius: inherit; background: #fff; }
+.editor-box .cm-editor.cm-focused { outline: none; }
+.editor-clear {
+    position: absolute; right: 1rem; top: .85rem; cursor: pointer;
+    color: #adb5bd; font-size: 1.15rem; z-index: 3;
+}
+.editor-clear:hover { color: var(--mut); }
 
-code, pre, .font-monospace {
-    font-family: "Cascadia Mono", "Cascadia Code", Menlo, Consolas, monospace;
+/* ---- Feedback line ---- */
+.feedback {
+    display: flex; align-items: center; gap: .6rem; padding: .3rem .15rem 0;
+    min-height: 1.2rem; font-family: var(--mono); font-size: .70rem; color: var(--mut);
 }
-code { color: var(--agg-code); }
+.feedback .fb-text {
+    flex: 1 1 auto; min-width: 0; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+}
+.feedback .fb-emacs {
+    flex: 0 0 auto; display: flex; align-items: center; gap: .35rem; white-space: nowrap;
+}
+.feedback .fb-emacs .form-check { margin: 0; min-height: auto; }
+.feedback .fb-emacs .form-check-input { margin-top: 0; }
 
-/* ---- Navbar ---- */
-.navbar-brand img { vertical-align: middle; border-radius: 4px; }
-.navbar-brand     { font-weight: 600; letter-spacing: 0.01em; }
+/* ---- Buttons row ---- */
+.btnrow { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .5rem; }
+.btnrow .btn { --bs-btn-font-size: .84rem; }
+.opt-toggle .v { font-family: var(--mono); color: #212529; }
+.bs-custom { padding: .25rem .75rem; }
+.bs-custom input { height: 1.7rem; font-size: .78rem; }
 
-/* ---- Tables ---- */
-.agg-table {
-    border-top: 1px solid var(--agg-rule);
-    border-bottom: 1px solid var(--agg-rule);
+/* ---- Build summary (status line) ---- */
+.summary { display: flex; align-items: baseline; gap: .4rem; margin: 1rem .1rem .6rem; }
+.summary-inner {
+    flex: 1 1 auto; min-width: 0; font-size: .8rem; color: #374151;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.agg-table thead th {
-    border-bottom: 1px solid var(--agg-rule);
-    font-family: "Helvetica Neue", Helvetica, sans-serif;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    text-transform: lowercase;
+.summary.expanded .summary-inner { white-space: normal; }
+.summary-inner .nm   { font-weight: 600; font-size: .92rem; }
+.summary-inner .sep  { color: var(--dot); font-family: var(--mono); margin: 0 .3rem; }
+.summary-inner .mono { font-family: var(--mono); color: var(--mut); }
+.summary-inner .ok   { color: #198754; }
+.summary-inner .warn { color: #b54708; }
+.summary-more {
+    flex: 0 0 auto; border: 0; background: transparent; color: var(--mut);
+    cursor: pointer; line-height: 1; padding: .1rem .3rem; font-size: 1rem; display: none;
 }
-.agg-table tbody td { vertical-align: top; }
-.agg-table tbody tr:hover { background-color: var(--agg-soft); }
+.summary.expanded .summary-more i { transform: rotate(180deg); }
 
-/* ---- Editor host ---- */
-#editor-host {
-    background-color: #fbfcfe;
+/* ---- Output tabs ---- */
+.out-tabs {
+    display: flex; flex-wrap: wrap; gap: .2rem; width: 100%;
+    background: #f1f3f5; border: 1px solid #e9ecef; border-radius: .6rem; padding: .3rem;
+    margin-bottom: .8rem;
 }
-#editor-host .cm-editor { border-radius: inherit; }
+.out-tabs .nav-link { padding: .25rem .9rem; font-size: .82rem; color: #495057; border-radius: .4rem; }
+.out-tabs .nav-link.active {
+    background: #fff; color: var(--primary); font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+}
+.out-tabs .nav-link:not(.active):hover { background: #e6e9ed; }
+
+/* ---- Tab tool rows ---- */
+.tab-tools { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .55rem; align-items: center; }
+.tab-tools .btn { --bs-btn-padding-y: .12rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .72rem; }
+
+.pane { min-height: 1rem; }
+
+/* ---- Dense booktabs tables ---- */
+.tbl {
+    width: auto; max-width: 100%; margin: 0; border-collapse: collapse;
+    font-size: .7rem; font-variant-numeric: lining-nums tabular-nums;
+    display: block; overflow-x: auto;
+}
+.tbl thead th {
+    font-weight: 600; font-size: .64rem; letter-spacing: .01em; text-align: right;
+    color: #374151; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+    padding: .2em .8em; white-space: nowrap;
+}
+.tbl tbody td { padding: .1em .8em; text-align: right; white-space: nowrap; }
+.tbl tbody tr:last-child td { border-bottom: 1px solid var(--rule); }
+.tbl th.lbl, .tbl td.lbl { text-align: left; font-weight: 600; }
+.tbl tbody tr:hover { background: var(--soft); }
 
 /* ---- Info pane ---- */
-.agg-info-pane {
-    white-space: pre;
-    overflow-x: auto;
-    font-size: 0.85rem;
-    line-height: 1.45;
+.info {
+    font-family: var(--mono); font-size: .68rem; line-height: 1.5; color: #374151;
+    white-space: pre; overflow-x: auto; margin: 0;
 }
 
-/* ---- Build banner ---- */
-.agg-build-banner {
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid #e5e7eb;
+/* ---- Reins description line (slim, no box) ---- */
+.reins-desc {
+    font-size: .74rem; color: #374151; margin: 0 .1rem .55rem;
+    display: flex; flex-wrap: wrap; gap: .3rem; align-items: baseline;
 }
-
-/* ---- Output ---- */
-.output-pane {
-    min-height: 200px;
-    padding-top: 0.5rem;
-}
-
-/* ---- Error pane ---- */
-.agg-error-pane {
-    border-left: 4px solid #d4a017;
-}
-.agg-error-source {
-    background-color: #fff;
-    padding: 0.5rem 0.75rem;
-    border-radius: 4px;
-    margin-bottom: 0;
-    font-family: "Cascadia Mono", Menlo, Consolas, monospace;
-    font-size: 0.875rem;
-    line-height: 1.35;
-}
-.agg-error-caret {
-    color: var(--agg-code);
-    font-weight: bold;
-    white-space: pre;
-}
+.reins-desc:empty { display: none; }
+.reins-desc .sep  { color: var(--dot); font-family: var(--mono); margin: 0 .25rem; }
+.reins-desc .mono { font-family: var(--mono); color: var(--mut); }
 
 /* ---- Plot pane ---- */
-.agg-plot-pane img { max-height: 70vh; }
+#pane-plot img { max-width: 100%; height: auto; }
+
+/* ---- Placeholder panes (Price / More) ---- */
+.placeholder-pane {
+    border: 1px dashed var(--grid); border-radius: .5rem; background: #fff;
+    display: flex; align-items: center; justify-content: center; min-height: 200px;
+    color: var(--mut); text-align: center; padding: 1rem; font-size: .78rem;
+}
+
+/* ---- Error pane (parse-error report) ---- */
+.agg-error-pane   { border-left: 4px solid #d4a017; }
+.agg-error-source {
+    background: #fff; padding: .5rem .75rem; border-radius: 4px; margin-bottom: 0;
+    font-family: var(--mono); font-size: .8rem; line-height: 1.35;
+}
+.agg-error-caret  { color: var(--code); font-weight: bold; white-space: pre; }

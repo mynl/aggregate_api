@@ -4,6 +4,53 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a3
+
+SPA editor fix and look-and-feel redesign (`dev/plan-ui-enhancements.md`). The
+DecL playground now mirrors the **archivum** visual language (one UI font,
+dense booktabs tables, blue accent, sticky header) and a `nav-pills` tabbed
+output. Backend grows native plotting and per-tab data endpoints.
+
+**Frontend**
+
+- **Tamed autocomplete:** completion is now manual-trigger only
+  (`activateOnTyping: false`); the per-keystroke `/v1/decl/complete` round-trip
+  is gone (`completion.js` only calls the network on an explicit Ctrl-Space).
+  This restores smooth typing, selection, and clipboard behavior.
+- **Emacs editing keys:** optional `emacsStyleKeymap` (Ctrl-A/E/K/Y/N/P/F/B/D)
+  behind a feedback-line switch, swapped at runtime via a CM6 `Compartment` and
+  persisted in `localStorage`.
+- **Redesign:** rebuilt `index.html` + `styles/site.css` from
+  `hacks/mockup-07.html` — header with logo + versions, rounded editor box with
+  focus glow and clear-X, mono feedback line, `Build / Examples / log2 / bs`
+  button row, a one-line **build summary** (`name · kind · mean · CV ·
+  validation`, overflow-only ⌄ expander), and the `Info · Describe · Plot ·
+  Stats · Reins · Price · More` tab bar. Tabs fetch their data lazily and cache
+  per built object. Price / More are placeholders.
+
+**Backend**
+
+- **Native plot:** `GET /v1/objects/{id}/plot` defaults to `kind=native`,
+  rendering the object's own multi-panel `.plot()` figure (captured from
+  `obj.figure`). The legacy `density|cdf|qq|kappa` single-panel renderers are
+  retained for backward compatibility.
+- **Reinsurance endpoints:** `reins_description` (text block, `available` flag),
+  `reins_describe`, `reins_stats_df`, and `reins_density_df` (the density frame
+  is filtered to `p_total > 0` then downsampled to ~20 rows for preview). All
+  getattr-gated → a clean 400 ("no reinsurance on this object") rather than 500.
+- **CSV download:** `GET /v1/objects/{id}/frame/{which}.csv` returns the full
+  frame (describe / stats_df / density_df / reins_*) for "save the real data".
+- **Build summary fields:** `BuildResponse` now carries `mean`, `cv`, and
+  `validation` (from `agg_m` / `agg_cv` / `explain_validation()`) for the SPA's
+  one-line summary.
+
+**Notes**
+
+- The "sev stats" sub-button was dropped: no clean `sev_stat_df` accessor exists
+  upstream; the Stats tab shows `stats_df` (which already carries the Freq / Sev
+  / Agg breakdown). Revisit if a dedicated severity-stats view is wanted.
+- The SPA bundle now vendors Bootstrap Icons via npm (no runtime CDN).
+
 ## 1.0.0a2
 
 Bootstrap the standalone package (`dev/plan-0001-bootstrap-standalone.md`). The

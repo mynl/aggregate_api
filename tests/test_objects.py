@@ -16,6 +16,12 @@ import pytest
 
 _DICE = "agg Dice dfreq [3] dsev [1:6]"
 
+# A small aggregate carrying occurrence reinsurance, for the reins_* paths.
+_REINS = (
+    "agg ReinsEx 5 claims 100 xs 0 sev lognorm 10 cv .75 "
+    "occurrence ceded to 15 xs 5 poisson"
+)
+
 
 # ----------------------------------------------------------------------
 # Build + cache
@@ -29,6 +35,15 @@ def test_build_dice(client):
     assert body["name"] == "Dice"
     assert len(body["id"]) == 16  # hex prefix length
     assert body["cached"] is False
+
+
+def test_build_summary_fields(client):
+    """Build response carries mean / cv / validation for the SPA summary."""
+    body = client.post("/v1/objects", json={"decl": _DICE}).json()
+    assert body["mean"] == pytest.approx(10.5, rel=1e-3)
+    # Fixed frequency -> agg CV = sd/mean = sqrt(3*Var(U[1..6]))/10.5.
+    assert body["cv"] == pytest.approx(0.2817, rel=1e-2)
+    assert body["validation"] == "not unreasonable"
 
 
 def test_build_is_idempotent(client):
@@ -155,6 +170,16 @@ def test_plot_png_explicit(client):
     assert r.content[:8] == b"\x89PNG\r\n\x1a\n"
 
 
+def test_plot_native_default(client):
+    """No ``kind`` -> the object's own multi-panel .plot() (SVG)."""
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/plot")
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("image/svg+xml")
+    body = r.content.lstrip()
+    assert body.startswith(b"<?xml") or body.startswith(b"<svg")
+
+
 def test_plot_kappa_rejects_aggregate(client):
     """kappa needs a Portfolio; on an Aggregate it should return 400."""
     oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
@@ -165,6 +190,80 @@ def test_plot_kappa_rejects_aggregate(client):
 def test_plot_unknown_kind_400(client):
     oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
     r = client.get(f"/v1/objects/{oid}/plot", params={"kind": "nonsense"})
+    assert r.status_code == 400
+
+
+# ----------------------------------------------------------------------
+# Reinsurance endpoints
+# ----------------------------------------------------------------------
+
+def test_reins_description_absent_on_plain_object(client):
+    """An object with no reinsurance reports available=False."""
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/reins_description")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["available"] is False
+    assert body["text"] == ""
+
+
+def test_reins_describe_400_on_plain_object(client):
+    """reins_describe is a 400 (not 500) when there's no reinsurance."""
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/reins_describe")
+    assert r.status_code == 400
+
+
+def test_reins_description_present(client):
+    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/reins_description")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["available"] is True
+    assert "xs" in body["text"]
+
+
+def test_reins_frames_present(client):
+    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
+    for which in ("reins_describe", "reins_stats_df", "reins_density_df"):
+        r = client.get(f"/v1/objects/{oid}/{which}")
+        assert r.status_code == 200, f"{which}: {r.text}"
+        body = r.json()
+        assert "columns" in body and "rows" in body
+        assert len(body["rows"]) > 0
+
+
+def test_reins_density_preview_is_bounded(client):
+    """Density preview drops zero-mass rows and downsamples to ~20."""
+    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/reins_density_df")
+    assert r.status_code == 200, r.text
+    assert len(r.json()["rows"]) <= 20
+
+
+# ----------------------------------------------------------------------
+# CSV frame download
+# ----------------------------------------------------------------------
+
+def test_frame_csv_describe(client):
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/frame/describe.csv")
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("text/csv")
+    assert "attachment" in r.headers.get("content-disposition", "")
+    # CSV body has a header row plus data.
+    assert len(r.text.strip().splitlines()) >= 2
+
+
+def test_frame_csv_unknown_name_404(client):
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/frame/bogus.csv")
+    assert r.status_code == 404
+
+
+def test_frame_csv_reins_400_when_absent(client):
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/frame/reins_describe.csv")
     assert r.status_code == 400
 
 

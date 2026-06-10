@@ -14,7 +14,12 @@ The /v1/objects/* family covers everything object-shaped:
 * ``GET    /v1/objects/{id}/stats_df``    -- stats_df DataFrame.
 * ``GET    /v1/objects/{id}/density_df``  -- paginated density frame.
 * ``GET    /v1/objects/{id}/kappa``       -- Portfolio exeqa_* slice.
-* ``GET    /v1/objects/{id}/plot``        -- SVG/PNG image.
+* ``GET    /v1/objects/{id}/reins_description`` -- reinsurance text block.
+* ``GET    /v1/objects/{id}/reins_describe``    -- per-layer describe frame.
+* ``GET    /v1/objects/{id}/reins_stats_df``    -- per-layer stats frame.
+* ``GET    /v1/objects/{id}/reins_density_df``  -- density preview frame.
+* ``GET    /v1/objects/{id}/frame/{which}.csv`` -- full-frame CSV download.
+* ``GET    /v1/objects/{id}/plot``        -- SVG/PNG image (native .plot()).
 * ``POST   /v1/objects/{id}/pricing_at``  -- distortion / ccoc pricing.
 
 Build pipeline (POST /v1/objects)
@@ -174,6 +179,32 @@ def _resolve_object(oid: str, cache: ObjectCache) -> CacheEntry:
     return entry
 
 
+def _summary_fields(obj: Any) -> dict:
+    """Headline ``mean`` / ``cv`` / ``validation`` for the build summary.
+
+    Both ``Aggregate`` and ``Portfolio`` expose ``agg_m`` / ``agg_cv``
+    and ``explain_validation()`` (the latter returns "not unreasonable"
+    on a clean build). Everything is getattr-gated so a future object
+    kind without these simply reports ``None``.
+    """
+    def _num(name: str) -> float | None:
+        v = getattr(obj, name, None)
+        try:
+            return float(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    validation: str | None = None
+    explain = getattr(obj, "explain_validation", None)
+    if callable(explain):
+        try:
+            validation = str(explain())
+        except Exception:  # noqa: BLE001 -- summary is best-effort
+            validation = None
+
+    return {"mean": _num("agg_m"), "cv": _num("agg_cv"), "validation": validation}
+
+
 # ----------------------------------------------------------------------
 # POST /v1/objects
 # ----------------------------------------------------------------------
@@ -236,6 +267,7 @@ def post_object(
             "warnings": [],
             "cached": True,
             "elapsed_ms": elapsed,
+            **_summary_fields(cached_entry.obj),
         }
 
     # Cache miss -- fire the build, gated by the semaphore +
@@ -344,6 +376,7 @@ def post_object(
         "warnings": [],
         "cached": False,
         "elapsed_ms": elapsed,
+        **_summary_fields(obj),
     }
 
 
@@ -527,13 +560,146 @@ def get_kappa(
 
 
 # ----------------------------------------------------------------------
+# Reinsurance -- text description + per-layer frames
+# ----------------------------------------------------------------------
+# Number of rows to surface in a density preview. The full grid is
+# 2**log2 rows; the on-screen table shows an evenly-spaced sample of the
+# actual support (``p_total > 0``). The csv download carries the full
+# frame.
+DENSITY_PREVIEW_ROWS = 20
+
+
+def _frame_attr(obj: Any, name: str):
+    """Return ``getattr(obj, name)`` as a DataFrame, or ``None``.
+
+    Reinsurance frames are properties that return ``None`` when the
+    object carries no reinsurance; we treat a missing attribute the same
+    way so the route can answer with a uniform 400.
+    """
+    df = getattr(obj, name, None)
+    if df is None:
+        return None
+    return df
+
+
+@router.get(
+    "/objects/{oid}/reins_description",
+    response_model=models.ReinsDescriptionResponse,
+)
+def get_reins_description(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+    """Always-visible text block describing the reinsurance program.
+
+    ``Aggregate.reins_description(kind='both', width=0)`` returns a short
+    string (empty when there's no reinsurance). ``Portfolio`` has no such
+    method -- there we report availability from ``reins_describe`` and
+    leave the text empty (the Reins table carries the detail).
+    """
+    entry = _resolve_object(oid, cache)
+    obj = entry.obj
+    # ``reins_describe`` is None exactly when the object has no
+    # reinsurance, so it's the canonical availability signal (the
+    # ``reins_description`` *method* otherwise returns the literal
+    # "No reinsurance" string, which we don't want to surface).
+    has_reins = _frame_attr(obj, "reins_describe") is not None
+    text = ""
+    meth = getattr(obj, "reins_description", None)
+    if has_reins and callable(meth):
+        try:
+            text = str(meth(kind="both", width=0)).strip()
+        except Exception:  # noqa: BLE001 -- text is optional; table carries detail
+            text = ""
+    return {"available": has_reins, "text": text}
+
+
+@router.get("/objects/{oid}/reins_describe", response_model=models.FrameResponse)
+def get_reins_describe(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+    """Per-layer gross/ceded/net reference-vs-model frame."""
+    entry = _resolve_object(oid, cache)
+    df = _frame_attr(entry.obj, "reins_describe")
+    if df is None:
+        raise HTTPException(status_code=400, detail="no reinsurance on this object")
+    return frame_to_payload(reset_index_safe(df))
+
+
+@router.get("/objects/{oid}/reins_stats_df", response_model=models.FrameResponse)
+def get_reins_stats_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+    """Per-layer summary statistics (small frame -> shown in full)."""
+    entry = _resolve_object(oid, cache)
+    df = _frame_attr(entry.obj, "reins_stats_df")
+    if df is None:
+        raise HTTPException(status_code=400, detail="no reinsurance on this object")
+    return frame_to_payload(reset_index_safe(df))
+
+
+@router.get("/objects/{oid}/reins_density_df", response_model=models.FrameResponse)
+def get_reins_density_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+    """Density preview: filter to the support then evenly sample ~20 rows.
+
+    The full frame spans the whole loss grid; most rows are zero-mass.
+    We drop those (``p_total > 0``) and downsample so the on-screen table
+    is a readable preview; the csv download has the full data.
+    """
+    entry = _resolve_object(oid, cache)
+    df = _frame_attr(entry.obj, "reins_density_df")
+    if df is None:
+        raise HTTPException(status_code=400, detail="no reinsurance on this object")
+    df = reset_index_safe(df)
+    if "p_total" in df.columns:
+        df = df[df["p_total"] > 0]
+    return frame_to_payload(df, downsample=DENSITY_PREVIEW_ROWS)
+
+
+# ----------------------------------------------------------------------
+# GET /v1/objects/{id}/frame/{which}.csv  -- full-frame download
+# ----------------------------------------------------------------------
+# Maps a download name to the attribute that yields its DataFrame. The
+# on-screen tables are previews; this route always returns the complete
+# frame as CSV for "save the real data" workflows.
+_CSV_FRAMES = {
+    "describe": "describe",
+    "stats_df": "stats_df",
+    "density_df": "density_df",
+    "reins_describe": "reins_describe",
+    "reins_stats_df": "reins_stats_df",
+    "reins_density_df": "reins_density_df",
+}
+
+
+@router.get("/objects/{oid}/frame/{which}.csv")
+def get_frame_csv(
+    oid: str, which: str, cache: ObjectCache = Depends(_get_cache)
+) -> Response:
+    """Return the full named frame as a CSV download."""
+    attr = _CSV_FRAMES.get(which)
+    if attr is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"unknown frame {which!r}; expected one of {sorted(_CSV_FRAMES)}",
+        )
+    entry = _resolve_object(oid, cache)
+    df = _frame_attr(entry.obj, attr)
+    if df is None:
+        raise HTTPException(
+            status_code=400, detail=f"{which} not available for {entry.kind!r}"
+        )
+    csv_text = reset_index_safe(df).to_csv(index=False)
+    return Response(
+        content=csv_text,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{entry.name}-{which}.csv"',
+        },
+    )
+
+
+# ----------------------------------------------------------------------
 # GET /v1/objects/{id}/plot
 # ----------------------------------------------------------------------
 
 @router.get("/objects/{oid}/plot")
 def get_plot(
     oid: str,
-    kind: str = Query("density", description="density|cdf|qq|kappa"),
+    kind: str = Query("native", description="native|density|cdf|qq|kappa"),
     format: str = Query("svg", description="svg|png"),
     width: float | None = Query(None, gt=0, le=30),
     height: float | None = Query(None, gt=0, le=30),

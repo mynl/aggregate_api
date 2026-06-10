@@ -80,6 +80,11 @@ class BuildResponse(BaseModel):
     warnings: list[str] = []
     cached: bool
     elapsed_ms: int
+    # Headline stats for the SPA's one-line build summary. Optional so a
+    # future object kind without these accessors still serializes.
+    mean: float | None = None
+    cv: float | None = None
+    validation: str | None = None
 
 
 class ObjectSummary(BaseModel):
@@ -148,6 +153,24 @@ class InfoResponse(BaseModel):
     model_config = _RESPONSE_CFG
 
     info: str
+
+
+# ======================================================================
+# Reinsurance -- text description block
+# ======================================================================
+
+class ReinsDescriptionResponse(BaseModel):
+    """``GET /v1/objects/{id}/reins_description``.
+
+    ``available`` is False (and ``text`` empty) when the object carries
+    no reinsurance, so the SPA can show a neutral "no reinsurance on this
+    object" line rather than an error.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    available: bool
+    text: str
 
 
 # ======================================================================

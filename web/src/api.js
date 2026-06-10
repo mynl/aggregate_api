@@ -60,6 +60,10 @@ export const api = {
     density_df:   (id, p = {})      => _json('GET',  `/v1/objects/${id}/density_df?${qs(p)}`),
     kappa:        (id, p = {})      => _json('GET',  `/v1/objects/${id}/kappa?${qs(p)}`),
 
+    // Reinsurance
+    reinsDescription: (id)          => _json('GET',  `/v1/objects/${id}/reins_description`),
+    reinsFrame:   (id, which)       => _json('GET',  `/v1/objects/${id}/${which}`),
+
     // Pricing
     pricing_at:   (id, body)        => _json('POST', `/v1/objects/${id}/pricing_at`, body),
 
@@ -72,6 +76,9 @@ export const api = {
     meta:         ()                => _json('GET',  '/v1/meta'),
     health:       ()                => _json('GET',  '/v1/health'),
 
-    /** Plot URL: handed straight to an <img>. */
+    /** Plot URL: handed straight to an <img>. Native multi-panel by default. */
     plotUrl:      (id, p = {})      => `${API_BASE}/v1/objects/${id}/plot?${qs(p)}`,
+
+    /** Full-frame CSV download URL (describe / stats_df / reins_* / density_df). */
+    frameCsvUrl:  (id, which)       => `${API_BASE}/v1/objects/${id}/frame/${which}.csv`,
 };

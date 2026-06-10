@@ -1,8 +1,10 @@
 """Server-side plot dispatch with SVG/PNG output.
 
 The api offers one plot endpoint per object: ``GET
-/v1/objects/{id}/plot?kind=density|cdf|qq|kappa&format=svg|png``.
-This module owns the matplotlib mechanics.
+/v1/objects/{id}/plot?kind=native|density|cdf|qq|kappa&format=svg|png``.
+``kind=native`` (the default) renders the object's own ``.plot()``
+multi-panel figure; the others are legacy single-panel renderers kept
+for backward compatibility. This module owns the matplotlib mechanics.
 
 Why the SVG default
 -------------------
@@ -62,13 +64,15 @@ WEB_OVERRIDES: dict[str, Any] = {
 
 
 # Whitelist of plot kinds; centralised so the error message in
-# render_plot lists them all.
-_PLOT_KINDS = ("density", "cdf", "qq", "kappa")
+# render_plot lists them all. ``native`` (the default) delegates to the
+# object's own ``.plot()``; the rest are the legacy bespoke renderers,
+# retained for backward compatibility with the old ``?kind=`` callers.
+_PLOT_KINDS = ("native", "density", "cdf", "qq", "kappa")
 
 
 def render_plot(
     obj: Any,
-    kind: str,
+    kind: str = "native",
     *,
     fmt: str = "svg",
     width: float | None = None,
@@ -82,15 +86,18 @@ def render_plot(
     obj : Aggregate | Portfolio
         Live object from the cache.
     kind : str
-        One of ``'density' | 'cdf' | 'qq' | 'kappa'``. ``kappa`` is
-        Portfolio-only (raises ValueError on Aggregate).
+        ``'native'`` (default) calls the object's own ``.plot()`` to
+        produce its canonical multi-panel figure. The legacy values
+        ``'density' | 'cdf' | 'qq' | 'kappa'`` use the api's bespoke
+        single-panel renderers; ``kappa`` is Portfolio-only.
     fmt : str
         ``'svg'`` (default) or ``'png'``.
     width, height : float | None
-        Figure size in inches. Override
-        ``WEB_OVERRIDES['figure.figsize']`` when set.
+        Figure size in inches for the *legacy* single-panel renderers.
+        Ignored for ``'native'`` -- the object sizes its own multi-panel
+        mosaic.
     dpi : float | None
-        Override ``WEB_OVERRIDES['figure.dpi']``.
+        Override ``WEB_OVERRIDES['figure.dpi']`` (honored for both paths).
 
     Returns
     -------
@@ -121,7 +128,7 @@ def render_plot(
     # The context manager restores prior rcParams on exit so the
     # api doesn't bleed style state across requests.
     with agg_style.context(**overrides):
-        fig = _dispatch(obj, kind)
+        fig = _native_figure(obj) if kind == "native" else _dispatch(obj, kind)
         try:
             fig.savefig(buf, format=fmt)
         finally:
@@ -135,7 +142,37 @@ def render_plot(
 
 
 # ----------------------------------------------------------------------
-# Per-kind dispatch
+# Native plot -- the object's own .plot()
+# ----------------------------------------------------------------------
+
+def _native_figure(obj: Any):
+    """Call ``obj.plot()`` and return the matplotlib ``Figure`` it built.
+
+    Both :meth:`Aggregate.plot` and :meth:`Portfolio.plot` construct their
+    own multi-panel mosaic when called with no ``axd`` and stash it on
+    ``obj.figure`` (they don't return it). We read that attribute back,
+    falling back to ``plt.gcf()`` if a future version stops setting it.
+
+    Raises
+    ------
+    ValueError
+        If the object has no ``plot`` method, or plotting produced no
+        figure -- surfaced by the route as HTTP 400.
+    """
+    plot = getattr(obj, "plot", None)
+    if not callable(plot):
+        raise ValueError(f"{type(obj).__name__} has no plot() method")
+    plot()
+    fig = getattr(obj, "figure", None)
+    if fig is None:
+        fig = plt.gcf()
+    if fig is None:
+        raise ValueError("plot() produced no figure")
+    return fig
+
+
+# ----------------------------------------------------------------------
+# Per-kind dispatch (legacy single-panel renderers)
 # ----------------------------------------------------------------------
 
 def _dispatch(obj: Any, kind: str):
