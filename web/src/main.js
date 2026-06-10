@@ -48,6 +48,8 @@ const editor = createEditor($('editor-host'), {
     onBuild:       () => build(),
     onHistoryPrev: () => navigateHistory('prev'),
     onHistoryNext: () => navigateHistory('next'),
+    onExamplePrev: () => exampleStep('prev'),
+    onExampleNext: () => exampleStep('next'),
 });
 
 editor.setText('agg Dice dfreq [3] dsev [1:6]\n');
@@ -156,6 +158,15 @@ buildBtn.addEventListener('click', build);
 // ----------------------------------------------------------------------
 function sep() { return el('span', { className: 'sep' }, '·'); }
 
+/** Bucket size for display: a sub-unit bs shows as 1/2^k (e.g. 1/64). */
+function fmtBs(bs) {
+    if (bs == null || !Number.isFinite(bs)) return '';
+    if (bs >= 1) return fmt(bs);
+    const inv = 1 / bs;
+    const k = Math.round(Math.log2(inv));
+    return Math.abs(2 ** k - inv) < 1e-6 ? `1/${2 ** k}` : fmt(bs);
+}
+
 function renderSummary(res) {
     const inner = $('summary-inner');
     empty(inner);
@@ -164,6 +175,7 @@ function renderSummary(res) {
         el('span', { className: 'nm' }, res.name || '(anonymous)'),
         el('span', { className: 'mono ms-2' }, kindLabel),
     ];
+    if (res.bs != null)   { bits.push(sep(), el('span', { className: 'mono' }, `bs = ${fmtBs(res.bs)}`)); }
     if (res.mean != null) { bits.push(sep(), el('span', { className: 'mono' }, `mean ${fmt(res.mean)}`)); }
     if (res.cv != null)   { bits.push(sep(), el('span', { className: 'mono' }, `CV ${fmt(res.cv)}`)); }
     if (res.validation) {
@@ -172,7 +184,19 @@ function renderSummary(res) {
     }
     if (res.cached) { bits.push(sep(), el('span', { className: 'mono' }, 'cached')); }
     inner.append(...bits);
+    renderTiming(res);
     syncSummaryMore();
+}
+
+/** Sub-line: "Calculated aggregate in 0.000 seconds" (or cache note). */
+function renderTiming(res) {
+    const node = $('summary-timing');
+    if (!node) return;
+    if (res.elapsed_ms == null) { node.textContent = ''; return; }
+    const word = res.kind === 'port' ? 'portfolio' : 'aggregate';
+    node.textContent = res.cached
+        ? `Loaded ${word} from cache`
+        : `Calculated ${word} in ${(res.elapsed_ms / 1000).toFixed(3)} seconds`;
 }
 
 function renderBuildFailure(err) {
@@ -181,6 +205,7 @@ function renderBuildFailure(err) {
     empty(inner);
     inner.appendChild(el('span', { className: 'mono warn' },
         limited ? 'rate limited — please pause a moment' : 'build failed'));
+    $('summary-timing').textContent = '';
     syncSummaryMore();
     // Surface the rich parse-error report (or the friendly rate-limit card)
     // in the Info pane and show it.
@@ -212,7 +237,7 @@ window.addEventListener('resize', syncSummaryMore);
 const PANE_OF = {
     info: 'pane-info', desc: 'pane-desc', plot: 'pane-plot',
     stats: 'pane-stats', reins: 'pane-reins',
-    density: 'pane-density', bswin: 'pane-bswin',
+    density: 'pane-density', bswin: 'pane-bswin', price: 'pane-price',
 };
 
 function clearPanes() {
@@ -327,6 +352,84 @@ document.querySelectorAll('[data-reins]').forEach((btn) => {
 });
 
 // ----------------------------------------------------------------------
+// Price tab -- pentagon form (p + CoC/LR); Portfolios also get the
+// per-distortion LR/P/PQ/ROE slices from analyze_distortions.
+// ----------------------------------------------------------------------
+const PRICE_FMT = {
+    LR:  (v) => pctFmt(v, 1),
+    P:   (v) => intFmt(v),
+    PQ:  (v) => fixFmt(v, 3),
+    ROE: (v) => pctFmt(v, 0),
+};
+const PRICE_TITLE = {
+    LR: 'Loss ratio', P: 'Premium', PQ: 'Premium / capital', ROE: 'Return on capital',
+};
+
+function pctFmt(v, dp) {
+    return (v == null || !Number.isFinite(v)) ? '' : `${(v * 100).toFixed(dp)}%`;
+}
+function intFmt(v) {
+    return (v == null || !Number.isFinite(v)) ? '' : Math.round(v).toLocaleString('en-US');
+}
+function fixFmt(v, dp) {
+    return (v == null || !Number.isFinite(v)) ? '' : Number(v).toFixed(dp);
+}
+
+function renderPrice(payload) {
+    const root = el('div', { className: 'price-result' });
+    root.appendChild(el('div', { className: 'price-section-title' }, 'Pricing pentagon'));
+    root.appendChild(renderFrameTable(payload.pentagon));
+    if (payload.distortion_df) {
+        root.appendChild(el('div', { className: 'price-section-title mt-3' },
+            'Calibrated distortions'));
+        root.appendChild(renderFrameTable(payload.distortion_df));
+    }
+    for (const w of payload.warnings || []) {
+        root.appendChild(el('div', { className: 'text-muted small fst-italic mt-1' }, `⚠ ${w}`));
+    }
+    if (payload.distortions) {
+        for (const stat of ['LR', 'P', 'PQ', 'ROE']) {
+            const frame = payload.distortions[stat];
+            if (!frame) continue;
+            root.appendChild(el('div', { className: 'price-section-title mt-3' },
+                `${PRICE_TITLE[stat]} (${stat}) by distortion`));
+            root.appendChild(renderFrameTable(frame, { format: PRICE_FMT[stat] }));
+        }
+    }
+    return root;
+}
+
+const priceBtn = $('price-btn');
+priceBtn?.addEventListener('click', async () => {
+    if (!state.id) return;
+    const p = parseFloat($('price-p').value);
+    const target = document.querySelector('input[name="price-target"]:checked')?.value || 'coc';
+    const val = parseFloat($('price-target-val').value);
+    if (!Number.isFinite(p) || !Number.isFinite(val)) return;
+    const body = { p };
+    body[target] = val;            // 'coc' or 'lr'
+    priceBtn.disabled = true;
+    priceBtn.textContent = 'Pricing…';
+    try {
+        replacePane('pane-price', renderPrice(await api.price(state.id, body)));
+    } catch (err) {
+        replacePane('pane-price', errorNode(err));
+    } finally {
+        priceBtn.disabled = false;
+        priceBtn.textContent = 'Price';
+    }
+});
+
+// Target radio -> label + a sensible default value.
+document.querySelectorAll('input[name="price-target"]').forEach((radio) => {
+    radio.addEventListener('change', () => {
+        const isCoc = radio.value === 'coc';
+        $('price-target-label').textContent = isCoc ? 'CoC' : 'LR';
+        $('price-target-val').value = isCoc ? '0.1' : '0.7';
+    });
+});
+
+// ----------------------------------------------------------------------
 // Tab tools: copy / csv / plot download
 // ----------------------------------------------------------------------
 document.querySelectorAll('[data-copy]').forEach((btn) => {
@@ -362,18 +465,43 @@ function flash(btn, text) {
 }
 
 // ----------------------------------------------------------------------
-// Examples dropdown
+// Examples dropdown + (undisclosed) Alt-↑/↓ ring navigation
 // ----------------------------------------------------------------------
-mountExamples($('examples-menu'), async (item) => {
-    editor.setText(item.decl);      // show the raw program immediately
+// A flat ring of every example decl, seeded from the same /v1/examples
+// payload (cached server-side). Independent of build history; navigated by
+// Alt-↑/↓ for quick inspection of the whole library. Not surfaced in the UI.
+const exampleRing = { decls: [], cursor: -1 };
+
+// Load a program into the editor, then standardize it via format_program.
+// Raw text shows instantly; the formatted version replaces it unless the
+// user has since stepped to another example (stale-format guard).
+function loadExample(decl) {
+    editor.setText(decl);
     editor.focus();
-    // Standardize it via the server's format_program pass; keep the raw text
-    // if the round-trip fails (offline, parse hiccup).
-    try {
-        const res = await api.formatDecl(item.decl);
-        if (res && res.decl) editor.setText(res.decl);
-    } catch { /* keep raw */ }
+    const at = exampleRing.cursor;
+    api.formatDecl(decl).then((res) => {
+        if (exampleRing.cursor === at && res && res.decl) editor.setText(res.decl);
+    }).catch(() => { /* keep raw */ });
+}
+
+mountExamples($('examples-menu'), (item) => {
+    exampleRing.cursor = exampleRing.decls.indexOf(item.decl);  // sync the ring
+    loadExample(item.decl);
 });
+
+api.examples().then((data) => {
+    exampleRing.decls = (data.categories || [])
+        .flatMap((c) => (c.items || []).map((i) => i.decl));
+}).catch(() => { /* dropdown still works; Alt-nav just stays empty */ });
+
+function exampleStep(dir) {
+    const n = exampleRing.decls.length;
+    if (!n) return;
+    exampleRing.cursor = dir === 'prev'
+        ? (exampleRing.cursor + 1) % n
+        : (exampleRing.cursor - 1 + n) % n;
+    loadExample(exampleRing.decls[exampleRing.cursor]);
+}
 
 // ----------------------------------------------------------------------
 // Versions from /v1/meta

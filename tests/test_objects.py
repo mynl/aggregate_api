@@ -40,6 +40,7 @@ def test_build_dice(client):
 def test_build_summary_fields(client):
     """Build response carries mean / cv / validation for the SPA summary."""
     body = client.post("/v1/objects", json={"decl": _DICE}).json()
+    assert body["bs"] == pytest.approx(1.0)   # Dice resolves to bs=1
     assert body["mean"] == pytest.approx(10.5, rel=1e-3)
     # Fixed frequency -> agg CV = sd/mean = sqrt(3*Var(U[1..6]))/10.5.
     assert body["cv"] == pytest.approx(0.2817, rel=1e-2)
@@ -374,3 +375,56 @@ def test_pricing_rejects_aggregate(client):
         json={"p": 0.99, "ccoc": 0.1},
     )
     assert r.status_code == 400
+
+
+# ----------------------------------------------------------------------
+# Price -- pentagon completion + distortion analysis
+# ----------------------------------------------------------------------
+
+# A small two-unit portfolio for the distortion-analysis path.
+_PORT = (
+    "port PF\n"
+    "    agg A 50 claims 50 xs 0 sev lognorm 10 cv 1.2 poisson\n"
+    "    agg B 30 claims 100 xs 0 sev lognorm 20 cv 2.0 poisson\n"
+)
+
+
+def test_price_pentagon_aggregate(client):
+    """An Aggregate gets the one-row pentagon; no distortion slices."""
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.post(f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.1})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "agg"
+    assert "columns" in body["pentagon"] and "rows" in body["pentagon"]
+    # Pentagon carries the canonical stats.
+    assert {"L", "P", "Q", "LR", "ROE"} <= set(body["pentagon"]["columns"])
+    assert body["distortions"] is None
+
+
+def test_price_requires_exactly_one_target(client):
+    """Neither / both of coc & lr -> 400."""
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    assert client.post(
+        f"/v1/objects/{oid}/price", json={"p": 0.99}
+    ).status_code == 400
+    assert client.post(
+        f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.1, "lr": 0.7}
+    ).status_code == 400
+
+
+def test_price_portfolio_distortions(client):
+    """A Portfolio gets the pentagon plus per-distortion LR/P/PQ/ROE slices."""
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    r = client.post(f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.1})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "port"
+    # Calibrated-distortions detail: one row per standard distortion.
+    assert body["distortion_df"] is not None
+    assert len(body["distortion_df"]["rows"]) == 5
+    assert body["distortions"] is not None
+    # At least the loss-ratio slice should come back, framed by distortion.
+    assert "LR" in body["distortions"]
+    lr = body["distortions"]["LR"]
+    assert "columns" in lr and len(lr["rows"]) >= 1

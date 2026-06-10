@@ -123,6 +123,7 @@
             <button class="summary-more" id="summary-more" title="show full summary">
                 <i class="bi bi-chevron-down"></i></button>
         </div>
+        <div class="summary-timing" id="summary-timing"></div>
 
         <!-- Output tabs: Info·Describe·Plot·Price·Reins·More(▾ Stats·Density·…) -->
         <ul class="nav nav-pills out-tabs" role="tablist">
@@ -190,10 +191,22 @@
                 <div id="pane-reins" class="pane"></div>
             </div>
 
-            <!-- Price (placeholder) -->
+            <!-- Price — pentagon completion (+ distortion analysis for Portfolios) -->
             <div class="tab-pane fade" id="t-price">
-                <div class="tab-tools"><span class="text-muted" style="font-size:.72rem;">Pricing — Portfolio objects (to be customized)</span></div>
-                <div class="placeholder-pane">pricing output will render here</div>
+                <div class="tab-tools price-form">
+                    <label class="price-field">p
+                        <input id="price-p" type="number" step="0.001" min="0" max="1" value="0.99"></label>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="pricing target">
+                        <input type="radio" class="btn-check" name="price-target" id="price-tgt-coc" value="coc" checked>
+                        <label class="btn btn-outline-secondary" for="price-tgt-coc">CoC</label>
+                        <input type="radio" class="btn-check" name="price-target" id="price-tgt-lr" value="lr">
+                        <label class="btn btn-outline-secondary" for="price-tgt-lr">LR</label>
+                    </div>
+                    <label class="price-field"><span id="price-target-label">CoC</span>
+                        <input id="price-target-val" type="number" step="0.01" value="0.1"></label>
+                    <button id="price-btn" class="btn btn-primary btn-sm">Price</button>
+                </div>
+                <div id="pane-price" class="pane"></div>
             </div>
 
             <!-- Density (under More ▾) — density_df, p_total>0, ~300-row preview -->

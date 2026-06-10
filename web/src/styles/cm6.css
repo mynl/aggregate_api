@@ -9,6 +9,13 @@
 
 .cm-editor                   { background-color: #ffffff; }
 .cm-editor.cm-focused        { outline: none; }
+
+/* iOS Safari magnifies the whole page when a focused editable has a font
+   smaller than 16px. Bump the editor text to 16px on phones to stop that
+   distracting zoom (desktop keeps the tighter 14px from the CM theme). */
+@media (max-width: 575.98px) {
+    .editor-box .cm-editor .cm-content { font-size: 16px; }
+}
 .cm-editor .cm-content       { caret-color: #1a1a1a; }
 /* Native browser selection (we dropped drawSelection so the selection paints
    on top of the active-line highlight instead of behind it). */

@@ -67,6 +67,7 @@ export const api = {
     reinsFrame:   (id, which)       => _json('GET',  `/v1/objects/${id}/${which}`),
 
     // Pricing
+    price:        (id, body)        => _json('POST', `/v1/objects/${id}/price`, body),
     pricing_at:   (id, body)        => _json('POST', `/v1/objects/${id}/pricing_at`, body),
 
     // DecL editor support

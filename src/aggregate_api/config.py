@@ -110,6 +110,16 @@ class Settings(BaseSettings):
     static_dir: str = ""
 
     # ------------------------------------------------------------------
+    # Examples library
+    # ------------------------------------------------------------------
+    # When set, the Examples dropdown loads from this .agg file instead of
+    # aggregate's bundled agg/test_suite.agg. Lets a deploy ship a curated
+    # example set without rebuilding the SPA (the list is fetched at runtime
+    # from GET /v1/examples). Same format: a ``# A. Title`` contents block
+    # plus ``agg A.Name ...`` item lines. Re-read on server restart.
+    examples_file: str = ""
+
+    # ------------------------------------------------------------------
     # Derived properties
     # ------------------------------------------------------------------
     @property

@@ -74,7 +74,7 @@ from ..audit import AuditLog
 from ..cache import CacheEntry, ObjectCache, canonicalize_decl, object_id
 from ..config import Settings, get_settings
 from ..plotting import render_plot
-from ..pricing import run_pricing
+from ..pricing import run_price_pentagon, run_pricing
 from ..serializers import frame_to_payload, info_to_payload, reset_index_safe
 
 
@@ -202,7 +202,12 @@ def _summary_fields(obj: Any) -> dict:
         except Exception:  # noqa: BLE001 -- summary is best-effort
             validation = None
 
-    return {"mean": _num("agg_m"), "cv": _num("agg_cv"), "validation": validation}
+    return {
+        "bs": _num("bs"),
+        "mean": _num("agg_m"),
+        "cv": _num("agg_cv"),
+        "validation": validation,
+    }
 
 
 # ----------------------------------------------------------------------
@@ -758,6 +763,24 @@ def get_plot(
 # ----------------------------------------------------------------------
 # POST /v1/objects/{id}/pricing_at
 # ----------------------------------------------------------------------
+
+@router.post("/objects/{oid}/price", response_model=models.PriceResponse)
+def post_price(
+    oid: str,
+    req: models.PriceRequest,
+    cache: ObjectCache = Depends(_get_cache),
+) -> dict:
+    """Pricing-pentagon completion (+ distortion analysis for Portfolios).
+
+    Fix the capital level with ``p`` and supply exactly one target (``coc``
+    or ``lr``); see :func:`aggregate_api.pricing.run_price_pentagon`.
+    """
+    entry = _resolve_object(oid, cache)
+    try:
+        return run_price_pentagon(entry.obj, p=req.p, coc=req.coc, lr=req.lr)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
 
 @router.post("/objects/{oid}/pricing_at", response_model=models.PricingResponse)
 def post_pricing(

@@ -81,7 +81,10 @@ class BuildResponse(BaseModel):
     cached: bool
     elapsed_ms: int
     # Headline stats for the SPA's one-line build summary. Optional so a
-    # future object kind without these accessors still serializes.
+    # future object kind without these accessors still serializes. ``bs`` is
+    # the *resolved* bucket size (the library's auto-pick when the request
+    # said "auto"), shown in the summary line.
+    bs: float | None = None
     mean: float | None = None
     cv: float | None = None
     validation: str | None = None
@@ -203,6 +206,41 @@ class PricingResponse(BaseModel):
     ccoc: float | None
     distortion: str | None
     rows: list[dict[str, Any]]
+
+
+class PriceRequest(BaseModel):
+    """Body for ``POST /v1/objects/{id}/price`` (pentagon pricing).
+
+    ``p`` fixes the capital level; supply **exactly one** pricing target --
+    ``coc`` (cost of capital / ROE) or ``lr`` (loss ratio). The server
+    enforces the exactly-one rule and returns 400 otherwise.
+    """
+
+    p: float = Field(..., gt=0, lt=1, description="VaR probability fixing capital.")
+    coc: float | None = Field(None, gt=0, description="Cost-of-capital (ROE) target.")
+    lr: float | None = Field(None, gt=0, description="Loss-ratio target.")
+
+
+class PriceResponse(BaseModel):
+    """``POST /v1/objects/{id}/price`` result.
+
+    ``pentagon`` is the one-row completion (both Aggregate and Portfolio).
+    ``distortion_df`` (Portfolio only) is the calibrated-distortions detail --
+    one row per standard distortion (ccoc / ph / wang / dual / tvar) from
+    ``calibrate_distortions``. ``distortions`` is the per-distortion pricing
+    map of stat name (``LR`` / ``P`` / ``PQ`` / ``ROE``) to a frame from
+    ``analyze_distortions``; both ``None`` for an Aggregate. ``warnings``
+    carries any non-fatal messages (e.g. an allocation skipped on an unbounded
+    portfolio).
+    """
+
+    model_config = _RESPONSE_CFG
+
+    kind: str
+    pentagon: FrameResponse
+    distortion_df: FrameResponse | None = None
+    distortions: dict[str, FrameResponse] | None = None
+    warnings: list[str] = []
 
 
 # ======================================================================

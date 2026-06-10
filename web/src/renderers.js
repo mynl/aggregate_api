@@ -61,8 +61,12 @@ export function renderTable(frame, opts = {}) {
  * into a tab pane. ``.tbl`` is ``display:block; overflow-x:auto`` so it
  * scrolls horizontally on narrow viewports without a wrapper.
  */
-export function renderFrameTable(frame) {
+export function renderFrameTable(frame, opts = {}) {
     const { columns = [], rows = [] } = frame || {};
+    // Optional per-cell formatter for the non-label columns (the first column
+    // is the row label and always uses the default fmt). Lets the Price tab
+    // render LR as a percent, P as a thousands-grouped integer, etc.
+    const cellFmt = opts.format || fmt;
 
     const thead = el('thead', {},
         el('tr', {}, columns.map((c, i) =>
@@ -70,7 +74,8 @@ export function renderFrameTable(frame) {
     );
     const tbody = el('tbody', {}, rows.map(row =>
         el('tr', {}, row.map((cell, i) =>
-            el('td', { className: i === 0 ? 'lbl' : '' }, fmt(cell)))),
+            el('td', { className: i === 0 ? 'lbl' : '' },
+                i === 0 ? fmt(cell) : cellFmt(cell)))),
     ));
     return el('table', { className: 'tbl' }, thead, tbody);
 }

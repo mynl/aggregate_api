@@ -244,6 +244,53 @@ Caddy's `rate_limit` module (the "special caddy install").
   `200…` then `429` after the cap; a loop on `/v1/health` should stay all `200`.
   If builds never 429, the config isn't live (validate + reload) or the matcher
   is wrong (the bare-path gotcha).
+- **`/docs` is intentionally broken on the public URL — leave it that way (for
+  now).** `https://www.mynl.com/Q7M4Z9KP/docs` 404s on `openapi.json` because
+  `handle_path` strips `/Q7M4Z9KP` and FastAPI then emits a root-relative
+  `/openapi.json`. That's a **feature**: external visitors get the SPA but not
+  the interactive API explorer. `/docs` still works over the VPN
+  (`http://10.8.0.1:19456/docs`). If we ever want public docs, the fix is to
+  forward the stripped prefix: Caddy `header_up X-Forwarded-Prefix /Q7M4Z9KP`
+  on the `/Q7M4Z9KP` reverse_proxy + a small ASGI middleware that copies that
+  header into the ASGI `root_path` (so Swagger references the prefixed
+  `openapi.json`). Was prototyped and reverted on 2026-06-10.
+
+### Curated Examples list
+
+The Examples dropdown is fetched at runtime from `GET /v1/examples` (parsed from
+an `.agg` file), so it's **not** baked into the SPA bundle — change the file,
+restart the api, refresh the browser. Source precedence:
+`AGGAPI_EXAMPLES_FILE` (a curated file anywhere on disk) → bundled
+`aggregate/agg/spa_examples.agg`. Format: a `# A. Title` contents block plus
+`agg A.Name …` item lines (optional trailing `note{…}`).
+```powershell
+$env:AGGAPI_EXAMPLES_FILE = "T:\tmp\silly-examples.agg" 
+uv run aggregate-api --port 8001
+```
+
+### VPS refresh: `uv.lock` blocks `git pull`
+
+If a refresh fails with *"Your local changes to the following files would be
+overwritten by merge: uv.lock … Aborting"* — that does **not** mean `uv.lock`
+should be gitignored. Keep it tracked so the VPS installs the same resolved
+environment as the dev box. Something on the VPS (usually `uv sync`) re-resolved
+the lock. Inspect, then discard just that file and pull:
+
+```bash
+git diff -- uv.lock
+git restore uv.lock
+git pull --ff-only
+```
+
+Make refresh install *from* the lock instead of updating it:
+
+```bash
+( cd "$AGG_DIR" && uv sync --frozen --extra dev )
+( cd "$API_DIR" && uv sync --frozen --extra dev )
+```
+
+Lock updates should happen intentionally on Windows, get committed, then pulled
+by the VPS.
 
 ### Later: run as a systemd service
 

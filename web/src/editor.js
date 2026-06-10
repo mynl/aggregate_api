@@ -102,7 +102,10 @@ const editorTheme = EditorView.theme({
     '.cm-content': {
         fontFamily: '"Cascadia Mono", Menlo, Consolas, monospace',
         padding: '12px 10px',
-        minHeight: '3rem',
+        // Floor of ~3 text lines; CM grows past this with content (capped by
+        // the scroller's maxHeight below). `em` so it tracks the font size,
+        // including the 16px mobile bump.
+        minHeight: '4.5em',
     },
     '.cm-scroller': { overflow: 'auto', maxHeight: '40vh' },
     '.cm-gutters': {
@@ -121,6 +124,8 @@ const editorTheme = EditorView.theme({
  *   onBuild()         -- Ctrl-Enter / Cmd-Enter
  *   onHistoryPrev()   -- Ctrl-ArrowUp / Cmd-ArrowUp
  *   onHistoryNext()   -- Ctrl-ArrowDown / Cmd-ArrowDown
+ *   onExamplePrev()   -- Alt-ArrowUp   (undisclosed: step through examples)
+ *   onExampleNext()   -- Alt-ArrowDown
  */
 export function createEditor(host, callbacks = {}) {
     const customKeymap = keymap.of([
@@ -158,6 +163,16 @@ export function createEditor(host, callbacks = {}) {
                 }
                 return false;
             },
+        },
+        // Alt-↑/↓: step through the example library (undisclosed power-user
+        // nav -- deliberately not shown in the feedback line).
+        {
+            key: 'Alt-ArrowUp',
+            run: () => { callbacks.onExamplePrev?.(); return true; },
+        },
+        {
+            key: 'Alt-ArrowDown',
+            run: () => { callbacks.onExampleNext?.(); return true; },
         },
         // Tab accepts a completion if the popup is open, otherwise inserts a tab.
         { key: 'Tab', run: acceptCompletion },

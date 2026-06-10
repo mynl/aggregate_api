@@ -100,6 +100,96 @@ def run_pricing(
     }
 
 
+def run_price_pentagon(
+    obj: Any,
+    *,
+    p: float,
+    coc: float | None = None,
+    lr: float | None = None,
+) -> dict:
+    """Pricing-pentagon completion, plus distortion analysis for Portfolios.
+
+    Parameters
+    ----------
+    obj : Aggregate | Portfolio
+        The live object (both expose ``price_pentagon``).
+    p : float
+        VaR probability fixing the capital level.
+    coc, lr : float | None
+        Exactly one pricing target -- cost of capital (ROE) or loss ratio.
+
+    Returns
+    -------
+    dict
+        Matches :class:`PriceResponse`: ``kind``, the one-row ``pentagon``
+        frame, an optional ``distortions`` map (Portfolio only), and any
+        ``warnings``.
+
+    Notes
+    -----
+    For a Portfolio we calibrate distortions to the pentagon's cost of capital
+    at the same ``p`` and run :meth:`Portfolio.analyze_distortions`, exposing
+    the ``LR`` / ``P`` / ``PQ`` / ``ROE`` slices of its ``pricing_df``. The
+    library may *skip* a distortion (e.g. the mass/ccoc distortion on an
+    unbounded portfolio) -- that surfaces as a warning and we render whatever
+    came back rather than failing.
+    """
+    from .serializers import frame_to_payload, reset_index_safe
+
+    if (coc is None) == (lr is None):
+        raise ValueError("pass exactly one of coc (CoC/ROE) or lr (loss ratio)")
+    if not hasattr(obj, "price_pentagon"):
+        raise ValueError("pricing requires an Aggregate or Portfolio")
+
+    target = {"ROE": coc} if coc is not None else {"LR": lr}
+    pent = obj.price_pentagon(p=p, **target)
+    is_port = type(obj).__name__ == "Portfolio"
+    out: dict = {
+        "kind": "port" if is_port else "agg",
+        "pentagon": frame_to_payload(reset_index_safe(pent)),
+        "distortion_df": None,
+        "distortions": None,
+        "warnings": [],
+    }
+    if not is_port:
+        return out
+
+    # Portfolio: calibrate to the pentagon's cost of capital at the same p,
+    # then analyze. Both steps are best-effort -- collect warnings, don't 500.
+    import warnings as _warnings
+
+    warns: list[str] = []
+    roe = coc if coc is not None else _scalar(pent["ROE"].iloc[0])
+    try:
+        obj.calibrate_distortions(roe, p=p)
+    except Exception as exc:  # noqa: BLE001 -- reported as a warning
+        warns.append(f"calibrate_distortions: {exc}")
+
+    # The calibrated-distortions detail (one row per standard distortion) is
+    # populated by calibrate_distortions even when allocation later balks at
+    # an unbounded ccoc -- surface it below the pentagon.
+    dist_df = getattr(obj, "distortion_df", None)
+    if dist_df is not None:
+        out["distortion_df"] = frame_to_payload(reset_index_safe(dist_df))
+
+    with _warnings.catch_warnings(record=True) as caught:
+        _warnings.simplefilter("always")
+        ad = obj.analyze_distortions(p=p)
+        warns.extend(str(w.message) for w in caught)
+
+    pdf = ad.pricing_df
+    dist: dict = {}
+    for stat in ("LR", "P", "PQ", "ROE"):
+        try:
+            sl = pdf.xs(stat, level="stat")
+        except KeyError:
+            continue
+        dist[stat] = frame_to_payload(reset_index_safe(sl))
+    out["distortions"] = dist
+    out["warnings"] = warns
+    return out
+
+
 # ----------------------------------------------------------------------
 # helpers
 # ----------------------------------------------------------------------

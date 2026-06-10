@@ -32,8 +32,10 @@ Returned shape mirrors :class:`ExamplesResponse` in
 from __future__ import annotations
 
 import re
+import warnings
 from functools import lru_cache
 from importlib.resources import files
+from pathlib import Path
 
 # Lines like ``# A. Creating Aggregates, Portfolios, and Distortion objects``
 # from the Contents block. Capture letter + title.
@@ -107,8 +109,26 @@ def _load_items(text: str) -> dict[str, list[dict]]:
 
 
 def _read_suite_text() -> str:
-    """Locate test_suite.agg via package resources and return its text."""
-    resource = files("aggregate").joinpath("agg/test_suite.agg")
+    """Return the examples-source text.
+
+    Prefers ``AGGAPI_EXAMPLES_FILE`` (a curated ``.agg`` on disk) when it is
+    set and present; otherwise falls back to the bundled
+    ``agg/spa_examples.agg`` discovered via package resources. A configured
+    but missing path warns and falls back rather than failing the route.
+    """
+    from .config import get_settings
+
+    custom = get_settings().examples_file
+    if custom:
+        path = Path(custom)
+        if path.is_file():
+            return path.read_text(encoding="utf-8")
+        warnings.warn(
+            f"AGGAPI_EXAMPLES_FILE={custom!r} not found; "
+            "using bundled spa_examples.agg",
+            stacklevel=2,
+        )
+    resource = files("aggregate").joinpath("agg/spa_examples.agg")
     # ``importlib.resources`` traversables expose .read_text() for files.
     return resource.read_text(encoding="utf-8")
 

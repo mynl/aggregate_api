@@ -55,6 +55,49 @@ In progress (`dev/plan-0002.md`). Iterating on the SPA via
 - `POST /v1/decl/format` — new; canonicalizes a DecL program via
   `aggregate.decl_writer.format_program`, echoing the input unchanged on any
   parse/format failure (best-effort, never 500s).
+- **Curated Examples via env:** `AGGAPI_EXAMPLES_FILE` points the Examples
+  dropdown at a custom `.agg` file (same `# A. Title` + `agg A.Name …` format),
+  falling back to the bundled `spa_examples.agg`. Runtime-fetched, so swapping
+  the file needs only a server restart — no SPA rebuild.
+
+**Price tab (plan-0002 step 3)**
+
+- New `POST /v1/objects/{id}/price` — `price_pentagon(p, ROE=coc | LR=lr)`
+  returns the one-row `[L, M, P, Q, a, LR, PQ, ROE]` completion for an
+  Aggregate *or* Portfolio. For a Portfolio it also calibrates distortions to
+  the pentagon's CoC at the same `p` and runs `analyze_distortions(p)`,
+  surfacing the `LR / P / PQ / ROE` slices of `pricing_df` (per distortion ×
+  unit + total). Skipped distortions (e.g. mass/ccoc on an unbounded
+  portfolio) come back as `warnings`, not errors.
+- The **Price** tab is now a live form (p + CoC/LR), replacing the
+  placeholder. The pentagon renders for any object; Portfolios additionally
+  show the calibrated-distortions detail (`distortion_df`, one row per
+  ccoc/ph/wang/dual/tvar) directly below the pentagon, then the four stacked
+  distortion tables, formatted per stat (LR/ROE as percents, P
+  thousands-grouped, PQ to 3 dp). `renderFrameTable` gained an optional
+  per-cell formatter. `/price` is intentionally not rate-limited.
+
+**Build summary (plan-0002 step 3)**
+
+- The summary line now shows the **resolved bucket size** —
+  `name · kind · bs = 1/64 · mean … · CV …` (sub-unit bs rendered as a
+  power-of-two fraction). `BuildResponse` carries `bs` (the library's auto-pick
+  when the request said "auto").
+- A **timing sub-line** under the summary: `Calculated aggregate in 0.000
+  seconds` (or "Loaded … from cache"), from the existing `elapsed_ms`.
+
+**Frontend — mobile (plan-0002 step 2)**
+
+- **No more iOS zoom-on-tap:** the editor text is bumped to 16px on phones
+  (≤575px) so Safari stops magnifying the page when the editor is focused;
+  desktop keeps 14px.
+- **Tab row fits a phone:** the output pills get tighter padding on ≤575px so
+  `Info · Describe · Plot · Price · Reins · More` stays on one line.
+- **Editor floor of ~3 lines:** the editor never shrinks below ~3 text lines
+  (`min-height: 4.5em`, font-relative) and grows with content as before.
+- **Undisclosed example browsing:** **Alt-↑/↓** steps through the whole example
+  library into the editor (format-standardized, wrap-around), seeded from
+  `/v1/examples` — separate from build history, not shown in the UI.
 
 ## 1.0.0a3
 

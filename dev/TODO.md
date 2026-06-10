@@ -6,9 +6,12 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## SM
 
-- [ ] Bandwidth limited by caddy page with obscured url; special caddy install  
-- [ ] Set up service to run on vps
-- [ ] Limit log2 <= 18
+- [x] Bandwidth limited by caddy page with obscured url; special caddy install
+      *(done — `rate_limit` on the public `/Q7M4Z9KP` route, build-only, plus a
+      friendly 429 card; see human-hints.)*
+- [ ] Set up service to run on vps *(systemd unit documented in human-hints;
+      still launched via `nohup`)*
+- [x] Limit log2 <= 18 *(`AGGAPI_LOG2_CAP` defaults to 18)*
 - [ ] 
 
 ## Near term (get it healthy)
@@ -20,9 +23,12 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
       autocomplete, emacs keys, archivum look-and-feel, tabbed output, native
       plot + reins / CSV endpoints. *(done; moved to `dev/done/`)*
 - [ ] **plan-0002 — UI tweaks, bug fixes, a4 enhancements** (→ 1.0.0a4, *in
-      progress*). Editor/CM6 fixes, responsive layout + tab reorg (step 1 landed:
-      More dropdown, phone-fit), distortion + density bugs, table filters, hints/
-      log2, Price pentagon flow, and a site-aligned mplstyle. See
+      progress*). Landed: editor fixes (native selection, kill-ring yank, ↑↓
+      history, 3-line floor, Alt-↑↓ example nav), tab reorg + More dropdown,
+      phone-fit, Density + bs-window panes, format_program on examples,
+      curated-examples env knob, Price pentagon + distortion analysis, friendly
+      429, bs + timing in the summary, mplstyle draft. Still open: standalone
+      distortion (C1), table filters (D1), hints/log2 cap (D2). See
       `dev/plan-0002.md`.
 - [ ] **plan-0003 — dev workflow & smoke test** (later). Document/verify the
       end-to-end loop: `uv run aggregate-api --reload` + `npm run dev`, build the
@@ -44,7 +50,7 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 - [ ] Frontend polish: keyboard-shortcut help, sharable URLs for a DecL program.
       *(look-and-feel redesign + emacs keys landed in 1.0.0a3; these specific
       items remain.)*
-- [ ] Flesh out the **Price** and **More** output tabs (placeholders in
-      1.0.0a3). Price = Portfolio pricing form; More = bs-window / misc reports.
+- [x] Flesh out the **Price** and **More** output tabs. *(a4: Price = pentagon
+      + distortion analysis; More = Stats / Density / bs-window.)*
 - [ ] Revisit a dedicated **severity-stats** view (the "sev stats" sub-button
       was dropped — no clean upstream accessor).
