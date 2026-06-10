@@ -14,7 +14,7 @@
 
 import { EditorState, Compartment } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine,
-         drawSelection, highlightSpecialChars } from '@codemirror/view';
+         highlightSpecialChars } from '@codemirror/view';
 import { defaultKeymap, emacsStyleKeymap, history, historyKeymap,
          indentWithTab } from '@codemirror/commands';
 import { autocompletion, completionKeymap, acceptCompletion } from '@codemirror/autocomplete';
@@ -43,8 +43,55 @@ export function emacsEnabledDefault() {
     catch { return true; }
 }
 
+// Minimal emacs kill-ring. CM's bundled `emacsStyleKeymap` binds Ctrl-K to a
+// plain delete (no ring) and has no Ctrl-Y, so killed text was lost and yank
+// did nothing. We keep a one-slot ring and bind kill/yank on top of it.
+let killRing = '';
+
+/** Ctrl-K: kill the active selection if any, else from cursor to line end
+ *  (at EOL, kill the newline). The removed text goes to the ring. */
+function killToLineEnd(view) {
+    const { state } = view;
+    const { from, to, empty } = state.selection.main;
+    if (!empty) {
+        killRing = state.doc.sliceString(from, to);
+        view.dispatch({ changes: { from, to }, scrollIntoView: true });
+        return true;
+    }
+    const line = state.doc.lineAt(from);
+    let killTo = line.to;
+    if (from === line.to) {                 // at EOL -> kill the newline
+        if (line.to === state.doc.length) return true;   // end of doc, nothing
+        killTo = line.to + 1;
+        killRing = '\n';
+    } else {
+        killRing = state.doc.sliceString(from, line.to);
+    }
+    view.dispatch({ changes: { from, to: killTo }, scrollIntoView: true });
+    return true;
+}
+
+/** Ctrl-Y: insert the ring at the cursor (replacing any selection). */
+function yank(view) {
+    if (!killRing) return false;
+    const { from, to } = view.state.selection.main;
+    view.dispatch({
+        changes: { from, to, insert: killRing },
+        selection: { anchor: from + killRing.length },
+        scrollIntoView: true,
+    });
+    return true;
+}
+
 function emacsExtension(on) {
-    return on ? keymap.of(emacsStyleKeymap) : [];
+    if (!on) return [];
+    // Our kill/yank sit *before* emacsStyleKeymap so our Ctrl-K (stores to the
+    // ring) beats its delete-only Ctrl-K; Ctrl-Y is otherwise unbound.
+    return keymap.of([
+        { key: 'Ctrl-k', run: killToLineEnd, preventDefault: true },
+        { key: 'Ctrl-y', run: yank, preventDefault: true },
+        ...emacsStyleKeymap,
+    ]);
 }
 
 const editorTheme = EditorView.theme({
@@ -89,6 +136,29 @@ export function createEditor(host, callbacks = {}) {
             key: 'Mod-ArrowDown',
             run: () => { callbacks.onHistoryNext?.(); return true; },
         },
+        // Plain ↑/↓ navigate history at the buffer edges (REPL feel, matches
+        // the feedback-line hint); elsewhere they fall through to normal
+        // cursor movement by returning false.
+        {
+            key: 'ArrowUp',
+            run: (view) => {
+                const { head } = view.state.selection.main;
+                if (view.state.doc.lineAt(head).number === 1) {
+                    callbacks.onHistoryPrev?.(); return true;
+                }
+                return false;
+            },
+        },
+        {
+            key: 'ArrowDown',
+            run: (view) => {
+                const { head } = view.state.selection.main;
+                if (view.state.doc.lineAt(head).number === view.state.doc.lines) {
+                    callbacks.onHistoryNext?.(); return true;
+                }
+                return false;
+            },
+        },
         // Tab accepts a completion if the popup is open, otherwise inserts a tab.
         { key: 'Tab', run: acceptCompletion },
     ]);
@@ -99,7 +169,9 @@ export function createEditor(host, callbacks = {}) {
             lineNumbers(),
             highlightSpecialChars(),
             history(),
-            drawSelection(),
+            // No drawSelection(): we use the browser's native selection so it
+            // paints on top of the opaque active-line highlight (drawSelection
+            // renders behind it, which hid double-click / shift selections).
             EditorState.allowMultipleSelections.of(true),
             bracketMatching(),
             highlightActiveLine(),

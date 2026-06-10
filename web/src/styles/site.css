@@ -108,6 +108,11 @@ header .navbar { min-height: 56px; }
     box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
 }
 .out-tabs .nav-link:not(.active):hover { background: #e6e9ed; }
+/* More ▾ dropdown trigger: Bootstrap's tab plugin adds .active to the
+   toggle when a child pane (Stats / Density) is active, so it inherits the
+   pill-active look above. Just tidy the menu itself. */
+.out-tabs .nav-item.dropdown .dropdown-menu { font-size: .85rem; }
+.out-tabs .nav-item.dropdown .dropdown-item { padding: .25rem .9rem; }
 
 /* ---- Tab tool rows ---- */
 .tab-tools { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .55rem; align-items: center; }

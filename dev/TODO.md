@@ -19,7 +19,12 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 - [x] **plan-ui-enhancements — SPA editor fix & redesign** (→ 1.0.0a3). Tamed
       autocomplete, emacs keys, archivum look-and-feel, tabbed output, native
       plot + reins / CSV endpoints. *(done; moved to `dev/done/`)*
-- [ ] **plan-0002 — dev workflow & smoke test** (next bump). Document/verify the
+- [ ] **plan-0002 — UI tweaks, bug fixes, a4 enhancements** (→ 1.0.0a4, *in
+      progress*). Editor/CM6 fixes, responsive layout + tab reorg (step 1 landed:
+      More dropdown, phone-fit), distortion + density bugs, table filters, hints/
+      log2, Price pentagon flow, and a site-aligned mplstyle. See
+      `dev/plan-0002.md`.
+- [ ] **plan-0003 — dev workflow & smoke test** (later). Document/verify the
       end-to-end loop: `uv run aggregate-api --reload` + `npm run dev`, build the
       SPA, hit `/docs`, build an object in the playground. Add a `ruff` pass.
 

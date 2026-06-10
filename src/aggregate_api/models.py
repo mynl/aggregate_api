@@ -232,6 +232,23 @@ class DeclLexRequest(BaseModel):
     decl: str
 
 
+class DeclFormatRequest(BaseModel):
+    decl: str
+
+
+class DeclFormatResponse(BaseModel):
+    """``POST /v1/decl/format`` -- canonicalized DecL.
+
+    ``decl`` is the program re-rendered through ``aggregate``'s
+    ``format_program`` (canonical clause order / spacing). On a format
+    failure the original text is echoed back unchanged.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    decl: str
+
+
 class LexToken(BaseModel):
     model_config = _RESPONSE_CFG
 

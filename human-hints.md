@@ -47,9 +47,31 @@ trusted network — there's no auth on the api.
 .\scripts\build-web.ps1
 ```
 
-It does two things: `npm install` (first time only — pulls Vite, Bootstrap,
-CodeMirror into `web/node_modules/`), then `npm run build` → `vite build`, which
-bundles `web/src/` into `src/aggregate_api/static/`.
+It does two things: `npm install` (when `node_modules` is missing *or* older than
+`package.json`/`package-lock.json` — so a newly added dep auto-installs), then
+`npm run build` → `vite build`, which bundles `web/src/` into
+`src/aggregate_api/static/`.
+
+### `-ApiBase` — local builds DON'T need it
+
+`-ApiBase` (→ `VITE_API_BASE_URL`) is baked into the bundle as the prefix on
+every `fetch()`. It exists only for **split-origin / hidden-prefix** deploys.
+Local same-origin work omits it entirely:
+
+```powershell
+.\scripts\build-web.ps1                       # local: fetch('/v1/...')  ← use this
+.\scripts\build-web.ps1 -ApiBase /Q7M4Z9KP    # VPS Caddy hidden prefix: fetch('/Q7M4Z9KP/v1/...')
+.\scripts\build-web.ps1 -ApiBase https://api.host   # separate api host
+```
+
+The `/Q7M4Z9KP` string is a **VPS-only** concern (Caddy `handle_path /Q7M4Z9KP/*`
+strips it before proxying to FastAPI). On the PC it would only break things —
+the api is served same-origin, so a relative `/v1` is correct.
+
+Quickest PC loop: `build-web.ps1` (no args) → `uv run aggregate-api --port 8001
+--reload` → browse `http://localhost:8001/`. Re-run the build after web edits
+(`--reload` watches Python only). For pure UI churn, prefer the Vite dev server
+below — no rebuild step.
 
 ### Icons / favicons / logo
 

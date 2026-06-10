@@ -147,6 +147,45 @@ def test_density_df_unknown_cols_filtered(client):
     assert r.json()["columns"] == ["loss"]
 
 
+def test_density_df_nonzero_filters_support(client):
+    """nonzero=true keeps only p_total > 0 rows (the SPA Density default)."""
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(
+        f"/v1/objects/{oid}/density_df",
+        params={"cols": "loss,p_total", "nonzero": "true", "downsample": 50},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["columns"] == ["loss", "p_total"]
+    # p_total is the second column; every surfaced row carries mass.
+    assert body["rows"], "expected some support rows"
+    assert all(row[1] is not None and row[1] > 0 for row in body["rows"])
+
+
+# ----------------------------------------------------------------------
+# bs window summary
+# ----------------------------------------------------------------------
+
+def test_bs_window_df_present(client):
+    """The bucket/window estimator summary is a small per-method frame."""
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/bs_window_df")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "columns" in body and "rows" in body
+    assert len(body["rows"]) >= 1
+    # The 'selected' column marks the chosen grid method.
+    assert "selected" in body["columns"]
+
+
+def test_bs_window_df_csv(client):
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/frame/bs_window_df.csv")
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("text/csv")
+    assert len(r.text.strip().splitlines()) >= 2
+
+
 # ----------------------------------------------------------------------
 # Plot endpoint
 # ----------------------------------------------------------------------
@@ -300,6 +339,27 @@ def test_log2_cap_rejected(client, monkeypatch):
         assert r.status_code == 422
         # Message says "log2 12 exceeds AGGAPI_LOG2_CAP=8".
         assert "CAP" in r.json()["detail"].upper()
+
+
+# ----------------------------------------------------------------------
+# DecL formatting (example standardization)
+# ----------------------------------------------------------------------
+
+def test_decl_format_roundtrips_name(client):
+    """format returns canonical DecL; the object name survives."""
+    r = client.post("/v1/decl/format", json={"decl": _DICE})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "decl" in body and isinstance(body["decl"], str)
+    assert "Dice" in body["decl"]
+
+
+def test_decl_format_echoes_garbage(client):
+    """Unparseable input echoes back unchanged (best-effort, never 500)."""
+    junk = "this is not decl"
+    r = client.post("/v1/decl/format", json={"decl": junk})
+    assert r.status_code == 200, r.text
+    assert r.json()["decl"] == junk
 
 
 # ----------------------------------------------------------------------

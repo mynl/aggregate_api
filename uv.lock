@@ -12,7 +12,7 @@ resolution-markers = [
 
 [[package]]
 name = "aggregate"
-version = "1.0.0a55"
+version = "1.0.0a56"
 source = { editable = "../aggregate_REFACTOR" }
 dependencies = [
     { name = "ipython" },
@@ -59,7 +59,7 @@ provides-extras = ["dev", "notebook"]
 
 [[package]]
 name = "aggregate-api"
-version = "1.0.0a3"
+version = "1.0.0a4"
 source = { editable = "." }
 dependencies = [
     { name = "aggregate" },

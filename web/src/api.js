@@ -58,6 +58,7 @@ export const api = {
     description:  (id)              => _json('GET',  `/v1/objects/${id}/description`),
     stats_df:     (id)              => _json('GET',  `/v1/objects/${id}/stats_df`),
     density_df:   (id, p = {})      => _json('GET',  `/v1/objects/${id}/density_df?${qs(p)}`),
+    bs_window_df: (id)              => _json('GET',  `/v1/objects/${id}/bs_window_df`),
     kappa:        (id, p = {})      => _json('GET',  `/v1/objects/${id}/kappa?${qs(p)}`),
 
     // Reinsurance
@@ -70,6 +71,7 @@ export const api = {
     // DecL editor support
     complete:     (decl, cursor)    => _json('POST', '/v1/decl/complete', { decl, cursor }),
     lex:          (decl)            => _json('POST', '/v1/decl/lex', { decl }),
+    formatDecl:   (decl)            => _json('POST', '/v1/decl/format', { decl }),
 
     // Metadata
     examples:     ()                => _json('GET',  '/v1/examples'),

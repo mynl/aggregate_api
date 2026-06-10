@@ -4,6 +4,54 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a4
+
+In progress (`dev/plan-0002.md`). Iterating on the SPA via
+`hacks/mockup-08.html`, then porting agreed changes here.
+
+**Frontend — layout (plan-0002 step 1)**
+
+- **Tab bar reorg:** the output tabs are now `Info · Describe · Plot · Price ·
+  Reins · More`, where **More** is a dropdown holding `Stats · Density ·
+  (reserved)`. Stats moved off the top row to bound its width; a new **Density**
+  tab is stubbed (a placeholder pane; wired to `density_df` in step 2). The tab
+  wiring in `main.js` now selects triggers by `[data-tab]` rather than
+  `.nav-link` so the dropdown items lazy-load like the top-level pills.
+- **Phone-fit button row:** on extra-small screens the live `log2` / `bs`
+  values and the *Examples* label collapse (icon/label only); the values still
+  show from ≥sm and inside the dropdowns.
+
+**Frontend — editor + data panes (plan-0002 step 2)**
+
+- **Editor selection fixed:** dropped `drawSelection()` in favor of the
+  browser's native selection. The opaque active-line highlight was painted over
+  drawSelection's (behind-the-text) selection layer, so double-click-word and
+  shift-arrow selections were invisible; native selection paints on top.
+- **Real kill/yank:** CM's bundled `emacsStyleKeymap` binds Ctrl-K to a
+  delete-only command and leaves Ctrl-Y unbound. Added a small kill-ring so
+  Ctrl-K stores (line-end or active selection) and Ctrl-Y yanks.
+- **↑/↓ history:** plain Up/Down now navigate build history at the buffer edges
+  (and no longer reset the history cursor), matching the feedback-line hint;
+  Ctrl-↑/↓ still work mid-buffer.
+- **Density pane** (under **More**): wired to `density_df` with the SPA default
+  `loss · p_total · F · S`, `nonzero` (p_total>0) filter, and a ~300-row
+  downsample; full frame via the CSV button.
+- **bs window pane** (under **More**): the bucket/window estimator summary
+  (`_bs_window_df`), with the `selected` row marking the chosen grid.
+- **Example standardization:** picking an Example now runs it through
+  `format_program` (new `POST /v1/decl/format`) so the editor shows canonical
+  DecL; the raw text shows instantly and is replaced when the format returns.
+
+**Backend (plan-0002 step 2)**
+
+- `GET /v1/objects/{id}/density_df` gains a `nonzero` flag (drop zero-mass rows
+  before slicing).
+- `GET /v1/objects/{id}/bs_window_df` — new; serves the private `_bs_window_df`
+  frame (400 when absent, e.g. on a Portfolio). Added to the `/frame/*.csv` map.
+- `POST /v1/decl/format` — new; canonicalizes a DecL program via
+  `aggregate.decl_writer.format_program`, echoing the input unchanged on any
+  parse/format failure (best-effort, never 500s).
+
 ## 1.0.0a3
 
 SPA editor fix and look-and-feel redesign (`dev/plan-ui-enhancements.md`). The

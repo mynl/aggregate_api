@@ -9,8 +9,12 @@
 
 .cm-editor                   { background-color: #ffffff; }
 .cm-editor.cm-focused        { outline: none; }
-.cm-editor .cm-selectionBackground { background: #d6e6f5 !important; }
-.cm-editor .cm-cursor        { border-left-color: #1a1a1a; }
+.cm-editor .cm-content       { caret-color: #1a1a1a; }
+/* Native browser selection (we dropped drawSelection so the selection paints
+   on top of the active-line highlight instead of behind it). */
+.cm-editor .cm-content::selection,
+.cm-editor .cm-content ::selection,
+.cm-editor .cm-line::selection { background: #d6e6f5; }
 
 /* Token coloring. Tags emitted by the StreamLanguage map to these
  * standard CSS class names via @codemirror/highlight defaults. */

@@ -75,7 +75,7 @@
             <div class="dropdown">
                 <button class="btn btn-outline-primary px-3 shadow-sm dropdown-toggle"
                         data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="bi bi-collection me-1"></i> Examples</button>
+                    <i class="bi bi-collection me-1"></i><span class="d-none d-sm-inline"> Examples</span></button>
                 <ul id="examples-menu" class="dropdown-menu shadow-sm" style="max-height:60vh; overflow-y:auto;">
                     <li><span class="dropdown-item-text text-muted small">loading…</span></li>
                 </ul>
@@ -84,7 +84,7 @@
             <div class="dropdown">
                 <button id="log2-btn" class="btn btn-outline-secondary shadow-sm dropdown-toggle opt-toggle"
                         data-bs-toggle="dropdown" aria-expanded="false">
-                    log2 <span class="v" id="log2-val">auto</span></button>
+                    log2 <span class="v d-none d-sm-inline" id="log2-val">auto</span></button>
                 <ul id="log2-menu" class="dropdown-menu shadow-sm">
                     <li><a class="dropdown-item small active" href="#" data-val="auto">auto</a></li>
                     <li><a class="dropdown-item small" href="#" data-val="10">10</a></li>
@@ -100,7 +100,7 @@
             <div class="dropdown">
                 <button id="bs-btn" class="btn btn-outline-secondary shadow-sm dropdown-toggle opt-toggle"
                         data-bs-toggle="dropdown" aria-expanded="false">
-                    bs <span class="v" id="bs-val">auto</span></button>
+                    bs <span class="v d-none d-sm-inline" id="bs-val">auto</span></button>
                 <ul id="bs-menu" class="dropdown-menu shadow-sm">
                     <li><a class="dropdown-item small active" href="#" data-val="auto">auto</a></li>
                     <li><a class="dropdown-item small" href="#" data-val="1">1</a></li>
@@ -124,15 +124,23 @@
                 <i class="bi bi-chevron-down"></i></button>
         </div>
 
-        <!-- Output tabs -->
+        <!-- Output tabs: Info·Describe·Plot·Price·Reins·More(▾ Stats·Density·…) -->
         <ul class="nav nav-pills out-tabs" role="tablist">
             <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#t-info"  data-tab="info"  type="button">Info</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-desc"  data-tab="desc"  type="button">Describe</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-plot"  data-tab="plot"  type="button">Plot</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-stats" data-tab="stats" type="button">Stats</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-reins" data-tab="reins" type="button">Reins</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-price" data-tab="price" type="button">Price</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-more"  data-tab="more"  type="button">More</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-reins" data-tab="reins" type="button">Reins</button></li>
+            <li class="nav-item dropdown">
+                <button class="nav-link dropdown-toggle" data-bs-toggle="dropdown" type="button" aria-expanded="false">More</button>
+                <ul class="dropdown-menu shadow-sm">
+                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-stats"   data-tab="stats"   type="button">Stats</button></li>
+                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-density" data-tab="density" type="button">Density</button></li>
+                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-bswin"   data-tab="bswin"   type="button">bs window</button></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><span class="dropdown-item-text text-muted small">reserved for future</span></li>
+                </ul>
+            </li>
         </ul>
 
         <div class="tab-content">
@@ -188,10 +196,22 @@
                 <div class="placeholder-pane">pricing output will render here</div>
             </div>
 
-            <!-- More (placeholder) -->
-            <div class="tab-pane fade" id="t-more">
-                <div class="tab-tools"><span class="text-muted" style="font-size:.72rem;">bs window etc. (to be customized)</span></div>
-                <div class="placeholder-pane">misc reports will render here</div>
+            <!-- Density (under More ▾) — density_df, p_total>0, ~300-row preview -->
+            <div class="tab-pane fade" id="t-density">
+                <div class="tab-tools">
+                    <button class="btn btn-outline-secondary" data-csv="density_df"><i class="bi bi-download"></i> csv</button>
+                    <span class="text-muted ms-1" style="font-size:.7rem;">loss · p_total · F · S — p_total&gt;0, downsampled; full data via csv</span>
+                </div>
+                <div id="pane-density" class="pane"></div>
+            </div>
+
+            <!-- bs window (under More ▾) — bucket/window estimator summary -->
+            <div class="tab-pane fade" id="t-bswin">
+                <div class="tab-tools">
+                    <button class="btn btn-outline-secondary" data-csv="bs_window_df"><i class="bi bi-download"></i> csv</button>
+                    <span class="text-muted ms-1" style="font-size:.7rem;">bucket / window estimator — the <code>selected</code> row is the chosen grid</span>
+                </div>
+                <div id="pane-bswin" class="pane"></div>
             </div>
         </div>
     </main>

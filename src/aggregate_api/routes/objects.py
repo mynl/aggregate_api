@@ -510,13 +510,17 @@ def get_density_df(
     start: int | None = Query(None, ge=0),
     stop: int | None = Query(None, ge=0),
     downsample: int | None = Query(None, ge=1, le=10_000),
+    nonzero: bool = Query(
+        False,
+        description="Drop zero-mass rows (keep only p_total > 0) before slicing.",
+    ),
     cache: ObjectCache = Depends(_get_cache),
 ) -> dict:
     """Paginated density_df slice.
 
     Without filters this is a 2**N-row table (potentially big);
-    typical SPA use sets ``cols`` and ``downsample`` to limit
-    payload size.
+    typical SPA use sets ``cols``, ``nonzero`` and ``downsample`` to
+    limit payload size to the actual support.
     """
     entry = _resolve_object(oid, cache)
     df = getattr(entry.obj, "density_df", None)
@@ -531,6 +535,10 @@ def get_density_df(
     # ``loss`` is already a column on the frame so reset_index_safe
     # avoids the collision.
     df = reset_index_safe(df)
+    # Trim the long zero-mass tails to the actual support first, so the
+    # downsample spends its row budget on rows that carry probability.
+    if nonzero and "p_total" in df.columns:
+        df = df[df["p_total"] > 0]
     return frame_to_payload(
         df, cols=col_list, start=start, stop=stop, downsample=downsample,
     )
@@ -557,6 +565,28 @@ def get_kappa(
         raise HTTPException(status_code=400, detail="no exeqa_* columns on density_df")
     df = reset_index_safe(df)[["loss", *exeqa]]
     return frame_to_payload(df, downsample=downsample)
+
+
+# ----------------------------------------------------------------------
+# GET /v1/objects/{id}/bs_window_df  -- bucket/window estimator summary
+# ----------------------------------------------------------------------
+
+@router.get("/objects/{oid}/bs_window_df", response_model=models.FrameResponse)
+def get_bs_window_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+    """Bucket/window estimator summary (``_bs_window_df``).
+
+    A small per-method frame the library builds while choosing the grid
+    (``bs`` / ``log2`` / ``x_min``); the ``selected`` row marks the method
+    actually used. Stored on the private ``_bs_window_df`` attribute, so a
+    getattr miss (e.g. on a Portfolio) yields a clean 400.
+    """
+    entry = _resolve_object(oid, cache)
+    df = _frame_attr(entry.obj, "_bs_window_df")
+    if df is None:
+        raise HTTPException(
+            status_code=400, detail="bs window summary not available for this object"
+        )
+    return frame_to_payload(reset_index_safe(df))
 
 
 # ----------------------------------------------------------------------
@@ -659,6 +689,7 @@ _CSV_FRAMES = {
     "describe": "describe",
     "stats_df": "stats_df",
     "density_df": "density_df",
+    "bs_window_df": "_bs_window_df",
     "reins_describe": "reins_describe",
     "reins_stats_df": "reins_stats_df",
     "reins_density_df": "reins_density_df",

@@ -7,8 +7,8 @@
 //   * wire the Build button, log2 / bs dropdowns, Examples dropdown
 //   * render the one-line build summary
 //   * lazily fetch + render each output tab (Info / Describe / Plot /
-//     Stats / Reins), caching per built object; Price / More are
-//     placeholders
+//     Reins, plus Stats under the More dropdown), caching per built
+//     object; Price and Density are placeholders (wired later)
 //   * surface aggregate/api versions in the header
 
 // ---- Bootstrap + icons + site styles ----
@@ -56,6 +56,9 @@ editor.focus();
 // Reset the history cursor whenever the user types something new so
 // arrow-up resumes from the latest entry on the next press.
 editor.view.dom.addEventListener('keydown', (ev) => {
+    // Plain ↑/↓ drive history navigation (see editor.js) -- don't reset the
+    // cursor on them or sequential history walking breaks.
+    if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') return;
     if (!ev.ctrlKey && !ev.metaKey) history.resetCursor();
 });
 
@@ -205,6 +208,7 @@ window.addEventListener('resize', syncSummaryMore);
 const PANE_OF = {
     info: 'pane-info', desc: 'pane-desc', plot: 'pane-plot',
     stats: 'pane-stats', reins: 'pane-reins',
+    density: 'pane-density', bswin: 'pane-bswin',
 };
 
 function clearPanes() {
@@ -212,20 +216,23 @@ function clearPanes() {
     empty($('reins-desc'));
 }
 
+// Tab triggers carry data-tab; they live either as top-level .nav-link or
+// as .dropdown-item inside the More dropdown, so select on [data-tab] (not
+// .nav-link) to catch both.
 function activeTabName() {
-    const link = document.querySelector('.out-tabs .nav-link.active');
+    const link = document.querySelector('.out-tabs [data-tab].active');
     return link ? link.dataset.tab : 'info';
 }
 
 function showTab(name) {
-    const btn = document.querySelector(`.out-tabs .nav-link[data-tab="${name}"]`);
+    const btn = document.querySelector(`.out-tabs [data-tab="${name}"]`);
     if (btn) bootstrap.Tab.getOrCreateInstance(btn).show();
 }
 
 function loadActiveTab() { loadTab(activeTabName()); }
 
-// Bootstrap fires shown.bs.tab on the tab button when a pill activates.
-document.querySelectorAll('.out-tabs .nav-link').forEach((btn) => {
+// Bootstrap fires shown.bs.tab on the tab trigger when a pill activates.
+document.querySelectorAll('.out-tabs [data-tab]').forEach((btn) => {
     btn.addEventListener('shown.bs.tab', () => loadTab(btn.dataset.tab));
 });
 
@@ -245,6 +252,13 @@ async function loadTab(name) {
             replacePane('pane-stats', renderFrameTable(await api.stats_df(state.id)));
         } else if (name === 'reins') {
             await loadReins();
+        } else if (name === 'density') {
+            const frame = await api.density_df(state.id, {
+                cols: 'loss,p_total,F,S', nonzero: true, downsample: 300,
+            });
+            replacePane('pane-density', renderFrameTable(frame));
+        } else if (name === 'bswin') {
+            replacePane('pane-bswin', renderFrameTable(await api.bs_window_df(state.id)));
         }
     } catch (err) {
         state.loaded.delete(name);   // allow a retry on the next activation
@@ -345,9 +359,15 @@ function flash(btn, text) {
 // ----------------------------------------------------------------------
 // Examples dropdown
 // ----------------------------------------------------------------------
-mountExamples($('examples-menu'), (item) => {
-    editor.setText(item.decl);
+mountExamples($('examples-menu'), async (item) => {
+    editor.setText(item.decl);      // show the raw program immediately
     editor.focus();
+    // Standardize it via the server's format_program pass; keep the raw text
+    // if the round-trip fails (offline, parse hiccup).
+    try {
+        const res = await api.formatDecl(item.decl);
+        if (res && res.decl) editor.setText(res.decl);
+    } catch { /* keep raw */ }
 });
 
 // ----------------------------------------------------------------------
