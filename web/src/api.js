@@ -12,10 +12,11 @@
 import { API_BASE } from './config.js';
 
 export class ApiError extends Error {
-    constructor(status, body) {
+    constructor(status, body, retryAfter) {
         super((body && body.message) || `HTTP ${status}`);
         this.status = status;
         this.body = body;          // raw response body, JSON-parsed if possible
+        this.retryAfter = retryAfter;   // Retry-After header (seconds), if any
     }
 }
 
@@ -42,7 +43,7 @@ async function _json(method, path, body) {
         try { data = JSON.parse(text); }
         catch { data = { message: text }; }
     }
-    if (!r.ok) throw new ApiError(r.status, data);
+    if (!r.ok) throw new ApiError(r.status, data, r.headers.get('Retry-After'));
     return data;
 }
 

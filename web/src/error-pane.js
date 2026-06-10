@@ -20,6 +20,39 @@
 
 import { el } from './utils/dom.js';
 
+/**
+ * Friendly panel shown when a build is rate-limited (HTTP 429).
+ *
+ * Builds are the one throttled endpoint on the shared public demo; rather
+ * than a bare "HTTP 429" we explain why, suggest a short wait (honoring the
+ * Retry-After header when present), and point at running locally for no
+ * limits. ``retryAfter`` is the header value (seconds) or undefined.
+ */
+export function renderRateLimit(retryAfter) {
+    const secs = Number(retryAfter);
+    const wait = Number.isFinite(secs) && secs > 0
+        ? `Please try again in about ${secs} second${secs === 1 ? '' : 's'}.`
+        : 'Please give it a moment and try again.';
+    return el('div', { className: 'agg-ratelimit' },
+        el('div', { className: 'agg-ratelimit-icon' },
+            el('i', { className: 'bi bi-cup-hot' })),
+        el('div', {},
+            el('div', { className: 'agg-ratelimit-title' }, 'Easy there — grab a coffee ☕'),
+            el('div', { className: 'agg-ratelimit-msg' },
+                "We're glad you're enjoying ", el('code', {}, 'aggregate'),
+                "! It's a shared, free resource, so builds are gently rate-limited "
+                + 'to keep it snappy for everyone. ', wait),
+            el('div', { className: 'agg-ratelimit-sub small text-muted' },
+                'Want unlimited builds? ', el('code', {}, 'aggregate'),
+                ' is open source — ',
+                el('a', {
+                    href: 'https://github.com/mynl/aggregate',
+                    target: '_blank', rel: 'noopener',
+                }, 'run it locally'),
+                '.')),
+    );
+}
+
 export function renderError(err) {
     const body = (err && err.body) || {};
     const detail = body.detail || body || {};

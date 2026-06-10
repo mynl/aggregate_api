@@ -216,6 +216,35 @@ sudo ufw status
 - One blanket `reverse_proxy` covers `/`, `/v1/*`, `/docs`, assets — same-origin,
   no CORS.
 
+### Rate limiting (public `www.mynl.com/Q7M4Z9KP` route only)
+
+The VPN route (`:19456`) is unlimited. The **public** route caps abuse via
+Caddy's `rate_limit` module (the "special caddy install").
+
+- **Only the build is capped.** A matcher limits `POST /v1/objects` (the one
+  endpoint with real compute behind the semaphore + 10s timeout). Static assets
+  and cheap GETs (`meta`, `examples`, `info`, `density`, …) are unlimited — so
+  page loads and tab clicks never 429.
+- **THE GOTCHA: `handle_path /Q7M4Z9KP/*` strips the prefix first**, so the
+  matcher must use the **bare** path `/v1/objects`, *not* `/Q7M4Z9KP/v1/objects`.
+  Match the prefixed path and it silently matches nothing (→ limits everything,
+  or nothing, depending on placement).
+- **Why it bit before:** the limiter had no matcher, so it counted *every*
+  request. One page load is ~14 requests (html + js + css + 2 fonts + favicons +
+  `meta`); a 5/min budget drained on load and 429'd the fonts/favicons/`examples`.
+- **Budgets:** per-IP `events 20 window 1m` + `100/1h`, `key {remote_host}`.
+  uvicorn logs the real client IP (proxy headers), so `{remote_host}` keys per
+  visitor correctly — *unless* a CDN sits in front, then key off
+  `{http.request.header.CF-Connecting-IP}` instead. Tune `events` down (e.g. 10)
+  to throttle harder.
+- **Friendly 429:** Caddy `handle_errors` returns a JSON `detail` message for
+  curl/direct callers; the SPA special-cases `status === 429` and renders a
+  card (`error-pane.js` `renderRateLimit`, honoring `Retry-After`).
+- **Verify it's scoped right:** a tight loop of 30 `POST /v1/objects` should go
+  `200…` then `429` after the cap; a loop on `/v1/health` should stay all `200`.
+  If builds never 429, the config isn't live (validate + reload) or the matcher
+  is wrong (the bare-path gotcha).
+
 ### Later: run as a systemd service
 
 Current relaunch is `nohup` to `~/aggapi.log` (fine while watching logs in dev).

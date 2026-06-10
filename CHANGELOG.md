@@ -41,6 +41,10 @@ In progress (`dev/plan-0002.md`). Iterating on the SPA via
 - **Example standardization:** picking an Example now runs it through
   `format_program` (new `POST /v1/decl/format`) so the editor shows canonical
   DecL; the raw text shows instantly and is replaced when the format returns.
+- **Friendly rate-limit card:** a build that hits the public demo's per-IP
+  build cap (HTTP 429) now shows a warm "shared, free resource" card (with a
+  Retry-After hint and a "run it locally" link) instead of a raw error.
+  `ApiError` carries `retryAfter`; the card lives in `error-pane.js`.
 
 **Backend (plan-0002 step 2)**
 

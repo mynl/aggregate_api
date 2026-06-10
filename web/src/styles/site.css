@@ -161,6 +161,17 @@ header .navbar { min-height: 56px; }
     color: var(--mut); text-align: center; padding: 1rem; font-size: .78rem;
 }
 
+/* ---- Rate-limit card (friendly HTTP 429 on the shared demo) ---- */
+.agg-ratelimit {
+    display: flex; gap: 1rem; align-items: flex-start; max-width: 640px;
+    border: 1px solid #ffe2b8; border-left: 4px solid #f0a020;
+    background: #fff8ef; border-radius: .6rem; padding: 1rem 1.1rem;
+}
+.agg-ratelimit-icon  { font-size: 2rem; line-height: 1; color: #f0a020; }
+.agg-ratelimit-title { font-weight: 600; font-size: 1rem; margin-bottom: .25rem; }
+.agg-ratelimit-msg   { font-size: .85rem; color: #374151; }
+.agg-ratelimit-sub   { margin-top: .45rem; }
+
 /* ---- Error pane (parse-error report) ---- */
 .agg-error-pane   { border-left: 4px solid #d4a017; }
 .agg-error-source {

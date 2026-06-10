@@ -23,7 +23,7 @@ import { api, ApiError } from './api.js';
 import { createEditor, emacsEnabledDefault } from './editor.js';
 import { mountExamples } from './examples.js';
 import { renderFrameTable, renderInfo } from './renderers.js';
-import { renderError } from './error-pane.js';
+import { renderError, renderRateLimit } from './error-pane.js';
 import * as history from './history.js';
 import { $, el, empty } from './utils/dom.js';
 import { fmt } from './utils/format.js';
@@ -176,14 +176,18 @@ function renderSummary(res) {
 }
 
 function renderBuildFailure(err) {
+    const limited = err instanceof ApiError && err.status === 429;
     const inner = $('summary-inner');
     empty(inner);
-    inner.appendChild(el('span', { className: 'mono warn' }, 'build failed'));
+    inner.appendChild(el('span', { className: 'mono warn' },
+        limited ? 'rate limited — please pause a moment' : 'build failed'));
     syncSummaryMore();
-    // Surface the rich parse-error report in the Info pane and show it.
+    // Surface the rich parse-error report (or the friendly rate-limit card)
+    // in the Info pane and show it.
     const pane = $('pane-info');
     empty(pane);
-    if (err instanceof ApiError) pane.appendChild(renderError(err));
+    if (limited) pane.appendChild(renderRateLimit(err.retryAfter));
+    else if (err instanceof ApiError) pane.appendChild(renderError(err));
     else pane.appendChild(el('div', { className: 'alert alert-danger' }, err.message));
     showTab('info');
 }
@@ -273,6 +277,7 @@ function replacePane(paneId, node) {
 }
 
 function errorNode(err) {
+    if (err instanceof ApiError && err.status === 429) return renderRateLimit(err.retryAfter);
     if (err instanceof ApiError) {
         const detail = err.body && (err.body.detail || err.body);
         const msg = (detail && detail.message) || (typeof detail === 'string' ? detail : err.message);
