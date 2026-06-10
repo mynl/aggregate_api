@@ -43,6 +43,49 @@ Either way: always reach the SPA through an `http://…` URL from a server, neve
 
 ---
 
+## VPS refresh: `uv.lock` blocks `git pull`
+
+If refresh fails with:
+
+```text
+error: Your local changes to the following files would be overwritten by merge:
+        uv.lock
+Please commit your changes or stash them before you merge.
+Aborting
+```
+
+that does **not** mean `uv.lock` should be ignored. Keep `uv.lock` tracked in
+git so the VPS installs the same resolved environment as the dev machine.
+
+What happened: something on the VPS modified the tracked lock file, usually
+`uv sync` resolving/updating it. Inspect first:
+
+```bash
+cd ~/hacking/aggregate_api
+git diff -- uv.lock
+```
+
+If it is just an unwanted VPS-local lock change, discard only that file:
+
+```bash
+git restore uv.lock
+git pull --ff-only
+```
+
+Then make the deploy/refresh script install from the existing lock instead of
+updating it:
+
+```bash
+( cd "$AGG_DIR" && uv sync --frozen --extra dev )
+( cd "$API_DIR" && uv sync --frozen --extra dev )
+```
+
+Lock updates should happen intentionally on Windows, get committed, then be
+pulled by the VPS.
+
+
+---
+
 Two readings — I'll cover both, since the order matters.
 
 **To restart Claude Code in the new project** (do this first):

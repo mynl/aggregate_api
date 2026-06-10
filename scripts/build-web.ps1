@@ -18,6 +18,10 @@
 # must request /Q7M4Z9KP/v1/... so Caddy can match the hidden prefix, strip it,
 # and proxy /v1/... to FastAPI.
 #
+# npm dependencies are refreshed when node_modules is missing or older than
+# package.json/package-lock.json. That avoids stale deploys where a newly added
+# package is present in git but absent from the VPS node_modules tree.
+#
 # The script does not assume the working directory; it resolves
 # everything relative to its own location so it's callable from
 # anywhere (CI, package step, ad-hoc terminal).
@@ -40,7 +44,17 @@ try {
         $env:VITE_API_BASE_URL = $ApiBase
         Write-Host "Building with VITE_API_BASE_URL=$ApiBase"
     }
-    if (-not (Test-Path "node_modules")) {
+    $installDeps = -not (Test-Path "node_modules")
+    if (-not $installDeps) {
+        $nodeModules = Get-Item "node_modules"
+        $packageJson = Get-Item "package.json"
+        $packageLock = Get-Item "package-lock.json"
+        $installDeps = (
+            $packageJson.LastWriteTimeUtc -gt $nodeModules.LastWriteTimeUtc -or
+            $packageLock.LastWriteTimeUtc -gt $nodeModules.LastWriteTimeUtc
+        )
+    }
+    if ($installDeps) {
         Write-Host "Installing npm dependencies..."
         npm install --no-fund --no-audit
     }
