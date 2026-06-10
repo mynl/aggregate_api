@@ -43,3 +43,6 @@ src/aggregate_api/static/index.html
 
 # obsidian
 .obsidian
+
+# hacks
+hacks/

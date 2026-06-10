@@ -51,6 +51,31 @@ It does two things: `npm install` (first time only — pulls Vite, Bootstrap,
 CodeMirror into `web/node_modules/`), then `npm run build` → `vite build`, which
 bundles `web/src/` into `src/aggregate_api/static/`.
 
+### Icons / favicons / logo
+
+Source of truth is **`web/public/`** — Vite copies it verbatim to the output
+root. The build runs with `emptyOutDir`, so it **wipes `static/` and recopies
+from `web/public/` every time**:
+
+```
+web/public/*  ──(vite build)──▶  src/aggregate_api/static/*  ──▶ browser
+   ^ edit here                       ^ generated, wiped each build (don't edit)
+```
+
+To change an icon: replace the file in `web/public/` keeping the **same name**
+(names are referenced in `web/index.html` and `web/public/site.webmanifest`):
+`favicon.ico`, `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png`,
+`logo.png`, `android-chrome-192x192.png`, `android-chrome-512x512.png`. Then
+rebuild.
+
+Still stale after rebuild+deploy? It's **browser favicon caching** — these names
+don't change between builds (unlike hashed `assets/index-*.js`), so the browser
+reuses them by URL. Empty-cache-hard-reload, or check incognito. To tell browser
+cache from a bad build, hit the file directly (e.g.
+`http://10.8.0.1:19456/favicon-32x32.png`): new icon there but old in the tab =
+browser cache; old icon there = the build/copy didn't take (confirm you edited
+`web/public/`).
+
 ## Packaging is two stages, in order
 
 1. **Frontend:** `.\scripts\build-web.ps1` fills `src/aggregate_api/static/`.

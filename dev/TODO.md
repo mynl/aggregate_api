@@ -4,6 +4,13 @@ Pending work for `aggregate_api`, newest thinking at the bottom of each list.
 What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 `dev/done/`.
 
+## SM
+
+- [ ] Bandwidth limited by caddy page with obscured url; special caddy install  
+- [ ] Set up service to run on vps
+- [ ] Limit log2 <= 18
+- [ ] 
+
 ## Near term (get it healthy)
 
 - [x] **plan-0001 — bootstrap standalone** (→ 1.0.0a2). Make the extracted code
