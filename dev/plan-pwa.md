@@ -1,9 +1,12 @@
 # plan-pwa — installable PWA + retire the obscured prefix
 
-Status: **draft / scoping**. Target: its own `1.0.0a*` bump (own iteration —
-carries an infra + public-exposure change that wants isolated verification on
-the VPS). No backend code changes; the work is manifest + service worker +
-Caddy + build invocation + docs.
+Status: **in progress** (1.0.0a6). **Phase B (PWA code) landed** — manifest
+completed, `web/public/sw.js` added + registered in `main.js`, `theme-color`
+meta, `build-web.ps1` usage trimmed. **Phase A (retire the prefix) is the
+pending VPS cutover** — DNS `agg.mynl.com` + the three Caddyfile edits +
+`refresh.sh`/`build-web.sh` dropping `-ApiBase`, then the `human-hints.md`
+runbook rewrite (held until the cutover is live so the doc never describes a
+non-live state). No backend code changes.
 
 Two coupled goals:
 1. **Decommission the `/Q7M4Z9KP` security-by-obscurity prefix** (Phase A). It's

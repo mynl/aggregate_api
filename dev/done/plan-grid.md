@@ -1,5 +1,32 @@
 # plan-grid — replace SPA table grids with CsvGrid
 
+Status: **LANDED (1.0.0a7).** What shipped vs. the plan below:
+
+- **Dep (Decision 1):** `git+https://github.com/mynl/CSV_Viewer.git`, pinned by
+  the lockfile to commit `6033b20` = **csv-grid 3.1.0** (the repo moved past the
+  3.0.7 the plan named; 3.1.0 is a superset, adding the `maxRows` bounded
+  viewport now used by Density). npm rewrites the lock's `resolved` to
+  `git+ssh://` regardless of the `git+https` spec — the public repo needs SSH or
+  the `url.insteadOf` git config on the VPS build host (noted in CHANGELOG).
+- **Density (Decision 2):** took **path A** — `{records}` with the server
+  downsample lifted 300 → 2 000, in a 25-row CsvGrid scroll viewport,
+  `worker: false`. Path B (`{url}` full-frame + worker) is deferred to the TODO
+  backlog; notably Vite already emits a correctly-pathed worker asset, so it's
+  reduced to a browser-verify + flag flip.
+- **Look (Decision 3):** accepted CsvGrid styling wholesale.
+- **Chrome (Decision 4):** split — substantive frames (Describe/Stats/Reins/
+  Density) get full chrome; the 3–8 row frames (bs window, pentagon, distortion
+  slices) strip search/filter but keep sort.
+- **Formats (Decision 5):** explicit per-column `formats` on the Price-stat
+  slices (`.1%`, `,d`, `.3f`, `.0%`); auto elsewhere.
+- **Dead code:** deleted `actions.js` + `pricing-pane.js` **and** `plot-pane.js`
+  (transitively dead — only `actions.js` imported it), plus the stale
+  `web/public/index.html` and the `.tbl` styles.
+
+Original scoping doc follows.
+
+---
+
 Status: **draft / scoping**. Target: a later 1.0.0a* bump (own iteration).
 
 Replace every DataFrame grid in the SPA with **CsvGrid** — the embeddable grid

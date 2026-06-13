@@ -4,6 +4,79 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a7
+
+Adopt **CsvGrid** for every table in the SPA (`dev/done/plan-grid.md`). No
+backend changes — the `FrameResponse` `{columns, rows}` shape is unchanged and
+maps straight onto CsvGrid `records`.
+
+**Frontend — one grid everywhere**
+
+- **All output tables now render through CsvGrid** (`mynl/CSV_Viewer`, git
+  dependency) instead of the hand-rolled `.tbl` renderer: Describe, Stats,
+  Density, bs window, the three Reins frames, and the Price set (pentagon,
+  calibrated distortions, and the LR/P/PQ/ROE distortion slices). Substantive
+  frames get click-to-sort, fzf-style global search, and per-column filters;
+  the small 3–8 row frames (bs window, pentagon, distortion slices) keep sort
+  but strip the search/filter chrome. The Price-stat slices keep their exact
+  formatting via CsvGrid per-column `formats` (`.1%`, `,d`, `.3f`, `.0%`).
+- **Density preview lifted** from 300 to 2 000 server-downsampled rows, shown in
+  a bounded 25-row scroll viewport (CsvGrid lazy-formats and caps the DOM at its
+  render cap). Full-frame `{url}` + worker parsing remains a future option — the
+  Vite build already emits a correctly-pathed worker asset; we ship with
+  `worker: false` for determinism until it is browser-verified.
+- **Teardown lifecycle** (`web/src/grid.js`): CsvGrid instances are tracked per
+  pane and `destroy()`ed on re-render and on rebuild, so listeners (and any
+  future worker) don't leak.
+- **Dead code removed:** `web/src/actions.js`, `pricing-pane.js`, `plot-pane.js`
+  (an unimported pre-redesign action layer), the `renderTable` /
+  `renderFrameTable` / `renderBuildBanner` renderers, the dense `.tbl` styles,
+  and the stale pre-redesign `web/public/index.html`.
+
+**Deployment note**
+
+- The new `csv-grid` git dependency is fetched at `npm install`. npm rewrites
+  the lockfile's `resolved` URL to `git+ssh://` regardless of the `git+https`
+  spec; the repo is public, so the VPS build host needs either GitHub SSH access
+  or `git config --global url."https://github.com/".insteadOf "git@github.com:"`.
+  Pinned to commit `6033b20` (csv-grid 3.1.0) via the lockfile.
+
+## 1.0.0a6
+
+Installable PWA (`dev/plan-pwa.md`, Phase B). No backend changes.
+
+**Frontend — PWA**
+
+- **Completed the web app manifest** (`web/public/site.webmanifest`): real
+  `name` / `short_name` / `description`, `start_url` and `scope` of `/`,
+  `display: standalone`, and a white `theme_color` matching the header (also
+  added as `<meta name="theme-color">`). Icons kept `purpose: "any"` — the logo
+  runs edge-to-edge with no maskable safe zone, so claiming `maskable` would crop
+  it on Android; a padded maskable variant is future polish.
+- **Service worker** (`web/public/sw.js`, served at `/sw.js`, scope `/`):
+  deliberately minimal — it exists to make the SPA installable and to speed
+  repeat loads, not for offline use (a build requires the backend). `/v1/*` is
+  **never** cached (network-only); HTML navigations are network-first (so a
+  redeploy is picked up); content-hashed assets are cache-first; old caches are
+  purged on `activate`. Registered from `main.js` in the **production bundle
+  only** (so it never intercepts the Vite dev server) and only in a secure
+  context.
+
+**Deployment — retire the `/Q7M4Z9KP` obscured prefix (Phase A, operational)**
+
+- The PWA is only clean at an origin **root**, so the deploy moves off the
+  obscured `www.mynl.com/Q7M4Z9KP/` subpath to a dedicated **`agg.mynl.com`**
+  subdomain (same-origin api, so the SPA builds with **no** `-ApiBase`). The
+  prefix strip used to hide `/docs` by accident; the new Caddy block does it
+  **explicitly** (`respond /docs … 404`) while keeping `/v1/*` open and the
+  build rate-limit in place. Full DNS + Caddy + `refresh.sh` cutover steps are in
+  `dev/plan-pwa.md`; these are server-side and applied at deploy. `build-web.ps1`
+  usage notes trimmed to the same-origin default.
+  - **Sequencing:** do the subdomain cutover **before** deploying this bundle —
+    under the old `/Q7M4Z9KP/` subpath the manifest `start_url`/`scope` and the
+    `/sw.js` registration resolve to the wrong path and the PWA simply won't
+    activate (no breakage, just inert). It works at `localhost` root today.
+
 ## 1.0.0a5
 
 Two small, client-only SPA additions (`dev/plan-help.md`,

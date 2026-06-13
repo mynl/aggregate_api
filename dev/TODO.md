@@ -36,19 +36,22 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 - [x] **plan-help — short in-SPA help** (→ 1.0.0a5). Always-visible top-right
       `?` opens a compact offcanvas (one-liner, try-it + Load it, keys, controls
       + tab guide, links, fair-use note). *(done; moved to `dev/done/`)*
-- [ ] **plan-grid — adopt CsvGrid for table output** (scoped). Replace
-      `renderFrameTable` everywhere with the `csv-grid` component (sort / fzf
-      search / per-column filters / worker parsing); density via `{url}`
-      full-frame. Decisions + phasing in `dev/plan-grid.md`.
+- [x] **plan-grid — adopt CsvGrid for table output** (→ 1.0.0a7). Every SPA
+      table now renders through `csv-grid` (sort / fzf search / per-column
+      filters); per-pane chrome, per-column Price formats, destroy lifecycle,
+      dead-code sweep (`actions.js` / `pricing-pane.js` / `plot-pane.js` /
+      `.tbl` / stale `public/index.html`). Density preview lifted to 2 000 rows.
+      *(done; moved to `dev/done/`)*
 - [x] **plan-ui-enhancements-01 — small UI polish** (→ 1.0.0a5). Phone-friendly
       form inputs: 16px on mobile (no iOS zoom) + `autocomplete=off` (no AutoFill
       bar) for the Price inputs and the custom-bs input. *(done; moved to
       `dev/done/`)*
-- [ ] **plan-pwa — installable PWA + retire the obscured prefix** (draft). Drop
-      the `/Q7M4Z9KP` security-by-obscurity prefix (Phase A: serve at a clean
-      `agg.mynl.com` subdomain, block `/docs` explicitly, build without
-      `-ApiBase`); then finish the install-as-PWA (Phase B: complete the
-      manifest + a small service worker). No backend changes. `dev/plan-pwa.md`.
+- [~] **plan-pwa — installable PWA + retire the obscured prefix** (in progress,
+      1.0.0a6). **Phase B done:** manifest completed + `sw.js` + registration +
+      `theme-color` (works at localhost root; ships in the bundle). **Phase A
+      pending (VPS cutover):** DNS `agg.mynl.com`, the three Caddyfile edits,
+      drop `-ApiBase` from `refresh.sh`, then the `human-hints.md` rewrite. Do the
+      cutover **before** deploying the a6 bundle. `dev/plan-pwa.md`.
 
 ## Backlog / ideas (unordered)
 
@@ -59,6 +62,11 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
       ships the bundle; confirm `static/*` package-data works.
 - [ ] Auth / rate limiting if this is ever exposed beyond localhost.
 - [ ] Expand the example library and DecL completion coverage.
+- [ ] **Density full-frame via CsvGrid `{url}` + worker** (follow-up from
+      plan-grid). Point Density at the `/frame/density_df.csv` route and enable
+      `worker: true` to drop the server downsample entirely. The Vite build
+      already emits a correctly-pathed worker asset; this is now a browser-verify
+      + flip-the-flag task, gated on the `agg.mynl.com` cutover (clean origin).
 - [ ] Persist object cache across restarts (currently in-memory only).
 - [x] Revisit `meta` version reporting: report both the `aggregate_api` version
       and the underlying `aggregate` version. *(done in 1.0.0a2 —

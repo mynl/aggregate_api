@@ -22,11 +22,23 @@ import './styles/cm6.css';
 import { api, ApiError } from './api.js';
 import { createEditor, emacsEnabledDefault } from './editor.js';
 import { mountExamples } from './examples.js';
-import { renderFrameTable, renderInfo } from './renderers.js';
+import { renderInfo } from './renderers.js';
+import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
 import { renderError, renderRateLimit } from './error-pane.js';
 import * as history from './history.js';
 import { $, el, empty } from './utils/dom.js';
 import { fmt } from './utils/format.js';
+
+// ----------------------------------------------------------------------
+// CsvGrid option presets (see grid.js)
+// ----------------------------------------------------------------------
+// FULL: the default chrome (sort / fzf search / per-column filters / expand)
+// for the substantive frames. PLAIN: chrome stripped for the small 3–8 row
+// frames where search/filter is just noise (sort stays — it's free and handy).
+const GRID_FULL = {};
+const GRID_PLAIN = {
+    globalSearch: false, columnFilters: false, statusBar: false, expandButtons: false,
+};
 
 // ----------------------------------------------------------------------
 // Module state
@@ -241,6 +253,7 @@ const PANE_OF = {
 };
 
 function clearPanes() {
+    destroyAllGrids();
     for (const id of Object.values(PANE_OF)) empty($(id));
     empty($('reins-desc'));
 }
@@ -273,21 +286,24 @@ async function loadTab(name) {
         if (name === 'info') {
             replacePane('pane-info', renderInfo(await api.info(state.id)));
         } else if (name === 'desc') {
-            replacePane('pane-desc', renderFrameTable(await api.description(state.id)));
+            replacePaneGrid('pane-desc', await api.description(state.id), GRID_FULL);
         } else if (name === 'plot') {
             const img = el('img', { src: api.plotUrl(state.id, { format: 'svg' }), alt: 'native plot' });
             replacePane('pane-plot', img);
         } else if (name === 'stats') {
-            replacePane('pane-stats', renderFrameTable(await api.stats_df(state.id)));
+            replacePaneGrid('pane-stats', await api.stats_df(state.id), GRID_FULL);
         } else if (name === 'reins') {
             await loadReins();
         } else if (name === 'density') {
+            // CsvGrid lazy-formats and caps the DOM at its renderCap, so we can
+            // lift the old 300-row preview to a fuller server downsample and let
+            // the grid scroll it in a bounded viewport.
             const frame = await api.density_df(state.id, {
-                cols: 'loss,p_total,F,S', nonzero: true, downsample: 300,
+                cols: 'loss,p_total,F,S', nonzero: true, downsample: 2000,
             });
-            replacePane('pane-density', renderFrameTable(frame));
+            replacePaneGrid('pane-density', frame, { ...GRID_FULL, maxRows: 25 });
         } else if (name === 'bswin') {
-            replacePane('pane-bswin', renderFrameTable(await api.bs_window_df(state.id)));
+            replacePaneGrid('pane-bswin', await api.bs_window_df(state.id), GRID_PLAIN);
         }
     } catch (err) {
         state.loaded.delete(name);   // allow a retry on the next activation
@@ -296,9 +312,21 @@ async function loadTab(name) {
 }
 
 function replacePane(paneId, node) {
+    clearGrids(paneId);          // tear down any CsvGrid that lived here
     const pane = $(paneId);
     empty(pane);
     if (node) pane.appendChild(node);
+}
+
+/**
+ * Replace a pane's contents with a single CsvGrid for `frame`. The host is
+ * attached (via replacePane) before the grid is constructed so CsvGrid can
+ * measure column widths against the live layout.
+ */
+function replacePaneGrid(paneId, frame, opts) {
+    const host = el('div', { className: 'grid-host' });
+    replacePane(paneId, host);
+    mountGrid(paneId, host, frame, opts);
 }
 
 function errorNode(err) {
@@ -335,7 +363,7 @@ async function loadReinsFrame() {
     if (!state.id) return;
     try {
         const frame = await api.reinsFrame(state.id, state.reinsWhich);
-        replacePane('pane-reins', renderFrameTable(frame));
+        replacePaneGrid('pane-reins', frame, GRID_FULL);
     } catch (err) {
         replacePane('pane-reins', errorNode(err));
     }
@@ -355,34 +383,40 @@ document.querySelectorAll('[data-reins]').forEach((btn) => {
 // Price tab -- pentagon form (p + CoC/LR); Portfolios also get the
 // per-distortion LR/P/PQ/ROE slices from analyze_distortions.
 // ----------------------------------------------------------------------
-const PRICE_FMT = {
-    LR:  (v) => pctFmt(v, 1),
-    P:   (v) => intFmt(v),
-    PQ:  (v) => fixFmt(v, 3),
-    ROE: (v) => pctFmt(v, 0),
-};
+// CsvGrid per-column format codes for the distortion-stat slices, honoring the
+// spec the old renderer used: LR/ROE as percents, P thousands-grouped, PQ to
+// 3dp. Applied to every value column (column 0 is the distortion label).
+const PRICE_FMT_CODE = { LR: '.1%', P: ',d', PQ: '.3f', ROE: '.0%' };
 const PRICE_TITLE = {
     LR: 'Loss ratio', P: 'Premium', PQ: 'Premium / capital', ROE: 'Return on capital',
 };
 
-function pctFmt(v, dp) {
-    return (v == null || !Number.isFinite(v)) ? '' : `${(v * 100).toFixed(dp)}%`;
-}
-function intFmt(v) {
-    return (v == null || !Number.isFinite(v)) ? '' : Math.round(v).toLocaleString('en-US');
-}
-function fixFmt(v, dp) {
-    return (v == null || !Number.isFinite(v)) ? '' : Number(v).toFixed(dp);
+/** CsvGrid `formats`: auto-format the label column, force `code` on the rest. */
+function statFormats(frame, code) {
+    const n = (frame.columns || []).length;
+    return [null, ...Array(Math.max(n - 1, 0)).fill(code)];
 }
 
+// Render the Price payload straight into pane-price: pentagon + (Portfolios
+// only) calibrated distortions and the per-stat distortion slices. Each frame
+// is its own CsvGrid; all register under 'pane-price' so a rebuild tears them
+// down together.
 function renderPrice(payload) {
+    const paneId = 'pane-price';
     const root = el('div', { className: 'price-result' });
-    root.appendChild(el('div', { className: 'price-section-title' }, 'Pricing pentagon'));
-    root.appendChild(renderFrameTable(payload.pentagon));
+    replacePane(paneId, root);          // clears prior grids + attaches root
+
+    const section = (title, frame, opts, cls = 'price-section-title') => {
+        root.appendChild(el('div', { className: cls }, title));
+        const host = el('div', { className: 'grid-host' });
+        root.appendChild(host);
+        mountGrid(paneId, host, frame, opts);
+    };
+
+    section('Pricing pentagon', payload.pentagon, GRID_PLAIN);
     if (payload.distortion_df) {
-        root.appendChild(el('div', { className: 'price-section-title mt-3' },
-            'Calibrated distortions'));
-        root.appendChild(renderFrameTable(payload.distortion_df));
+        section('Calibrated distortions', payload.distortion_df, GRID_PLAIN,
+            'price-section-title mt-3');
     }
     for (const w of payload.warnings || []) {
         root.appendChild(el('div', { className: 'text-muted small fst-italic mt-1' }, `⚠ ${w}`));
@@ -391,12 +425,11 @@ function renderPrice(payload) {
         for (const stat of ['LR', 'P', 'PQ', 'ROE']) {
             const frame = payload.distortions[stat];
             if (!frame) continue;
-            root.appendChild(el('div', { className: 'price-section-title mt-3' },
-                `${PRICE_TITLE[stat]} (${stat}) by distortion`));
-            root.appendChild(renderFrameTable(frame, { format: PRICE_FMT[stat] }));
+            section(`${PRICE_TITLE[stat]} (${stat}) by distortion`, frame,
+                { ...GRID_PLAIN, formats: statFormats(frame, PRICE_FMT_CODE[stat]) },
+                'price-section-title mt-3');
         }
     }
-    return root;
 }
 
 const priceBtn = $('price-btn');
@@ -411,7 +444,7 @@ priceBtn?.addEventListener('click', async () => {
     priceBtn.disabled = true;
     priceBtn.textContent = 'Pricing…';
     try {
-        replacePane('pane-price', renderPrice(await api.price(state.id, body)));
+        renderPrice(await api.price(state.id, body));
     } catch (err) {
         replacePane('pane-price', errorNode(err));
     } finally {
@@ -531,3 +564,16 @@ api.meta().then((meta) => {
 }).catch(() => {
     $('ver-api').textContent = '(api offline)';
 });
+
+// ----------------------------------------------------------------------
+// PWA service worker (production bundle only)
+// ----------------------------------------------------------------------
+// Registered only in the built bundle so the Vite dev server's HMR isn't
+// intercepted. Makes the SPA installable and speeds repeat loads; the caching
+// strategy lives in web/public/sw.js (served verbatim at /sw.js, scope /).
+// Requires a secure context (HTTPS or localhost) — a no-op otherwise.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => { /* non-fatal */ });
+    });
+}

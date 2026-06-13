@@ -165,21 +165,12 @@ header .navbar { min-height: 56px; }
 
 .pane { min-height: 1rem; }
 
-/* ---- Dense booktabs tables ---- */
-.tbl {
-    width: auto; max-width: 100%; margin: 0; border-collapse: collapse;
-    font-size: .7rem; font-variant-numeric: lining-nums tabular-nums;
-    display: block; overflow-x: auto;
-}
-.tbl thead th {
-    font-weight: 600; font-size: .64rem; letter-spacing: .01em; text-align: right;
-    color: #374151; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
-    padding: .2em .8em; white-space: nowrap;
-}
-.tbl tbody td { padding: .1em .8em; text-align: right; white-space: nowrap; }
-.tbl tbody tr:last-child td { border-bottom: 1px solid var(--rule); }
-.tbl th.lbl, .tbl td.lbl { text-align: left; font-weight: 600; }
-.tbl tbody tr:hover { background: var(--soft); }
+/* ---- CsvGrid host ---- */
+/* Tables are rendered by CsvGrid (self-contained styles from csv-grid.css).
+   The host just bounds width so wide frames scroll inside the pane rather than
+   stretching the page; CsvGrid handles vertical scroll via maxRows/height. */
+.grid-host { max-width: 100%; overflow-x: auto; }
+.price-result .grid-host { margin-bottom: .4rem; }
 
 /* ---- Info pane ---- */
 .info {
@@ -213,7 +204,6 @@ header .navbar { min-height: 56px; }
 /* Fixed width so toggling CoC<->LR doesn't reflow the value input + button. */
 #price-target-label { display: inline-block; min-width: 2.3rem; }
 .price-section-title { font-size: .8rem; font-weight: 600; color: #374151; margin: .2rem 0 .45rem; }
-.price-result .tbl { margin-bottom: .2rem; }
 
 /* ---- Rate-limit card (friendly HTTP 429 on the shared demo) ---- */
 .agg-ratelimit {

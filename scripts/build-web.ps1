@@ -1,22 +1,18 @@
 # Build the aggregate SPA into src/aggregate_api/static/.
 #
 # Usage:
-#   .\scripts\build-web.ps1                                # same-origin root build
-#   .\scripts\build-web.ps1 -ApiBase https://api.mynl.com   # split-origin api build
-#   .\scripts\build-web.ps1 -ApiBase /Q7M4Z9KP              # hidden subpath build
+#   .\scripts\build-web.ps1                                  # same-origin build
+#   .\scripts\build-web.ps1 -ApiBase https://api.mynl.com    # split-origin api
+#
+# The default (no -ApiBase) is the normal case: the SPA and the api are served
+# from the same origin (localhost, or the agg.mynl.com subdomain in prod), so
+# every fetch() is a root-relative /v1/... call.
 #
 # The optional -ApiBase value becomes VITE_API_BASE_URL for Vite. The frontend
-# code reads that value in web/src/config.js and prepends it to every fetch()
-# wrapper in web/src/api.js.
-#
-# Examples:
-#   no -ApiBase           -> fetch('/v1/health')
-#   -ApiBase /Q7M4Z9KP   -> fetch('/Q7M4Z9KP/v1/health')
+# code reads it in web/src/config.js and prepends it to every fetch() wrapper in
+# web/src/api.js — use it only when the api lives on a *different* origin:
+#   no -ApiBase          -> fetch('/v1/health')
 #   -ApiBase https://... -> fetch('https://.../v1/health')
-#
-# This matters for a Caddy `handle_path /Q7M4Z9KP/*` deployment: the browser
-# must request /Q7M4Z9KP/v1/... so Caddy can match the hidden prefix, strip it,
-# and proxy /v1/... to FastAPI.
 #
 # npm dependencies are refreshed when node_modules is missing or older than
 # package.json/package-lock.json. That avoids stale deploys where a newly added
