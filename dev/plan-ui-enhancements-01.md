@@ -10,23 +10,27 @@ are all ~12.5px (`.78rem`) and zoom on a phone:
 - Price tab: `#price-p`, `#price-target-val` (`.price-field input`)
 - bs dropdown: `#bs-custom` (`.bs-custom input`)
 
-**Fix:** a phone-only bump to 16px (desktop keeps the tighter size):
+**Fix:** a phone-only bump to 16px (desktop keeps the tighter size). `site.css`
+**already has** a `@media (max-width: 575.98px)` block (around line 119, for tab
+padding) — fold these rules into it rather than adding a second media query:
 ```css
-@media (max-width: 575.98px) {
+/* inside the existing @media (max-width: 575.98px) block */
     .price-field input,
     .bs-custom input { font-size: 16px; }
-}
 ```
 (Mirrors the editor's `min-height: 4.5em` / 16px mobile treatment.)
 
 ## 2. Suppress the iOS AutoFill (key / credit-card / PIN) accessory bar
 WebKit pops the AutoFill bar above the keyboard when it guesses an input might be
 credentials/payment. Mark these fields as not-a-form-field:
-- `#price-p`, `#price-target-val` → `autocomplete="off" inputmode="decimal"`
-- `#bs-custom` → `autocomplete="off" inputmode="decimal"`
-  (it accepts fractions like `1/64`, so keep `type="text"`; `inputmode="decimal"`
-  just hints the keypad — verify it doesn't block `/`. If it does, drop inputmode
-  and keep `autocomplete="off"`.)
+- `#price-p`, `#price-target-val` → already `type="number"` (numeric pad +
+  rarely triggers the credit-card bar), so this is belt-and-suspenders; add
+  `autocomplete="off"`. `inputmode="decimal"` is redundant on `type="number"`.
+- `#bs-custom` → `autocomplete="off" inputmode="decimal"`. **This is the real
+  target** — it's the only `type="text"` field, so the AutoFill bar is most
+  likely here. It accepts fractions like `1/64`, so keep `type="text"`;
+  `inputmode="decimal"` just hints the keypad — verify it doesn't block `/`. If
+  it does, drop inputmode and keep `autocomplete="off"`.
 
 Also harmless-and-correct for numeric fields: `autocorrect="off"
 autocapitalize="off"`.

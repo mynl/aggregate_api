@@ -67,8 +67,17 @@ dashes carry **no surrounding spaces**.
   of `<main>`/body, and the `.help-*` CSS to `web/src/styles/site.css` (all
   present in the mockup's inlined `<style>`).
 - Bootstrap JS is already bundled, so the offcanvas needs no new dependency.
+- `bootstrap-icons` is already a dep and its CSS is imported in `main.js`, so the
+  `bi-question-circle` glyph renders with no new wiring. **Verified.**
 - Wire **Load it** to `editor.setText(...)` + `editor.focus()` (same path the
-  Examples dropdown uses).
+  Examples dropdown / `loadExample` use). `editor.setText` exists
+  (`web/src/editor.js`). **Verified.**
+
+## Maintenance note
+The help copy restates the key bindings and the tab guide, which also live in the
+running UI. That's a **drift surface**: renaming a tab or rebinding a key means
+updating the offcanvas copy too. Acceptable for static help — just keep it in
+mind when those change.
 
 ## Effort
 Small: a header `?` + one offcanvas + static content + the Load-it wiring. ~Half

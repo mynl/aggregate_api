@@ -45,9 +45,14 @@ new CsvGrid(host, { columns: frame.columns, records: frame.rows }, opts);
 (`pane-density`), bs window (`pane-bswin`), Reins ×3 (`pane-reins`:
 reins_describe / reins_stats_df / reins_density_df), Price (pentagon,
 `distortion_df`, and the four distortion slices). **Not** converted: Info (a
-`<pre>`), Plot (an `<img>`), error / rate-limit cards, the summary line. The
-legacy `renderTable` (old Bootstrap table) appears unused by the redesign →
-retire it.
+`<pre>`), Plot (an `<img>`), error / rate-limit cards, the summary line.
+
+**Dead-code cleanup (confirmed):** the legacy `renderTable` is used *only* by
+`web/src/actions.js` and `web/src/pricing-pane.js`, and **neither file is
+imported by the live entry (`main.js`)** — they're dead modules. So delete
+`actions.js` + `pricing-pane.js` wholesale, not just `renderTable`. (Separately,
+`web/public/index.html` still carries the old btn-toolbar layout and looks
+stale — verify and remove in the same sweep.)
 
 ## Integration approach
 1. **Dependency source** (decision below): add `csv-grid` and
@@ -76,7 +81,10 @@ Two paths with CsvGrid:
   — and let CsvGrid **fetch + worker-parse the full frame**. This removes the
   300-row preview limitation *and* the JSON payload entirely. Requires solving
   worker pathing under Vite (serve `csv-grid.worker.js`, or `worker:false` and
-  accept main-thread parse).
+  accept main-thread parse). Note: `frameCsvUrl` + the `/frame/{which}.csv` route
+  already exist; the route sets `Content-Disposition: attachment`, which is
+  harmless for CsvGrid's fetch-based `{url}` (only matters if you *navigate* to
+  the URL).
 
 ## Phasing
 1. Add the dep + `renderGrid` helper + destroy lifecycle; convert **Describe**
@@ -88,13 +96,12 @@ Two paths with CsvGrid:
    reconcile CSS; sanity-check bundle size.
 
 ## Decisions needed
-1. **Dependency source.** npm name is `csv-grid` but the package is `private`
-   (not on the public npm registry). Options: **(a)** git dep
-   `"csv-grid": "github:mynl/CSV_Viewer"` — clean, VPS pulls it at
-   `npm install`, needs network + public repo; **(b)** **vendor** the committed
-   `dist/*` into `web/vendor/csv-grid/` and import by relative path — offline,
-   no registry, but manual version bumps; **(c)** local `file:` path — rejected
-   (machine-specific, breaks the VPS). Lean (a) or (b).
+1. **Dependency source — DECIDED: (a) git dep.** Use
+   `"csv-grid": "github:mynl/CSV_Viewer"` — the VPS pulls it at `npm install`
+   (author confirmed an install-time network connection is acceptable). For the
+   record, the rejected alternatives: **(b)** vendor the committed `dist/*` into
+   `web/vendor/csv-grid/` (offline, but manual version bumps); **(c)** local
+   `file:` path (machine-specific, breaks the VPS).
 2. **Density:** `{url}` full-frame (best, needs worker pathing) vs `{records}`
    with a higher cap.
 3. **Look:** accept CsvGrid styling wholesale, or theme it toward the dense
@@ -103,6 +110,14 @@ Two paths with CsvGrid:
    3-row frames.
 5. **Formatting:** CsvGrid auto-format everywhere vs explicit `formats` for the
    Price stats to match the exact spec.
+
+## Interaction with plan-pwa
+- **Do this after plan-pwa Phase A** (the prefix removal). Density's `{url}` fetch
+  + Vite worker pathing should be exercised against the **final clean origin**
+  (`agg.mynl.com`, same-origin `/v1/…`), not the stripped `/Q7M4Z9KP` prefix.
+- If plan-pwa Phase B (service worker) has landed, confirm the SW keeps `/v1/*`
+  **network-only** so the CSV/density frames this plan fetches are never served
+  stale from cache.
 
 ## Risks / notes
 - **Teardown leaks** if `destroy()` isn't wired (workers + listeners) — the main

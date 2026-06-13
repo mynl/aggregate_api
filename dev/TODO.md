@@ -43,6 +43,11 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 - [ ] **plan-ui-enhancements-01 — small UI polish** (ready). Phone-friendly
       form inputs: 16px on mobile (no iOS zoom) + `autocomplete=off` (no AutoFill
       bar) for the Price inputs and the custom-bs input. `dev/plan-ui-enhancements-01.md`.
+- [ ] **plan-pwa — installable PWA + retire the obscured prefix** (draft). Drop
+      the `/Q7M4Z9KP` security-by-obscurity prefix (Phase A: serve at a clean
+      `agg.mynl.com` subdomain, block `/docs` explicitly, build without
+      `-ApiBase`); then finish the install-as-PWA (Phase B: complete the
+      manifest + a small service worker). No backend changes. `dev/plan-pwa.md`.
 
 ## Backlog / ideas (unordered)
 
@@ -57,6 +62,12 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 - [x] Revisit `meta` version reporting: report both the `aggregate_api` version
       and the underlying `aggregate` version. *(done in 1.0.0a2 —
       `health`/`meta` carry `version` + `aggregate_version`.)*
+- [ ] **`.agg` OS file association** (longer-term, pended from plan-pwa). Once
+      the app installs as a PWA, register `file_handlers` for `.agg` + consume
+      opens via `launchQueue` → `editor.setText`. Chromium-desktop only, needs
+      the PWA installed + HTTPS; value is theoretical until there's a reason to
+      double-click a `.agg` into the app. On-ramp: a plain in-page "Open file"
+      button (`<input type=file>`). See the "Pended" section of `dev/plan-pwa.md`.
 - [ ] Frontend polish: keyboard-shortcut help, sharable URLs for a DecL program.
       *(look-and-feel redesign + emacs keys landed in 1.0.0a3; these specific
       items remain.)*
