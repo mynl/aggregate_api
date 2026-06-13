@@ -286,7 +286,9 @@ async function loadTab(name) {
         if (name === 'info') {
             replacePane('pane-info', renderInfo(await api.info(state.id)));
         } else if (name === 'desc') {
-            replacePaneGrid('pane-desc', await api.description(state.id), GRID_FULL);
+            // Keep the fzf bar but drop the per-column filter row — describe is
+            // narrow and the global search covers it.
+            replacePaneGrid('pane-desc', await api.description(state.id), { columnFilters: false });
         } else if (name === 'plot') {
             const img = el('img', { src: api.plotUrl(state.id, { format: 'svg' }), alt: 'native plot' });
             replacePane('pane-plot', img);

@@ -4,6 +4,18 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a8
+
+CsvGrid polish (follow-up to a7). No backend changes.
+
+- **Force grids to light mode.** CsvGrid auto-follows the OS via
+  `prefers-color-scheme`, so on a dark-mode browser the grids rendered dark while
+  the (light-only) SPA around them stayed light. `mountGrid` now sets
+  `data-theme="light"` on every grid host to opt out. A real SPA-wide dark mode
+  is intentionally out of scope (it would also need dark plots — a whole thing).
+- **Describe loses its per-column filter row** (kept the global fzf search bar):
+  the frame is narrow enough that the column filters were just noise.
+
 ## 1.0.0a7
 
 Adopt **CsvGrid** for every table in the SPA (`dev/done/plan-grid.md`). No

@@ -58,6 +58,11 @@ export function destroyAllGrids() {
  */
 export function mountGrid(paneId, host, frame, opts = {}) {
     const { columns = [], rows = [] } = frame || {};
+    // The SPA is light-only; CsvGrid otherwise auto-follows the OS via
+    // prefers-color-scheme and would render dark on a dark-mode browser,
+    // clashing with the rest of the page. Forcing data-theme="light" on the
+    // host (CsvGrid adds its .csvgrid class to this element) opts the grid out.
+    host.setAttribute('data-theme', 'light');
     const grid = new CsvGrid(host, { columns, records: rows }, { worker: false, ...opts });
     const grids = registry.get(paneId) || [];
     grids.push(grid);
