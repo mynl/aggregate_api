@@ -1,12 +1,20 @@
 # plan-pwa — installable PWA + retire the obscured prefix
 
-Status: **in progress** (1.0.0a6). **Phase B (PWA code) landed** — manifest
-completed, `web/public/sw.js` added + registered in `main.js`, `theme-color`
-meta, `build-web.ps1` usage trimmed. **Phase A (retire the prefix) is the
-pending VPS cutover** — DNS `agg.mynl.com` + the three Caddyfile edits +
-`refresh.sh`/`build-web.sh` dropping `-ApiBase`, then the `human-hints.md`
-runbook rewrite (held until the cutover is live so the doc never describes a
-non-live state). No backend code changes.
+Status: **DONE.** Where it landed:
+- **Phase B (PWA code) — 1.0.0a6:** completed `site.webmanifest`, added
+  `web/public/sw.js` + registration in `main.js`, `theme-color` meta,
+  `build-web.ps1` usage trimmed.
+- **Phase A (retire the prefix) — VPS cutover 2026-06-13:** added DNS
+  `agg.mynl.com`; applied the three Caddyfile edits below (new `agg.mynl.com`
+  block, shrunk `www.mynl.com`, simplified the VPN block — author confirmed the
+  live Caddyfile matched); dropped `-ApiBase` from `refresh.sh`. The
+  `human-hints.md` runbook was rewritten to match (Public route + Rate-limiting +
+  `/docs`-blocked sections; `-ApiBase` marked vestigial). No backend code changes.
+- **Pended:** `.agg` OS file association (see TODO backlog + the section below).
+
+Original plan follows.
+
+---
 
 Two coupled goals:
 1. **Decommission the `/Q7M4Z9KP` security-by-obscurity prefix** (Phase A). It's

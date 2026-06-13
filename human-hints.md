@@ -52,21 +52,19 @@ It does two things: `npm install` (when `node_modules` is missing *or* older tha
 `npm run build` → `vite build`, which bundles `web/src/` into
 `src/aggregate_api/static/`.
 
-### `-ApiBase` — local builds DON'T need it
+### `-ApiBase` — nobody needs it now (same-origin everywhere)
 
-`-ApiBase` (→ `VITE_API_BASE_URL`) is baked into the bundle as the prefix on
-every `fetch()`. It exists only for **split-origin / hidden-prefix** deploys.
-Local same-origin work omits it entirely:
+`-ApiBase` (→ `VITE_API_BASE_URL`) bakes a prefix onto every `fetch()`. Since the
+2026-06-13 cutover to the `agg.mynl.com` subdomain, **both** local and VPS builds
+are same-origin, so the flag is vestigial — build with no args:
 
 ```powershell
-.\scripts\build-web.ps1                       # local: fetch('/v1/...')  ← use this
-.\scripts\build-web.ps1 -ApiBase /Q7M4Z9KP    # VPS Caddy hidden prefix: fetch('/Q7M4Z9KP/v1/...')
-.\scripts\build-web.ps1 -ApiBase https://api.host   # separate api host
+.\scripts\build-web.ps1                              # fetch('/v1/...')  ← always
+.\scripts\build-web.ps1 -ApiBase https://api.host    # only if the api ever moves to a separate host
 ```
 
-The `/Q7M4Z9KP` string is a **VPS-only** concern (Caddy `handle_path /Q7M4Z9KP/*`
-strips it before proxying to FastAPI). On the PC it would only break things —
-the api is served same-origin, so a relative `/v1` is correct.
+(History: the VPS used to serve under an obscured `www.mynl.com/Q7M4Z9KP/` subpath
+and built with `-ApiBase /Q7M4Z9KP`. That's gone — see "Public route" below.)
 
 Quickest PC loop: `build-web.ps1` (no args) → `uv run aggregate-api --port 8001
 --reload` → browse `http://localhost:8001/`. Re-run the build after web edits
@@ -119,13 +117,15 @@ cd web; npm run dev                # terminal 2
 Browse http://localhost:5173/ — Vite hot-reloads and proxies `/v1/*` to `:8000`.
 No rebuild needed while doing this.
 
-## Running on the Linux VPS (over the VPN)
+## Running on the Linux VPS
 
-Topology — two listeners, browser only ever talks to Caddy:
+Topology — one backend, two Caddy front doors; the browser only ever talks to Caddy:
 
 ```
-Windows ──VPN──▶ Caddy 10.8.0.1:19456 ──▶ app 127.0.0.1:8001
-                 (VPN front door)          (private backend)
+public  ──HTTPS──▶ Caddy agg.mynl.com:443  ─┐
+                   (rate-limited, no /docs)  ├─▶ app 127.0.0.1:8001
+Windows ──VPN───▶ Caddy 10.8.0.1:19456     ─┘   (private backend)
+                   (unlimited, full /docs)
 ```
 
 ### Setup, in order
@@ -216,7 +216,28 @@ sudo ufw status
 - One blanket `reverse_proxy` covers `/`, `/v1/*`, `/docs`, assets — same-origin,
   no CORS.
 
-### Rate limiting (public `www.mynl.com/Q7M4Z9KP` route only)
+### Public route (`agg.mynl.com`)
+
+Since 2026-06-13 the app is **also** public at `https://agg.mynl.com/` — its own
+subdomain, root origin, auto-TLS from Caddy. This replaced the old obscured
+`www.mynl.com/Q7M4Z9KP/` subpath (which broke the PWA: a stripped subpath can't
+host a root `start_url` / `scope` / service-worker scope). Same backend
+(`127.0.0.1:8001`) as the VPN route; the difference is all in Caddy. Three blocks
+in `/etc/caddy/Caddyfile`:
+
+- **`agg.mynl.com`** — `reverse_proxy 127.0.0.1:8001` inside a `route` that:
+  hardens headers (`X-Robots-Tag`, `Referrer-Policy`), caps the body at 1 MB,
+  **blocks the API explorer explicitly** (`@apidocs path /docs /docs/* /redoc …
+  /openapi.json` → `respond @apidocs 404`), and rate-limits the build (below).
+- **`www.mynl.com`** — shrunk back to a bare `reverse_proxy 127.0.0.1:8010` (its
+  own content); the `/Q7M4Z9KP` redir + `handle_path` block were deleted.
+- **VPN `:19456`** — simplified to a bare `reverse_proxy` (its old
+  `handle_path /Q7M4Z9KP/*` was only there to make a prefix-built SPA work).
+
+Reload: `caddy fmt --overwrite /etc/caddy/Caddyfile` → `sudo caddy validate
+--config /etc/caddy/Caddyfile` → `sudo systemctl restart caddy`.
+
+### Rate limiting (public `agg.mynl.com` route only)
 
 The VPN route (`:19456`) is unlimited. The **public** route caps abuse via
 Caddy's `rate_limit` module (the "special caddy install").
@@ -224,36 +245,28 @@ Caddy's `rate_limit` module (the "special caddy install").
 - **Only the build is capped.** A matcher limits `POST /v1/objects` (the one
   endpoint with real compute behind the semaphore + 10s timeout). Static assets
   and cheap GETs (`meta`, `examples`, `info`, `density`, …) are unlimited — so
-  page loads and tab clicks never 429.
-- **THE GOTCHA: `handle_path /Q7M4Z9KP/*` strips the prefix first**, so the
-  matcher must use the **bare** path `/v1/objects`, *not* `/Q7M4Z9KP/v1/objects`.
-  Match the prefixed path and it silently matches nothing (→ limits everything,
-  or nothing, depending on placement).
-- **Why it bit before:** the limiter had no matcher, so it counted *every*
-  request. One page load is ~14 requests (html + js + css + 2 fonts + favicons +
-  `meta`); a 5/min budget drained on load and 429'd the fonts/favicons/`examples`.
-- **Budgets:** per-IP `events 20 window 1m` + `100/1h`, `key {remote_host}`.
-  uvicorn logs the real client IP (proxy headers), so `{remote_host}` keys per
-  visitor correctly — *unless* a CDN sits in front, then key off
-  `{http.request.header.CF-Connecting-IP}` instead. Tune `events` down (e.g. 10)
-  to throttle harder.
+  page loads and tab clicks never 429. Match the **real** path `/v1/objects`
+  directly — same-origin now, there is no prefix to strip or account for.
+- **Budgets:** per-IP `events 5 window 1m` + `100/1h`, keyed `{remote_host}`
+  with `ipv6_prefix 64`. uvicorn logs the real client IP (proxy headers), so the
+  key is per-visitor — *unless* a CDN sits in front, then key off
+  `{http.request.header.CF-Connecting-IP}`. Obscurity is gone, so this limiter is
+  now the **primary** abuse guard — tune `events` down to throttle harder.
+- **Why a matcher matters:** without one the limiter counts *every* request; one
+  page load is ~14 requests (html + js + css + 2 fonts + favicons + `meta`), so a
+  small budget drains on load and 429s the fonts/favicons. (This bit us under the
+  old route — fixed by matching only the build.)
 - **Friendly 429:** Caddy `handle_errors` returns a JSON `detail` message for
-  curl/direct callers; the SPA special-cases `status === 429` and renders a
-  card (`error-pane.js` `renderRateLimit`, honoring `Retry-After`).
-- **Verify it's scoped right:** a tight loop of 30 `POST /v1/objects` should go
-  `200…` then `429` after the cap; a loop on `/v1/health` should stay all `200`.
-  If builds never 429, the config isn't live (validate + reload) or the matcher
-  is wrong (the bare-path gotcha).
-- **`/docs` is intentionally broken on the public URL — leave it that way (for
-  now).** `https://www.mynl.com/Q7M4Z9KP/docs` 404s on `openapi.json` because
-  `handle_path` strips `/Q7M4Z9KP` and FastAPI then emits a root-relative
-  `/openapi.json`. That's a **feature**: external visitors get the SPA but not
-  the interactive API explorer. `/docs` still works over the VPN
-  (`http://10.8.0.1:19456/docs`). If we ever want public docs, the fix is to
-  forward the stripped prefix: Caddy `header_up X-Forwarded-Prefix /Q7M4Z9KP`
-  on the `/Q7M4Z9KP` reverse_proxy + a small ASGI middleware that copies that
-  header into the ASGI `root_path` (so Swagger references the prefixed
-  `openapi.json`). Was prototyped and reverted on 2026-06-10.
+  curl/direct callers; the SPA special-cases `status === 429` and renders a card
+  (`error-pane.js` `renderRateLimit`, honoring `Retry-After`).
+- **Verify scope:** a tight loop of `POST /v1/objects` should go `200…` then
+  `429` after ~5/min; a loop on `/v1/health` stays all `200`. If builds never
+  429, the config isn't live (validate + reload).
+- **`/docs` is blocked on the public route — on purpose, explicitly.**
+  `https://agg.mynl.com/docs` 404s because Caddy `respond @apidocs 404` rejects
+  it (no longer an accident of prefix-stripping). External visitors get the SPA,
+  not the interactive API explorer. `/docs` still works over the VPN
+  (`http://10.8.0.1:19456/docs`).
 
 ### Curated Examples list
 
@@ -326,6 +339,17 @@ journalctl -u aggregate-api -f               # watch logs (replaces tail -f)
 With this in place, `refresh.sh` swaps its `pkill`/`nohup` block for a single
 `sudo systemctl restart aggregate-api`.
 
+## Upstream (`aggregate`) — not fixable here
+
+Some things live in the `aggregate` library (the editable `../aggregate_REFACTOR`
+checkout), not this repo — fix them there, then `uv sync`:
+- **Plot / matplotlib styling** (plan-0002 **E**): the off-brand
+  blue-background, serif-font plots come from `aggregate.mplstyle`. Restyling to
+  match the site is an *upstream* edit (a draft sits over the file awaiting
+  Jupyter review); nothing in `aggregate_api` controls it.
+- **Parser internals** the api leans on (`parser_errors`, `parser._PARSER`):
+  bugs in DecL completion / error reports are upstream too.
+
 ## Session log
 
 Running tab of what we've done (newest last).
@@ -357,3 +381,13 @@ Running tab of what we've done (newest last).
   `uv run`, which auto-syncs) before `__version__` updates. And `git status`
   doesn't contact the remote: `git fetch`/`pull` first or its "up to date" is
   stale.
+
+### 2026-06-13 — public subdomain cutover + PWA
+- Retired the obscured `www.mynl.com/Q7M4Z9KP/` subpath; the app is now public at
+  `https://agg.mynl.com/` (own origin, auto-TLS), built **same-origin** (no
+  `-ApiBase`). Caddy: new `agg.mynl.com` block (hardening + 1 MB cap + explicit
+  `/docs` 404 + build rate-limit 5/min·100/h), shrunk `www.mynl.com`, simplified
+  the VPN `:19456` block. Dropped the `-ApiBase` arg from `refresh.sh`.
+- This unblocked the installable **PWA** (manifest + `sw.js`, shipped in a6): a
+  root origin is required for a clean `start_url` / `scope` / service-worker
+  scope. Closed `plan-pwa`.

@@ -22,14 +22,17 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 - [x] **plan-ui-enhancements — SPA editor fix & redesign** (→ 1.0.0a3). Tamed
       autocomplete, emacs keys, archivum look-and-feel, tabbed output, native
       plot + reins / CSV endpoints. *(done; moved to `dev/done/`)*
-- [ ] **plan-0002 — UI tweaks, bug fixes, a4 enhancements** (→ 1.0.0a4, *in
-      progress*). Landed: editor fixes (native selection, kill-ring yank, ↑↓
-      history, 3-line floor, Alt-↑↓ example nav), tab reorg + More dropdown,
-      phone-fit, Density + bs-window panes, format_program on examples,
-      curated-examples env knob, Price pentagon + distortion analysis, friendly
-      429, bs + timing in the summary, mplstyle draft. Still open: standalone
-      distortion (C1), table filters (D1), hints/log2 cap (D2). See
-      `dev/plan-0002.md`.
+- [x] **plan-0002 — UI tweaks, bug fixes, a4 enhancements** (core → 1.0.0a4).
+      Editor fixes, tab reorg + More dropdown, phone-fit, Density + bs-window
+      panes, format_program on examples, curated-examples env knob, Price
+      pentagon + distortion analysis, friendly 429, bs + timing in the summary.
+      Survivors dispersed: C1 + D2 → `plan-misc-01`; D1 superseded by `plan-grid`
+      (CsvGrid filters); E is upstream (`aggregate.mplstyle`). *(done; moved to
+      `dev/done/`)*
+- [ ] **plan-misc-01 — p=1 pricing, friendly 422s, standalone Distortions**
+      (scoped → 1.0.0a9). Relax `PriceRequest.p` to `(0,1]`; render FastAPI
+      validation `detail` arrays instead of a bare "HTTP 422"; allow `dist …`
+      builds (absorbs plan-0002 **C1**). See `dev/plan-misc-01.md`.
 - [ ] **plan-0003 — dev workflow & smoke test** (later). Document/verify the
       end-to-end loop: `uv run aggregate-api --reload` + `npm run dev`, build the
       SPA, hit `/docs`, build an object in the playground. Add a `ruff` pass.
@@ -46,12 +49,11 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
       form inputs: 16px on mobile (no iOS zoom) + `autocomplete=off` (no AutoFill
       bar) for the Price inputs and the custom-bs input. *(done; moved to
       `dev/done/`)*
-- [~] **plan-pwa — installable PWA + retire the obscured prefix** (in progress,
-      1.0.0a6). **Phase B done:** manifest completed + `sw.js` + registration +
-      `theme-color` (works at localhost root; ships in the bundle). **Phase A
-      pending (VPS cutover):** DNS `agg.mynl.com`, the three Caddyfile edits,
-      drop `-ApiBase` from `refresh.sh`, then the `human-hints.md` rewrite. Do the
-      cutover **before** deploying the a6 bundle. `dev/plan-pwa.md`.
+- [x] **plan-pwa — installable PWA + retire the obscured prefix** (Phase B →
+      1.0.0a6; Phase A VPS cutover 2026-06-13). PWA manifest + `sw.js`; app moved
+      to the `agg.mynl.com` subdomain (same-origin, auto-TLS, explicit `/docs`
+      404, build rate-limit); `human-hints.md` runbook rewritten. *(done; moved
+      to `dev/done/`)*
 
 ## Backlog / ideas (unordered)
 
