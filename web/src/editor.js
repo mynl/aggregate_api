@@ -213,6 +213,16 @@ export function createEditor(host, callbacks = {}) {
                 ...searchKeymap,
                 indentWithTab,
             ]),
+            // Mark the contenteditable as not-a-form-field: turns off
+            // autocorrect/-capitalize/spellcheck (right for code) and, crucially
+            // on iOS, suppresses the AutoFill (Passwords / Payment) accessory
+            // bar above the keyboard.
+            EditorView.contentAttributes.of({
+                autocomplete: 'off',
+                autocorrect: 'off',
+                autocapitalize: 'off',
+                spellcheck: 'false',
+            }),
             editorTheme,
         ],
     });

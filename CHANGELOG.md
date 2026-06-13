@@ -95,6 +95,10 @@ In progress (`dev/plan-0002.md`). Iterating on the SPA via
   `Info · Describe · Plot · Price · Reins · More` stays on one line.
 - **Editor floor of ~3 lines:** the editor never shrinks below ~3 text lines
   (`min-height: 4.5em`, font-relative) and grows with content as before.
+- **No iOS AutoFill bar:** the editor's contenteditable is marked
+  `autocomplete/autocorrect/autocapitalize=off, spellcheck=false`, which (on
+  iPhone) suppresses the Passwords/Payment accessory bar above the keyboard and
+  stops autocorrect mangling DecL keywords.
 - **Undisclosed example browsing:** **Alt-↑/↓** steps through the whole example
   library into the editor (format-standardized, wrap-around), seeded from
   `/v1/examples` — separate from build history, not shown in the UI.

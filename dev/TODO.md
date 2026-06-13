@@ -33,6 +33,16 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 - [ ] **plan-0003 — dev workflow & smoke test** (later). Document/verify the
       end-to-end loop: `uv run aggregate-api --reload` + `npm run dev`, build the
       SPA, hit `/docs`, build an object in the playground. Add a `ruff` pass.
+- [ ] **plan-help — short in-SPA help** (proposed). Always-visible top-right `?`
+      opening a compact offcanvas (one-liner, try-it, keys, tab guide, links,
+      fair-use note). Ideas in `dev/plan-help.md`.
+- [ ] **plan-grid — adopt CsvGrid for table output** (scoped). Replace
+      `renderFrameTable` everywhere with the `csv-grid` component (sort / fzf
+      search / per-column filters / worker parsing); density via `{url}`
+      full-frame. Decisions + phasing in `dev/plan-grid.md`.
+- [ ] **plan-ui-enhancements-01 — small UI polish** (ready). Phone-friendly
+      form inputs: 16px on mobile (no iOS zoom) + `autocomplete=off` (no AutoFill
+      bar) for the Price inputs and the custom-bs input. `dev/plan-ui-enhancements-01.md`.
 
 ## Backlog / ideas (unordered)
 
