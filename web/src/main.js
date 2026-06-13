@@ -504,6 +504,25 @@ function exampleStep(dir) {
 }
 
 // ----------------------------------------------------------------------
+// Help offcanvas: "Load it" drops the sample program into the editor
+// ----------------------------------------------------------------------
+// Reuse loadExample so the program is format_program-normalized just like the
+// Examples dropdown. Close the panel and return focus to the editor once it has
+// finished animating out, so Bootstrap's focus-restore doesn't bounce back to
+// the "?" trigger.
+const helpLoad = $('help-load');
+if (helpLoad) {
+    helpLoad.addEventListener('click', () => {
+        const sample = $('help-example').textContent.trim();
+        const panel = $('helpPanel');
+        panel.addEventListener('hidden.bs.offcanvas',
+            () => editor.focus(), { once: true });
+        loadExample(sample);
+        bootstrap.Offcanvas.getOrCreateInstance(panel).hide();
+    });
+}
+
+// ----------------------------------------------------------------------
 // Versions from /v1/meta
 // ----------------------------------------------------------------------
 api.meta().then((meta) => {

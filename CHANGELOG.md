@@ -4,6 +4,34 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a5
+
+Two small, client-only SPA additions (`dev/plan-help.md`,
+`dev/plan-ui-enhancements-01.md`). No backend changes.
+
+**In-SPA help (plan-help)**
+
+- **Always-visible `?` in the header** (after `docs · github`) opens a right-side
+  Bootstrap **offcanvas** quick-help panel: a one-line intro, a paste-ready
+  example with a **Load it** button (drops it into the editor via the same
+  `format_program`-normalized path as the Examples dropdown), the key bindings
+  (incl. `↑↓` history and `Alt+↑↓` examples), a one-line guide to the Build /
+  Examples / log2 / bs controls and every output tab, doc links, and the
+  fair-use note tying into the rate-limit card. Static content; only **Load it**
+  is interactive (closes the panel and refocuses the editor).
+
+**Phone-friendly form inputs (plan-ui-enhancements-01)**
+
+- **No iOS zoom-on-focus:** the Price form inputs (`#price-p`,
+  `#price-target-val`) and the custom-bs input (`#bs-custom`) bump to 16px on
+  phones (≤575.98px) so focusing them no longer magnifies the layout. Desktop
+  keeps the tighter `.78rem`.
+- **No AutoFill bar:** those inputs get `autocomplete="off"` (and
+  `autocorrect`/`autocapitalize="off"` on the text `#bs-custom`) to suppress the
+  iOS key/credit-card accessory bar. `#bs-custom` keeps `type="text"` (it accepts
+  fractions like `1/64`) and intentionally takes **no** `inputmode` so the `/`
+  key stays available.
+
 ## 1.0.0a4
 
 In progress (`dev/plan-0002.md`). Iterating on the SPA via

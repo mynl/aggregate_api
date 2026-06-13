@@ -39,6 +39,10 @@
                     <a href="https://aggregate.readthedocs.io/" target="_blank" rel="noopener">docs</a>
                     <span class="dot">·</span>
                     <a href="https://github.com/mynl/aggregate" target="_blank" rel="noopener">github</a>
+                    <span class="dot">·</span>
+                    <button type="button" class="help-btn" data-bs-toggle="offcanvas"
+                            data-bs-target="#helpPanel" aria-label="help" title="Help">
+                        <i class="bi bi-question-circle"></i></button>
                 </div>
             </div>
         </nav>
@@ -109,6 +113,7 @@
                     <li><hr class="dropdown-divider"></li>
                     <li class="bs-custom">
                         <input type="text" id="bs-custom" class="form-control form-control-sm"
+                               autocomplete="off" autocorrect="off" autocapitalize="off"
                                placeholder="custom, then Enter"></li>
                 </ul>
             </div>
@@ -195,7 +200,7 @@
             <div class="tab-pane fade" id="t-price">
                 <div class="tab-tools price-form">
                     <label class="price-field">p
-                        <input id="price-p" type="number" step="0.001" min="0" max="1" value="0.99"></label>
+                        <input id="price-p" type="number" step="0.001" min="0" max="1" value="0.99" autocomplete="off"></label>
                     <div class="btn-group btn-group-sm" role="group" aria-label="pricing target">
                         <input type="radio" class="btn-check" name="price-target" id="price-tgt-coc" value="coc" checked>
                         <label class="btn btn-outline-secondary" for="price-tgt-coc">CoC</label>
@@ -203,7 +208,7 @@
                         <label class="btn btn-outline-secondary" for="price-tgt-lr">LR</label>
                     </div>
                     <label class="price-field"><span id="price-target-label">CoC</span>
-                        <input id="price-target-val" type="number" step="0.01" value="0.1"></label>
+                        <input id="price-target-val" type="number" step="0.01" value="0.1" autocomplete="off"></label>
                     <button id="price-btn" class="btn btn-primary btn-sm">Price</button>
                 </div>
                 <div id="pane-price" class="pane"></div>
@@ -228,6 +233,65 @@
             </div>
         </div>
     </main>
+
+    <!-- ============================================================
+         Help offcanvas (opened by the header "?")
+         ============================================================ -->
+    <div class="offcanvas offcanvas-end help-panel" tabindex="-1" id="helpPanel" aria-labelledby="helpLabel">
+        <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="helpLabel">DecL playground—quick help</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body help-body">
+            <p class="help-lead">Build and explore compound <em>(aggregate)</em> loss
+               distributions from simple <strong>DecL</strong> programs.</p>
+
+            <h6>Try it</h6>
+            <div class="help-try">
+                <code id="help-example">agg Demo 100 claims 1000 xs 0 sev lognorm 90 cv 1.5 poisson</code>
+                <div class="mt-2 d-flex align-items-center gap-2">
+                    <button id="help-load" class="btn btn-sm btn-primary" style="--bs-btn-font-size:.76rem;">Load it</button>
+                    <span class="text-muted" style="font-size:.74rem;">then press <kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>
+                </div>
+            </div>
+
+            <h6>Keys</h6>
+            <div class="help-keys">
+                <span><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span><span>build</span>
+                <span><kbd>Ctrl</kbd>+<kbd>Space</kbd></span><span>autocomplete</span>
+                <span><kbd>↑</kbd> <kbd>↓</kbd></span><span>step through history</span>
+                <span><kbd>Alt</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span><span>step through examples</span>
+                <span><kbd>✕</kbd></span><span>clear the editor</span>
+            </div>
+
+            <h6>Controls</h6>
+            <ul class="help-tabs">
+                <li><span class="t">Build</span>: run the program (same as Ctrl+Enter)</li>
+                <li><span class="t">Examples</span>: load a ready-made program</li>
+                <li><span class="t">log2</span>: FFT grid size, 2<sup>log2</sup> buckets (auto picks it, max 16)</li>
+                <li><span class="t">bs</span>: bucket size / resolution (auto picks it)</li>
+            </ul>
+
+            <h6>Output tabs</h6>
+            <ul class="help-tabs">
+                <li><span class="t">Info</span>: object summary &amp; grid settings</li>
+                <li><span class="t">Describe</span>: Freq / Sev / Agg moments</li>
+                <li><span class="t">Plot</span>: visualize the object</li>
+                <li><span class="t">Price</span>: pricing metrics and allocation analysis</li>
+                <li><span class="t">Reins</span>: ceded / net by layer</li>
+                <li><span class="t">More ▾</span>: Stats · Density · bs window</li>
+            </ul>
+
+            <h6>Learn more</h6>
+            <p class="help-links mb-0">
+                <a href="https://aggregate.readthedocs.io/en/latest/4_dec_Language_Reference.html" target="_blank" rel="noopener">DecL language reference</a> ·
+                <a href="https://github.com/mynl/aggregate" target="_blank" rel="noopener">aggregate library on github</a>
+            </p>
+
+            <p class="help-fair mb-0">This is a shared, free demo, so builds are
+               rate-limited. Want no limits? <code>aggregate</code> is open source—<a href="https://github.com/mynl/aggregate" target="_blank" rel="noopener">run it locally</a>.</p>
+        </div>
+    </div>
 
     <!-- Vite entry point. main.js imports Bootstrap JS + icons, the
          editor, and wires up the UI. -->

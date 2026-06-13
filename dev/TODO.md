@@ -33,16 +33,17 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 - [ ] **plan-0003 — dev workflow & smoke test** (later). Document/verify the
       end-to-end loop: `uv run aggregate-api --reload` + `npm run dev`, build the
       SPA, hit `/docs`, build an object in the playground. Add a `ruff` pass.
-- [ ] **plan-help — short in-SPA help** (proposed). Always-visible top-right `?`
-      opening a compact offcanvas (one-liner, try-it, keys, tab guide, links,
-      fair-use note). Ideas in `dev/plan-help.md`.
+- [x] **plan-help — short in-SPA help** (→ 1.0.0a5). Always-visible top-right
+      `?` opens a compact offcanvas (one-liner, try-it + Load it, keys, controls
+      + tab guide, links, fair-use note). *(done; moved to `dev/done/`)*
 - [ ] **plan-grid — adopt CsvGrid for table output** (scoped). Replace
       `renderFrameTable` everywhere with the `csv-grid` component (sort / fzf
       search / per-column filters / worker parsing); density via `{url}`
       full-frame. Decisions + phasing in `dev/plan-grid.md`.
-- [ ] **plan-ui-enhancements-01 — small UI polish** (ready). Phone-friendly
+- [x] **plan-ui-enhancements-01 — small UI polish** (→ 1.0.0a5). Phone-friendly
       form inputs: 16px on mobile (no iOS zoom) + `autocomplete=off` (no AutoFill
-      bar) for the Price inputs and the custom-bs input. `dev/plan-ui-enhancements-01.md`.
+      bar) for the Price inputs and the custom-bs input. *(done; moved to
+      `dev/done/`)*
 - [ ] **plan-pwa — installable PWA + retire the obscured prefix** (draft). Drop
       the `/Q7M4Z9KP` security-by-obscurity prefix (Phase A: serve at a clean
       `agg.mynl.com` subdomain, block `/docs` explicitly, build without
