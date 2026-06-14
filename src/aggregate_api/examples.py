@@ -42,11 +42,15 @@ from pathlib import Path
 _CONTENTS_LINE = re.compile(r"^#\s+([A-O])\.\s+(.+)$")
 
 # An item line. Must start with a DecL top-level keyword so we don't
-# mistake a comment-stripped section header for a program. The known
-# top-level kinds are agg, sev, port, dist, and bare ``expr`` (rare
-# in test_suite, ignored).
+# mistake a comment-stripped section header for a program. Covers the
+# object-producing kinds: agg, sev, port, dist, pnl, the multivariate
+# family (mv / multivariate), and netceded -- which uniquely carries an
+# extra ``agg`` token before the name (``netceded agg X.Name ...``), so
+# that form is matched explicitly. The leading keyword itself is captured
+# but unused; the name's ``<Letter>.<Suffix>`` is what drives grouping.
 _ITEM_LINE = re.compile(
-    r"^(agg|sev|port|dist)\s+([A-O])\.([A-Za-z0-9_.\-]+)\s+(.*)$"
+    r"^(agg|sev|port|dist|pnl|mv|multivariate|netceded(?:\s+agg)?)"
+    r"\s+([A-O])\.([A-Za-z0-9_.\-]+)\s+(.*)$"
 )
 
 # ``note{...}`` trailing annotation. Allowed to span the rest of the

@@ -185,6 +185,7 @@ function renderSummary(res) {
     applyKindGating(res.kind);
     const kindLabel = res.kind === 'port' ? 'Portfolio'
         : res.kind === 'distortion' ? 'Distortion'
+        : res.kind === 'multivariate' ? 'Multivariate'
         : 'Aggregate';
     const bits = [
         el('span', { className: 'nm' }, res.name || '(anonymous)'),
@@ -210,6 +211,7 @@ function renderTiming(res) {
     if (res.elapsed_ms == null) { node.textContent = ''; return; }
     const word = res.kind === 'port' ? 'portfolio'
         : res.kind === 'distortion' ? 'distortion'
+        : res.kind === 'multivariate' ? 'multivariate'
         : 'aggregate';
     node.textContent = res.cached
         ? `Loaded ${word} from cache`
@@ -276,20 +278,34 @@ function showTab(name) {
     if (btn) bootstrap.Tab.getOrCreateInstance(btn).show();
 }
 
-// Tabs that need a loss distribution. A standalone Distortion exposes
-// info / describe / stats / density / plot but has no pricing,
-// reinsurance, or bs window -- hide those for a distortion so they can't
-// be clicked into a guaranteed 400. Re-shown for agg / port.
-const DIST_HIDDEN_TABS = ['price', 'reins', 'bswin'];
+// Tabs that need a loss distribution. A standalone Distortion or a
+// MultivariateAggregate exposes info / describe / stats / density / plot but
+// has no pricing, reinsurance, or bs window. Per the playground house rule we
+// NEVER hide menu items — the menu set stays stable — we grey them out
+// (disabled) so the user can see what's not applicable. agg / port disable
+// nothing.
+const NA_TABS_BY_KIND = {
+    distortion: ['price', 'reins', 'bswin'],
+    multivariate: ['price', 'reins', 'bswin'],
+};
+const GATED_TABS = ['price', 'reins', 'bswin'];
 
 function applyKindGating(kind) {
-    const hide = kind === 'distortion';
-    for (const tab of DIST_HIDDEN_TABS) {
+    const na = new Set(NA_TABS_BY_KIND[kind] || []);
+    for (const tab of GATED_TABS) {
         const btn = document.querySelector(`.out-tabs [data-tab="${tab}"]`);
-        if (btn) btn.closest('li').classList.toggle('d-none', hide);
+        if (!btn) continue;
+        const off = na.has(tab);
+        // Clear any legacy hide so the menu set is always complete, then grey
+        // out via Bootstrap's .disabled + the native attribute (self-styling,
+        // pointer-events: none, and Bootstrap's Tab plugin won't activate it).
+        btn.closest('li').classList.remove('d-none');
+        btn.classList.toggle('disabled', off);
+        btn.toggleAttribute('disabled', off);
+        btn.setAttribute('aria-disabled', off ? 'true' : 'false');
     }
-    // If the active tab was just hidden, fall back to Info.
-    if (hide && DIST_HIDDEN_TABS.includes(activeTabName())) showTab('info');
+    // If the active tab was just disabled, fall back to Info.
+    if (na.has(activeTabName())) showTab('info');
 }
 
 function loadActiveTab() { loadTab(activeTabName()); }
@@ -319,15 +335,18 @@ async function loadTab(name) {
             await loadReins();
         } else if (name === 'density') {
             // A distortion's density_df is the g-curve (g, g_inv, g_dual,
-            // g_prime, ...) over x in [0,1] -- ~101 rows, and none of the
-            // loss,p_total,F,S columns the curated request asks for. Pull the
-            // whole frame (no cols/nonzero/downsample) so it renders.
-            const frame = state.kind === 'distortion'
+            // g_prime, ...) over x in [0,1] -- ~101 rows; a MultivariateAggregate's
+            // is the full joint-density matrix. Neither has the loss,p_total,F,S
+            // columns, so pull the whole frame for those. For agg/port the server
+            // bins the density to a faithful 2**11 display grid (p_total stays
+            // correct), so we only ask for the curated columns -- no nonzero /
+            // downsample needed.
+            const frame = (state.kind === 'distortion' || state.kind === 'multivariate')
                 ? await api.density_df(state.id)
-                : await api.density_df(state.id, {
-                    cols: 'loss,p_total,F,S', nonzero: true, downsample: 2000,
-                });
-            replacePaneGrid('pane-density', frame, { ...GRID_FULL, maxRows: 25 });
+                : await api.density_df(state.id, { cols: 'loss,p_total,F,S' });
+            // renderCap lifts CsvGrid's default 2,000-row render cap so the full
+            // 2**11 = 2048 binned grid shows without the "show all" prompt.
+            replacePaneGrid('pane-density', frame, { ...GRID_FULL, maxRows: 25, renderCap: 2048 });
         } else if (name === 'bswin') {
             replacePaneGrid('pane-bswin', await api.bs_window_df(state.id), GRID_PLAIN);
         }
@@ -497,7 +516,7 @@ document.querySelectorAll('input[name="price-target"]').forEach((radio) => {
     radio.addEventListener('change', () => {
         const isCoc = radio.value === 'coc';
         $('price-target-label').textContent = isCoc ? 'CoC' : 'LR';
-        $('price-target-val').value = isCoc ? '0.1' : '0.7';
+        $('price-target-val').value = isCoc ? '0.15' : '0.9';
     });
 });
 

@@ -156,6 +156,104 @@ def frame_to_payload(
     return {"columns": columns, "rows": rows}
 
 
+# Default display resolution for the binned density: 2**11 = 2048 rows. A
+# density built at log2 = N is reduced to this many grid-aligned super-buckets,
+# i.e. shown as if built at a coarser ``bs`` while the fine build is kept.
+DENSITY_DISPLAY_LOG2 = 11
+
+
+def bin_density(
+    df: pd.DataFrame,
+    source_log2: int,
+    *,
+    sum_cols: set[str],
+    label_col: str = "loss",
+    display_log2: int = DENSITY_DISPLAY_LOG2,
+) -> pd.DataFrame:
+    """Aggregate a density frame onto a coarser power-of-two display grid.
+
+    The density grid has ``2**source_log2`` rows. We reduce it to exactly
+    ``2**display_log2`` rows binned by a factor ``k = 2**j``
+    (``j = source_log2 - display_log2``) -- the density "as if built at a
+    coarser ``bs' = k * bs``", with no loss of severity detail in the fine
+    build. This keeps the power-of-two paradigm.
+
+    Buckets are **centered on the coarse grid nodes** (the "around x_i"
+    convention). Node ``i`` sits at ``loss = i * bs'`` (a clean multiple:
+    0, bs', 2*bs', …) and owns the fine buckets in the half-open window
+    ``(i*bs' - bs'/2, i*bs' + bs'/2]``. So with ``bs' = 320`` the first row is
+    labeled ``0`` and covers ``loss <= 160``; the second is labeled ``320`` and
+    covers ``160 < loss <= 480``; and so on. The first bucket is a left
+    half-window (nothing below 0) and the final node absorbs the short tail, so
+    the partition is exact and the row count stays ``2**display_log2``.
+
+    Column reductions:
+
+    * **mass columns** (``sum_cols`` -- ``p_total`` / ``p_sev`` / any ``p_*``)
+      are **summed** over the window (probability-conserving);
+    * the **label column** (``label_col``, default ``loss``) takes the node
+      center ``i * bs'`` -- the clean coarse-grid label;
+    * **every other column** (``F`` / ``S`` / the ``ex***`` series) takes the
+      window's **right edge** (``last``). For ``F`` / ``S`` that makes the
+      surfaced value the running cumulative through the bucket, so
+      ``F[i] - F[i-1]`` equals the summed mass ``p_total[i]`` -- the same
+      convention a native coarse build uses (``F`` = cumsum of the masses).
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Density frame (already index-reset, ``loss`` a column).
+    source_log2 : int
+        ``log2`` of the underlying build grid.
+    sum_cols : set[str]
+        Column names whose values are masses and should be summed.
+    label_col : str, default ``"loss"``
+        The coarse-grid label column, sampled at each node center. Absent from
+        the frame is fine (then no column is treated as the label).
+    display_log2 : int, default ``DENSITY_DISPLAY_LOG2``
+        Target ``log2`` of the displayed grid. ``source_log2 <= display_log2``
+        means no binning (``k == 1``) -- the frame is returned unchanged.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The binned frame, column order preserved, with a fresh 0..2**m index.
+
+    Notes
+    -----
+    Grouping is positional, not value-based, so it does not depend on the index
+    being clean or monotone. ``(arange(n) + k//2 - 1) // k`` (clamped to the last
+    node) assigns each fine index to the nearest node under the upper-inclusive
+    ``(node - bs'/2, node + bs'/2]`` rule; the node centers themselves are the
+    fine rows ``0, k, 2k, …``.
+    """
+    j = max(0, int(source_log2) - int(display_log2))
+    k = 1 << j
+    if k == 1:
+        return df
+    n = len(df)
+    half = k // 2
+    num_groups = (n - 1) // k + 1
+    # Nearest-node assignment under the (node - bs'/2, node + bs'/2] rule, with
+    # the short tail folded into the final node so the partition is exact.
+    groups = np.minimum((np.arange(n) + half - 1) // k, num_groups - 1)
+    # Node centers are the fine rows 0, k, 2k, … (capped at the last row).
+    center_idx = np.minimum(np.arange(num_groups) * k, n - 1)
+
+    cols = list(df.columns)
+    out: dict[str, np.ndarray] = {}
+    for col in cols:
+        series = df[col]
+        if col in sum_cols:
+            out[col] = series.groupby(groups, sort=True).sum().to_numpy()
+        elif col == label_col:
+            out[col] = series.to_numpy()[center_idx]
+        else:
+            # Window right edge -> F/S read as the cumulative through the bucket.
+            out[col] = series.groupby(groups, sort=True).last().to_numpy()
+    return pd.DataFrame(out, columns=cols)
+
+
 def info_to_payload(obj: Any) -> dict:
     """Return ``{"info": "..."}``.
 

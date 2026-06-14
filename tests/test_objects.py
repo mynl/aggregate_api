@@ -126,15 +126,20 @@ def test_stats_df_endpoint(client):
     assert len(body["rows"]) > 0
 
 
-def test_density_df_paginated(client):
+def test_density_df_binned_is_faithful(client):
+    """Density binning conserves probability: p_total sums to ~1.
+
+    The old even-spaced stride-skip understated p_total by the stride
+    factor; the power-of-two binning sums masses per super-bucket, so the
+    surfaced p_total column is faithful.
+    """
     oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    r = client.get(
-        f"/v1/objects/{oid}/density_df",
-        params={"cols": "loss,p_total", "downsample": 20},
-    )
+    r = client.get(f"/v1/objects/{oid}/density_df", params={"cols": "loss,p_total"})
+    assert r.status_code == 200, r.text
     body = r.json()
     assert body["columns"] == ["loss", "p_total"]
-    assert len(body["rows"]) <= 20
+    total = sum(row[1] for row in body["rows"] if row[1] is not None)
+    assert total == pytest.approx(1.0, abs=1e-6)
 
 
 def test_density_df_unknown_cols_filtered(client):
@@ -148,19 +153,33 @@ def test_density_df_unknown_cols_filtered(client):
     assert r.json()["columns"] == ["loss"]
 
 
-def test_density_df_nonzero_filters_support(client):
-    """nonzero=true keeps only p_total > 0 rows (the SPA Density default)."""
-    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    r = client.get(
-        f"/v1/objects/{oid}/density_df",
-        params={"cols": "loss,p_total", "nonzero": "true", "downsample": 50},
-    )
+def test_density_df_bins_to_display_grid(client):
+    """A fine grid (log2 > 11) bins to exactly 2**11 = 2048 display rows.
+
+    The reduction stays on the power-of-two paradigm (``k = 2**(log2-11)``),
+    so a 2**16-row build collapses to exactly 2048 grid nodes while p_total
+    still sums to ~1. Nodes are centered: the loss grid is 0, bs', 2*bs', ...
+    (first label 0), and F is the running cumulative so F[i]-F[i-1] == p[i].
+    """
+    oid = client.post(
+        "/v1/objects",
+        json={"decl": "agg Big 100 claims sev lognorm 100 cv 1.5 poisson", "log2": 16},
+    ).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/density_df", params={"cols": "loss,p_total,F"})
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["columns"] == ["loss", "p_total"]
-    # p_total is the second column; every surfaced row carries mass.
-    assert body["rows"], "expected some support rows"
-    assert all(row[1] is not None and row[1] > 0 for row in body["rows"])
+    assert body["columns"] == ["loss", "p_total", "F"]
+    rows = body["rows"]
+    assert len(rows) == 2048
+    total = sum(row[1] for row in rows if row[1] is not None)
+    assert total == pytest.approx(1.0, abs=1e-4)
+    # Centered nodes: first label 0, then a constant coarse step bs'.
+    assert rows[0][0] == pytest.approx(0.0, abs=1e-12)
+    step = rows[1][0]
+    assert rows[2][0] == pytest.approx(2 * step, rel=1e-9)
+    assert rows[3][0] == pytest.approx(3 * step, rel=1e-9)
+    # F is cumsum-consistent with the summed masses.
+    assert rows[1][2] - rows[0][2] == pytest.approx(rows[1][1], abs=1e-12)
 
 
 # ----------------------------------------------------------------------
@@ -273,12 +292,19 @@ def test_reins_frames_present(client):
         assert len(body["rows"]) > 0
 
 
-def test_reins_density_preview_is_bounded(client):
-    """Density preview drops zero-mass rows and downsamples to ~20."""
-    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
+def test_reins_density_preview_is_binned(client):
+    """Reins density bins to the 2**11 display grid (faithful gross/ceded/net mass)."""
+    oid = client.post("/v1/objects", json={"decl": _REINS, "log2": 16}).json()["id"]
     r = client.get(f"/v1/objects/{oid}/reins_density_df")
     assert r.status_code == 200, r.text
-    assert len(r.json()["rows"]) <= 20
+    body = r.json()
+    assert len(body["rows"]) == 2048
+    # The gross aggregate density column sums to ~1 across the binned grid.
+    cols = body["columns"]
+    assert "p_agg_gross" in cols
+    gi = cols.index("p_agg_gross")
+    total = sum(row[gi] for row in body["rows"] if row[gi] is not None)
+    assert total == pytest.approx(1.0, abs=1e-3)
 
 
 # ----------------------------------------------------------------------
@@ -340,6 +366,77 @@ def test_log2_cap_rejected(client, monkeypatch):
         assert r.status_code == 422
         # Message says "log2 12 exceeds AGGAPI_LOG2_CAP=8".
         assert "CAP" in r.json()["detail"].upper()
+
+
+def test_unknown_distortion_kind_returns_422(client):
+    """A bad distortion kind is raised inside the Lark transformer (VisitError).
+
+    It should surface as a clean 422 with the underlying message, not the old
+    ugly 500.
+    """
+    r = client.post("/v1/objects", json={"decl": "dist MYD pd 0.5"})
+    assert r.status_code == 422, r.text
+    detail = str(r.json()["detail"])
+    assert "pd" in detail
+    assert "distortion kind" in detail.lower()
+
+
+# ----------------------------------------------------------------------
+# MultivariateAggregate (multivariate / mv / netceded)
+# ----------------------------------------------------------------------
+
+_MV = (
+    "multivariate MV.Indep 25 claims "
+    "agg A dfreq [0 1] [.5 .5] sev lognorm 50 cv 1.5 "
+    "agg B dfreq [0 1] [.5 .5] sev gamma 50 cv 1.0 poisson"
+)
+
+
+def test_multivariate_builds_and_reports(client):
+    """A MultivariateAggregate builds as kind='multivariate' with the common surface."""
+    r = client.post("/v1/objects", json={"decl": _MV})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "multivariate"
+    oid = body["id"]
+    # Common reporting surface works.
+    for which in ("info", "description", "stats_df"):
+        assert client.get(f"/v1/objects/{oid}/{which}").status_code == 200, which
+    # No pricing / reinsurance / bs-window -> clean 400 (not 500).
+    assert client.post(
+        f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.15}
+    ).status_code == 400
+    assert client.get(f"/v1/objects/{oid}/reins_describe").status_code == 400
+    assert client.get(f"/v1/objects/{oid}/bs_window_df").status_code == 400
+
+
+# ----------------------------------------------------------------------
+# Multi-line input (whitespace collapse)
+# ----------------------------------------------------------------------
+
+def test_multiline_input_builds(client):
+    r"""Newlines / tabs collapse so a multi-line program builds without `\`."""
+    decl = "agg A\n    100 claims\n    sev lognorm 10 cv 1\n    poisson"
+    r = client.post("/v1/objects", json={"decl": decl})
+    assert r.status_code == 200, r.text
+    assert r.json()["kind"] == "agg"
+    # The same program on one line shares the cache slot (formatting-insensitive).
+    one_line = "agg A 100 claims sev lognorm 10 cv 1 poisson"
+    r2 = client.post("/v1/objects", json={"decl": one_line})
+    assert r2.json()["id"] == r.json()["id"]
+
+
+# ----------------------------------------------------------------------
+# Stats tables omit raw moments
+# ----------------------------------------------------------------------
+
+def test_stats_df_drops_raw_moments(client):
+    """Displayed stats omit ex1/ex2/ex3; keep mean/cv/skew."""
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    body = client.get(f"/v1/objects/{oid}/stats_df").json()
+    cells = {str(c) for row in body["rows"] for c in row}
+    assert not ({"ex1", "ex2", "ex3"} & cells)
+    assert {"mean", "cv", "skew"} <= cells
 
 
 # ----------------------------------------------------------------------

@@ -75,7 +75,7 @@ class BuildResponse(BaseModel):
     model_config = _RESPONSE_CFG
 
     id: str
-    kind: Literal["agg", "port", "distortion"]
+    kind: Literal["agg", "port", "distortion", "multivariate"]
     name: str
     warnings: list[str] = []
     cached: bool

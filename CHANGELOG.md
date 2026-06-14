@@ -4,6 +4,88 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a11
+
+Punch-ups from the a10 demo pass — two small fixes on top of 1.0.0a10.
+
+- **Build-time semantic errors render legibly in the SPA.** The a10 fix returned
+  these as a 422 with a *plain-string* `detail` (e.g. *"Unknown distortion kind
+  'dualx'; available: …"*), but the error pane only knew how to render the
+  `ErrorReport` *dict* shape, so a string fell through to a generic "Request
+  failed". The renderer now shows a string `detail` directly. (Frontend only;
+  the backend was already correct.)
+- **Density binning uses centered "around xᵢ" buckets.** The 2¹¹ binning now
+  labels each coarse node at `i·bs'` (0, bs', 2·bs', …) and sums the fine mass
+  in the window *centered* on it — node `i` owns `(i·bs' − bs'/2, i·bs' + bs'/2]`
+  (so with `bs'=320` the first row is `0` covering `loss ≤ 160`, the second is
+  `320` covering `160 < loss ≤ 480`, …). Masses sum; `loss` takes the node
+  center; `F`/`S`/`ex***` take the window right edge, so `F` reads as the running
+  cumulative and `F[i] − F[i−1] == p_total[i]` exactly (the native coarse-build
+  convention). Still exactly 2048 rows; `p_total` sums to ~1. (Replaces the a11
+  right-edge labeling shipped earlier in this section.)
+- **Density grid shows all 2048 rows.** CsvGrid's default `renderCap` (2,000)
+  truncated the binned grid with a "show all" prompt; the Density pane now sets
+  `renderCap: 2048` so the full grid renders directly.
+- **Examples loader recognizes more object kinds.** The `GET /v1/examples`
+  item parser only matched programs starting with `agg` / `sev` / `port` /
+  `dist`, so `pnl`, `mv` / `multivariate`, and `netceded agg …` examples never
+  surfaced in the dropdown. The item regex now covers those (the `netceded agg
+  X.Name …` two-keyword form included). The bundled `spa_examples.agg` was
+  reformatted to the `# <Letter>. <Title>` contents + `<Letter>.<Name>`
+  convention so the curated set populates the categorized dropdown.
+
+## 1.0.0a10
+
+Assorted playground tweaks (`dev/done/plan-misc-02.md`) — six small fixes
+gathered while demoing the playground.
+
+**Backend**
+
+- **Build-time semantic errors now return 422, not 500.** An unknown distortion
+  kind (`dist X pd 0.5`, a `ph`→`pd` typo) is raised *inside* the Lark
+  transformer and surfaced as a `lark.exceptions.VisitError`, which fell through
+  to the catch-all 500. A new `except VisitError` clause unwraps `.orig_exc` and
+  returns 422 with the clean message (*"Unknown distortion kind 'pd';
+  available: …"*), rendered legibly in the SPA error pane. The catch-all 500 is
+  retained for genuine server bugs.
+- **`MultivariateAggregate` objects build.** The `multivariate` / `mv` /
+  `netceded` DecL keywords now build and cache as `kind="multivariate"` instead
+  of being rejected with "api supports … only; got 'multivariateaggregate'".
+  They expose the common reporting surface — Info, Describe, Stats, Density (the
+  joint-density matrix), and the native Plot. Pricing, reinsurance, and the bs
+  window legitimately return a clean 400 (the SPA greys those tabs out — see
+  below). `BuildResponse.kind` widened to include `"multivariate"`.
+- **Multi-line input builds without `\`.** The build entry collapses newlines,
+  tabs, and `\` line-continuations to single spaces before parsing, so a program
+  formatted across several indented lines builds (DecL otherwise treats a bare
+  newline as a program separator). Applies before the hints scan, cache key, and
+  parse, so cache keys become formatting-insensitive and parse-error carets
+  reflect the submitted source.
+- **Stats / Reins-stats tables omit raw moments.** The displayed `stats_df` and
+  `reins_stats_df` drop the `ex1` / `ex2` / `ex3` rows (E[X], E[X²], E[X³]),
+  keeping the human-readable `mean` / `cv` / `skew` (and the `meta` block). The
+  full-frame CSV download keeps everything.
+- **Faithful power-of-two density binning.** The density display reduction was
+  even-spaced row sampling (stride-skip), which understated `p_total` by the
+  stride factor (summed to ~0.045 instead of 1). Density / reins-density / kappa
+  now bin the full grid to a fixed 2¹¹ = 2048 grid-aligned rows — "as if built
+  at a coarser `bs`" — summing the mass columns (`p_*`) and right-edging the
+  pointwise columns (`loss` / `F` / `S` / `ex***`). `p_total` is now correct
+  (sums to ~1). The full-frame CSV download stays exact / unbinned.
+
+**Frontend**
+
+- **Price defaults bumped** to CoC `0.15` (was `0.10`) and LR `0.90` (was
+  `0.70`) — LR is the technical premium ratio (no expenses), so 0.9 is the
+  natural default. The `p` default (`0.99`) is unchanged.
+- **Tabs grey out, never disappear (house rule).** Tabs that don't apply to the
+  built object (Price / Reins / bs window for a distortion or multivariate) are
+  now *disabled* (greyed, non-interactive) rather than hidden — the menu set
+  stays stable. **Behavior change vs 1.0.0a9**, which *hid* those tabs for
+  distortions via `d-none`; that path is retrofitted to the grey-out.
+- Multivariate gets its own summary / timing label ("Multivariate"), and its
+  Density tab renders the full joint-density frame.
+
 ## 1.0.0a9
 
 Make the playground less brittle (`dev/done/plan-misc-01.md`) — five small,

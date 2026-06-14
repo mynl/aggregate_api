@@ -36,6 +36,15 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
       plan-0002 **C1**); `hints{ log2=N }` now counts against `AGGAPI_LOG2_CAP`
       (absorbs plan-0002 **D2**); csv-grid version shown in the header.
       *(done; moved to `dev/done/`)*
+- [x] **plan-misc-02 — assorted playground tweaks** (→ 1.0.0a10). Six small
+      fixes: build-time semantic errors (unknown distortion kind) return a clean
+      422 (unwrap `VisitError`) not a 500; `MultivariateAggregate`
+      (`multivariate`/`mv`/`netceded`) builds as `kind="multivariate"`; input
+      newlines/tabs/`\` collapse so multi-line programs build; Stats/Reins-stats
+      omit raw-moment rows (`ex1/2/3`); Price defaults CoC 0.15 / LR 0.90;
+      density / reins-density / kappa bin to a faithful 2¹¹ power-of-two display
+      grid. House rule: tabs grey out (disabled), never hide — retrofits
+      plan-misc-01 **C**. *(done; moved to `dev/done/`)*
 - [ ] **plan-0003 — dev workflow & smoke test** (later). Document/verify the
       end-to-end loop: `uv run aggregate-api --reload` + `npm run dev`, build the
       SPA, hit `/docs`, build an object in the playground. Add a `ruff` pass.

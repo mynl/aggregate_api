@@ -65,7 +65,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 
-from lark.exceptions import UnexpectedInput
+from lark.exceptions import UnexpectedInput, VisitError
 
 from aggregate import Distortion, build as _build_singleton
 from aggregate.parser_errors import ErrorReport, format_error
@@ -76,7 +76,12 @@ from ..cache import CacheEntry, ObjectCache, canonicalize_decl, object_id
 from ..config import Settings, get_settings
 from ..plotting import render_plot
 from ..pricing import run_price_pentagon, run_pricing
-from ..serializers import frame_to_payload, info_to_payload, reset_index_safe
+from ..serializers import (
+    bin_density,
+    frame_to_payload,
+    info_to_payload,
+    reset_index_safe,
+)
 
 
 router = APIRouter()
@@ -228,6 +233,33 @@ def _summary_fields(obj: Any) -> dict:
     }
 
 
+# Raw-moment statistic labels (E[X], E[X^2], E[X^3]). The displayed stats /
+# reins-stats tables drop these rows -- nobody reads E[X^2]; the human-readable
+# mean / cv / skew (and the ``meta`` block) carry the story. The full-frame CSV
+# download keeps them (the "give me everything" export).
+_RAW_MOMENTS = frozenset({"ex1", "ex2", "ex3"})
+
+
+def _drop_raw_moments(df):
+    """Drop the ``ex1`` / ``ex2`` / ``ex3`` rows; keep mean / cv / skew (+ meta).
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        ``stats_df`` / ``reins_stats_df``, whose rows carry a 2-level
+        ``(group, statistic)`` MultiIndex (the ``meta`` group has its own
+        labels and no ``ex*``, so it's untouched).
+
+    Returns
+    -------
+    pandas.DataFrame
+        The frame with the raw-moment rows removed. Filters on the
+        *innermost* index level, so it works for a flat index too.
+    """
+    stat = df.index.get_level_values(-1)
+    return df[~stat.isin(_RAW_MOMENTS)]
+
+
 # ----------------------------------------------------------------------
 # POST /v1/objects
 # ----------------------------------------------------------------------
@@ -255,6 +287,19 @@ def post_object(
     eff_bs = req.bs if req.bs is not None else 0.0
     ip = _client_ip(request)
     t0 = time.monotonic()
+
+    # Collapse newlines / tabs / `\` line-continuations to single spaces so a
+    # program formatted across several indented lines builds without the ugly
+    # `\` continuation. DecL treats a bare newline as a *program separator*, but
+    # the same program on one line parses fine. We replace (not delete) runs of
+    # whitespace so tokens don't merge (``100\nclaims`` → ``100 claims``), drop
+    # any `\` first to fold existing continuation programs in too, then strip.
+    # Done up front so the hints scan, cache key, build, and any parse-error
+    # caret all see the same collapsed source. This is a single-object
+    # playground (one program per build), so merging newline-separated programs
+    # is not a regression. ``#`` comments aren't accepted in the input box, so
+    # nothing gets swallowed.
+    req.decl = re.sub(r"\s+", " ", req.decl.replace("\\", " ")).strip()
 
     # Cap check is cheap; do it before the cache lookup so an
     # over-cap request never reaches the build path. Enforce against the
@@ -357,6 +402,21 @@ def post_object(
                 elapsed_ms=elapsed,
             )
             raise HTTPException(status_code=422, detail=report.to_dict())
+        except VisitError as exc:
+            # Lark wraps any exception raised *inside* the transformer in a
+            # ``VisitError``; the real cause (e.g. a ``ValueError("Unknown
+            # distortion kind 'pd'; available: …")`` from an unknown distortion
+            # kind) hangs off ``.orig_exc``. These are user-input errors with an
+            # informative message, so surface them in the 422 family rather than
+            # letting them fall through to the catch-all 500.
+            orig = getattr(exc, "orig_exc", None) or exc
+            elapsed = int((time.monotonic() - t0) * 1000)
+            audit.record_build(
+                ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
+                status="build_error", error_msg=str(orig),
+                elapsed_ms=elapsed,
+            )
+            raise HTTPException(status_code=422, detail=str(orig))
         except Exception as exc:
             elapsed = int((time.monotonic() - t0) * 1000)
             audit.record_build(
@@ -366,13 +426,14 @@ def post_object(
             )
             raise HTTPException(status_code=500, detail=str(exc))
 
-    # Classify the result. The api stores 'agg' | 'port' | 'distortion'.
-    # Distortions carry the common reporting surface (info, describe,
-    # stats_df, density_df, plot) so the playground can explore them --
-    # they just have no pricing / reinsurance / bs-window (those routes
-    # return a clean 400). 'sev' and anything else is rejected.
+    # Classify the result. The api stores
+    # 'agg' | 'port' | 'distortion' | 'multivariate'. Distortions and
+    # MultivariateAggregates carry the common reporting surface (info,
+    # describe, stats_df, density_df, plot) so the playground can explore
+    # them -- they just have no pricing / reinsurance / bs-window (those
+    # routes return a clean 400). 'sev' and anything else is rejected.
     kind = _classify_object(obj)
-    if kind not in ("agg", "port", "distortion"):
+    if kind not in ("agg", "port", "distortion", "multivariate"):
         elapsed = int((time.monotonic() - t0) * 1000)
         audit.record_build(
             ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
@@ -382,7 +443,10 @@ def post_object(
         )
         raise HTTPException(
             status_code=422,
-            detail=f"api supports 'agg', 'port' and 'distortion' only; got {kind!r}",
+            detail=(
+                "api supports 'agg', 'port', 'distortion' and 'multivariate' "
+                f"only; got {kind!r}"
+            ),
         )
 
     entry = CacheEntry(
@@ -412,7 +476,7 @@ def post_object(
 
 
 def _classify_object(obj: Any) -> str:
-    """Return 'agg' | 'port' | 'distortion' | <type-name> for ``obj``.
+    """Return 'agg' | 'port' | 'distortion' | 'multivariate' | <type-name>.
 
     Uses class-name discrimination because Aggregate / Portfolio
     don't carry an explicit .kind attribute on the instances --
@@ -420,13 +484,17 @@ def _classify_object(obj: Any) -> str:
     called ``build()``, which unwraps). Every ``Distortion`` subclass
     (PHDistortion, WangDistortion, ...) is normalized to the generic
     ``'distortion'`` so the SPA and endpoints treat them uniformly; the
-    specific subclass shows up in ``info`` / ``describe``.
+    specific subclass shows up in ``info`` / ``describe``. A
+    ``MultivariateAggregate`` (``multivariate`` / ``mv`` / ``netceded``
+    keywords) maps to the generic ``'multivariate'``.
     """
     cls = type(obj).__name__
     if cls == "Portfolio":
         return "port"
     if cls == "Aggregate":
         return "agg"
+    if cls == "MultivariateAggregate":
+        return "multivariate"
     if isinstance(obj, Distortion):
         return "distortion"
     return cls.lower()
@@ -529,7 +597,7 @@ def get_stats_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
             status_code=400,
             detail=f"stats_df not available for {entry.kind!r}",
         )
-    return frame_to_payload(reset_index_safe(df))
+    return frame_to_payload(reset_index_safe(_drop_raw_moments(df)))
 
 
 # ----------------------------------------------------------------------
@@ -552,11 +620,18 @@ def get_density_df(
     ),
     cache: ObjectCache = Depends(_get_cache),
 ) -> dict:
-    """Paginated density_df slice.
+    """Density_df reduced to a faithful power-of-two display grid.
 
-    Without filters this is a 2**N-row table (potentially big);
-    typical SPA use sets ``cols``, ``nonzero`` and ``downsample`` to
-    limit payload size to the actual support.
+    For an object with a build grid (agg / port; ``log2`` present) the
+    2**log2-row frame is binned to a fixed 2**11 display grid: masses
+    (``p_total`` / ``p_sev`` / ``p_*``) are summed and the pointwise columns
+    (``loss`` / ``F`` / ``S`` / ``ex***``) take the super-bucket right edge, so
+    ``p_total`` stays faithful (sums to ~1) instead of being understated by an
+    even-spaced stride. The full-frame CSV download stays exact / unbinned.
+
+    Objects without a build grid (a distortion's g-curve, a
+    ``MultivariateAggregate`` joint matrix) skip binning and honor the legacy
+    ``cols`` / ``start`` / ``stop`` / ``downsample`` / ``nonzero`` params.
     """
     entry = _resolve_object(oid, cache)
     df = getattr(entry.obj, "density_df", None)
@@ -571,8 +646,19 @@ def get_density_df(
     # ``loss`` is already a column on the frame so reset_index_safe
     # avoids the collision.
     df = reset_index_safe(df)
-    # Trim the long zero-mass tails to the actual support first, so the
-    # downsample spends its row budget on rows that carry probability.
+
+    source_log2 = getattr(entry.obj, "log2", None)
+    if source_log2 is not None:
+        # Bin the full grid to 2**11 rows. Apply the column subset first (so we
+        # only sum the masses the SPA asked for), then bin: p_* columns sum,
+        # loss/F/S right-edge.
+        if col_list:
+            existing = [c for c in col_list if c in df.columns]
+            df = df[existing]
+        sum_cols = {c for c in df.columns if c.startswith("p")}
+        return frame_to_payload(bin_density(df, source_log2, sum_cols=sum_cols))
+
+    # No build grid: leave the frame as-is and honor the legacy slice params.
     if nonzero and "p_total" in df.columns:
         df = df[df["p_total"] > 0]
     return frame_to_payload(
@@ -600,6 +686,12 @@ def get_kappa(
     if not exeqa:
         raise HTTPException(status_code=400, detail="no exeqa_* columns on density_df")
     df = reset_index_safe(df)[["loss", *exeqa]]
+    # Bin to the power-of-two display grid. ``exeqa_*`` are conditional
+    # expectations (pointwise in x), not masses, so every column right-edges
+    # (sum_cols empty). The full-frame CSV stays exact.
+    source_log2 = getattr(entry.obj, "log2", None)
+    if source_log2 is not None:
+        df = bin_density(df, source_log2, sum_cols=set())
     return frame_to_payload(df, downsample=downsample)
 
 
@@ -628,10 +720,10 @@ def get_bs_window_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict
 # ----------------------------------------------------------------------
 # Reinsurance -- text description + per-layer frames
 # ----------------------------------------------------------------------
-# Number of rows to surface in a density preview. The full grid is
-# 2**log2 rows; the on-screen table shows an evenly-spaced sample of the
-# actual support (``p_total > 0``). The csv download carries the full
-# frame.
+# Fallback row budget for a density preview on an object *without* a build
+# grid (no ``log2`` to bin against). Grid-backed objects (agg / port) bin to a
+# faithful 2**11 display grid instead -- see ``bin_density``. The csv download
+# carries the full frame.
 DENSITY_PREVIEW_ROWS = 20
 
 
@@ -694,24 +786,27 @@ def get_reins_stats_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> di
     df = _frame_attr(entry.obj, "reins_stats_df")
     if df is None:
         raise HTTPException(status_code=400, detail="no reinsurance on this object")
-    return frame_to_payload(reset_index_safe(df))
+    return frame_to_payload(reset_index_safe(_drop_raw_moments(df)))
 
 
 @router.get("/objects/{oid}/reins_density_df", response_model=models.FrameResponse)
 def get_reins_density_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
-    """Density preview: filter to the support then evenly sample ~20 rows.
+    """Reinsurance density preview, binned to the power-of-two display grid.
 
-    The full frame spans the whole loss grid; most rows are zero-mass.
-    We drop those (``p_total > 0``) and downsample so the on-screen table
-    is a readable preview; the csv download has the full data.
+    The full frame spans the whole loss grid (2**log2 rows). We bin it to a
+    fixed 2**11 display grid: every gross/ceded/net density column (``p_*``)
+    sums and ``loss`` right-edges, so the previewed masses stay faithful. The
+    csv download has the full, exact frame.
     """
     entry = _resolve_object(oid, cache)
     df = _frame_attr(entry.obj, "reins_density_df")
     if df is None:
         raise HTTPException(status_code=400, detail="no reinsurance on this object")
     df = reset_index_safe(df)
-    if "p_total" in df.columns:
-        df = df[df["p_total"] > 0]
+    source_log2 = getattr(entry.obj, "log2", None)
+    if source_log2 is not None:
+        sum_cols = {c for c in df.columns if c.startswith("p")}
+        return frame_to_payload(bin_density(df, source_log2, sum_cols=sum_cols))
     return frame_to_payload(df, downsample=DENSITY_PREVIEW_ROWS)
 
 

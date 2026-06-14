@@ -1,14 +1,18 @@
 # plan-misc-02 — (gathering) assorted playground tweaks
 
-Status: **gathering.** Open collection plan — specs land here as we discuss
-them; nothing is being built yet. When the list is substantial enough to be
-worth a build we do a final review, (probably) `/compact`, then implement the
-whole batch on one go: one version bump, one CHANGELOG section.
+Status: **done** (→ 1.0.0a10). All six items implemented in one batch with a
+single version bump and CHANGELOG section. Backend: `routes/objects.py`
+(VisitError→422, multivariate kind + guard, whitespace collapse, raw-moment
+drop, density binning wiring), `serializers.py` (`bin_density`), `models.py`
+(`kind` Literal). Frontend: `web/index.html` + `web/src/main.js` (Price
+defaults, grey-out gating, multivariate labels + density). Tests in
+`tests/test_objects.py` (3 density tests reworked to the binning contract; 4
+new regression tests). SPA bundle rebuilt.
 
-This is the **gather → review → execute** pipeline documented in
+This ran the **gather → review → execute** pipeline documented in
 `human-hints.md`. Predecessor `plan-misc-01` ran the same loop (→ 1.0.0a9).
 
-Target: **1.0.0a10** (provisional — one bump for the batch).
+Target: **1.0.0a10**.
 
 ## Items
 

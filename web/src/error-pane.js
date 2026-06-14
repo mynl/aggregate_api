@@ -57,6 +57,15 @@ export function renderError(err) {
     const body = (err && err.body) || {};
     const detail = body.detail || body || {};
 
+    // A plain-string detail (a build-time semantic error like "Unknown
+    // distortion kind 'dualx'; available: …") isn't an ErrorReport dict, so it
+    // has no .line / .message and would otherwise fall through to the generic
+    // "Request failed" branch. Render the message directly.
+    if (typeof detail === 'string') {
+        return el('div', { className: 'alert alert-warning agg-error-pane', role: 'alert' },
+            detail);
+    }
+
     // Generic non-parse fallback (HTTP 500, network failure, etc.):
     if (!detail.line && !detail.message) {
         return el('div', { className: 'alert alert-danger', role: 'alert' },
