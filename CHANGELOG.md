@@ -4,6 +4,48 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a9
+
+Make the playground less brittle (`dev/done/plan-misc-01.md`) — five small,
+related fixes found mostly while exercising the Price tab and `dist …`. Absorbs
+plan-0002 **C1** (standalone Distortions) and **D2** (hints log2 cap).
+
+**Backend**
+
+- **Pricing accepts `p = 1` (max).** `PriceRequest.p` and `PricingRequest.p`
+  relaxed from `(0, 1)` to `(0, 1]` (`lt=1` → `le=1`). On a *bounded*
+  distribution `p=1` resolves to the finite max of support via the lower
+  quantile — the motivating use case (bounded distortions). On an unbounded one
+  it returns the last grid bucket, so it's grid-dependent there.
+- **Standalone `Distortion` objects build.** `dist MYD ph 0.5` (and every other
+  `Distortion` subclass) now builds and caches as `kind="distortion"` instead of
+  being rejected with "api supports 'agg' and 'port' only". Distortions expose
+  the common reporting surface — Info, Describe, Stats, Density (the g-curve over
+  x∈[0,1]), and the native Plot all work. Pricing, reinsurance, and the bs window
+  legitimately return a clean 400 (the SPA hides those tabs — see below).
+- **`log2` cap enforced against `hints{}`.** `AGGAPI_LOG2_CAP` (default 18) was a
+  request-only guard; a program could dodge it with an embedded
+  `hints{ log2=24 }` clause. A static pre-build scan now folds any `hints{}`
+  `log2` into the cap check (effective = max(request, hint)); over-cap → 422
+  naming the effective `log2`. `bs` and every other hint pass through untouched —
+  the guard only vetoes an over-cap `log2`, it never rewrites the program.
+
+**Frontend**
+
+- **FastAPI 422 validation errors render legibly.** A Pydantic rejection (bad
+  `p`, over-cap `log2`, malformed `bs`) used to surface as a bare "HTTP 422"; the
+  error pane now maps the `detail` array to `"<field>: <msg>"` (e.g.
+  *"p: Input should be less than or equal to 1"*). General — covers every
+  validated endpoint.
+- **Distortion-aware UI.** Summary line and timing label say "Distortion"; the
+  Density tab pulls the whole g-curve frame (no `loss,p_total,F,S` columns to
+  request); Price / Reins / bs-window tabs are hidden for a distortion (and
+  re-shown for agg / port) so they can't be clicked into a guaranteed 400.
+- **csv-grid version in the header.** The top-right line now reads
+  `… · api <ver> · grid <ver> · docs · …`. The version is a build-time constant
+  (Vite `define` reads `csv-grid`'s `package.json`), not an api/meta field — the
+  backend has no knowledge of which `csv-grid` the SPA bundled.
+
 ## 1.0.0a8
 
 CsvGrid polish (follow-up to a7). No backend changes.

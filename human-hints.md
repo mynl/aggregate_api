@@ -2,6 +2,28 @@
 
 My crib sheet for `aggregate_api`. Short notes to self.
 
+## How a batch of tweaks ships: gather → review → execute
+
+Working style for the `plan-misc-*` batches. Instead of one plan per tweak,
+collect related small changes in a single *gathering* plan, then build them as
+one versioned batch:
+
+1. **Gather.** Discuss tweaks one at a time; each gets a spec appended to the
+   open `dev/plan-misc-NN.md` (Problem / fix / files-to-touch, like the items in
+   plan-misc-01). Plan stays `Status: gathering`. No code yet.
+2. **Review.** When the list is big enough to be worth a build, read the whole
+   plan top-to-bottom as a final sanity pass — drop/merge items, confirm scope,
+   pick the version. Flip to `Status: final`.
+3. **(Compact.)** Usually `/compact` here: the gather discussion is all on disk
+   in the plan, so the chat context is disposable.
+4. **Execute.** Build the whole batch on one "go" — one version bump
+   (`1.0.0a*`), one CHANGELOG section, move the plan to `dev/done/` with a
+   landing note. (Same close-out as the standing release rules in CLAUDE.md.)
+
+`plan-misc-01` ran exactly this loop (p=1 / friendly 422s / standalone
+Distortions / hints log2 cap / grid version → a9). `plan-misc-02` is the current
+open gathering plan.
+
 ## The two folders
 
 `web/src/` is the **source** I edit (the `.js` files). `src/aggregate_api/static/`

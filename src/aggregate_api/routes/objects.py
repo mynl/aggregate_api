@@ -55,6 +55,7 @@ return in milliseconds.
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
@@ -66,7 +67,7 @@ from fastapi.responses import Response
 
 from lark.exceptions import UnexpectedInput
 
-from aggregate import build as _build_singleton
+from aggregate import Distortion, build as _build_singleton
 from aggregate.parser_errors import ErrorReport, format_error
 
 from .. import models
@@ -79,6 +80,23 @@ from ..serializers import frame_to_payload, info_to_payload, reset_index_safe
 
 
 router = APIRouter()
+
+
+# ----------------------------------------------------------------------
+# DecL hints{} log2 scan
+# ----------------------------------------------------------------------
+# The log2 cap (``AGGAPI_LOG2_CAP``) is a DoS guard, but a program can
+# dodge a request-level cap by embedding ``hints{ log2=24 }`` in the DecL
+# source -- ``build()`` honors that hint, so the effective grid is 2**24
+# regardless of the request log2. We extract the log2 out of any
+# ``hints{ ... }`` block straight from the source, before building, and
+# enforce the cap against the *effective* log2 (request vs hint, whichever
+# is larger). ``[^}]*`` keeps the match inside one block so a bs-only
+# ``hints{}`` can't false-match; ``findall`` + max handles a multi-line
+# ``port`` with several agg lines. This is a guard, not a parser: a
+# non-integer log2 expression won't match ``\d+`` and slips through -- not
+# a real hint form, so acceptable.
+_HINTS_LOG2 = re.compile(r"hints\s*\{[^}]*\blog2\s*=\s*(\d+)", re.IGNORECASE)
 
 
 # ----------------------------------------------------------------------
@@ -239,18 +257,24 @@ def post_object(
     t0 = time.monotonic()
 
     # Cap check is cheap; do it before the cache lookup so an
-    # over-cap request never reaches the build path.
-    if eff_log2 and eff_log2 > settings.log2_cap:
+    # over-cap request never reaches the build path. Enforce against the
+    # *effective* log2: the larger of the request log2 and any log2 set
+    # via a DecL hints{} clause (which build() would otherwise honor,
+    # bypassing a request-only cap). Other hints (bs, etc.) pass through
+    # untouched -- this guard only vetoes an over-cap log2.
+    hint_log2 = max((int(m) for m in _HINTS_LOG2.findall(req.decl)), default=0)
+    effective_log2 = max(eff_log2, hint_log2)
+    if effective_log2 > settings.log2_cap:
         elapsed = int((time.monotonic() - t0) * 1000)
         audit.record_build(
             ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
             status="limit_exceeded",
-            error_msg=f"log2 {eff_log2} exceeds cap {settings.log2_cap}",
+            error_msg=f"log2 {effective_log2} exceeds cap {settings.log2_cap}",
             elapsed_ms=elapsed,
         )
         raise HTTPException(
             status_code=422,
-            detail=f"log2 {eff_log2} exceeds AGGAPI_LOG2_CAP={settings.log2_cap}",
+            detail=f"log2 {effective_log2} exceeds AGGAPI_LOG2_CAP={settings.log2_cap}",
         )
 
     canonical = canonicalize_decl(req.decl)
@@ -342,11 +366,13 @@ def post_object(
             )
             raise HTTPException(status_code=500, detail=str(exc))
 
-    # Classify the result. ``ParsedProgram.kind`` is 'agg' | 'port' |
-    # 'sev' | 'distortion' -- the api only stores agg/port (sev and
-    # distortion don't have density_df / pricing). Reject the rest.
+    # Classify the result. The api stores 'agg' | 'port' | 'distortion'.
+    # Distortions carry the common reporting surface (info, describe,
+    # stats_df, density_df, plot) so the playground can explore them --
+    # they just have no pricing / reinsurance / bs-window (those routes
+    # return a clean 400). 'sev' and anything else is rejected.
     kind = _classify_object(obj)
-    if kind not in ("agg", "port"):
+    if kind not in ("agg", "port", "distortion"):
         elapsed = int((time.monotonic() - t0) * 1000)
         audit.record_build(
             ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
@@ -356,7 +382,7 @@ def post_object(
         )
         raise HTTPException(
             status_code=422,
-            detail=f"api supports 'agg' and 'port' only; got {kind!r}",
+            detail=f"api supports 'agg', 'port' and 'distortion' only; got {kind!r}",
         )
 
     entry = CacheEntry(
@@ -386,18 +412,23 @@ def post_object(
 
 
 def _classify_object(obj: Any) -> str:
-    """Return 'agg' | 'port' | <type-name> for ``obj``.
+    """Return 'agg' | 'port' | 'distortion' | <type-name> for ``obj``.
 
     Uses class-name discrimination because Aggregate / Portfolio
     don't carry an explicit .kind attribute on the instances --
     that's only on ParsedProgram, which we don't see here (we
-    called ``build()``, which unwraps).
+    called ``build()``, which unwraps). Every ``Distortion`` subclass
+    (PHDistortion, WangDistortion, ...) is normalized to the generic
+    ``'distortion'`` so the SPA and endpoints treat them uniformly; the
+    specific subclass shows up in ``info`` / ``describe``.
     """
     cls = type(obj).__name__
     if cls == "Portfolio":
         return "port"
     if cls == "Aggregate":
         return "agg"
+    if isinstance(obj, Distortion):
+        return "distortion"
     return cls.lower()
 
 

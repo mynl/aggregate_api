@@ -1,5 +1,20 @@
 # plan-misc-01 — pricing p=1, friendly validation errors, standalone Distortions
 
+> **LANDED (1.0.0a9).** All five items shipped. Where they landed:
+> **A** `models.py` (`PriceRequest.p` / `PricingRequest.p` → `le=1`).
+> **B** `web/src/main.js` `errorNode()` (`Array.isArray(detail)` branch).
+> **C** `routes/objects.py` (`Distortion` import, `_classify_object` →
+> `'distortion'`, relaxed build guard) + `models.py` (`BuildResponse.kind`
+> Literal gains `'distortion'`) + `web/src/main.js` (`applyKindGating`,
+> summary/timing labels, distortion density branch).
+> **D** `routes/objects.py` (`_HINTS_LOG2` regex, effective-log2 cap check).
+> **E** `web/vite.config.js` (`__CSV_GRID_VERSION__` define) + `web/index.html`
+> (`#ver-csv` span) + `web/src/main.js` (static set). Verified: 52 tests pass +
+> a backend smoke run (distortion reporting, hints cap 422, p=1 ok, p=1.5 422)
+> + SPA build inlines `grid 3.1.0`. Deviation from plan: item C also needed the
+> `BuildResponse.kind` Literal widened (the response model would otherwise 500
+> on serialization) — not foreseen in the plan text.
+
 Status: **final — ready to implement.** Target: **1.0.0a9** (one bump for the
 five; small and related as "make the playground less brittle"). No upstream
 changes (D's `update=False` route was rejected, so nothing upstream to confirm).

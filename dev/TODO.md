@@ -29,10 +29,13 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
       Survivors dispersed: C1 + D2 → `plan-misc-01`; D1 superseded by `plan-grid`
       (CsvGrid filters); E is upstream (`aggregate.mplstyle`). *(done; moved to
       `dev/done/`)*
-- [ ] **plan-misc-01 — p=1 pricing, friendly 422s, standalone Distortions**
-      (scoped → 1.0.0a9). Relax `PriceRequest.p` to `(0,1]`; render FastAPI
-      validation `detail` arrays instead of a bare "HTTP 422"; allow `dist …`
-      builds (absorbs plan-0002 **C1**). See `dev/plan-misc-01.md`.
+- [x] **plan-misc-01 — p=1 pricing, friendly 422s, standalone Distortions**
+      (→ 1.0.0a9). Relaxed `PriceRequest.p` to `(0,1]`; FastAPI validation
+      `detail` arrays now render as `"<field>: <msg>"`; `dist …` builds as
+      `kind="distortion"` with Info/Describe/Stats/Density/Plot (absorbs
+      plan-0002 **C1**); `hints{ log2=N }` now counts against `AGGAPI_LOG2_CAP`
+      (absorbs plan-0002 **D2**); csv-grid version shown in the header.
+      *(done; moved to `dev/done/`)*
 - [ ] **plan-0003 — dev workflow & smoke test** (later). Document/verify the
       end-to-end loop: `uv run aggregate-api --reload` + `npm run dev`, build the
       SPA, hit `/docs`, build an object in the playground. Add a `ruff` pass.

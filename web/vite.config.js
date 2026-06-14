@@ -14,10 +14,20 @@
 // SPA itself talks to /v1 via fetch() without any base URL juggling,
 // matching the production behavior.
 
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
+
+// The SPA freezes one specific csv-grid build at `npm run build`. The
+// version isn't a runtime/api concern (the backend has no idea what the
+// frontend bundled) and the shipped bundle exports no version constant,
+// so capture it here at build time and inline it as a global define.
+const csvGridVersion = JSON.parse(
+    readFileSync(new URL('./node_modules/csv-grid/package.json', import.meta.url)),
+).version;
 
 export default defineConfig({
     base: './',
+    define: { __CSV_GRID_VERSION__: JSON.stringify(csvGridVersion) },
     build: {
         outDir: '../src/aggregate_api/static',
         emptyOutDir: true,

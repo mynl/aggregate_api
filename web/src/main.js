@@ -182,7 +182,10 @@ function fmtBs(bs) {
 function renderSummary(res) {
     const inner = $('summary-inner');
     empty(inner);
-    const kindLabel = res.kind === 'port' ? 'Portfolio' : 'Aggregate';
+    applyKindGating(res.kind);
+    const kindLabel = res.kind === 'port' ? 'Portfolio'
+        : res.kind === 'distortion' ? 'Distortion'
+        : 'Aggregate';
     const bits = [
         el('span', { className: 'nm' }, res.name || '(anonymous)'),
         el('span', { className: 'mono ms-2' }, kindLabel),
@@ -205,7 +208,9 @@ function renderTiming(res) {
     const node = $('summary-timing');
     if (!node) return;
     if (res.elapsed_ms == null) { node.textContent = ''; return; }
-    const word = res.kind === 'port' ? 'portfolio' : 'aggregate';
+    const word = res.kind === 'port' ? 'portfolio'
+        : res.kind === 'distortion' ? 'distortion'
+        : 'aggregate';
     node.textContent = res.cached
         ? `Loaded ${word} from cache`
         : `Calculated ${word} in ${(res.elapsed_ms / 1000).toFixed(3)} seconds`;
@@ -271,6 +276,22 @@ function showTab(name) {
     if (btn) bootstrap.Tab.getOrCreateInstance(btn).show();
 }
 
+// Tabs that need a loss distribution. A standalone Distortion exposes
+// info / describe / stats / density / plot but has no pricing,
+// reinsurance, or bs window -- hide those for a distortion so they can't
+// be clicked into a guaranteed 400. Re-shown for agg / port.
+const DIST_HIDDEN_TABS = ['price', 'reins', 'bswin'];
+
+function applyKindGating(kind) {
+    const hide = kind === 'distortion';
+    for (const tab of DIST_HIDDEN_TABS) {
+        const btn = document.querySelector(`.out-tabs [data-tab="${tab}"]`);
+        if (btn) btn.closest('li').classList.toggle('d-none', hide);
+    }
+    // If the active tab was just hidden, fall back to Info.
+    if (hide && DIST_HIDDEN_TABS.includes(activeTabName())) showTab('info');
+}
+
 function loadActiveTab() { loadTab(activeTabName()); }
 
 // Bootstrap fires shown.bs.tab on the tab trigger when a pill activates.
@@ -297,12 +318,15 @@ async function loadTab(name) {
         } else if (name === 'reins') {
             await loadReins();
         } else if (name === 'density') {
-            // CsvGrid lazy-formats and caps the DOM at its renderCap, so we can
-            // lift the old 300-row preview to a fuller server downsample and let
-            // the grid scroll it in a bounded viewport.
-            const frame = await api.density_df(state.id, {
-                cols: 'loss,p_total,F,S', nonzero: true, downsample: 2000,
-            });
+            // A distortion's density_df is the g-curve (g, g_inv, g_dual,
+            // g_prime, ...) over x in [0,1] -- ~101 rows, and none of the
+            // loss,p_total,F,S columns the curated request asks for. Pull the
+            // whole frame (no cols/nonzero/downsample) so it renders.
+            const frame = state.kind === 'distortion'
+                ? await api.density_df(state.id)
+                : await api.density_df(state.id, {
+                    cols: 'loss,p_total,F,S', nonzero: true, downsample: 2000,
+                });
             replacePaneGrid('pane-density', frame, { ...GRID_FULL, maxRows: 25 });
         } else if (name === 'bswin') {
             replacePaneGrid('pane-bswin', await api.bs_window_df(state.id), GRID_PLAIN);
@@ -335,7 +359,20 @@ function errorNode(err) {
     if (err instanceof ApiError && err.status === 429) return renderRateLimit(err.retryAfter);
     if (err instanceof ApiError) {
         const detail = err.body && (err.body.detail || err.body);
-        const msg = (detail && detail.message) || (typeof detail === 'string' ? detail : err.message);
+        let msg;
+        if (Array.isArray(detail)) {
+            // FastAPI 422 validation errors: [{loc:[...,field], msg, type}, ...].
+            // Show "<field>: <msg>" per entry so the real reason (a bad p, an
+            // over-cap log2) is legible instead of a bare "HTTP 422".
+            msg = detail
+                .map((e) => {
+                    const field = Array.isArray(e.loc) ? e.loc[e.loc.length - 1] : null;
+                    return field ? `${field}: ${e.msg}` : e.msg;
+                })
+                .join('; ');
+        } else {
+            msg = (detail && detail.message) || (typeof detail === 'string' ? detail : err.message);
+        }
         return el('div', { className: 'text-muted small' }, msg);
     }
     return el('div', { className: 'text-muted small' }, err.message);
@@ -566,6 +603,10 @@ api.meta().then((meta) => {
 }).catch(() => {
     $('ver-api').textContent = '(api offline)';
 });
+
+// csv-grid version is a build-time constant (inlined by Vite's define),
+// not a runtime value -- set it directly, outside the meta fetch.
+$('ver-csv').textContent = `grid ${__CSV_GRID_VERSION__}`;
 
 // ----------------------------------------------------------------------
 // PWA service worker (production bundle only)

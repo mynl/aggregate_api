@@ -75,7 +75,7 @@ class BuildResponse(BaseModel):
     model_config = _RESPONSE_CFG
 
     id: str
-    kind: Literal["agg", "port"]
+    kind: Literal["agg", "port", "distortion"]
     name: str
     warnings: list[str] = []
     cached: bool
@@ -188,7 +188,7 @@ class PricingRequest(BaseModel):
     the dispatch based on which fields are present.
     """
 
-    p: float | None = Field(None, gt=0, lt=1, description="VaR probability.")
+    p: float | None = Field(None, gt=0, le=1, description="VaR probability in (0, 1].")
     a: float | None = Field(None, gt=0, description="Asset level.")
     ccoc: float | None = Field(None, gt=0, description="Constant cost of capital.")
     distortion: str | None = Field(
@@ -216,7 +216,7 @@ class PriceRequest(BaseModel):
     enforces the exactly-one rule and returns 400 otherwise.
     """
 
-    p: float = Field(..., gt=0, lt=1, description="VaR probability fixing capital.")
+    p: float = Field(..., gt=0, le=1, description="VaR probability in (0, 1] fixing capital.")
     coc: float | None = Field(None, gt=0, description="Cost-of-capital (ROE) target.")
     lr: float | None = Field(None, gt=0, description="Loss-ratio target.")
 
