@@ -1,10 +1,11 @@
 # plan-misc-01 — pricing p=1, friendly validation errors, standalone Distortions
 
 Status: **final — ready to implement.** Target: **1.0.0a9** (one bump for the
-four; small and related as "make the playground less brittle"). No upstream
+five; small and related as "make the playground less brittle"). No upstream
 changes (D's `update=False` route was rejected, so nothing upstream to confirm).
 
-Three independent fixes, found while exercising the Price tab and `dist …`:
+Five small fixes, mostly found while exercising the Price tab and `dist …`
+(E is an unrelated header nicety folded into the same bump):
 
 | # | Item | Layer | Size |
 |---|---|---|---|
@@ -12,6 +13,7 @@ Three independent fixes, found while exercising the Price tab and `dist …`:
 | B | Render FastAPI 422 validation errors instead of "HTTP 422" | frontend | ~8 lines |
 | C | Allow standalone `Distortion` objects | backend + frontend | medium |
 | D | Enforce the log2 cap against `hints{}`, not just the request | backend | small |
+| E | Show the bundled `csv-grid` version in the header | frontend | small |
 
 C supersedes **plan-0002 C1**; D rehomes **plan-0002 D2** (both plans now retired
 into here). plan-0002's **D1** (table filters) was delivered by **plan-grid**
@@ -195,8 +197,55 @@ acceptable. (Commented-out `hints{}` false-matches are a non-issue per author.)
 
 ---
 
+## E. Show the bundled `csv-grid` version in the header
+
+**Want.** The top-right `nav-meta` line shows `aggregate <ver> · api <ver> ·
+docs · github · ?`. Add the **csv-grid** viewer version after `api`, so the
+header reads `… · api <ver> · grid <ver> · docs · …`.
+
+**Why it isn't an api/meta concern.** The version belongs to the *frontend
+bundle*, not the running service — the backend has no knowledge of which
+`csv-grid` build the SPA embedded, so `/v1/meta` is the wrong source. The SPA
+freezes one specific `csv-grid` build at `npm run build`, so the version must be
+captured at **build time**. The shipped bundle exports no runtime version
+constant (verified against `dist/csv-grid.es.js`), so reading it from the running
+module isn't an option either.
+
+**Approach — Vite build-time constant.** Read `csv-grid`'s own
+`package.json` `version` in `web/vite.config.js` and inject it as a global
+`define`:
+```js
+// web/vite.config.js
+import { readFileSync } from 'node:fs';
+const csvGridVersion = JSON.parse(
+    readFileSync(new URL('./node_modules/csv-grid/package.json', import.meta.url))
+).version;
+// inside defineConfig({ … }):
+define: { __CSV_GRID_VERSION__: JSON.stringify(csvGridVersion) },
+```
+Markup — one span + dot after `#ver-api` in `web/index.html` (mirror the
+`mono d-none d-md-inline` treatment so it hides on phones like the others):
+```html
+<span class="dot d-none d-md-inline">·</span>
+<span id="ver-csv" class="mono d-none d-md-inline"></span>
+```
+Set it in `web/src/main.js` — **static, no fetch** (it's a build constant, not a
+runtime value), so it sits *outside* the `api.meta()` promise:
+```js
+$('ver-csv').textContent = `grid ${__CSV_GRID_VERSION__}`;
+```
+
+**Notes.** Pure presentation; no backend touch, no api version bump implied by
+the value itself (the change still rides the `a9` bump). Today this prints
+`grid 3.1.0`. The `define` resolves at build, so the constant is inlined and the
+`node_modules` read never reaches the browser.
+
+---
+
 ## Phasing
 A and B are trivial and independent — land first (instant payoff; B de-risks the
-distortion + p=1 testing by making 422s legible). Then C, then D. One `a9` bump
-covers all four; CHANGELOG + TODO updated on landing; tick **plan-0002 C1 + D2**
+distortion + p=1 testing by making 422s legible). Then C, then D. E is a small
+self-contained frontend addition — fold it in anywhere (it touches only
+`vite.config.js` / `index.html` / `main.js`, no overlap with A–D). One `a9` bump
+covers all five; CHANGELOG + TODO updated on landing; tick **plan-0002 C1 + D2**
 as delivered here.
