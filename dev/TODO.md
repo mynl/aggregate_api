@@ -76,11 +76,12 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
       ships the bundle; confirm `static/*` package-data works.
 - [ ] Auth / rate limiting if this is ever exposed beyond localhost.
 - [ ] Expand the example library and DecL completion coverage.
-- [ ] **Density full-frame via CsvGrid `{url}` + worker** (follow-up from
-      plan-grid). Point Density at the `/frame/density_df.csv` route and enable
-      `worker: true` to drop the server downsample entirely. The Vite build
-      already emits a correctly-pathed worker asset; this is now a browser-verify
-      + flip-the-flag task, gated on the `agg.mynl.com` cutover (clean origin).
+- [x] **Density full-frame via CsvGrid `{url}` + worker** (follow-up from
+      plan-grid). *(Closed — superseded by the faithful power-of-two density
+      binning in 1.0.0a10/a11. The server now bins to a correct 2¹¹ display grid
+      with a faithful `p_total`, so the original motivation — escape the lossy
+      server downsample — is gone. A live "scroll the entire density" view is a
+      possible someday-feature, but it's no longer pending work.)*
 - [ ] Persist object cache across restarts (currently in-memory only).
 - [x] Revisit `meta` version reporting: report both the `aggregate_api` version
       and the underlying `aggregate` version. *(done in 1.0.0a2 —

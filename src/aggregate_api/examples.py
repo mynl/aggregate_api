@@ -1,10 +1,17 @@
-"""Parser for ``aggregate/agg/test_suite.agg`` → grouped DecL examples.
+"""Parser for ``aggregate/agg/examples.agg`` → grouped DecL examples.
 
-The bundled test suite doubles as an example library for the SPA's
-dropdown menus. Each non-comment, non-blank line is a runnable DecL
-program. Names follow the convention ``<Letter>.<Name>`` (e.g.
-``A.Dice00``, ``G.Mixed03``); the letter prefix identifies the
-category.
+The curated example library doubles as the SPA's dropdown menu source.
+Each non-comment, non-blank line is a runnable DecL program. Names follow
+the convention ``<Letter>.<Name>`` (e.g. ``A.Basic``, ``C.MixedGamma``);
+the letter prefix identifies the category.
+
+Programs may span several physical lines (the portfolios are written
+this way for readability); statements are separated by a blank line or
+a trailing ``;``, and full-line ``#`` / ``//`` comments are transparent.
+Splitting the file into logical statements -- folding continuations,
+stripping comments, honoring ``;`` terminators -- is delegated to
+``aggregate``'s own ``UnderwritingLexer.preprocess`` so the SPA sees
+exactly the statements the default ``build`` underwriter does.
 
 Categories are sourced from the "Contents" block at the top of the
 file, which lists ``# A. Title``, ``# B. Title`` etc. -- one for each
@@ -37,19 +44,23 @@ from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
 
+from aggregate.parser import UnderwritingLexer
+
 # Lines like ``# A. Creating Aggregates, Portfolios, and Distortion objects``
 # from the Contents block. Capture letter + title.
 _CONTENTS_LINE = re.compile(r"^#\s+([A-O])\.\s+(.+)$")
 
 # An item line. Must start with a DecL top-level keyword so we don't
 # mistake a comment-stripped section header for a program. Covers the
-# object-producing kinds: agg, sev, port, dist, pnl, the multivariate
-# family (mv / multivariate), and netceded -- which uniquely carries an
-# extra ``agg`` token before the name (``netceded agg X.Name ...``), so
-# that form is matched explicitly. The leading keyword itself is captured
-# but unused; the name's ``<Letter>.<Suffix>`` is what drives grouping.
+# object-producing kinds: agg, sev, port, dist, pnl, the bivariate
+# family (bivariate / bv) and clash, plus the view-pair prefixes
+# netceded / grossceded / grossnet -- which each carry an extra ``agg``
+# token before the name (``netceded agg X.Name ...``), so that form is
+# matched explicitly. The leading keyword itself is captured but unused;
+# the name's ``<Letter>.<Suffix>`` is what drives grouping.
 _ITEM_LINE = re.compile(
-    r"^(agg|sev|port|dist|pnl|mv|multivariate|netceded(?:\s+agg)?)"
+    r"^(agg|sev|port|dist|pnl|bivariate|bv|clash"
+    r"|(?:netceded|grossceded|grossnet)\s+agg)"
     r"\s+([A-O])\.([A-Za-z0-9_.\-]+)\s+(.*)$"
 )
 
@@ -76,20 +87,21 @@ def _load_contents(text: str) -> dict[str, str]:
     return out
 
 
-def _load_items(text: str) -> dict[str, list[dict]]:
-    """Walk the body for item lines and group by letter prefix.
+def _load_items(statements: list[str]) -> dict[str, list[dict]]:
+    """Group the preprocessed statements by letter prefix.
 
-    Each item carries the original DecL minus the trailing ``note{...}``
-    so the client can re-evaluate it directly via ``POST /v1/objects``.
+    Takes the logical statements produced by
+    ``UnderwritingLexer.preprocess`` -- already comment-free, folded onto
+    one line, and ``;``-terminator-free -- so trailing ``note{...}`` is
+    again at end-of-line where :data:`_NOTE` can find it. Each item
+    carries the original DecL minus the trailing ``note{...}`` so the
+    client can re-evaluate it directly via ``POST /v1/objects``.
     """
     grouped: dict[str, list[dict]] = {}
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
+    for line in statements:
         m = _ITEM_LINE.match(line)
         if not m:
-            # Lines that don't match the convention (no Letter.Name)
+            # Statements that don't match the convention (no Letter.Name)
             # are kept out of the example library; they still parse
             # fine as DecL, but aren't surface-able via the categorized
             # dropdown.
@@ -129,10 +141,10 @@ def _read_suite_text() -> str:
             return path.read_text(encoding="utf-8")
         warnings.warn(
             f"AGGAPI_EXAMPLES_FILE={custom!r} not found; "
-            "using bundled spa_examples.agg",
+            "using bundled examples.agg",
             stacklevel=2,
         )
-    resource = files("aggregate").joinpath("agg/spa_examples.agg")
+    resource = files("aggregate").joinpath("agg/examples.agg")
     # ``importlib.resources`` traversables expose .read_text() for files.
     return resource.read_text(encoding="utf-8")
 
@@ -141,8 +153,8 @@ def _read_suite_text() -> str:
 def load_examples() -> dict:
     """Return the cached examples payload.
 
-    Cached at the module level via ``lru_cache``; the test suite is
-    parsed once per server process. To pick up edits to test_suite.agg
+    Cached at the module level via ``lru_cache``; the example library is
+    parsed once per server process. To pick up edits to examples.agg
     without restarting, call ``load_examples.cache_clear()``.
 
     Returns
@@ -152,8 +164,10 @@ def load_examples() -> dict:
         ``{"categories": [...]}``.
     """
     text = _read_suite_text()
+    # Contents titles come from the raw comment block; items come from the
+    # preprocessed statements (comments stripped, continuations folded).
     titles = _load_contents(text)
-    items_by_letter = _load_items(text)
+    items_by_letter = _load_items(UnderwritingLexer.preprocess(text))
     # Build the output in letter order so the SPA dropdown is
     # alphabetically consistent. Letters appearing only in titles
     # but with no items get an empty list; letters with items but

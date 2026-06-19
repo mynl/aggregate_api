@@ -4,6 +4,29 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a12
+
+Batch from `dev/plan-misc-03.md` (gather → review → execute).
+
+- **Examples loader follows `aggregate`'s new statement syntax.** DecL programs
+  now separate statements with a blank line or a trailing `;` (line breaks
+  replaced the old `\` continuation), so the bundled `examples.agg` is
+  semicolon-terminated and writes the portfolios across several indented lines.
+  The old loader only folded `\`-continuations and only stripped a `note{...}`
+  at the very end of a line, so under the new syntax every multi-line `port`
+  (section F) and the `bivariate` example (section H) vanished from the dropdown,
+  and every `;`-terminated program lost its `note` and carried a stray
+  `note{...};` in its decl. The loader now delegates statement splitting to
+  `aggregate`'s own `UnderwritingLexer.preprocess` (so the SPA sees exactly the
+  statements the default `build` underwriter does) and runs the item/note
+  regexes over those clean statements. The item-keyword set is refreshed for the
+  current grammar: `bivariate` / `bv` and `clash` added, the view-pair prefixes
+  `grossceded` / `grossnet` added alongside `netceded`, and the retired
+  `mv` / `multivariate` keywords dropped.
+- **Docs:** `examples.py`'s module docstring and comments now name `examples.agg`
+  (the file the loader actually reads) and describe the statement model
+  (closes `plan-misc-03` item 4).
+
 ## 1.0.0a11
 
 Punch-ups from the a10 demo pass — two small fixes on top of 1.0.0a10.

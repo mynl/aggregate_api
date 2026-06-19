@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aggregate_api"
-version = "1.0.0a11"
+version = "1.0.0a12"
 description = "FastAPI service and single-page web playground for the aggregate actuarial library."
 readme = "README.md"
 authors = [
