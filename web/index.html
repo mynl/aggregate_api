@@ -133,10 +133,10 @@
         </div>
         <div class="summary-timing" id="summary-timing"></div>
 
-        <!-- Output tabs: Info·Describe·Plot·Price·Reins·More(▾ Stats·Density·…) -->
+        <!-- Output tabs: Info·Summary·Plot·Price·Reins·More(▾ Stats·Density·…) -->
         <ul class="nav nav-pills out-tabs" role="tablist">
             <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#t-info"  data-tab="info"  type="button">Info</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-desc"  data-tab="desc"  type="button">Describe</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-summary"  data-tab="summary"  type="button">Summary</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-plot"  data-tab="plot"  type="button">Plot</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-price" data-tab="price" type="button">Price</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-reins" data-tab="reins" type="button">Reins</button></li>
@@ -161,13 +161,13 @@
                 <div id="pane-info" class="pane"></div>
             </div>
 
-            <!-- Describe -->
-            <div class="tab-pane fade" id="t-desc">
+            <!-- Summary -->
+            <div class="tab-pane fade" id="t-summary">
                 <div class="tab-tools">
-                    <button class="btn btn-outline-secondary" data-copy="pane-desc"><i class="bi bi-clipboard"></i> copy</button>
-                    <button class="btn btn-outline-secondary" data-csv="describe"><i class="bi bi-download"></i> csv</button>
+                    <button class="btn btn-outline-secondary" data-copy="pane-summary"><i class="bi bi-clipboard"></i> copy</button>
+                    <button class="btn btn-outline-secondary" data-csv="summary"><i class="bi bi-download"></i> csv</button>
                 </div>
-                <div id="pane-desc" class="pane"></div>
+                <div id="pane-summary" class="pane"></div>
             </div>
 
             <!-- Plot -->
@@ -278,7 +278,7 @@
             <h6>Output tabs</h6>
             <ul class="help-tabs">
                 <li><span class="t">Info</span>: object summary &amp; grid settings</li>
-                <li><span class="t">Describe</span>: Freq / Sev / Agg moments</li>
+                <li><span class="t">Summary</span>: Freq / Sev / Agg moments</li>
                 <li><span class="t">Plot</span>: visualize the object</li>
                 <li><span class="t">Price</span>: pricing metrics and allocation analysis</li>
                 <li><span class="t">Reins</span>: ceded / net by layer</li>

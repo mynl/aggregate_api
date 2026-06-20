@@ -141,7 +141,7 @@ header .navbar { min-height: 56px; }
     box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
 }
 .out-tabs .nav-link:not(.active):hover { background: #e6e9ed; }
-/* Phones: tighten the pill padding so Info·Describe·Plot·Price·Reins·More
+/* Phones: tighten the pill padding so Info·Summary·Plot·Price·Reins·More
    fits on one line instead of wrapping. */
 @media (max-width: 575.98px) {
     .out-tabs { gap: .15rem; padding: .25rem; }

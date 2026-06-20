@@ -6,7 +6,7 @@
 //   * construct the CM6 editor + wire build / history / clear / emacs
 //   * wire the Build button, log2 / bs dropdowns, Examples dropdown
 //   * render the one-line build summary
-//   * lazily fetch + render each output tab (Info / Describe / Plot /
+//   * lazily fetch + render each output tab (Info / Summary / Plot /
 //     Reins, plus Stats under the More dropdown), caching per built
 //     object; Price and Density are placeholders (wired later)
 //   * surface aggregate/api versions in the header
@@ -185,7 +185,7 @@ function renderSummary(res) {
     applyKindGating(res.kind);
     const kindLabel = res.kind === 'port' ? 'Portfolio'
         : res.kind === 'distortion' ? 'Distortion'
-        : res.kind === 'multivariate' ? 'Multivariate'
+        : res.kind === 'bivariate' ? 'Bivariate'
         : 'Aggregate';
     const bits = [
         el('span', { className: 'nm' }, res.name || '(anonymous)'),
@@ -211,7 +211,7 @@ function renderTiming(res) {
     if (res.elapsed_ms == null) { node.textContent = ''; return; }
     const word = res.kind === 'port' ? 'portfolio'
         : res.kind === 'distortion' ? 'distortion'
-        : res.kind === 'multivariate' ? 'multivariate'
+        : res.kind === 'bivariate' ? 'bivariate'
         : 'aggregate';
     node.textContent = res.cached
         ? `Loaded ${word} from cache`
@@ -254,7 +254,7 @@ window.addEventListener('resize', syncSummaryMore);
 // Tabs -- lazy load + cache per built object
 // ----------------------------------------------------------------------
 const PANE_OF = {
-    info: 'pane-info', desc: 'pane-desc', plot: 'pane-plot',
+    info: 'pane-info', summary: 'pane-summary', plot: 'pane-plot',
     stats: 'pane-stats', reins: 'pane-reins',
     density: 'pane-density', bswin: 'pane-bswin', price: 'pane-price',
 };
@@ -279,14 +279,14 @@ function showTab(name) {
 }
 
 // Tabs that need a loss distribution. A standalone Distortion or a
-// MultivariateAggregate exposes info / describe / stats / density / plot but
+// BivariateAggregate exposes info / summary / stats / density / plot but
 // has no pricing, reinsurance, or bs window. Per the playground house rule we
 // NEVER hide menu items — the menu set stays stable — we grey them out
 // (disabled) so the user can see what's not applicable. agg / port disable
 // nothing.
 const NA_TABS_BY_KIND = {
     distortion: ['price', 'reins', 'bswin'],
-    multivariate: ['price', 'reins', 'bswin'],
+    bivariate: ['price', 'reins', 'bswin'],
 };
 const GATED_TABS = ['price', 'reins', 'bswin'];
 
@@ -322,10 +322,10 @@ async function loadTab(name) {
     try {
         if (name === 'info') {
             replacePane('pane-info', renderInfo(await api.info(state.id)));
-        } else if (name === 'desc') {
-            // Keep the fzf bar but drop the per-column filter row — describe is
-            // narrow and the global search covers it.
-            replacePaneGrid('pane-desc', await api.description(state.id), { columnFilters: false });
+        } else if (name === 'summary') {
+            // Keep the fzf bar but drop the per-column filter row — the summary
+            // table is narrow and the global search covers it.
+            replacePaneGrid('pane-summary', await api.summary(state.id), { columnFilters: false });
         } else if (name === 'plot') {
             const img = el('img', { src: api.plotUrl(state.id, { format: 'svg' }), alt: 'native plot' });
             replacePane('pane-plot', img);
@@ -335,13 +335,13 @@ async function loadTab(name) {
             await loadReins();
         } else if (name === 'density') {
             // A distortion's density_df is the g-curve (g, g_inv, g_dual,
-            // g_prime, ...) over x in [0,1] -- ~101 rows; a MultivariateAggregate's
+            // g_prime, ...) over x in [0,1] -- ~101 rows; a BivariateAggregate's
             // is the full joint-density matrix. Neither has the loss,p_total,F,S
             // columns, so pull the whole frame for those. For agg/port the server
             // bins the density to a faithful 2**11 display grid (p_total stays
             // correct), so we only ask for the curated columns -- no nonzero /
             // downsample needed.
-            const frame = (state.kind === 'distortion' || state.kind === 'multivariate')
+            const frame = (state.kind === 'distortion' || state.kind === 'bivariate')
                 ? await api.density_df(state.id)
                 : await api.density_df(state.id, { cols: 'loss,p_total,F,S' });
             // renderCap lifts CsvGrid's default 2,000-row render cap so the full

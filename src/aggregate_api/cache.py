@@ -10,7 +10,7 @@ Why bother
 
 Building a moderately sized portfolio takes seconds; FFTs over
 2**18 points across many lines aren't free. The cache lets the
-SPA's "per-button-fetch UX" (info, describe, stats_df, plot,
+SPA's "per-button-fetch UX" (info, summary, stats_df, plot,
 kappa, pricing) all run as O(1) lookups against the prebuilt
 object, with the heavy lift paid only once per (decl, log2, bs).
 

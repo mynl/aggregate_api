@@ -26,6 +26,40 @@ Batch from `dev/plan-misc-03.md` (gather → review → execute).
 - **Docs:** `examples.py`'s module docstring and comments now name `examples.agg`
   (the file the loader actually reads) and describe the statement model
   (closes `plan-misc-03` item 4).
+- **Bivariate objects replace the `multivariate` vocabulary.** `aggregate`
+  renamed `MultivariateAggregate` to `BivariateAggregate` and retired the
+  `multivariate` / `mv` keywords in favor of `bivariate` / `bv` (plus `clash`
+  and the `netceded` / `grossceded` / `grossnet` occurrence view-pairs). The api
+  follows suit: `_classify_object` maps `BivariateAggregate` to a new
+  `kind="bivariate"` (replacing `"multivariate"`), `BuildResponse.kind`'s
+  `Literal` is updated, and the SPA's kind label / timing word / tab-gating /
+  density-fetch switch all key off `"bivariate"`. The reporting surface is
+  unchanged — info / describe / stats_df / density_df / plot work; price /
+  reins / bs-window return a clean 400. **Breaking:** clients that special-cased
+  `kind == "multivariate"` must switch to `"bivariate"`. *(Rebuild the SPA bundle
+  — `scripts/build-web.ps1` — to ship the frontend half.)*
+- **`reins_description` reads the library's string attribute.** `aggregate`
+  turned `Aggregate.reins_description` from a method into a plain string
+  attribute (e.g. *"Ceded to 100% share of 15 xs 5 per occurrence"*). The
+  `reins_description` endpoint returned empty text because it only called a
+  *callable*; it now reads the attribute directly (still tolerating the legacy
+  callable form), so the always-visible reinsurance blurb renders again.
+- **`describe` → `summary` (object moment table).** `aggregate` renamed the
+  object-level `describe` property to `summary_df`. The api endpoint is renamed
+  `GET /v1/objects/{id}/description` → `GET /v1/objects/{id}/summary`, the CSV
+  download token `describe` → `summary` (`/frame/summary.csv`), and the SPA tab
+  is relabeled **Describe → Summary** (tab id `desc` → `summary`, pane
+  `pane-desc` → `pane-summary`, `api.description` → `api.summary`). The frame is
+  read with a `summary_df`-then-`describe` fallback so it works across the
+  in-flight library change. **Breaking:** the `/description` path and the
+  `describe.csv` download token are gone — use `/summary` and `summary.csv`.
+  *(`reins_describe` / `reins_description` are unrelated and unchanged.)*
+- **Build-summary validation reads `validation_explanation`.** `aggregate`
+  replaced the `explain_validation()` method with a `validation_explanation`
+  string attribute (e.g. *"not unreasonable"* / *"fails sev mean, agg mean"*).
+  `_summary_fields` now reads the attribute (falling back to the legacy
+  callable), so the build status line's validation chip is populated again
+  instead of going blank.
 
 ## 1.0.0a11
 

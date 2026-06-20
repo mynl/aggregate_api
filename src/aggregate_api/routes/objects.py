@@ -10,7 +10,7 @@ The /v1/objects/* family covers everything object-shaped:
 * ``GET    /v1/objects/{id}``    -- per-object manifest.
 * ``DELETE /v1/objects/{id}``    -- evict from cache.
 * ``GET    /v1/objects/{id}/info``        -- text summary.
-* ``GET    /v1/objects/{id}/description`` -- describe DataFrame.
+* ``GET    /v1/objects/{id}/summary``     -- summary_df moment DataFrame.
 * ``GET    /v1/objects/{id}/stats_df``    -- stats_df DataFrame.
 * ``GET    /v1/objects/{id}/density_df``  -- paginated density frame.
 * ``GET    /v1/objects/{id}/kappa``       -- Portfolio exeqa_* slice.
@@ -48,7 +48,7 @@ Per-button-fetch UX
 
 The build response carries only ``id``, ``kind``, ``name``,
 ``warnings``, ``cached``, ``elapsed_ms``. The SPA shows that
-immediately and only fetches info/describe/plot/pricing when the
+immediately and only fetches info/summary/plot/pricing when the
 user clicks the matching button. Second visits hit the cache and
 return in milliseconds.
 """
@@ -116,7 +116,7 @@ _HINTS_LOG2 = re.compile(r"hints\s*\{[^}]*\blog2\s*=\s*(\d+)", re.IGNORECASE)
 #
 # Build-side concurrency: a single semaphore caps in-flight heavy
 # builds at 1, regardless of how many requests are queued up. Reads
-# (info / describe / plot) don't touch it -- they're O(ms) lookups
+# (info / summary / plot) don't touch it -- they're O(ms) lookups
 # on the already-built object.
 _cache_lock = threading.Lock()
 _cache_singleton: ObjectCache | None = None
@@ -206,9 +206,9 @@ def _summary_fields(obj: Any) -> dict:
     """Headline ``mean`` / ``cv`` / ``validation`` for the build summary.
 
     Both ``Aggregate`` and ``Portfolio`` expose ``agg_m`` / ``agg_cv``
-    and ``explain_validation()`` (the latter returns "not unreasonable"
-    on a clean build). Everything is getattr-gated so a future object
-    kind without these simply reports ``None``.
+    and a validation blurb that reads "not unreasonable" on a clean build.
+    Everything is getattr-gated so a future object kind without these simply
+    reports ``None``.
     """
     def _num(name: str) -> float | None:
         v = getattr(obj, name, None)
@@ -217,13 +217,21 @@ def _summary_fields(obj: Any) -> dict:
         except (TypeError, ValueError):
             return None
 
+    # ``aggregate`` replaced the ``explain_validation()`` method with a
+    # ``validation_explanation`` string attribute (e.g. "not unreasonable" /
+    # "fails sev mean, agg mean"). Prefer the attribute; fall back to the
+    # legacy callable so the summary survives the in-flight library change.
     validation: str | None = None
-    explain = getattr(obj, "explain_validation", None)
-    if callable(explain):
-        try:
-            validation = str(explain())
-        except Exception:  # noqa: BLE001 -- summary is best-effort
-            validation = None
+    explanation = getattr(obj, "validation_explanation", None)
+    if explanation is not None:
+        validation = str(explanation)
+    else:
+        explain = getattr(obj, "explain_validation", None)
+        if callable(explain):
+            try:
+                validation = str(explain())
+            except Exception:  # noqa: BLE001 -- summary is best-effort
+                validation = None
 
     return {
         "bs": _num("bs"),
@@ -427,13 +435,13 @@ def post_object(
             raise HTTPException(status_code=500, detail=str(exc))
 
     # Classify the result. The api stores
-    # 'agg' | 'port' | 'distortion' | 'multivariate'. Distortions and
-    # MultivariateAggregates carry the common reporting surface (info,
-    # describe, stats_df, density_df, plot) so the playground can explore
+    # 'agg' | 'port' | 'distortion' | 'bivariate'. Distortions and
+    # BivariateAggregates carry the common reporting surface (info,
+    # summary, stats_df, density_df, plot) so the playground can explore
     # them -- they just have no pricing / reinsurance / bs-window (those
     # routes return a clean 400). 'sev' and anything else is rejected.
     kind = _classify_object(obj)
-    if kind not in ("agg", "port", "distortion", "multivariate"):
+    if kind not in ("agg", "port", "distortion", "bivariate"):
         elapsed = int((time.monotonic() - t0) * 1000)
         audit.record_build(
             ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
@@ -444,7 +452,7 @@ def post_object(
         raise HTTPException(
             status_code=422,
             detail=(
-                "api supports 'agg', 'port', 'distortion' and 'multivariate' "
+                "api supports 'agg', 'port', 'distortion' and 'bivariate' "
                 f"only; got {kind!r}"
             ),
         )
@@ -476,7 +484,7 @@ def post_object(
 
 
 def _classify_object(obj: Any) -> str:
-    """Return 'agg' | 'port' | 'distortion' | 'multivariate' | <type-name>.
+    """Return 'agg' | 'port' | 'distortion' | 'bivariate' | <type-name>.
 
     Uses class-name discrimination because Aggregate / Portfolio
     don't carry an explicit .kind attribute on the instances --
@@ -484,17 +492,18 @@ def _classify_object(obj: Any) -> str:
     called ``build()``, which unwraps). Every ``Distortion`` subclass
     (PHDistortion, WangDistortion, ...) is normalized to the generic
     ``'distortion'`` so the SPA and endpoints treat them uniformly; the
-    specific subclass shows up in ``info`` / ``describe``. A
-    ``MultivariateAggregate`` (``multivariate`` / ``mv`` / ``netceded``
-    keywords) maps to the generic ``'multivariate'``.
+    specific subclass shows up in ``info`` / ``summary``. A
+    ``BivariateAggregate`` (``bivariate`` / ``bv`` / ``clash`` and the
+    ``netceded`` / ``grossceded`` / ``grossnet`` view-pair keywords) maps
+    to the generic ``'bivariate'``.
     """
     cls = type(obj).__name__
     if cls == "Portfolio":
         return "port"
     if cls == "Aggregate":
         return "agg"
-    if cls == "MultivariateAggregate":
-        return "multivariate"
+    if cls == "BivariateAggregate":
+        return "bivariate"
     if isinstance(obj, Distortion):
         return "distortion"
     return cls.lower()
@@ -564,20 +573,34 @@ def get_info(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
 
 
 # ----------------------------------------------------------------------
-# GET /v1/objects/{id}/description
+# GET /v1/objects/{id}/summary
 # ----------------------------------------------------------------------
 
-@router.get("/objects/{oid}/description", response_model=models.FrameResponse)
-def get_description(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
-    """Theoretical-vs-empirical moment table."""
+def _summary_frame(obj: Any):
+    """Return the object's moment table (Freq/Sev/Agg) as a DataFrame, or None.
+
+    ``aggregate`` is renaming this property from ``describe`` to
+    ``summary_df``. Prefer the new name and fall back to the old one so the
+    api keeps working on both sides of the in-flight library change. Once the
+    rename lands everywhere this can collapse to ``summary_df`` alone.
+    """
+    df = getattr(obj, "summary_df", None)
+    if df is None:
+        df = getattr(obj, "describe", None)
+    return df
+
+
+@router.get("/objects/{oid}/summary", response_model=models.FrameResponse)
+def get_summary(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+    """Theoretical-vs-empirical moment table (the library's ``summary_df``)."""
     entry = _resolve_object(oid, cache)
-    df = getattr(entry.obj, "describe", None)
+    df = _summary_frame(entry.obj)
     if df is None:
         raise HTTPException(
             status_code=400,
-            detail=f"describe not available for {entry.kind!r}",
+            detail=f"summary not available for {entry.kind!r}",
         )
-    # ``describe`` is a property returning a DataFrame; we want its
+    # ``summary_df`` is a property returning a DataFrame; we want its
     # named index in the payload too, so promote it to a column when
     # possible (reset_index_safe handles index/column collisions).
     df = reset_index_safe(df)
@@ -630,7 +653,7 @@ def get_density_df(
     even-spaced stride. The full-frame CSV download stays exact / unbinned.
 
     Objects without a build grid (a distortion's g-curve, a
-    ``MultivariateAggregate`` joint matrix) skip binning and honor the legacy
+    ``BivariateAggregate`` joint matrix) skip binning and honor the legacy
     ``cols`` / ``start`` / ``stop`` / ``downsample`` / ``nonzero`` params.
     """
     entry = _resolve_object(oid, cache)
@@ -747,25 +770,29 @@ def _frame_attr(obj: Any, name: str):
 def get_reins_description(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
     """Always-visible text block describing the reinsurance program.
 
-    ``Aggregate.reins_description(kind='both', width=0)`` returns a short
-    string (empty when there's no reinsurance). ``Portfolio`` has no such
-    method -- there we report availability from ``reins_describe`` and
-    leave the text empty (the Reins table carries the detail).
+    ``Aggregate.reins_description`` is a short string attribute (e.g.
+    ``"Ceded to 100% share of 15 xs 5 per occurrence"``), empty when the
+    object carries no reinsurance. ``Portfolio`` has no such attribute --
+    there we report availability from ``reins_describe`` and leave the text
+    empty (the Reins table carries the detail).
     """
     entry = _resolve_object(oid, cache)
     obj = entry.obj
     # ``reins_describe`` is None exactly when the object has no
-    # reinsurance, so it's the canonical availability signal (the
-    # ``reins_description`` *method* otherwise returns the literal
-    # "No reinsurance" string, which we don't want to surface).
+    # reinsurance, so it's the canonical availability signal. The
+    # ``reins_description`` attribute (a plain string in current
+    # ``aggregate``; it used to be a method) carries the human-readable
+    # blurb -- read it defensively so an older callable form still works.
     has_reins = _frame_attr(obj, "reins_describe") is not None
     text = ""
-    meth = getattr(obj, "reins_description", None)
-    if has_reins and callable(meth):
-        try:
-            text = str(meth(kind="both", width=0)).strip()
-        except Exception:  # noqa: BLE001 -- text is optional; table carries detail
-            text = ""
+    if has_reins:
+        desc = getattr(obj, "reins_description", "")
+        if callable(desc):  # legacy method form
+            try:
+                desc = desc(kind="both", width=0)
+            except Exception:  # noqa: BLE001 -- text is optional; table carries detail
+                desc = ""
+        text = str(desc or "").strip()
     return {"available": has_reins, "text": text}
 
 
@@ -817,7 +844,7 @@ def get_reins_density_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> 
 # on-screen tables are previews; this route always returns the complete
 # frame as CSV for "save the real data" workflows.
 _CSV_FRAMES = {
-    "describe": "describe",
+    "summary": "summary_df",
     "stats_df": "stats_df",
     "density_df": "density_df",
     "bs_window_df": "_bs_window_df",
@@ -839,7 +866,9 @@ def get_frame_csv(
             detail=f"unknown frame {which!r}; expected one of {sorted(_CSV_FRAMES)}",
         )
     entry = _resolve_object(oid, cache)
-    df = _frame_attr(entry.obj, attr)
+    # ``summary`` honors the describe -> summary_df transition (see
+    # ``_summary_frame``); every other frame is a direct attribute.
+    df = _summary_frame(entry.obj) if which == "summary" else _frame_attr(entry.obj, attr)
     if df is None:
         raise HTTPException(
             status_code=400, detail=f"{which} not available for {entry.kind!r}"

@@ -66,7 +66,7 @@ class BuildRequest(BaseModel):
 class BuildResponse(BaseModel):
     """Slim response so the post-build page doesn't pay for unused data.
 
-    The SPA's per-button buttons (info, describe, plot, etc.) each
+    The SPA's per-button buttons (info, summary, plot, etc.) each
     hit their own endpoint. With ``cached=True`` the data calls are
     O(1) -- effectively the same as if the build returned everything
     eagerly, minus the wasted serialization.
@@ -75,7 +75,7 @@ class BuildResponse(BaseModel):
     model_config = _RESPONSE_CFG
 
     id: str
-    kind: Literal["agg", "port", "distortion", "multivariate"]
+    kind: Literal["agg", "port", "distortion", "bivariate"]
     name: str
     warnings: list[str] = []
     cached: bool
@@ -130,7 +130,7 @@ class DeleteResponse(BaseModel):
 
 
 # ======================================================================
-# Tabular endpoints -- describe / stats_df / density_df / kappa
+# Tabular endpoints -- summary / stats_df / density_df / kappa
 # ======================================================================
 
 class FrameResponse(BaseModel):

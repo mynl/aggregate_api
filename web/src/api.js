@@ -56,7 +56,7 @@ export const api = {
 
     // Per-button data
     info:         (id)              => _json('GET',  `/v1/objects/${id}/info`),
-    description:  (id)              => _json('GET',  `/v1/objects/${id}/description`),
+    summary:      (id)              => _json('GET',  `/v1/objects/${id}/summary`),
     stats_df:     (id)              => _json('GET',  `/v1/objects/${id}/stats_df`),
     density_df:   (id, p = {})      => _json('GET',  `/v1/objects/${id}/density_df?${qs(p)}`),
     bs_window_df: (id)              => _json('GET',  `/v1/objects/${id}/bs_window_df`),
@@ -83,6 +83,6 @@ export const api = {
     /** Plot URL: handed straight to an <img>. Native multi-panel by default. */
     plotUrl:      (id, p = {})      => `${API_BASE}/v1/objects/${id}/plot?${qs(p)}`,
 
-    /** Full-frame CSV download URL (describe / stats_df / reins_* / density_df). */
+    /** Full-frame CSV download URL (summary / stats_df / reins_* / density_df). */
     frameCsvUrl:  (id, which)       => `${API_BASE}/v1/objects/${id}/frame/${which}.csv`,
 };

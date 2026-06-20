@@ -20,6 +20,8 @@ Target: **1.0.0a12** (provisional — one bump for the batch).
 | 3 | Promote the VPS launch from `nohup` to a systemd service | ops (no code) | easy | specced |
 | 4 | Doc tidy: `examples.py` docstring still says `test_suite.agg` | docs (no code) | easy | **done** (1.0.0a12) |
 | 5 | Examples loader: follow new statement syntax (`;` / line breaks) + new keywords | backend | medium | **done** (1.0.0a12) |
+| 6 | Migrate `multivariate` -> `bivariate` (new class + kind) and fix `reins_description` attribute | backend + frontend | medium | **done** (1.0.0a12) |
+| 7 | Follow `describe` -> `summary_df` rename (Describe tab -> Summary) + `explain_validation` -> `validation_explanation` | backend + frontend | medium | **done** (1.0.0a12) |
 
 > **Note on the version bump.** Items 1–2 are code changes and carry the
 > `1.0.0a12` bump + CHANGELOG line. Items 3 (ops) and 4 (doc-only) are pure
@@ -204,3 +206,64 @@ Refresh `_ITEM_LINE` for the current grammar: add `bivariate` / `bv` and
 bivariate); `;`-terminated items keep a clean decl + note. Regression test
 `test_multiline_and_keyword_examples_captured` added; `test_examples_contain_dice`
 updated for the `A.Dice00` → `A.ThreeDice` rename.
+
+---
+
+## 6. Migrate `multivariate` → `bivariate`; fix `reins_description`
+
+**Problem.** `aggregate` renamed `MultivariateAggregate` → `BivariateAggregate`
+and retired the `multivariate` / `mv` keywords for `bivariate` / `bv` (+ `clash`
+and the `netceded` / `grossceded` / `grossnet` view-pairs). The api still
+classified on the old class name (so a `bivariate` program 422'd as an
+unsupported kind) and labeled everything `"multivariate"`. Separately,
+`Aggregate.reins_description` became a plain string attribute (was a method), so
+the `reins_description` endpoint — which only called a *callable* — returned
+empty text for every reinsured object.
+
+**Fix.**
+- *Backend* (`routes/objects.py`): `_classify_object` maps `BivariateAggregate`
+  → `"bivariate"`; the build-guard kind tuple + error message updated;
+  density_df docstring updated. `models.py`: `BuildResponse.kind` `Literal` swaps
+  `"multivariate"` → `"bivariate"`. `reins_description` route reads the attribute
+  directly (tolerating the legacy callable).
+- *Frontend* (`web/src/main.js`): kind label (`Bivariate`), timing word, the
+  `NA_TABS_BY_KIND` gating key, and the density-fetch kind switch all move to
+  `"bivariate"`. Needs a `scripts/build-web.ps1` rebuild to refresh the bundle.
+
+**Verified.** `test_bivariate_builds_and_reports` (renamed from the `_MV` test;
+asserts `kind=="bivariate"`, common surface 200, price/reins/bs-window 400) and
+`test_reins_description_present` both pass; full suite 57 passed.
+
+---
+
+## 7. `describe` → `summary_df` (Describe tab → Summary) + validation rename
+
+**Problem.** The live `aggregate` change renames the object-level `describe`
+property to `summary_df` (it landed mid-task: `describe` is now gone). It also
+replaced the `explain_validation()` *method* with a `validation_explanation`
+*string* attribute. On our side that meant: the Describe tab/CSV would 400 once
+`describe` disappeared, and the build status line's validation chip already went
+blank (`explain_validation` no longer callable).
+
+**Fix (full rename, reins left alone).**
+- *Backend* (`routes/objects.py`): `GET /description` → `GET /summary`
+  (`get_summary`), reading via a `_summary_frame` helper that prefers
+  `summary_df` and falls back to `describe` for the transition window. CSV map
+  token `describe` → `summary` with value `summary_df` (same fallback in
+  `get_frame_csv`). `_summary_fields` reads `validation_explanation` (fallback to
+  the legacy `explain_validation()` callable). Doc/comment sweep, leaving every
+  `reins_describe` reference intact.
+- *Frontend* (`web/`): tab relabeled **Describe → Summary** — `index.html` tab
+  (`data-tab="summary"`, target `#t-summary`), pane (`pane-summary`,
+  `data-csv="summary"`), help text; `api.js` `description` → `summary`
+  (`/summary`); `main.js` `name === 'summary'` branch, `PANE_OF` entry, and
+  comments. Rebuilt the SPA bundle.
+
+**Note.** `reins_describe` / `reins_description` are a separate reinsurance
+surface and were explicitly left unchanged (per the author). The
+`summary_df`-then-`describe` fallback can collapse to `summary_df`-only once the
+library rename is everywhere.
+
+**Verified.** `test_summary_endpoint` + `test_frame_csv_summary` (renamed),
+bivariate surface check uses `summary`, and `test_build_summary_fields` (the
+validation chip) pass; full suite 57 passed.

@@ -104,13 +104,13 @@ def test_info_endpoint(client):
     assert "Dice" in body["info"]
 
 
-def test_description_endpoint(client):
+def test_summary_endpoint(client):
     oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    r = client.get(f"/v1/objects/{oid}/description")
+    r = client.get(f"/v1/objects/{oid}/summary")
     assert r.status_code == 200
     body = r.json()
     assert "columns" in body and "rows" in body
-    # describe is a 3-row Freq/Sev/Agg table.
+    # summary_df is a 3-row Freq/Sev/Agg table.
     assert len(body["rows"]) == 3
 
 
@@ -311,9 +311,9 @@ def test_reins_density_preview_is_binned(client):
 # CSV frame download
 # ----------------------------------------------------------------------
 
-def test_frame_csv_describe(client):
+def test_frame_csv_summary(client):
     oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    r = client.get(f"/v1/objects/{oid}/frame/describe.csv")
+    r = client.get(f"/v1/objects/{oid}/frame/summary.csv")
     assert r.status_code == 200, r.text
     assert r.headers["content-type"].startswith("text/csv")
     assert "attachment" in r.headers.get("content-disposition", "")
@@ -382,25 +382,26 @@ def test_unknown_distortion_kind_returns_422(client):
 
 
 # ----------------------------------------------------------------------
-# MultivariateAggregate (multivariate / mv / netceded)
+# BivariateAggregate (bivariate / bv / clash / netceded / grossceded / grossnet)
 # ----------------------------------------------------------------------
 
-_MV = (
-    "multivariate MV.Indep 25 claims "
+_BV = (
+    "bivariate BV.Copula 25 claims "
     "agg A dfreq [0 1] [.5 .5] sev lognorm 50 cv 1.5 "
-    "agg B dfreq [0 1] [.5 .5] sev gamma 50 cv 1.0 poisson"
+    "agg B dfreq [0 1] [.5 .5] sev gamma 50 cv 1.0 "
+    "copula gumbel 0.4 poisson"
 )
 
 
-def test_multivariate_builds_and_reports(client):
-    """A MultivariateAggregate builds as kind='multivariate' with the common surface."""
-    r = client.post("/v1/objects", json={"decl": _MV})
+def test_bivariate_builds_and_reports(client):
+    """A BivariateAggregate builds as kind='bivariate' with the common surface."""
+    r = client.post("/v1/objects", json={"decl": _BV})
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["kind"] == "multivariate"
+    assert body["kind"] == "bivariate"
     oid = body["id"]
     # Common reporting surface works.
-    for which in ("info", "description", "stats_df"):
+    for which in ("info", "summary", "stats_df"):
         assert client.get(f"/v1/objects/{oid}/{which}").status_code == 200, which
     # No pricing / reinsurance / bs-window -> clean 400 (not 500).
     assert client.post(

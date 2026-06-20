@@ -11,7 +11,7 @@
 // CsvGrid otherwise resolves its worker from `import.meta.url`, which under our
 // Vite build points at the hashed bundle, not a co-located worker file — so the
 // main-thread parser is the robust choice until the worker asset is shipped.
-// Our frames are small (describe/stats/reins) or server-downsampled (density),
+// Our frames are small (summary/stats/reins) or server-downsampled (density),
 // well under CsvGrid's render cap, so main-thread parsing is imperceptible.
 
 import CsvGrid from 'csv-grid';
