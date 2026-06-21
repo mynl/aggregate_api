@@ -197,7 +197,7 @@ class PricingRequest(BaseModel):
 
 
 class PricingResponse(BaseModel):
-    """Per-line breakdown plus headline totals."""
+    """Per-unit breakdown plus headline totals."""
 
     model_config = _RESPONSE_CFG
 

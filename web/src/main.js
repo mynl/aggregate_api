@@ -50,7 +50,7 @@ const state = {
     log2: null,             // null = auto
     bs: null,               // null = auto
     loaded: new Set(),      // tab names whose data has been fetched
-    reinsWhich: 'reins_describe',
+    reinsWhich: 'reins_summary_df',
 };
 
 // ----------------------------------------------------------------------

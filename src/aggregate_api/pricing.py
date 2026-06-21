@@ -41,7 +41,7 @@ def run_pricing(
     p, a : float | None
         Probability or asset level. Exactly one must be set.
     ccoc : float | None
-        If set, use ``price_ccoc(p, ccoc)``. Requires ``p``.
+        If set, use ``price_ccoc(ccoc, p=p)``. Requires ``p``.
     distortion : str | None
         Distortion name (looked up on ``obj.distortions``) for
         ``pricing_at(distortion, p=..., a=...)``.
@@ -50,7 +50,7 @@ def run_pricing(
     -------
     dict
         Matches :class:`PricingResponse`: headline fields plus a
-        per-line ``rows`` list-of-dicts.
+        per-unit ``rows`` list-of-dicts.
     """
     # Pricing surface is Portfolio-only; Aggregate has no
     # ``pricing_at`` / ``price_ccoc``. Check up front so we can
@@ -65,11 +65,11 @@ def run_pricing(
         raise ValueError("exactly one of p or a must be provided")
 
     if ccoc is not None:
-        # price_ccoc only takes ``p`` (it computes ``a`` internally
-        # via q(p)); reject a stray ``a`` for clarity.
+        # ``price_ccoc(ccoc, *, p)``: it computes ``a`` internally via q(p),
+        # so ``p`` is required (and keyword-only); reject a stray ``a``.
         if p is None:
             raise ValueError("price_ccoc requires p (probability)")
-        df = obj.price_ccoc(p, ccoc)
+        df = obj.price_ccoc(ccoc, p=p)
         # The price_ccoc DataFrame has a single row indexed
         # 'total'; expose it as a list-of-dicts for symmetry with
         # the distortion path.
@@ -86,7 +86,7 @@ def run_pricing(
         raise ValueError("must supply either ccoc or distortion")
 
     df = obj.pricing_at(distortion, p=p, a=a)
-    rows = _df_to_records(df, index_name="line")
+    rows = _df_to_records(df, index_name="unit")
     # ``pricing_at`` doesn't return the asset level itself in the
     # frame; recover it the same way the method did to surface on
     # the response.

@@ -15,7 +15,7 @@ The /v1/objects/* family covers everything object-shaped:
 * ``GET    /v1/objects/{id}/density_df``  -- paginated density frame.
 * ``GET    /v1/objects/{id}/kappa``       -- Portfolio exeqa_* slice.
 * ``GET    /v1/objects/{id}/reins_description`` -- reinsurance text block.
-* ``GET    /v1/objects/{id}/reins_describe``    -- per-layer describe frame.
+* ``GET    /v1/objects/{id}/reins_summary_df`` -- per-layer summary frame.
 * ``GET    /v1/objects/{id}/reins_stats_df``    -- per-layer stats frame.
 * ``GET    /v1/objects/{id}/reins_density_df``  -- density preview frame.
 * ``GET    /v1/objects/{id}/frame/{which}.csv`` -- full-frame CSV download.
@@ -217,21 +217,13 @@ def _summary_fields(obj: Any) -> dict:
         except (TypeError, ValueError):
             return None
 
-    # ``aggregate`` replaced the ``explain_validation()`` method with a
-    # ``validation_explanation`` string attribute (e.g. "not unreasonable" /
-    # "fails sev mean, agg mean"). Prefer the attribute; fall back to the
-    # legacy callable so the summary survives the in-flight library change.
+    # ``validation_explanation`` is a string property (e.g. "not unreasonable" /
+    # "fails sev mean, agg mean"). getattr-gated so an object kind without it
+    # simply reports ``None``.
     validation: str | None = None
     explanation = getattr(obj, "validation_explanation", None)
     if explanation is not None:
         validation = str(explanation)
-    else:
-        explain = getattr(obj, "explain_validation", None)
-        if callable(explain):
-            try:
-                validation = str(explain())
-            except Exception:  # noqa: BLE001 -- summary is best-effort
-                validation = None
 
     return {
         "bs": _num("bs"),
@@ -576,25 +568,11 @@ def get_info(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
 # GET /v1/objects/{id}/summary
 # ----------------------------------------------------------------------
 
-def _summary_frame(obj: Any):
-    """Return the object's moment table (Freq/Sev/Agg) as a DataFrame, or None.
-
-    ``aggregate`` is renaming this property from ``describe`` to
-    ``summary_df``. Prefer the new name and fall back to the old one so the
-    api keeps working on both sides of the in-flight library change. Once the
-    rename lands everywhere this can collapse to ``summary_df`` alone.
-    """
-    df = getattr(obj, "summary_df", None)
-    if df is None:
-        df = getattr(obj, "describe", None)
-    return df
-
-
 @router.get("/objects/{oid}/summary", response_model=models.FrameResponse)
 def get_summary(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
     """Theoretical-vs-empirical moment table (the library's ``summary_df``)."""
     entry = _resolve_object(oid, cache)
-    df = _summary_frame(entry.obj)
+    df = getattr(entry.obj, "summary_df", None)
     if df is None:
         raise HTTPException(
             status_code=400,
@@ -773,34 +751,24 @@ def get_reins_description(oid: str, cache: ObjectCache = Depends(_get_cache)) ->
     ``Aggregate.reins_description`` is a short string attribute (e.g.
     ``"Ceded to 100% share of 15 xs 5 per occurrence"``), empty when the
     object carries no reinsurance. ``Portfolio`` has no such attribute --
-    there we report availability from ``reins_describe`` and leave the text
+    there we report availability from ``reins_summary_df`` and leave the text
     empty (the Reins table carries the detail).
     """
     entry = _resolve_object(oid, cache)
     obj = entry.obj
-    # ``reins_describe`` is None exactly when the object has no
-    # reinsurance, so it's the canonical availability signal. The
-    # ``reins_description`` attribute (a plain string in current
-    # ``aggregate``; it used to be a method) carries the human-readable
-    # blurb -- read it defensively so an older callable form still works.
-    has_reins = _frame_attr(obj, "reins_describe") is not None
-    text = ""
-    if has_reins:
-        desc = getattr(obj, "reins_description", "")
-        if callable(desc):  # legacy method form
-            try:
-                desc = desc(kind="both", width=0)
-            except Exception:  # noqa: BLE001 -- text is optional; table carries detail
-                desc = ""
-        text = str(desc or "").strip()
+    # ``reins_summary_df`` is None exactly when the object has no reinsurance, so
+    # it's the canonical availability signal. ``reins_description`` is a plain
+    # string property carrying the human-readable blurb (empty otherwise).
+    has_reins = _frame_attr(obj, "reins_summary_df") is not None
+    text = str(getattr(obj, "reins_description", "") or "").strip() if has_reins else ""
     return {"available": has_reins, "text": text}
 
 
-@router.get("/objects/{oid}/reins_describe", response_model=models.FrameResponse)
-def get_reins_describe(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+@router.get("/objects/{oid}/reins_summary_df", response_model=models.FrameResponse)
+def get_reins_summary_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
     """Per-layer gross/ceded/net reference-vs-model frame."""
     entry = _resolve_object(oid, cache)
-    df = _frame_attr(entry.obj, "reins_describe")
+    df = _frame_attr(entry.obj, "reins_summary_df")
     if df is None:
         raise HTTPException(status_code=400, detail="no reinsurance on this object")
     return frame_to_payload(reset_index_safe(df))
@@ -848,7 +816,7 @@ _CSV_FRAMES = {
     "stats_df": "stats_df",
     "density_df": "density_df",
     "bs_window_df": "_bs_window_df",
-    "reins_describe": "reins_describe",
+    "reins_summary_df": "reins_summary_df",
     "reins_stats_df": "reins_stats_df",
     "reins_density_df": "reins_density_df",
 }
@@ -866,9 +834,7 @@ def get_frame_csv(
             detail=f"unknown frame {which!r}; expected one of {sorted(_CSV_FRAMES)}",
         )
     entry = _resolve_object(oid, cache)
-    # ``summary`` honors the describe -> summary_df transition (see
-    # ``_summary_frame``); every other frame is a direct attribute.
-    df = _summary_frame(entry.obj) if which == "summary" else _frame_attr(entry.obj, attr)
+    df = _frame_attr(entry.obj, attr)
     if df is None:
         raise HTTPException(
             status_code=400, detail=f"{which} not available for {entry.kind!r}"

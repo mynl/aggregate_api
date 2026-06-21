@@ -34,7 +34,7 @@ Batch from `dev/plan-misc-03.md` (gather → review → execute).
   `kind="bivariate"` (replacing `"multivariate"`), `BuildResponse.kind`'s
   `Literal` is updated, and the SPA's kind label / timing word / tab-gating /
   density-fetch switch all key off `"bivariate"`. The reporting surface is
-  unchanged — info / describe / stats_df / density_df / plot work; price /
+  unchanged — info / summary_df / stats_df / density_df / plot work; price /
   reins / bs-window return a clean 400. **Breaking:** clients that special-cased
   `kind == "multivariate"` must switch to `"bivariate"`. *(Rebuild the SPA bundle
   — `scripts/build-web.ps1` — to ship the frontend half.)*
@@ -42,24 +42,68 @@ Batch from `dev/plan-misc-03.md` (gather → review → execute).
   turned `Aggregate.reins_description` from a method into a plain string
   attribute (e.g. *"Ceded to 100% share of 15 xs 5 per occurrence"*). The
   `reins_description` endpoint returned empty text because it only called a
-  *callable*; it now reads the attribute directly (still tolerating the legacy
-  callable form), so the always-visible reinsurance blurb renders again.
+  *callable*; it now reads the string property directly, so the always-visible
+  reinsurance blurb renders again.
 - **`describe` → `summary` (object moment table).** `aggregate` renamed the
   object-level `describe` property to `summary_df`. The api endpoint is renamed
   `GET /v1/objects/{id}/description` → `GET /v1/objects/{id}/summary`, the CSV
   download token `describe` → `summary` (`/frame/summary.csv`), and the SPA tab
   is relabeled **Describe → Summary** (tab id `desc` → `summary`, pane
-  `pane-desc` → `pane-summary`, `api.description` → `api.summary`). The frame is
-  read with a `summary_df`-then-`describe` fallback so it works across the
-  in-flight library change. **Breaking:** the `/description` path and the
-  `describe.csv` download token are gone — use `/summary` and `summary.csv`.
-  *(`reins_describe` / `reins_description` are unrelated and unchanged.)*
+  `pane-desc` → `pane-summary`, `api.description` → `api.summary`). **Breaking:**
+  the `/description` path and the `describe.csv` download token are gone — use
+  `/summary` and `summary.csv`. *(`reins_describe` / `reins_description` are a
+  separate reinsurance surface and are unchanged.)*
 - **Build-summary validation reads `validation_explanation`.** `aggregate`
   replaced the `explain_validation()` method with a `validation_explanation`
-  string attribute (e.g. *"not unreasonable"* / *"fails sev mean, agg mean"*).
-  `_summary_fields` now reads the attribute (falling back to the legacy
-  callable), so the build status line's validation chip is populated again
-  instead of going blank.
+  string property (e.g. *"not unreasonable"* / *"fails sev mean, agg mean"*).
+  `_summary_fields` now reads the property, so the build status line's validation
+  chip is populated again instead of going blank.
+- **`line` → `unit` and pricing-method signatures (full `aggregate` a76–a84
+  surface sweep).** Brought the rest of the API into line with the renamed
+  library surface:
+  - **kappa plot** keyed off the removed `Portfolio.line_names_ex`; now
+    `unit_names_ex`. Without this, every per-unit kappa plot 400'd ("kappa plot
+    requires a Portfolio") even for a real Portfolio.
+  - **`Portfolio.price_ccoc`** signature changed to `price_ccoc(ccoc, *, p)`
+    (arg order swapped, `p` keyword-only). The constant-CoC `/pricing_at` path
+    called `price_ccoc(p, ccoc)` → `TypeError`/500; now `price_ccoc(ccoc, p=p)`.
+  - **`pricing_at` frame index** renamed `line` → `unit` upstream; the per-row
+    breakdown is now keyed `unit` (was a hard-coded `index_name="line"`).
+  - Confirmed unchanged-and-working against the new surface: `summary_df`,
+    `stats_df`, `density_df`, `bs_window_df` / `_bs_window_df`, `agg_m` /
+    `agg_cv`, `price_pentagon(*, p, ROE|LR)`, `calibrate_distortions`,
+    `analyze_distortions(*, p).pricing_df`, `distortion_df`, `reins_*`, and the
+    `exeqa_*` density columns. New tests cover the two previously-untested
+    breakages (Portfolio kappa plot, ccoc `/pricing_at`).
+  - The transitional `describe`/`explain_validation`/callable-`reins_description`
+    fallbacks added earlier this batch are removed — `aggregate` made clean
+    breaks (no aliases), so the API matches the single canonical name.
+- **`reins_describe` → `reins_summary_df` (aggregate a85).** The last
+  `describe`-verb frame property was renamed to join the `_df` family. The api
+  follows: the endpoint `GET /v1/objects/{id}/reins_describe` →
+  `GET /v1/objects/{id}/reins_summary_df`, the CSV token / `_CSV_FRAMES` entry
+  `reins_describe` → `reins_summary_df`, the reinsurance-availability signal in
+  the `reins_description` route now reads `reins_summary_df`, and the SPA Reins
+  tab's first sub-button is relabeled **"reins describe" → "reins summary"**
+  (`data-reins="reins_summary_df"`, `state.reinsWhich` default). **Breaking:**
+  the `/reins_describe` path and `reins_describe.csv` token are gone — use
+  `reins_summary_df`. The text blurb endpoint `reins_description` (a string
+  property) is unchanged, as are `reins_stats_df` / `reins_density_df`. The
+  `BivariateAggregate` reporting redesign (a85: rebuilt `summary_df`, slimmed
+  `stats_df`, new `dependency_df`) needs no api change — those frames are
+  serialized generically. *(SPA bundle rebuilt.)*
+- **Infinite-variance builds return 422 (aggregate a87).** Building an
+  infinite-variance aggregate (e.g. `pareto` shape ≤ 2) without an explicit `bs`
+  now raises `InfiniteVarianceError` (a `ValueError` subclass) instead of
+  silently sizing. The build handler's existing `except ValueError` already maps
+  it to a 422 carrying the library's "pass an explicit `bs`" message; a
+  regression test pins the behavior.
+- **Transformer errors now arrive as plain `ValueError` (aggregate a86).** A bad
+  distortion kind (and other transformer `ValueError`s) surface directly rather
+  than wrapped in Lark's `VisitError`. The build handler's `except ValueError`
+  catches them and still returns 422; the `except VisitError` clause is retained
+  as defensive cover for any non-`ValueError` transformer exception. (Test
+  comment updated; no behavior change.)
 
 ## 1.0.0a11
 

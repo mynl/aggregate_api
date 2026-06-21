@@ -256,12 +256,12 @@ def _plot_kappa(obj):
     as a line; the legend tags units. Aggregate has no kappa --
     we raise so the API layer can return HTTP 400.
     """
-    if not hasattr(obj, "line_names_ex"):
+    if not hasattr(obj, "unit_names_ex"):
         raise ValueError("kappa plot requires a Portfolio")
     fig, ax = plt.subplots()
     df = obj.density_df
     # Filter to ``exeqa_*`` columns; their order matches
-    # ``line_names_ex`` from the Portfolio.
+    # ``unit_names_ex`` from the Portfolio.
     exeqa_cols = [c for c in df.columns if c.startswith("exeqa_")]
     for col in exeqa_cols:
         ax.plot(df.index, df[col], lw=1.0, label=col.replace("exeqa_", ""))

@@ -22,6 +22,8 @@ Target: **1.0.0a12** (provisional — one bump for the batch).
 | 5 | Examples loader: follow new statement syntax (`;` / line breaks) + new keywords | backend | medium | **done** (1.0.0a12) |
 | 6 | Migrate `multivariate` -> `bivariate` (new class + kind) and fix `reins_description` attribute | backend + frontend | medium | **done** (1.0.0a12) |
 | 7 | Follow `describe` -> `summary_df` rename (Describe tab -> Summary) + `explain_validation` -> `validation_explanation` | backend + frontend | medium | **done** (1.0.0a12) |
+| 8 | Full `aggregate` a76-a84 surface sweep: `line` -> `unit`, `price_ccoc` signature, kappa guard; drop transitional fallbacks | backend | medium | **done** (1.0.0a12) |
+| 9 | `aggregate` a85-a87 sweep: `reins_describe` -> `reins_summary_df`; InfiniteVarianceError 422; transformer ValueError | backend + frontend | medium | **done** (1.0.0a12) |
 
 > **Note on the version bump.** Items 1–2 are code changes and carry the
 > `1.0.0a12` bump + CHANGELOG line. Items 3 (ops) and 4 (doc-only) are pure
@@ -267,3 +269,85 @@ library rename is everywhere.
 **Verified.** `test_summary_endpoint` + `test_frame_csv_summary` (renamed),
 bivariate surface check uses `summary`, and `test_build_summary_fields` (the
 validation chip) pass; full suite 57 passed.
+
+---
+
+## 8. Full `aggregate` a76–a84 surface sweep (`line` → `unit`, pricing sigs)
+
+**Problem.** A bigger naming rationalization landed on `aggregate` (commits
+a76–a84). Beyond items 5–7, the remaining drift was found by inventorying every
+attribute/method the API touches and probing it against the new surface:
+
+- **`line` → `unit` throughout (a81).** `Portfolio.line_names_ex` is gone — the
+  kappa **plot** guard (`plotting.py`) keyed off it, so every Portfolio kappa
+  plot wrongly 400'd. The `pricing_at` frame index renamed `line` → `unit`.
+- **`Portfolio.price_ccoc(ccoc, *, p)` (was `price_ccoc(p, ccoc)`).** Arg order
+  swapped and `p` is keyword-only; the constant-CoC `/pricing_at` path raised
+  `TypeError` (500).
+- **Clean-break removals (a84).** `describe` and `explain_validation` were
+  deleted outright (no aliases); the transitional fallbacks added in items 5–7
+  are now dead code referencing a removed surface.
+
+**Fix.**
+- `plotting.py`: kappa guard + comment `line_names_ex` → `unit_names_ex`.
+- `pricing.py`: `price_ccoc(ccoc, p=p)`; `pricing_at` rows keyed `index_name="unit"`;
+  docstrings.
+- `routes/objects.py`: drop the `describe` and `explain_validation` fallbacks
+  (read `summary_df` / `validation_explanation` directly); drop the
+  `reins_description` callable fallback; remove the now-unused `_summary_frame`
+  helper and the `get_frame_csv` summary special-case. `models.py`: "per-line"
+  → "per-unit".
+
+**Confirmed unchanged-and-working** (probed live): `summary_df`, `stats_df`,
+`density_df`, `bs_window_df`/`_bs_window_df`, `agg_m`/`agg_cv`,
+`price_pentagon(*, p, ROE|LR)`, `calibrate_distortions`,
+`analyze_distortions(*, p).pricing_df`, `distortion_df`, `reins_describe` /
+`reins_stats_df` / `reins_density_df`, the `exeqa_*` columns, and the parser
+imports (`_PARSER`, `UnderwritingLexer`, `parser_errors`, `decl_writer`,
+`aggregate.style`).
+
+**Verified.** Two new tests for the previously-untested breakages —
+`test_plot_kappa_portfolio` and `test_pricing_at_ccoc_portfolio` — plus the
+existing pentagon/distortion tests; full suite **59 passed**. No SPA source
+changed in this item, so no rebuild needed.
+
+---
+
+## 9. `aggregate` a85–a87 sweep
+
+**Problem.** Three more library releases landed after a84.
+- **a85** renamed the last `describe`-verb frame property: `reins_describe` →
+  `reins_summary_df` (on `Aggregate` / `Portfolio`). Also rebuilt the
+  `BivariateAggregate` reporting surface (`summary_df` reshaped, `stats_df`
+  slimmed, new `dependency_df`) and turned a few accessors into properties
+  (`reins_kinds`, `tvar_info_df`, bivariate `corr`/`marginals`).
+- **a86** made transformer `ValueError`s surface directly (no longer wrapped in
+  Lark's `VisitError`); added `dbvsev` / discrete `bv` DecL forms.
+- **a87** raises `InfiniteVarianceError` (a `ValueError` subclass, exported from
+  `aggregate.constants`) when an infinite-variance aggregate is built without an
+  explicit `bs`.
+
+**Inventory result.** Of all this, only `reins_describe` is on the API's surface.
+The other a85 property/redesign changes (`reins_kinds`, `tvar_info_df`,
+bivariate `corr`/`marginals`/`dependency_df`, the reshaped frames) are **not**
+touched by the api — frames are serialized generically, so no change. `dbvsev`
+is a severity clause inside a `bv` statement; the examples loader keys on the
+top-level `bivariate`/`bv` keyword, so its regex is unaffected.
+
+**Fix.**
+- *Backend* (`routes/objects.py`): endpoint `/reins_describe` → `/reins_summary_df`
+  (`get_reins_summary_df`, reads `reins_summary_df`); the `reins_description`
+  route's availability signal reads `reins_summary_df`; `_CSV_FRAMES` token +
+  value `reins_summary_df`; route-list docstring.
+- *Frontend* (`web/`): Reins tab sub-button **"reins describe" → "reins summary"**
+  (`data-reins="reins_summary_df"`) and `state.reinsWhich` default. SPA rebuilt.
+- *No code change needed* for a86/a87 — the build handler's `except ValueError`
+  already maps both the direct transformer `ValueError` and
+  `InfiniteVarianceError` to a 422 with the library message. The defensive
+  `except VisitError` clause is kept (harmless cover for non-`ValueError`
+  transformer exceptions).
+
+**Verified.** Renamed reins tests to `reins_summary_df`; added
+`test_infinite_variance_without_bs_returns_422`; updated the distortion-kind
+test comment for the direct-`ValueError` path. Full suite **60 passed**; SPA
+bundle rebuilt and confirmed (`reins_summary_df`, no stale `reins_describe`).

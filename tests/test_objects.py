@@ -246,6 +246,14 @@ def test_plot_kappa_rejects_aggregate(client):
     assert r.status_code == 400
 
 
+def test_plot_kappa_portfolio(client):
+    """kappa renders for a Portfolio (guard keys off ``unit_names_ex``)."""
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/plot", params={"kind": "kappa"})
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("image/svg+xml")
+
+
 def test_plot_unknown_kind_400(client):
     oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
     r = client.get(f"/v1/objects/{oid}/plot", params={"kind": "nonsense"})
@@ -266,10 +274,10 @@ def test_reins_description_absent_on_plain_object(client):
     assert body["text"] == ""
 
 
-def test_reins_describe_400_on_plain_object(client):
-    """reins_describe is a 400 (not 500) when there's no reinsurance."""
+def test_reins_summary_df_400_on_plain_object(client):
+    """reins_summary_df is a 400 (not 500) when there's no reinsurance."""
     oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    r = client.get(f"/v1/objects/{oid}/reins_describe")
+    r = client.get(f"/v1/objects/{oid}/reins_summary_df")
     assert r.status_code == 400
 
 
@@ -284,7 +292,7 @@ def test_reins_description_present(client):
 
 def test_reins_frames_present(client):
     oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
-    for which in ("reins_describe", "reins_stats_df", "reins_density_df"):
+    for which in ("reins_summary_df", "reins_stats_df", "reins_density_df"):
         r = client.get(f"/v1/objects/{oid}/{which}")
         assert r.status_code == 200, f"{which}: {r.text}"
         body = r.json()
@@ -329,7 +337,7 @@ def test_frame_csv_unknown_name_404(client):
 
 def test_frame_csv_reins_400_when_absent(client):
     oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    r = client.get(f"/v1/objects/{oid}/frame/reins_describe.csv")
+    r = client.get(f"/v1/objects/{oid}/frame/reins_summary_df.csv")
     assert r.status_code == 400
 
 
@@ -369,16 +377,32 @@ def test_log2_cap_rejected(client, monkeypatch):
 
 
 def test_unknown_distortion_kind_returns_422(client):
-    """A bad distortion kind is raised inside the Lark transformer (VisitError).
+    """A bad distortion kind surfaces as a clean 422 with the message.
 
-    It should surface as a clean 422 with the underlying message, not the old
-    ugly 500.
+    Current ``aggregate`` raises the ``ValueError`` directly from the
+    transformer (no longer wrapped in Lark's ``VisitError``); either way the
+    build handler returns 422, not the old ugly 500.
     """
     r = client.post("/v1/objects", json={"decl": "dist MYD pd 0.5"})
     assert r.status_code == 422, r.text
     detail = str(r.json()["detail"])
     assert "pd" in detail
     assert "distortion kind" in detail.lower()
+
+
+def test_infinite_variance_without_bs_returns_422(client):
+    """An infinite-variance severity with no explicit bs is a 422, not a 500.
+
+    ``aggregate`` raises ``InfiniteVarianceError`` (a ``ValueError`` subclass)
+    when it can't size the grid; the build handler surfaces it in the 422 family
+    with the library's "pass an explicit bs" message.
+    """
+    r = client.post(
+        "/v1/objects",
+        json={"decl": "agg IMP 3 claims sev 100 * pareto 1.5 - 100 poisson"},
+    )
+    assert r.status_code == 422, r.text
+    assert "bs" in str(r.json()["detail"]).lower()
 
 
 # ----------------------------------------------------------------------
@@ -407,7 +431,7 @@ def test_bivariate_builds_and_reports(client):
     assert client.post(
         f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.15}
     ).status_code == 400
-    assert client.get(f"/v1/objects/{oid}/reins_describe").status_code == 400
+    assert client.get(f"/v1/objects/{oid}/reins_summary_df").status_code == 400
     assert client.get(f"/v1/objects/{oid}/bs_window_df").status_code == 400
 
 
@@ -526,3 +550,14 @@ def test_price_portfolio_distortions(client):
     assert "LR" in body["distortions"]
     lr = body["distortions"]["LR"]
     assert "columns" in lr and len(lr["rows"]) >= 1
+
+
+def test_pricing_at_ccoc_portfolio(client):
+    """ccoc path exercises ``price_ccoc(ccoc, *, p)`` and returns a total row."""
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    r = client.post(f"/v1/objects/{oid}/pricing_at", json={"p": 0.99, "ccoc": 0.1})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ccoc"] == 0.1
+    assert body["a"] is not None
+    assert len(body["rows"]) >= 1
