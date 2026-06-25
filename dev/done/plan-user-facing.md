@@ -1,10 +1,25 @@
 # Plan — user-facing first impression ("wow factor")
 
-> **Status: DRAFT — not executed.** Reworks the landing experience of the web
+> **Status: EXECUTED (1.0.0a13).** Reworks the landing experience of the web
 > SPA from an internal tool into an immediately impressive demo. Grew out of the
-> "lacks demo wow" review. Several items depend on the upstream `aggregate`
-> work that turns `summary_df` / `tail_df` into user-facing risk views — see
-> *Dependencies*.
+> "lacks demo wow" review. The upstream dependency landed in `aggregate`
+> 1.0.0a113 (new `summary_df` / `tail_df` risk views, `validation_df` /
+> `tail_behavior_df` renames), so all three sequencing steps shipped together.
+>
+> **What shipped:** new `/tail_df` + `/validation_df` api routes (the latter
+> carrying the old `summary_df` payload); `/summary` repointed to the new risk
+> view. SPA: "Description to distribution" header + subhead, a random group-A
+> hero gallery with load-time auto-build, the Overview tab (note + interactive
+> uPlot density/exceedance chart + `summary_df` + `tail_df` exhibits, with the
+> 1-in-200 / 1-in-250 rows highlighted), and Info/Summary/Validation/Stats/
+> Density/bs-window demoted under **More ▾**.
+>
+> **Decisions taken during execution:** (1) the Overview *graceful-degrades* for
+> objects without the new frames (a bivariate / distortion shows whatever it
+> carries rather than erroring) — heroes are not filtered by kind. (2) Hero
+> thumbnails are name-seeded CSS gradients (no network), not remote placeholder
+> images. (3) Per the plan's "Decided", a plain **Summary** tab (the `summary_df`
+> grid + CSV) is kept under **More** alongside the richer Overview exhibit.
 
 ---
 

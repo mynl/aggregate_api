@@ -57,6 +57,8 @@ export const api = {
     // Per-button data
     info:         (id)              => _json('GET',  `/v1/objects/${id}/info`),
     summary:      (id)              => _json('GET',  `/v1/objects/${id}/summary`),
+    tail_df:      (id)              => _json('GET',  `/v1/objects/${id}/tail_df`),
+    validation_df:(id)              => _json('GET',  `/v1/objects/${id}/validation_df`),
     stats_df:     (id)              => _json('GET',  `/v1/objects/${id}/stats_df`),
     density_df:   (id, p = {})      => _json('GET',  `/v1/objects/${id}/density_df?${qs(p)}`),
     bs_window_df: (id)              => _json('GET',  `/v1/objects/${id}/bs_window_df`),

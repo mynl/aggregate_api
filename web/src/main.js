@@ -22,7 +22,8 @@ import './styles/cm6.css';
 import { api, ApiError } from './api.js';
 import { createEditor, emacsEnabledDefault } from './editor.js';
 import { mountExamples } from './examples.js';
-import { renderInfo } from './renderers.js';
+import { renderInfo, renderExhibit } from './renderers.js';
+import { mountInteractivePlot, markerLegend } from './plot-interactive.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
 import { renderError, renderRateLimit } from './error-pane.js';
 import * as history from './history.js';
@@ -47,11 +48,17 @@ const state = {
     id: null,
     kind: null,
     name: null,
+    note: null,             // description for the Overview lead (from an example)
     log2: null,             // null = auto
     bs: null,               // null = auto
     loaded: new Set(),      // tab names whose data has been fetched
     reinsWhich: 'reins_summary_df',
 };
+
+// The note for the *next* build. Set when an example / hero is loaded; cleared
+// the moment the user types into the editor (so a hand-edited program doesn't
+// inherit a stale description). Captured into state.note at build time.
+let pendingNote = null;
 
 // ----------------------------------------------------------------------
 // Editor
@@ -73,7 +80,10 @@ editor.view.dom.addEventListener('keydown', (ev) => {
     // Plain ↑/↓ drive history navigation (see editor.js) -- don't reset the
     // cursor on them or sequential history walking breaks.
     if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') return;
-    if (!ev.ctrlKey && !ev.metaKey) history.resetCursor();
+    if (!ev.ctrlKey && !ev.metaKey) {
+        history.resetCursor();
+        pendingNote = null;   // a hand-edited program is no longer "the example"
+    }
 });
 
 function navigateHistory(dir) {
@@ -149,6 +159,7 @@ async function build() {
         state.id = res.id;
         state.kind = res.kind;
         state.name = res.name;
+        state.note = pendingNote;   // the example's description, if this is one
         state.loaded = new Set();
         renderSummary(res);
         history.record(decl);
@@ -254,7 +265,8 @@ window.addEventListener('resize', syncSummaryMore);
 // Tabs -- lazy load + cache per built object
 // ----------------------------------------------------------------------
 const PANE_OF = {
-    info: 'pane-info', summary: 'pane-summary', plot: 'pane-plot',
+    overview: 'pane-overview', info: 'pane-info', summary: 'pane-summary',
+    validation: 'pane-validation', plot: 'pane-plot',
     stats: 'pane-stats', reins: 'pane-reins',
     density: 'pane-density', bswin: 'pane-bswin', price: 'pane-price',
 };
@@ -320,12 +332,16 @@ async function loadTab(name) {
     if (state.loaded.has(name)) return;
     state.loaded.add(name);
     try {
-        if (name === 'info') {
+        if (name === 'overview') {
+            await loadOverview();
+        } else if (name === 'info') {
             replacePane('pane-info', renderInfo(await api.info(state.id)));
         } else if (name === 'summary') {
             // Keep the fzf bar but drop the per-column filter row — the summary
             // table is narrow and the global search covers it.
             replacePaneGrid('pane-summary', await api.summary(state.id), { columnFilters: false });
+        } else if (name === 'validation') {
+            replacePaneGrid('pane-validation', await api.validation_df(state.id), { columnFilters: false });
         } else if (name === 'plot') {
             const img = el('img', { src: api.plotUrl(state.id, { format: 'svg' }), alt: 'native plot' });
             replacePane('pane-plot', img);
@@ -353,6 +369,78 @@ async function loadTab(name) {
     } catch (err) {
         state.loaded.delete(name);   // allow a retry on the next activation
         replacePane(PANE_OF[name] || 'pane-info', errorNode(err));
+    }
+}
+
+// The live uPlot on the Overview tab; destroyed before each re-render so its
+// canvas + ResizeObserver don't leak across builds (CsvGrid teardown is keyed
+// on the grid registry; uPlot is not, so we track it ourselves).
+let overviewChart = null;
+
+// ---- Overview tab: note + interactive plot + summary_df + tail_df ----
+// The landing exhibit. Each section is best-effort: a frame the object doesn't
+// carry (a distortion has no summary_df; a bivariate has no validation_df) just
+// 400s and is skipped, so the tab degrades gracefully rather than erroring.
+async function loadOverview() {
+    if (overviewChart) { try { overviewChart.destroy(); } catch { /* gone */ } overviewChart = null; }
+    clearGrids('pane-overview');
+    const pane = $('pane-overview');
+    empty(pane);
+    let rendered = false;
+
+    // 1. Description lead -- the example's note, when this build came from one.
+    if (state.note) {
+        pane.appendChild(el('p', { className: 'overview-note' }, state.note));
+        rendered = true;
+    }
+
+    // 2. Interactive density / exceedance plot (uPlot), with VaR markers.
+    try {
+        const density = state.kind === 'distortion' || state.kind === 'bivariate'
+            ? await api.density_df(state.id)
+            : await api.density_df(state.id, { cols: 'loss,p_total,F,S' });
+        const tail = await api.tail_df(state.id).catch(() => null);
+        const host = el('div', { className: 'overview-plot' });
+        pane.appendChild(host);
+        const chart = mountInteractivePlot(host, density, tail);
+        if (chart) {
+            overviewChart = chart;
+            const legend = markerLegend(tail);
+            if (legend) pane.appendChild(legend);
+            rendered = true;
+        } else {
+            pane.removeChild(host);   // nothing plottable (e.g. a g-curve)
+        }
+    } catch { /* plot is a bonus; skip on failure */ }
+
+    // 3. summary_df exhibit -- moments + percentiles, Agg / total emphasized.
+    try {
+        const summary = await api.summary(state.id);
+        pane.appendChild(renderExhibit(summary, {
+            title: 'Summary — what it’s made of',
+            caption: 'Moments and key percentiles. CV blank for signed / near-break-even '
+                + 'rows; Freq percentiles blank by design (PGF-only).',
+            emphasize: (r) => r.X === 'Agg' || r.unit === 'total',
+        }));
+        rendered = true;
+    } catch { /* no summary_df for this kind */ }
+
+    // 4. tail_df exhibit -- return periods, the 1-in-200 / 1-in-250 anchors lit.
+    try {
+        const tail = await api.tail_df(state.id);
+        pane.appendChild(renderExhibit(tail, {
+            title: 'Tail risk — how bad it gets',
+            caption: '1-in-200 (Solvency II) and 1-in-250 (US) are the capital anchors. '
+                + 'Exact from the FFT grid, not simulated.',
+            highlight: (r) => Number(r.T) === 200 || Number(r.T) === 250,
+            emphasize: (r) => r.unit === 'total',
+        }));
+        rendered = true;
+    } catch { /* no tail_df for this kind */ }
+
+    if (!rendered) {
+        pane.appendChild(el('div', { className: 'text-muted small' },
+            'No risk views for this object — see the other tabs.'));
     }
 }
 
@@ -563,10 +651,13 @@ function flash(btn, text) {
 // Alt-↑/↓ for quick inspection of the whole library. Not surfaced in the UI.
 const exampleRing = { decls: [], cursor: -1 };
 
-// Load a program into the editor, then standardize it via format_program.
-// Raw text shows instantly; the formatted version replaces it unless the
-// user has since stepped to another example (stale-format guard).
-function loadExample(decl) {
+// Load a program into the editor, then standardize it via format_program
+// (now multiline/spread by default). Raw text shows instantly; the formatted
+// version replaces it unless the user has since stepped to another example
+// (stale-format guard). `note` rides along to the Overview lead on the next
+// build; passing null clears any inherited description.
+function loadExample(decl, note = null) {
+    pendingNote = note;
     editor.setText(decl);
     editor.focus();
     const at = exampleRing.cursor;
@@ -577,13 +668,62 @@ function loadExample(decl) {
 
 mountExamples($('examples-menu'), (item) => {
     exampleRing.cursor = exampleRing.decls.indexOf(item.decl);  // sync the ring
-    loadExample(item.decl);
+    loadExample(item.decl, item.note);
 });
 
 api.examples().then((data) => {
-    exampleRing.decls = (data.categories || [])
-        .flatMap((c) => (c.items || []).map((i) => i.decl));
+    const cats = data.categories || [];
+    exampleRing.decls = cats.flatMap((c) => (c.items || []).map((i) => i.decl));
+    // Hero gallery: a random handful from group A (the curated "Showcase"
+    // set, which grows over time -- never assume a fixed count). One of them
+    // auto-builds so the page lands fully populated, zero clicks.
+    const groupA = (cats.find((c) => c.letter === 'A') || {}).items || [];
+    mountHeroes(pickRandom(groupA, 4));
 }).catch(() => { /* dropdown still works; Alt-nav just stays empty */ });
+
+// ----------------------------------------------------------------------
+// Hero gallery (group A) -- clickable showcase cards above the editor
+// ----------------------------------------------------------------------
+function mountHeroes(items) {
+    const row = $('hero-row');
+    if (!row) return;
+    empty(row);
+    if (!items.length) { row.classList.add('d-none'); return; }
+    row.classList.remove('d-none');
+    items.forEach((item, i) => {
+        const card = el('button', {
+            className: 'hero-card', type: 'button', title: item.note || '',
+            onClick: () => { loadExample(item.decl, item.note); build(); },
+        },
+            el('span', { className: 'hero-thumb', style: `background:${gradientFor(item.name)}` }),
+            el('span', { className: 'hero-name' }, item.name));
+        row.appendChild(card);
+        // Auto-build the first card so the visitor lands on a populated page.
+        if (i === 0) { loadExample(item.decl, item.note); build(); }
+    });
+}
+
+// A deterministic placeholder thumbnail: a gradient seeded by the name hash.
+// (Final per-example art / sparklines are a later decision; this needs no
+// network and stays stable per example.)
+function gradientFor(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    const a = h % 360;
+    const b = (a + 40 + (h >> 8) % 80) % 360;
+    return `linear-gradient(135deg, hsl(${a} 70% 62%), hsl(${b} 65% 45%))`;
+}
+
+// Fisher-Yates partial shuffle -> first n. Math.random is fine here (purely
+// cosmetic which-heroes-show choice; not reproducibility-sensitive).
+function pickRandom(arr, n) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a.slice(0, n);
+}
 
 function exampleStep(dir) {
     const n = exampleRing.decls.length;

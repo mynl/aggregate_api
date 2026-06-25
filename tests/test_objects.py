@@ -114,6 +114,29 @@ def test_summary_endpoint(client):
     assert len(body["rows"]) == 3
 
 
+def test_tail_df_endpoint(client):
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/tail_df")
+    assert r.status_code == 200
+    body = r.json()
+    # tail_df is a method on Aggregate; the route must call it. Index =
+    # return period T; the VaR / TVaR / xsVaR / VaR/Mean columns survive.
+    assert "T" in body["columns"]
+    for col in ("p", "VaR", "TVaR", "xsVaR", "VaR/Mean"):
+        assert col in body["columns"]
+    assert len(body["rows"]) > 0
+
+
+def test_validation_df_endpoint(client):
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/validation_df")
+    assert r.status_code == 200
+    body = r.json()
+    # validation_df is the old moment-vs-estimate QA table (Freq/Sev/Agg).
+    assert "columns" in body and "rows" in body
+    assert len(body["rows"]) == 3
+
+
 def test_stats_df_endpoint(client):
     oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
     r = client.get(f"/v1/objects/{oid}/stats_df")

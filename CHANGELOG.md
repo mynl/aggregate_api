@@ -4,6 +4,34 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a13
+
+From `dev/plan-user-facing.md` — rework the SPA landing from an internal tool
+into an immediate demo, riding the upstream `aggregate` 1.0.0a113 risk frames.
+
+- **New risk-view endpoints.** `GET /v1/objects/{id}/tail_df` (return-period /
+  exceedance table — `p · VaR · TVaR · xsVaR · VaR/Mean`) and
+  `GET /v1/objects/{id}/validation_df` (the moment-vs-estimate QA table). Both
+  are CSV-downloadable via `/frame/{which}.csv`. A `_resolve_frame` helper calls
+  `tail_df` when it is a method (Aggregate / Portfolio) and reads it when it is a
+  property (BivariateAggregate), so one route covers both.
+- **`/summary` now serves the user risk view.** Upstream repurposed `summary_df`
+  in place (moments + percentiles, Freq/Sev/Agg), so the existing route changed
+  meaning; the old moment-validation payload moved to the new `validation_df`
+  route. Docstrings updated; no path change.
+- **SPA: "Description to distribution" landing.** Brand title + one-line subhead;
+  a hero gallery of four random group-A showcase examples (the set grows — the
+  count is not assumed), one of which auto-builds on load so the page lands fully
+  populated with zero clicks. Examples load in the new multiline/spread DecL
+  layout (now `format_program`'s default).
+- **SPA: Overview tab (new default).** Replaces Info as the landing tab: the
+  example's `note` as a lead, an interactive density / exceedance chart (uPlot,
+  fed from `density_df` with 1-in-100/200/250 markers off `tail_df`), then the
+  `summary_df` and `tail_df` exhibits (the 1-in-200 / 1-in-250 capital rows lit,
+  `Agg` / `total` emphasized). Degrades gracefully when an object lacks a frame.
+  Info / Summary / Validation / Stats / Density / bs-window move under **More ▾**.
+  The matplotlib SVG export stays on the **Plot** tab.
+
 ## 1.0.0a12
 
 Batch from `dev/plan-misc-03.md` (gather → review → execute).

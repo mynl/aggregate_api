@@ -28,7 +28,7 @@
                 <a href="/" class="d-flex align-items-center text-decoration-none me-auto">
                     <img src="/logo.png" alt="aggregate" style="height:40px;width:auto;">
                     <div class="d-flex flex-column align-items-center px-3">
-                        <div class="brand-title text-dark">DecL playground</div>
+                        <div class="brand-title text-dark">Description to distribution</div>
                         <div class="brand-kicker">AGGREGATE</div>
                     </div>
                 </a>
@@ -55,6 +55,14 @@
          Main
          ============================================================ -->
     <main class="container-fluid px-3 px-md-4 py-3" style="max-width:1280px;">
+
+        <!-- Subhead: the one-line pitch under the header rule -->
+        <p class="subhead">Describe an insurance book and get its full loss
+            distribution, tail risk, and price.</p>
+
+        <!-- Hero row: a few showcase examples (group A), picked at random each
+             load; one auto-builds so the page lands fully populated. -->
+        <div id="hero-row" class="hero-row" aria-label="example gallery"></div>
 
         <!-- Editor box (CM6 mounts into #editor-host) -->
         <div class="editor-wrap">
@@ -133,41 +141,57 @@
         </div>
         <div class="summary-timing" id="summary-timing"></div>
 
-        <!-- Output tabs: Info·Summary·Plot·Price·Reins·More(▾ Stats·Density·…) -->
+        <!-- Output tabs: Overview·Plot·Price·Reins·More(▾ Summary·Validation·Stats·Density·bs·Info) -->
         <ul class="nav nav-pills out-tabs" role="tablist">
-            <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#t-info"  data-tab="info"  type="button">Info</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-summary"  data-tab="summary"  type="button">Summary</button></li>
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#t-overview" data-tab="overview" type="button">Overview</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-plot"  data-tab="plot"  type="button">Plot</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-price" data-tab="price" type="button">Price</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-reins" data-tab="reins" type="button">Reins</button></li>
             <li class="nav-item dropdown">
                 <button class="nav-link dropdown-toggle" data-bs-toggle="dropdown" type="button" aria-expanded="false">More</button>
                 <ul class="dropdown-menu shadow-sm">
-                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-stats"   data-tab="stats"   type="button">Stats</button></li>
-                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-density" data-tab="density" type="button">Density</button></li>
-                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-bswin"   data-tab="bswin"   type="button">bs window</button></li>
+                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-summary"    data-tab="summary"    type="button">Summary</button></li>
+                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-validation" data-tab="validation" type="button">Validation</button></li>
+                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-stats"      data-tab="stats"      type="button">Stats</button></li>
+                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-density"    data-tab="density"    type="button">Density</button></li>
+                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-bswin"      data-tab="bswin"      type="button">bs window</button></li>
                     <li><hr class="dropdown-divider"></li>
-                    <li><span class="dropdown-item-text text-muted small">reserved for future</span></li>
+                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-info"       data-tab="info"       type="button">Info (raw)</button></li>
                 </ul>
             </li>
         </ul>
 
         <div class="tab-content">
-            <!-- Info -->
-            <div class="tab-pane fade show active" id="t-info">
+            <!-- Overview — the landing tab: note + interactive plot + summary_df + tail_df -->
+            <div class="tab-pane fade show active" id="t-overview">
+                <div id="pane-overview" class="pane"></div>
+            </div>
+
+            <!-- Info (raw, under More) -->
+            <div class="tab-pane fade" id="t-info">
                 <div class="tab-tools">
                     <button class="btn btn-outline-secondary" data-copy="pane-info"><i class="bi bi-clipboard"></i> copy</button>
                 </div>
                 <div id="pane-info" class="pane"></div>
             </div>
 
-            <!-- Summary -->
+            <!-- Summary (under More) — summary_df risk view as a plain grid -->
             <div class="tab-pane fade" id="t-summary">
                 <div class="tab-tools">
                     <button class="btn btn-outline-secondary" data-copy="pane-summary"><i class="bi bi-clipboard"></i> copy</button>
                     <button class="btn btn-outline-secondary" data-csv="summary"><i class="bi bi-download"></i> csv</button>
                 </div>
                 <div id="pane-summary" class="pane"></div>
+            </div>
+
+            <!-- Validation (under More) — moment-vs-estimate QA table -->
+            <div class="tab-pane fade" id="t-validation">
+                <div class="tab-tools">
+                    <button class="btn btn-outline-secondary" data-copy="pane-validation"><i class="bi bi-clipboard"></i> copy</button>
+                    <button class="btn btn-outline-secondary" data-csv="validation_df"><i class="bi bi-download"></i> csv</button>
+                    <span class="text-muted ms-1" style="font-size:.7rem;">theoretical vs empirical moments — reads “not unreasonable” on a clean build</span>
+                </div>
+                <div id="pane-validation" class="pane"></div>
             </div>
 
             <!-- Plot -->

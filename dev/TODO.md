@@ -97,5 +97,11 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
       items remain.)*
 - [x] Flesh out the **Price** and **More** output tabs. *(a4: Price = pentagon
       + distortion analysis; More = Stats / Density / bs-window.)*
+- [x] **plan-user-facing — landing "wow factor"** (→ 1.0.0a13). "Description to
+      distribution" header + subhead, random group-A hero gallery with load-time
+      auto-build, the Overview tab (note + interactive uPlot density/exceedance +
+      `summary_df` / `tail_df` exhibits), old tabs under More; new `/tail_df` +
+      `/validation_df` api routes off the upstream `aggregate` 1.0.0a113 frames.
+      *(done; moved to `dev/done/`)*
 - [ ] Revisit a dedicated **severity-stats** view (the "sev stats" sub-button
       was dropped — no clean upstream accessor).

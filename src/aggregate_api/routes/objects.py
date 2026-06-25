@@ -10,7 +10,9 @@ The /v1/objects/* family covers everything object-shaped:
 * ``GET    /v1/objects/{id}``    -- per-object manifest.
 * ``DELETE /v1/objects/{id}``    -- evict from cache.
 * ``GET    /v1/objects/{id}/info``        -- text summary.
-* ``GET    /v1/objects/{id}/summary``     -- summary_df moment DataFrame.
+* ``GET    /v1/objects/{id}/summary``     -- summary_df risk view (moments + percentiles).
+* ``GET    /v1/objects/{id}/tail_df``     -- return-period / exceedance table.
+* ``GET    /v1/objects/{id}/validation_df`` -- moment-vs-estimate QA table.
 * ``GET    /v1/objects/{id}/stats_df``    -- stats_df DataFrame.
 * ``GET    /v1/objects/{id}/density_df``  -- paginated density frame.
 * ``GET    /v1/objects/{id}/kappa``       -- Portfolio exeqa_* slice.
@@ -258,6 +260,33 @@ def _drop_raw_moments(df):
     """
     stat = df.index.get_level_values(-1)
     return df[~stat.isin(_RAW_MOMENTS)]
+
+
+def _resolve_frame(obj: Any, name: str):
+    """Return the named frame, calling it when it is a method.
+
+    The risk frames are exposed inconsistently upstream: ``summary_df`` /
+    ``validation_df`` are properties, but ``tail_df`` is a *method* on
+    ``Aggregate`` / ``Portfolio`` (``tail_df(periods=None)``) and a property
+    on ``BivariateAggregate``. Resolve both: a missing or ``None`` attribute
+    yields ``None`` (the route answers 400); a callable is invoked with its
+    defaults; anything else is returned as-is.
+
+    Parameters
+    ----------
+    obj : Any
+        The built object (Aggregate / Portfolio / BivariateAggregate / ...).
+    name : str
+        Attribute name to resolve to a DataFrame.
+
+    Returns
+    -------
+    pandas.DataFrame or None
+    """
+    attr = getattr(obj, name, None)
+    if attr is None:
+        return None
+    return attr() if callable(attr) else attr
 
 
 # ----------------------------------------------------------------------
@@ -570,9 +599,16 @@ def get_info(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
 
 @router.get("/objects/{oid}/summary", response_model=models.FrameResponse)
 def get_summary(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
-    """Theoretical-vs-empirical moment table (the library's ``summary_df``)."""
+    """At-a-glance risk view -- moments + key percentiles (``summary_df``).
+
+    Since ``aggregate`` 1.0.0a113 ``summary_df`` is the user-facing risk
+    frame (Freq / Sev / Agg rows; ``E[X] | SD | CV | Skew | p0.01 | p0.50 |
+    p0.99``), not the old moment-validation table -- that moved to
+    :func:`get_validation_df` (``validation_df``). ``CV`` and the Freq-row
+    percentiles are blank (NaN -> JSON ``null``) by design.
+    """
     entry = _resolve_object(oid, cache)
-    df = getattr(entry.obj, "summary_df", None)
+    df = _resolve_frame(entry.obj, "summary_df")
     if df is None:
         raise HTTPException(
             status_code=400,
@@ -583,6 +619,55 @@ def get_summary(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
     # possible (reset_index_safe handles index/column collisions).
     df = reset_index_safe(df)
     return frame_to_payload(df)
+
+
+# ----------------------------------------------------------------------
+# GET /v1/objects/{id}/tail_df
+# ----------------------------------------------------------------------
+
+@router.get("/objects/{oid}/tail_df", response_model=models.FrameResponse)
+def get_tail_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+    """Return-period / exceedance table (``tail_df``).
+
+    The centerpiece risk view: index = return period ``T`` (the default
+    ladder includes the 1-in-200 / 1-in-250 capital anchors); columns
+    ``p | VaR | TVaR | xsVaR | VaR/Mean``. On ``Aggregate`` / ``Portfolio``
+    ``tail_df`` is a *method* (``tail_df(periods=None)``); on
+    ``BivariateAggregate`` it is a property -- :func:`_resolve_frame` calls
+    or reads it accordingly, so both forms answer here. ``None`` before a
+    grid exists (no realised density) -> 400.
+    """
+    entry = _resolve_object(oid, cache)
+    df = _resolve_frame(entry.obj, "tail_df")
+    if df is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"tail_df not available for {entry.kind!r}",
+        )
+    return frame_to_payload(reset_index_safe(df))
+
+
+# ----------------------------------------------------------------------
+# GET /v1/objects/{id}/validation_df
+# ----------------------------------------------------------------------
+
+@router.get("/objects/{oid}/validation_df", response_model=models.FrameResponse)
+def get_validation_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+    """Moment-vs-estimate QA table (``validation_df``).
+
+    The old ``summary_df`` payload, renamed upstream: theoretical vs
+    empirical moments with the per-moment error, reading "not unreasonable"
+    on a clean build. Demoted under the SPA's **More** menu now that
+    ``summary_df`` is the headline risk view.
+    """
+    entry = _resolve_object(oid, cache)
+    df = _resolve_frame(entry.obj, "validation_df")
+    if df is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"validation_df not available for {entry.kind!r}",
+        )
+    return frame_to_payload(reset_index_safe(df))
 
 
 # ----------------------------------------------------------------------
@@ -813,6 +898,8 @@ def get_reins_density_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> 
 # frame as CSV for "save the real data" workflows.
 _CSV_FRAMES = {
     "summary": "summary_df",
+    "tail_df": "tail_df",
+    "validation_df": "validation_df",
     "stats_df": "stats_df",
     "density_df": "density_df",
     "bs_window_df": "_bs_window_df",
@@ -834,7 +921,8 @@ def get_frame_csv(
             detail=f"unknown frame {which!r}; expected one of {sorted(_CSV_FRAMES)}",
         )
     entry = _resolve_object(oid, cache)
-    df = _frame_attr(entry.obj, attr)
+    # ``tail_df`` is a method on agg / port; ``_resolve_frame`` calls it.
+    df = _resolve_frame(entry.obj, attr)
     if df is None:
         raise HTTPException(
             status_code=400, detail=f"{which} not available for {entry.kind!r}"
