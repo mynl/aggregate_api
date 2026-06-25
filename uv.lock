@@ -12,7 +12,7 @@ resolution-markers = [
 
 [[package]]
 name = "aggregate"
-version = "1.0.0a87"
+version = "1.0.0a109"
 source = { editable = "../aggregate_REFACTOR" }
 dependencies = [
     { name = "ipython" },
@@ -48,8 +48,6 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.11" },
     { name = "sphinx", marker = "extra == 'dev'", specifier = ">=8.1,<9" },
     { name = "sphinx-copybutton", marker = "extra == 'dev'", specifier = ">=0.5" },
-    { name = "sphinx-design", marker = "extra == 'dev'" },
-    { name = "sphinx-design", marker = "extra == 'dev'", specifier = ">=0.6" },
     { name = "sphinx-multitoc-numbering", marker = "extra == 'dev'" },
     { name = "sphinx-rtd-theme", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "sphinx-toggleprompt", marker = "extra == 'dev'", specifier = ">=0.6" },

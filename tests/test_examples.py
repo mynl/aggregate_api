@@ -9,18 +9,19 @@ def test_examples_grouped_by_category(client):
     body = r.json()
     cats = body["categories"]
     letters = {c["letter"] for c in cats}
-    # At least the canonical A-O categories from the Contents block
-    # should be present (or close to it).
+    # At least the canonical A-Z categories from the Contents block
+    # should be present (or close to it). A is the showcase heroes.
     assert "A" in letters
     assert "B" in letters
 
 
 def test_examples_contain_dice(client):
-    """The A.ThreeDice example from examples.agg should appear in section A."""
+    """The B.ThreeDice example from examples.agg should appear in section B
+    (section A is now the showcase heroes)."""
     r = client.get("/v1/examples")
     cats = {c["letter"]: c for c in r.json()["categories"]}
-    a = cats["A"]
-    names = {item["name"] for item in a["items"]}
+    b = cats["B"]
+    names = {item["name"] for item in b["items"]}
     assert any("Dice" in n for n in names)
 
 
@@ -48,16 +49,16 @@ def test_multiline_and_keyword_examples_captured(client):
     r = client.get("/v1/examples")
     items = {i["name"]: i for c in r.json()["categories"] for i in c["items"]}
     # Multi-line portfolio folds whole: header + both component aggs.
-    book = items["F.Book"]
-    assert book["decl"].startswith("port F.Book agg ")
+    book = items["G.Book"]
+    assert book["decl"].startswith("port G.Book agg ")
     assert book["decl"].count("agg ") == 2
     assert ";" not in book["decl"]
     assert book["note"] and "note{" not in book["decl"]
     # bivariate keyword recognized.
-    assert "H.Copula" in items
-    assert items["H.Copula"]["decl"].startswith("bivariate H.Copula ")
+    assert "I.Copula" in items
+    assert items["I.Copula"]["decl"].startswith("bivariate I.Copula ")
     # ``;``-terminated single-line program: no stray terminator, note kept.
-    dice = items["A.ThreeDice"]
+    dice = items["B.ThreeDice"]
     assert ";" not in dice["decl"]
     assert "note{" not in dice["decl"]
     assert dice["note"]

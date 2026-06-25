@@ -2,7 +2,7 @@
 
 The curated example library doubles as the SPA's dropdown menu source.
 Each non-comment, non-blank line is a runnable DecL program. Names follow
-the convention ``<Letter>.<Name>`` (e.g. ``A.Basic``, ``C.MixedGamma``);
+the convention ``<Letter>.<Name>`` (e.g. ``B.Basic``, ``D.MixedGamma``);
 the letter prefix identifies the category.
 
 Programs may span several physical lines (the portfolios are written
@@ -48,7 +48,7 @@ from aggregate.parser import UnderwritingLexer
 
 # Lines like ``# A. Creating Aggregates, Portfolios, and Distortion objects``
 # from the Contents block. Capture letter + title.
-_CONTENTS_LINE = re.compile(r"^#\s+([A-O])\.\s+(.+)$")
+_CONTENTS_LINE = re.compile(r"^#\s+([A-Z])\.\s+(.+)$")
 
 # An item line. Must start with a DecL top-level keyword so we don't
 # mistake a comment-stripped section header for a program. Covers the
@@ -61,12 +61,16 @@ _CONTENTS_LINE = re.compile(r"^#\s+([A-O])\.\s+(.+)$")
 _ITEM_LINE = re.compile(
     r"^(agg|sev|port|dist|pnl|bivariate|bv|clash"
     r"|(?:netceded|grossceded|grossnet)\s+agg)"
-    r"\s+([A-O])\.([A-Za-z0-9_.\-]+)\s+(.*)$"
+    r"\s+([A-Z])\.([A-Za-z0-9_.\-]+)\s+(.*)$"
 )
 
-# ``note{...}`` trailing annotation. Allowed to span the rest of the
-# line. Captured greedily up to the closing brace.
-_NOTE = re.compile(r"\s*note\{([^}]*)\}\s*$")
+# ``note{...}`` annotation -- the dropdown description. It can sit ANYWHERE
+# in the folded statement, not just at the end: a ``port`` carries its note on
+# the header clause (a trailing note would attach to the last ``agg``, not the
+# portfolio). A note never contains ``}``, so ``[^}]*`` is an unambiguous match
+# regardless of position. The surrounding ``\s*`` lets us collapse the gap left
+# behind to a single space when we strip it from the decl.
+_NOTE = re.compile(r"\s*note\{([^}]*)\}\s*")
 
 
 def _load_contents(text: str) -> dict[str, str]:
@@ -92,10 +96,11 @@ def _load_items(statements: list[str]) -> dict[str, list[dict]]:
 
     Takes the logical statements produced by
     ``UnderwritingLexer.preprocess`` -- already comment-free, folded onto
-    one line, and ``;``-terminator-free -- so trailing ``note{...}`` is
-    again at end-of-line where :data:`_NOTE` can find it. Each item
-    carries the original DecL minus the trailing ``note{...}`` so the
-    client can re-evaluate it directly via ``POST /v1/objects``.
+    one line, and ``;``-terminator-free. The ``note{...}`` may sit anywhere
+    in the folded statement (e.g. on a ``port`` header), so :data:`_NOTE`
+    matches by position, not anchored to the end. Each item carries the DecL
+    minus the ``note{...}`` so the client can re-evaluate it directly via
+    ``POST /v1/objects``.
     """
     grouped: dict[str, list[dict]] = {}
     for line in statements:
@@ -107,11 +112,13 @@ def _load_items(statements: list[str]) -> dict[str, list[dict]]:
             # dropdown.
             continue
         kind, letter, _suffix, _body = m.groups()
-        # Split off trailing note{...} for the dedicated `note` field.
+        # Split off note{...} (wherever it sits) for the dedicated `note`
+        # field; replace with a space so a mid-statement note doesn't fuse
+        # the clauses on either side, then strip.
         note_match = _NOTE.search(line)
         if note_match:
             note = note_match.group(1).strip()
-            decl = _NOTE.sub("", line).rstrip()
+            decl = _NOTE.sub(" ", line, count=1).strip()
         else:
             note = None
             decl = line
