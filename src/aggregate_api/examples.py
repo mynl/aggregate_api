@@ -52,14 +52,14 @@ _CONTENTS_LINE = re.compile(r"^#\s+([A-Z])\.\s+(.+)$")
 
 # An item line. Must start with a DecL top-level keyword so we don't
 # mistake a comment-stripped section header for a program. Covers the
-# object-producing kinds: agg, sev, port, dist, pnl, the bivariate
-# family (bivariate / bv) and clash, plus the view-pair prefixes
+# object-producing kinds: agg, sev, port, dist, the P&L engine (pnl / xpnl),
+# the bivariate family (bivariate / bv) and clash, plus the view-pair prefixes
 # netceded / grossceded / grossnet -- which each carry an extra ``agg``
 # token before the name (``netceded agg X.Name ...``), so that form is
 # matched explicitly. The leading keyword itself is captured but unused;
 # the name's ``<Letter>.<Suffix>`` is what drives grouping.
 _ITEM_LINE = re.compile(
-    r"^(agg|sev|port|dist|pnl|bivariate|bv|clash"
+    r"^(agg|sev|port|dist|pnl|xpnl|bivariate|bv|clash"
     r"|(?:netceded|grossceded|grossnet)\s+agg)"
     r"\s+([A-Z])\.([A-Za-z0-9_.\-]+)\s+(.*)$"
 )

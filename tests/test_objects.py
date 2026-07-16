@@ -459,6 +459,48 @@ def test_bivariate_builds_and_reports(client):
 
 
 # ----------------------------------------------------------------------
+# PnL (the pnl / xpnl P&L engine -> kind='pnl')
+# ----------------------------------------------------------------------
+
+_PNL = (
+    "pnl P.PnL 1000 prem less "
+    "agg P.Loss 1000 prem at 70% lr sev lognorm 100 cv 2 poisson"
+)
+
+
+def test_pnl_builds_and_reports(client):
+    """A PnL builds as kind='pnl' with the common surface + a headline mean.
+
+    The build route rejected ``pnl`` before this landed (``_classify_object``
+    had no ``PnL`` case), so this pins the new kind. A PnL exposes info /
+    summary / stats / validation / density / plot; the density synthesis path
+    is exercised because its ``density_df`` is a dict of grids, not a frame.
+    """
+    r = client.post("/v1/objects", json={"decl": _PNL})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "pnl"
+    # The summary-line mean/cv fall back to PnL's mean/cv (no agg_m).
+    assert body["mean"] is not None
+    oid = body["id"]
+    # Common reporting surface works (density exercises the dict->frame path).
+    for which in ("info", "summary", "stats_df", "validation_df", "density_df"):
+        assert client.get(f"/v1/objects/{oid}/{which}").status_code == 200, which
+    assert client.get(f"/v1/objects/{oid}/plot").status_code == 200
+    # density CSV export goes through the grand-result synthesis, not a 500.
+    csv = client.get(f"/v1/objects/{oid}/frame/density_df.csv")
+    assert csv.status_code == 200
+    assert "loss" in csv.text.splitlines()[0]
+    # No tail / pricing / reinsurance / bs-window -> clean 400 (not 500).
+    assert client.get(f"/v1/objects/{oid}/tail_df").status_code == 400
+    assert client.post(
+        f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.15}
+    ).status_code == 400
+    assert client.get(f"/v1/objects/{oid}/reins_summary_df").status_code == 400
+    assert client.get(f"/v1/objects/{oid}/bs_window_df").status_code == 400
+
+
+# ----------------------------------------------------------------------
 # Multi-line input (whitespace collapse)
 # ----------------------------------------------------------------------
 

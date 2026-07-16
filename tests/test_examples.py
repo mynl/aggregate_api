@@ -2,6 +2,24 @@
 
 from __future__ import annotations
 
+from aggregate_api.examples import _ITEM_LINE, _load_items
+
+
+def test_xpnl_item_recognized():
+    """The item regex recognizes the ``xpnl`` P&L keyword.
+
+    ``xpnl`` is a valid top-level DecL statement (the multi-group P&L walk); it
+    isn't in the bundled ``examples.agg`` yet, so this guards the loader
+    directly. The ``^``-anchored ``pnl`` alternative must not shadow it.
+    """
+    line = (
+        "xpnl H.Walk 1000 prem less "
+        "agg H.L 1000 prem at 70% lr sev lognorm 100 cv 2 poisson"
+    )
+    assert _ITEM_LINE.match(line)
+    grouped = _load_items([line])
+    assert any(i["name"] == "H.Walk" for i in grouped.get("H", []))
+
 
 def test_examples_grouped_by_category(client):
     r = client.get("/v1/examples")

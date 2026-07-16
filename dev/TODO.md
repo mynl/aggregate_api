@@ -103,5 +103,12 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
       `summary_df` / `tail_df` exhibits), old tabs under More; new `/tail_df` +
       `/validation_df` api routes off the upstream `aggregate` 1.0.0a113 frames.
       *(done; moved to `dev/done/`)*
+- [x] **plan-pnl-kind — first-class `pnl` kind** (→ 1.0.0a14). Picked up the
+      `aggregate` a114→a145 surface (a full two-sided audit; almost all internal /
+      generic). `build()` now returns a `PnL` for `pnl`/`xpnl`; classify → `"pnl"`,
+      guard + `BuildResponse.kind` Literal widened, density synthesized from the
+      grand-result grid (dict `density_df`), mean/cv + `construction_explanation`
+      fallbacks, `_ITEM_LINE` gains `xpnl`, SPA label/timing/gating + rebuild.
+      *(done; in `dev/done/`)*
 - [ ] Revisit a dedicated **severity-stats** view (the "sev stats" sub-button
       was dropped — no clean upstream accessor).

@@ -254,14 +254,56 @@ def bin_density(
     return pd.DataFrame(out, columns=cols)
 
 
+def pnl_density_frame(obj: Any) -> pd.DataFrame:
+    """Synthesize a ``loss / p_total / F / S`` density frame from a PnL result.
+
+    A :class:`PnL` object's ``density_df`` is an ``OrderedDict`` of per-leg
+    ``GridDistribution``s, not a single DataFrame, so it can't flow through the
+    generic density path. Its ``result`` attribute is the grand-result
+    ``GridDistribution`` (the consolidated P&L outcome), carrying the outcome
+    grid ``x`` and its probability masses ``p``. We surface it in the same
+    ``loss / p_total / F / S`` shape the SPA density plot expects for an
+    aggregate, so the Overview and Density views render unchanged.
+
+    Parameters
+    ----------
+    obj : Any
+        A built ``PnL`` object exposing ``result.x`` / ``result.p``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns ``loss`` (outcome), ``p_total`` (mass), ``F`` (cdf), ``S``
+        (survival), one row per grid node, ascending in ``loss``.
+
+    Notes
+    -----
+    The P&L outcome axis is *signed* -- losses are negative -- unlike an
+    aggregate's non-negative loss grid. The downstream reduction
+    (:func:`bin_density`) is positional and samples the real ``loss`` value at
+    each node, so it makes no non-negativity assumption and bins the signed grid
+    faithfully.
+    """
+    gd = obj.result
+    x = np.asarray(gd.x, dtype=float)
+    p = np.asarray(gd.p, dtype=float)
+    cdf = np.cumsum(p)
+    return pd.DataFrame({"loss": x, "p_total": p, "F": cdf, "S": 1.0 - cdf})
+
+
 def info_to_payload(obj: Any) -> dict:
     """Return ``{"info": "..."}``.
 
     :attr:`Aggregate.info` and :attr:`Portfolio.info` are
     multi-line strings (formatted summaries). We expose them
     verbatim; clients display in a monospaced block.
+
+    A ``PnL`` object has no ``info`` string; it carries the equivalent narrative
+    on ``construction_explanation``. We fall back to that so the Info tab isn't
+    blank for a P&L build. Both accesses are getattr-gated, so an object kind
+    with neither simply reports an empty string.
     """
-    info = getattr(obj, "info", "")
+    info = getattr(obj, "info", "") or getattr(obj, "construction_explanation", "")
     if not isinstance(info, str):
         # Fallback for objects that override .info as something
         # else -- str() coerces to a usable rendering.

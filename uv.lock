@@ -12,7 +12,7 @@ resolution-markers = [
 
 [[package]]
 name = "aggregate"
-version = "1.0.0a113"
+version = "1.0.0a145"
 source = { editable = "../aggregate_REFACTOR" }
 dependencies = [
     { name = "ipython" },
@@ -27,7 +27,10 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "attrs", marker = "extra == 'notebook'" },
+    { name = "bokeh", marker = "extra == 'viz'" },
+    { name = "datashader", marker = "extra == 'viz'" },
     { name = "docutils", marker = "extra == 'dev'", specifier = ">=0.20,<0.22" },
+    { name = "holoviews", marker = "extra == 'viz'" },
     { name = "ipython" },
     { name = "ipython-autotime", marker = "extra == 'notebook'" },
     { name = "ipywidgets", marker = "extra == 'notebook'" },
@@ -38,12 +41,14 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.5" },
     { name = "myst-parser", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "nbsphinx", marker = "extra == 'dev'", specifier = ">=0.9.4" },
+    { name = "numba", marker = "extra == 'numba'" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=2.1" },
     { name = "pickleshare", marker = "extra == 'dev'" },
     { name = "pyarrow", marker = "extra == 'dev'", specifier = ">=15" },
     { name = "pygments" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7" },
+    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
     { name = "scipy", specifier = ">=1.11" },
     { name = "sphinx", marker = "extra == 'dev'", specifier = ">=8.1,<9" },
@@ -52,12 +57,13 @@ requires-dist = [
     { name = "sphinx-rtd-theme", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "sphinx-toggleprompt", marker = "extra == 'dev'", specifier = ">=0.6" },
     { name = "sphinxcontrib-bibtex", marker = "extra == 'dev'" },
+    { name = "zarr", marker = "extra == 'massive'", specifier = ">=3" },
 ]
-provides-extras = ["dev", "notebook"]
+provides-extras = ["dev", "notebook", "numba", "massive", "viz"]
 
 [[package]]
 name = "aggregate-api"
-version = "1.0.0a13"
+version = "1.0.0a14"
 source = { editable = "." }
 dependencies = [
     { name = "aggregate" },

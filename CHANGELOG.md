@@ -4,6 +4,48 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a14
+
+From `dev/plan-pnl-kind.md` — pick up the `aggregate` a114→a145 surface (the
+library advanced ~30 releases since a13 rode a113). An audit of both sides found
+almost all of it internal or serialized generically; the one thing that reached
+our surface was the **P&L engine**, which now builds a real object.
+
+- **New `pnl` object kind (breaking-ish surface addition).** `aggregate.build`
+  returns an `aggregate._pnl.PnL` for a `pnl` / `xpnl` DecL program (`xpnl` is
+  the same class built with a multi-group walk). `_classify_object` had no `PnL`
+  case, so it fell through to an unaccepted `"pnl"` kind and **every `pnl` /
+  `xpnl` build 422'd** — and the bundled `examples.agg` now ships a `pnl H.PnL …`
+  example that surfaced in the dropdown and failed on click. `PnL` now maps to a
+  new `kind="pnl"`; `BuildResponse.kind`'s `Literal` and the accepted-kind guard
+  gain `"pnl"`. **Clients that switch on `kind` will now see `"pnl"`.**
+- **PnL density synthesis.** A `PnL`'s `density_df` is an `OrderedDict` of per-leg
+  grid distributions, not a DataFrame, so the generic density path would 500. The
+  density route (and its CSV export) now synthesize the grand-result density
+  (`obj.result`) into the standard `loss / p_total / F / S` frame
+  (`serializers.pnl_density_frame`) and bin it to the 2¹¹ display grid like an
+  aggregate. The P&L outcome axis is signed (losses negative); the existing
+  positional `bin_density` handles it, and `p_total` stays faithful (sums to ~1).
+- **PnL reporting surface.** Info / Summary / Validation / Stats / Density / Plot
+  work (the Overview tab too — the absent `tail_df` is skipped gracefully); the
+  build summary line's mean/CV fall back to `PnL.mean` / `PnL.cv` (no `agg_m`),
+  and the Info tab falls back to `construction_explanation` (no `info` string).
+  Price / Reins / bs-window are inapplicable and return a clean 400 (the SPA
+  greys those tabs out — `NA_TABS_BY_KIND.pnl`, mirroring `bivariate`).
+- **SPA:** the summary line and timing word read **P&L** for a `pnl`; kind gating
+  added. *(Rebuild the bundle — `scripts/build-web.ps1` — to ship the frontend.)*
+- **Examples loader recognizes `xpnl`.** The `_ITEM_LINE` keyword set gains
+  `xpnl` (latent — no `xpnl` item in the bundled file yet, but it's a valid
+  top-level statement keyword).
+- **No change needed** for the rest of the a114→a145 drift (verified
+  non-breaking): the `summary_df` a142 column renames (`E[X]`→`Mean`,
+  `p0.99`→`P99`, values now computed) are cosmetic to us — the Overview
+  emphasizes by row index (`Agg`/`total`/`T`), not header names; the
+  `VariableRatingAnalysis` / `ReinstatementAnalysis` removal (a144) was never on
+  our surface; the a145 bs-window rework leaves the public `bs_window_df` columns
+  unchanged; the labels namespace and reins premium scaling change values, not
+  the serialized frame shapes.
+
 ## 1.0.0a13
 
 From `dev/plan-user-facing.md` — rework the SPA landing from an internal tool

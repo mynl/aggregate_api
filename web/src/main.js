@@ -197,6 +197,7 @@ function renderSummary(res) {
     const kindLabel = res.kind === 'port' ? 'Portfolio'
         : res.kind === 'distortion' ? 'Distortion'
         : res.kind === 'bivariate' ? 'Bivariate'
+        : res.kind === 'pnl' ? 'P&L'
         : 'Aggregate';
     const bits = [
         el('span', { className: 'nm' }, res.name || '(anonymous)'),
@@ -223,6 +224,7 @@ function renderTiming(res) {
     const word = res.kind === 'port' ? 'portfolio'
         : res.kind === 'distortion' ? 'distortion'
         : res.kind === 'bivariate' ? 'bivariate'
+        : res.kind === 'pnl' ? 'P&L'
         : 'aggregate';
     node.textContent = res.cached
         ? `Loaded ${word} from cache`
@@ -290,15 +292,16 @@ function showTab(name) {
     if (btn) bootstrap.Tab.getOrCreateInstance(btn).show();
 }
 
-// Tabs that need a loss distribution. A standalone Distortion or a
-// BivariateAggregate exposes info / summary / stats / density / plot but
-// has no pricing, reinsurance, or bs window. Per the playground house rule we
-// NEVER hide menu items — the menu set stays stable — we grey them out
+// Tabs that need a loss distribution. A standalone Distortion, a
+// BivariateAggregate, or a PnL exposes info / summary / stats / density / plot
+// but has no pricing, reinsurance, or bs window. Per the playground house rule
+// we NEVER hide menu items — the menu set stays stable — we grey them out
 // (disabled) so the user can see what's not applicable. agg / port disable
 // nothing.
 const NA_TABS_BY_KIND = {
     distortion: ['price', 'reins', 'bswin'],
     bivariate: ['price', 'reins', 'bswin'],
+    pnl: ['price', 'reins', 'bswin'],
 };
 const GATED_TABS = ['price', 'reins', 'bswin'];
 

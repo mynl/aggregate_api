@@ -79,9 +79,11 @@ from ..config import Settings, get_settings
 from ..plotting import render_plot
 from ..pricing import run_price_pentagon, run_pricing
 from ..serializers import (
+    DENSITY_DISPLAY_LOG2,
     bin_density,
     frame_to_payload,
     info_to_payload,
+    pnl_density_frame,
     reset_index_safe,
 )
 
@@ -208,16 +210,24 @@ def _summary_fields(obj: Any) -> dict:
     """Headline ``mean`` / ``cv`` / ``validation`` for the build summary.
 
     Both ``Aggregate`` and ``Portfolio`` expose ``agg_m`` / ``agg_cv``
-    and a validation blurb that reads "not unreasonable" on a clean build.
-    Everything is getattr-gated so a future object kind without these simply
-    reports ``None``.
+    and a validation blurb that reads "not unreasonable" on a clean build. A
+    ``PnL`` has no ``agg_m`` / ``agg_cv`` but carries the same headline on
+    ``mean`` / ``cv``, so those are accepted as fallbacks. Everything is
+    getattr-gated so a future object kind without any of them simply reports
+    ``None``.
     """
-    def _num(name: str) -> float | None:
-        v = getattr(obj, name, None)
-        try:
-            return float(v) if v is not None else None
-        except (TypeError, ValueError):
-            return None
+    def _num(*names: str) -> float | None:
+        # First present, float-coercible attribute wins; skip missing or
+        # non-numeric ones so a PnL's ``mean`` backs up an ``agg_m`` miss.
+        for name in names:
+            v = getattr(obj, name, None)
+            if v is None:
+                continue
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                continue
+        return None
 
     # ``validation_explanation`` is a string property (e.g. "not unreasonable" /
     # "fails sev mean, agg mean"). getattr-gated so an object kind without it
@@ -229,8 +239,8 @@ def _summary_fields(obj: Any) -> dict:
 
     return {
         "bs": _num("bs"),
-        "mean": _num("agg_m"),
-        "cv": _num("agg_cv"),
+        "mean": _num("agg_m", "mean"),
+        "cv": _num("agg_cv", "cv"),
         "validation": validation,
     }
 
@@ -456,13 +466,13 @@ def post_object(
             raise HTTPException(status_code=500, detail=str(exc))
 
     # Classify the result. The api stores
-    # 'agg' | 'port' | 'distortion' | 'bivariate'. Distortions and
-    # BivariateAggregates carry the common reporting surface (info,
+    # 'agg' | 'port' | 'distortion' | 'bivariate' | 'pnl'. Distortions,
+    # BivariateAggregates and PnLs carry the common reporting surface (info,
     # summary, stats_df, density_df, plot) so the playground can explore
     # them -- they just have no pricing / reinsurance / bs-window (those
     # routes return a clean 400). 'sev' and anything else is rejected.
     kind = _classify_object(obj)
-    if kind not in ("agg", "port", "distortion", "bivariate"):
+    if kind not in ("agg", "port", "distortion", "bivariate", "pnl"):
         elapsed = int((time.monotonic() - t0) * 1000)
         audit.record_build(
             ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
@@ -473,8 +483,8 @@ def post_object(
         raise HTTPException(
             status_code=422,
             detail=(
-                "api supports 'agg', 'port', 'distortion' and 'bivariate' "
-                f"only; got {kind!r}"
+                "api supports 'agg', 'port', 'distortion', 'bivariate' and "
+                f"'pnl' only; got {kind!r}"
             ),
         )
 
@@ -505,7 +515,7 @@ def post_object(
 
 
 def _classify_object(obj: Any) -> str:
-    """Return 'agg' | 'port' | 'distortion' | 'bivariate' | <type-name>.
+    """Return 'agg' | 'port' | 'distortion' | 'bivariate' | 'pnl' | <type-name>.
 
     Uses class-name discrimination because Aggregate / Portfolio
     don't carry an explicit .kind attribute on the instances --
@@ -516,7 +526,9 @@ def _classify_object(obj: Any) -> str:
     specific subclass shows up in ``info`` / ``summary``. A
     ``BivariateAggregate`` (``bivariate`` / ``bv`` / ``clash`` and the
     ``netceded`` / ``grossceded`` / ``grossnet`` view-pair keywords) maps
-    to the generic ``'bivariate'``.
+    to the generic ``'bivariate'``. A ``PnL`` (the ``pnl`` / ``xpnl``
+    P&L engine -- ``xpnl`` builds the same class with a multi-group walk)
+    maps to ``'pnl'``; the name check matches both since it has no subclasses.
     """
     cls = type(obj).__name__
     if cls == "Portfolio":
@@ -525,6 +537,8 @@ def _classify_object(obj: Any) -> str:
         return "agg"
     if cls == "BivariateAggregate":
         return "bivariate"
+    if cls == "PnL":
+        return "pnl"
     if isinstance(obj, Distortion):
         return "distortion"
     return cls.lower()
@@ -715,18 +729,37 @@ def get_density_df(
     ``p_total`` stays faithful (sums to ~1) instead of being understated by an
     even-spaced stride. The full-frame CSV download stays exact / unbinned.
 
+    A ``PnL`` has no DataFrame ``density_df`` (it is a dict of per-leg grids);
+    its grand-result density is synthesized (:func:`pnl_density_frame`) into the
+    same ``loss / p_total / F / S`` shape and binned like an aggregate.
+
     Objects without a build grid (a distortion's g-curve, a
     ``BivariateAggregate`` joint matrix) skip binning and honor the legacy
     ``cols`` / ``start`` / ``stop`` / ``downsample`` / ``nonzero`` params.
     """
     entry = _resolve_object(oid, cache)
+    col_list = [c.strip() for c in cols.split(",")] if cols else None
+
+    if entry.kind == "pnl":
+        # A PnL's density_df is a dict of per-leg GridDistributions, not a
+        # DataFrame. Synthesize the grand-result density in the standard
+        # loss / p_total / F / S shape and bin it to the 2**11 display grid the
+        # way an aggregate is binned -- the positional binning tolerates the
+        # signed P&L outcome axis. ``(n - 1).bit_length()`` is ceil(log2(n)),
+        # so a grid already at or under the display size skips binning.
+        df = pnl_density_frame(entry.obj)
+        if col_list:
+            df = df[[c for c in col_list if c in df.columns]]
+        sum_cols = {c for c in df.columns if c.startswith("p")}
+        source_log2 = max(DENSITY_DISPLAY_LOG2, (len(df) - 1).bit_length())
+        return frame_to_payload(bin_density(df, source_log2, sum_cols=sum_cols))
+
     df = getattr(entry.obj, "density_df", None)
     if df is None:
         raise HTTPException(
             status_code=400,
             detail=f"density_df not available for {entry.kind!r}",
         )
-    col_list = [c.strip() for c in cols.split(",")] if cols else None
     # density_df is indexed by loss; surface that as a column for
     # the SPA so it can render the x-axis without a separate query.
     # ``loss`` is already a column on the frame so reset_index_safe
@@ -921,8 +954,15 @@ def get_frame_csv(
             detail=f"unknown frame {which!r}; expected one of {sorted(_CSV_FRAMES)}",
         )
     entry = _resolve_object(oid, cache)
-    # ``tail_df`` is a method on agg / port; ``_resolve_frame`` calls it.
-    df = _resolve_frame(entry.obj, attr)
+    if entry.kind == "pnl" and which == "density_df":
+        # A PnL's density_df is a dict of GridDistributions, not a frame; export
+        # the grand-result density instead (the full, unbinned shape the Density
+        # tab previews). All the PnL's other frames are real DataFrames and flow
+        # through the generic path below.
+        df = pnl_density_frame(entry.obj)
+    else:
+        # ``tail_df`` is a method on agg / port; ``_resolve_frame`` calls it.
+        df = _resolve_frame(entry.obj, attr)
     if df is None:
         raise HTTPException(
             status_code=400, detail=f"{which} not available for {entry.kind!r}"
