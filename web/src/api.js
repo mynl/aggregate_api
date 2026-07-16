@@ -84,6 +84,9 @@ export const api = {
 
     /** Plot URL: handed straight to an <img>. Native multi-panel by default. */
     plotUrl:      (id, p = {})      => `${API_BASE}/v1/objects/${id}/plot?${qs(p)}`,
+
+    /** Download-all-session-models URL. form: 'raw' (as typed) | 'agg' (canonical). */
+    sessionModelsUrl: (form = 'raw') => `${API_BASE}/v1/session/models.agg?form=${form}`,
     // Per-frame CSV download/copy is handled by CsvGrid's own export controls;
     // the /frame/{which}.csv backend endpoints remain for full-frame API access.
 };

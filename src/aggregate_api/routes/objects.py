@@ -62,7 +62,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -566,6 +566,87 @@ def list_objects(cache: ObjectCache = Depends(_get_cache)) -> dict:
                 "ts": entry.created_at.isoformat(timespec="milliseconds"),
             })
     return {"objects": items}
+
+
+# ----------------------------------------------------------------------
+# GET /v1/session/models.agg -- download the session's built programs
+# ----------------------------------------------------------------------
+
+# Dependency order for the canonical ('agg') export, mirroring the library's
+# write order: a sev precedes the agg that uses it, an agg precedes the port
+# that references it, so the emitted file re-loads cleanly.
+_KIND_ORDER = {"sev": 0, "agg": 1, "port": 2, "distortion": 3}
+
+
+@router.get("/session/models.agg")
+def get_session_models(
+    form: Literal["raw", "agg"] = Query(
+        "raw",
+        description=(
+            "'raw' = programs exactly as submitted (from the object cache); "
+            "'agg' = canonical, dependency-ordered DecL from the underwriter's "
+            "session knowledge (re-loadable)."
+        ),
+    ),
+    cache: ObjectCache = Depends(_get_cache),
+) -> Response:
+    """Download every DecL program built this session as one ``.agg`` file.
+
+    Two forms. ``raw`` walks the api object cache and emits each built object's
+    program verbatim -- your formatting, comments and layout preserved. ``agg``
+    reads the shared ``build`` underwriter's knowledge base, keeps the entries it
+    flagged ``source='session'`` (every in-session ``build(...)``), and re-renders
+    each through ``decl_writer.spec_to_decl`` (verbatim fallback) in dependency
+    order, producing a canonical, re-loadable program set.
+
+    Notes
+    -----
+    Scope is **process-global**: both the object cache and the ``build`` singleton
+    are shared across the server process, so on a shared deployment this returns
+    every program built since the last restart, not just one browser's. Fine for a
+    personal / local instance; per-session scoping is future work.
+    """
+    programs: list[str] = []
+    if form == "raw":
+        # Programs as typed -- unique decls in cache (MRU) order.
+        seen: set[str] = set()
+        with cache._lock:  # noqa: SLF001 -- intentional cross-module use
+            for entry in cache._store.values():
+                decl = entry.decl.strip()
+                if decl and decl not in seen:
+                    seen.add(decl)
+                    programs.append(decl)
+    else:  # form == "agg"
+        from aggregate.decl_writer import spec_to_decl
+
+        kn = _build_singleton.knowledge
+        session = kn[kn["source"] == "session"]
+        # (kind, name) MultiIndex; order by kind dependency then name.
+        rows = sorted(
+            session.itertuples(),
+            key=lambda r: (_KIND_ORDER.get(r.Index[0], 99), r.Index[1]),
+        )
+        for r in rows:
+            kind, name = r.Index
+            try:
+                programs.append(spec_to_decl(r.spec, kind, name))
+            except Exception:  # noqa: BLE001
+                # Best-effort export: any spec the unparser can't render (minimum
+                # / mixture distortions, or a kind spec_to_decl doesn't cover)
+                # falls back to the verbatim program text. Never 500 the download
+                # over one un-round-trippable entry.
+                if isinstance(r.program, str) and r.program.strip():
+                    programs.append(r.program.strip())
+
+    header = f"# aggregate_api session models ({form}), {len(programs)} program(s)"
+    body = header + "\n\n" + "\n\n".join(programs) + "\n"
+    return Response(
+        content=body,
+        media_type="text/plain",
+        headers={
+            "Content-Disposition": 'attachment; filename="session-models.agg"',
+        },
+    )
 
 
 # ----------------------------------------------------------------------

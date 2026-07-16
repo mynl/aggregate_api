@@ -805,18 +805,25 @@ if (helpLoad) {
 }
 
 // ----------------------------------------------------------------------
-// Versions from /v1/meta
+// About panel: tool versions + session-model download
 // ----------------------------------------------------------------------
+// Bundled-library versions are build-time constants (inlined by Vite's define);
+// aggregate / api versions come from the backend at runtime.
+$('about-grid').textContent = __CSV_GRID_VERSION__;
+$('about-uplot').textContent = __UPLOT_VERSION__;
+$('about-bootstrap').textContent = __BOOTSTRAP_VERSION__;
 api.meta().then((meta) => {
-    $('ver-aggregate').textContent = `aggregate ${meta.aggregate_version}`;
-    $('ver-api').textContent = `api ${meta.version}`;
+    $('about-aggregate').textContent = meta.aggregate_version;
+    $('about-api').textContent = meta.version;
 }).catch(() => {
-    $('ver-api').textContent = '(api offline)';
+    $('about-api').textContent = '(api offline)';
 });
 
-// csv-grid version is a build-time constant (inlined by Vite's define),
-// not a runtime value -- set it directly, outside the meta fetch.
-$('ver-csv').textContent = `grid ${__CSV_GRID_VERSION__}`;
+// Download every DecL program built this session: raw (as typed, from the object
+// cache) or agg (canonical, re-loadable, from the underwriter's session
+// knowledge). The attachment header makes the browser save the file.
+$('dl-raw')?.addEventListener('click', () => window.open(api.sessionModelsUrl('raw')));
+$('dl-agg')?.addEventListener('click', () => window.open(api.sessionModelsUrl('agg')));
 
 // ----------------------------------------------------------------------
 // PWA service worker (production bundle only)

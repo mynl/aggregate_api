@@ -4,6 +4,26 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a17
+
+From `dev/plan-chrome-about-download.md` — header chrome refresh + session-model
+download (first cut of a UI refresh).
+
+- **Top-right hamburger menu** replaces the `?` help button: Help, Download models
+  (raw / .agg), About, and a greyed-out **"Example source… (soon)"** placeholder
+  for a coming example-source switcher.
+- **About panel** (new right offcanvas): lists internal-tool versions —
+  `aggregate` / `aggregate_api` (from `/v1/meta`) and `csv-grid` / `uPlot` /
+  `Bootstrap` (Vite build-time `define`s; two new defines added). The three
+  version strings are **removed from the header** and now live here.
+- **Download session models** — new `GET /v1/session/models.agg?form=raw|agg`.
+  `raw` emits the programs exactly as typed (from the object cache); `agg` emits
+  canonical, dependency-ordered DecL from the underwriter's session knowledge
+  (best-effort, verbatim fallback), re-loadable. Empty session ⇒ header-only file.
+  **Note:** scope is *process-global* (shared cache/underwriter) — every build
+  since server restart, not per-browser; fine for a personal/local instance.
+  *(Rebuild the SPA bundle — `scripts/build-web.ps1`.)*
+
 ## 1.0.0a16
 
 From `dev/plan-grid-full-chrome.md` — turn on the CsvGrid feature set so the grids

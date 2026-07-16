@@ -17,17 +17,22 @@
 import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 
-// The SPA freezes one specific csv-grid build at `npm run build`. The
-// version isn't a runtime/api concern (the backend has no idea what the
-// frontend bundled) and the shipped bundle exports no version constant,
-// so capture it here at build time and inline it as a global define.
-const csvGridVersion = JSON.parse(
-    readFileSync(new URL('./node_modules/csv-grid/package.json', import.meta.url)),
+// The SPA freezes specific library builds at `npm run build`. These versions
+// aren't a runtime/api concern (the backend has no idea what the frontend
+// bundled) and the shipped bundles export no version constant, so capture each
+// from its package.json here at build time and inline it as a global define.
+// Surfaced in the About panel alongside the api/aggregate versions from /v1/meta.
+const pkgVersion = (name) => JSON.parse(
+    readFileSync(new URL(`./node_modules/${name}/package.json`, import.meta.url)),
 ).version;
 
 export default defineConfig({
     base: './',
-    define: { __CSV_GRID_VERSION__: JSON.stringify(csvGridVersion) },
+    define: {
+        __CSV_GRID_VERSION__: JSON.stringify(pkgVersion('csv-grid')),
+        __UPLOT_VERSION__: JSON.stringify(pkgVersion('uplot')),
+        __BOOTSTRAP_VERSION__: JSON.stringify(pkgVersion('bootstrap')),
+    },
     build: {
         outDir: '../src/aggregate_api/static',
         emptyOutDir: true,

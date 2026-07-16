@@ -501,6 +501,44 @@ def test_pnl_builds_and_reports(client):
 
 
 # ----------------------------------------------------------------------
+# Session models export (/v1/session/models.agg)
+# ----------------------------------------------------------------------
+
+def test_session_models_export(client):
+    """Both forms download the session's built programs as an .agg attachment."""
+    # Empty cache: header-only, graceful (no 500). The object cache is per-app
+    # (fresh per test), so raw starts empty.
+    r0 = client.get("/v1/session/models.agg", params={"form": "raw"})
+    assert r0.status_code == 200
+    assert r0.headers["content-type"].startswith("text/plain")
+    assert 'filename="session-models.agg"' in r0.headers["content-disposition"]
+    assert "0 program(s)" in r0.text
+
+    a = "agg SME.One 5 claims sev lognorm 10 cv 1 poisson"
+    b = ("port SME.Book agg U 3 claims sev lognorm 5 cv 1 poisson "
+         "agg V 4 claims sev gamma 8 cv 1 poisson")
+    for decl in (a, b):
+        assert client.post("/v1/objects", json={"decl": decl}).status_code == 200, decl
+
+    # raw = programs verbatim, as typed.
+    raw = client.get("/v1/session/models.agg", params={"form": "raw"})
+    assert raw.status_code == 200
+    assert a in raw.text
+    assert "port SME.Book" in raw.text
+
+    # agg = canonical (names present; source is the process-global knowledge, so
+    # only assert our programs are included, not exact contents).
+    agg = client.get("/v1/session/models.agg", params={"form": "agg"})
+    assert agg.status_code == 200
+    assert "SME.One" in agg.text and "SME.Book" in agg.text
+
+    # Unknown form -> 422 (Literal validation).
+    assert client.get(
+        "/v1/session/models.agg", params={"form": "nope"}
+    ).status_code == 422
+
+
+# ----------------------------------------------------------------------
 # Multi-line input (whitespace collapse)
 # ----------------------------------------------------------------------
 

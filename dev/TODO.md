@@ -123,5 +123,16 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
       Contract only from 6 cols up; removed the custom per-tab CSV download buttons
       (grid handles export; `/frame/*.csv` endpoints stay for full-frame access).
       *(done; in `dev/done/`)*
+- [x] **plan-chrome-about-download — hamburger + About + session download**
+      (→ 1.0.0a17). Top-right hamburger (Help / Download / About) replaces the `?`;
+      About panel holds the tool versions (moved from the header, + uPlot/Bootstrap
+      defines); new `GET /v1/session/models.agg?form=raw|agg` downloads the
+      session's built programs (raw = as typed; agg = canonical/re-loadable).
+      *(done; in `dev/done/`)*
+- [ ] **Example-source switcher** (next; placeholder shipped greyed-out in a17).
+      `GET /v1/examples?source=` with a keyed cache; curated `examples.agg` stays
+      the default, add `cookbook`, `all` (the whole `build.knowledge`), and
+      optionally the tester set (filter decl-testers' section-X error fixtures).
+      Wire the hamburger's "Example source…" placeholder to a picker.
 - [ ] Revisit a dedicated **severity-stats** view (the "sev stats" sub-button
       was dropped — no clean upstream accessor).

@@ -34,13 +34,18 @@ header .navbar { min-height: 56px; }
 .nav-meta .dot  { color: var(--dot); font-family: var(--mono); }
 .nav-meta .mono { font-family: var(--mono); }
 
-/* ---- Help affordance (header "?" + offcanvas panel) ---- */
-.help-btn { border: 0; background: transparent; color: var(--mut); cursor: pointer;
-  padding: 0 .15rem; line-height: 1; font-size: 1.05rem; display: inline-flex; }
-.help-btn:hover { color: var(--primary); }
+/* ---- Header menu (hamburger dropdown) + Help/About offcanvas panels ---- */
+.hamburger-btn { border: 0; background: transparent; color: var(--mut); cursor: pointer;
+  padding: 0 .15rem; line-height: 1; font-size: 1.15rem; display: inline-flex; }
+.hamburger-btn:hover { color: var(--primary); }
 .help-panel { width: 360px; max-width: 86vw; }
 .help-panel .offcanvas-title { font-size: 1rem; font-weight: 700; }
 .help-body { font-size: .82rem; color: #374151; }
+/* About panel version list */
+.about-versions { display: grid; grid-template-columns: auto 1fr; gap: .18rem .9rem;
+  margin: .3rem 0 1.1rem; font-size: .84rem; }
+.about-versions dt { color: var(--mut); font-weight: 600; }
+.about-versions dd { margin: 0; }
 .help-body h6 { font-size: .66rem; letter-spacing: .08em; text-transform: uppercase;
   color: var(--mut); margin: 1.1rem 0 .4rem; }
 .help-body h6:first-of-type { margin-top: .5rem; }

@@ -33,19 +33,22 @@
                     </div>
                 </a>
                 <div class="nav-meta">
-                    <span id="ver-aggregate" class="mono d-none d-md-inline"></span>
-                    <span class="dot d-none d-md-inline">·</span>
-                    <span id="ver-api" class="mono d-none d-md-inline"></span>
-                    <span class="dot d-none d-md-inline">·</span>
-                    <span id="ver-csv" class="mono d-none d-md-inline"></span>
-                    <span class="dot d-none d-md-inline">·</span>
                     <a href="https://aggregate.readthedocs.io/" target="_blank" rel="noopener">docs</a>
                     <span class="dot">·</span>
                     <a href="https://github.com/mynl/aggregate" target="_blank" rel="noopener">github</a>
-                    <span class="dot">·</span>
-                    <button type="button" class="help-btn" data-bs-toggle="offcanvas"
-                            data-bs-target="#helpPanel" aria-label="help" title="Help">
-                        <i class="bi bi-question-circle"></i></button>
+                    <div class="dropdown">
+                        <button type="button" class="hamburger-btn" data-bs-toggle="dropdown"
+                                aria-expanded="false" aria-label="menu" title="Menu">
+                            <i class="bi bi-list"></i></button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><button type="button" class="dropdown-item" data-bs-toggle="offcanvas" data-bs-target="#helpPanel">Help</button></li>
+                            <li><button type="button" class="dropdown-item" id="dl-raw">Download models (raw)</button></li>
+                            <li><button type="button" class="dropdown-item" id="dl-agg">Download models (.agg)</button></li>
+                            <li><button type="button" class="dropdown-item" data-bs-toggle="offcanvas" data-bs-target="#aboutPanel">About</button></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item disabled" aria-disabled="true" tabindex="-1">Example source… (soon)</a></li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </nav>
@@ -309,6 +312,35 @@
 
             <p class="help-fair mb-0">This is a shared, free demo, so builds are
                rate-limited. Want no limits? <code>aggregate</code> is open source—<a href="https://github.com/mynl/aggregate" target="_blank" rel="noopener">run it locally</a>.</p>
+        </div>
+    </div>
+
+    <!-- About panel (offcanvas from the right, like Help) -->
+    <div class="offcanvas offcanvas-end help-panel about-panel" tabindex="-1" id="aboutPanel" aria-labelledby="aboutLabel">
+        <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="aboutLabel">About</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body help-body">
+            <p class="help-lead">The <strong>DecL playground</strong>—build and explore
+               compound <em>(aggregate)</em> loss distributions in the browser, powered by
+               the open-source <code>aggregate</code> library.</p>
+
+            <h6>Versions</h6>
+            <dl class="about-versions">
+                <dt>aggregate</dt><dd id="about-aggregate" class="mono">—</dd>
+                <dt>aggregate_api</dt><dd id="about-api" class="mono">—</dd>
+                <dt>csv-grid</dt><dd id="about-grid" class="mono">—</dd>
+                <dt>uPlot</dt><dd id="about-uplot" class="mono">—</dd>
+                <dt>Bootstrap</dt><dd id="about-bootstrap" class="mono">—</dd>
+            </dl>
+
+            <h6>Learn more</h6>
+            <p class="help-links mb-0">
+                <a href="https://aggregate.readthedocs.io/" target="_blank" rel="noopener">documentation</a> ·
+                <a href="https://aggregate.readthedocs.io/en/latest/4_dec_Language_Reference.html" target="_blank" rel="noopener">DecL reference</a> ·
+                <a href="https://github.com/mynl/aggregate" target="_blank" rel="noopener">github</a>
+            </p>
         </div>
     </div>
 
