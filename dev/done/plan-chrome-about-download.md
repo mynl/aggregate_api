@@ -62,6 +62,15 @@ port). SPA builds; bundle carries the About ids, download handlers, session URL,
 and inlined versions (uPlot 1.6.32, Bootstrap 5.3.8, csv-grid 3.9.0). **Author to
 eyeball**: hamburger opens Help/About offcanvases and triggers both downloads.
 
+## Punch-ups (1.0.0a18)
+
+- Removed the header **docs / github** links (now in Help + About).
+- The session **`agg`** download is now **`format_program`-wrapped** (spread text
+  layout) after `spec_to_decl`; **`raw` stays verbatim**. `format_program`
+  re-parses and expands compact syntax (`[10:100:10]` → `[10 20 … 100]`), so
+  formatting `raw` would collapse it into `agg` — the two forms are kept distinct
+  on purpose (raw = exact source, agg = canonical/re-flowed).
+
 ## Next
 
 Example-source switcher (`/v1/examples?source=`, keyed cache; curated default +

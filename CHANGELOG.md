@@ -4,6 +4,20 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a18
+
+Punch-ups to the a17 chrome/download pass.
+
+- **Header docs / github links removed.** They're now in both the Help and About
+  panels, so the header cluster is just the hamburger.
+- **Session `agg` download is line-wrapped.** The `agg` form now runs each
+  canonical program through `format_program` (spread/text layout) after
+  `spec_to_decl`, so the download reads as tidy multi-line DecL. The `raw` form is
+  deliberately **left verbatim** — `format_program` re-parses and would expand
+  compact syntax (a range `[10:100:10]` becomes `[10 20 … 100]`), which is exactly
+  the difference the two forms exist to preserve: `raw` = your exact source,
+  `agg` = canonical/re-flowed. *(Rebuild the SPA bundle.)*
+
 ## 1.0.0a17
 
 From `dev/plan-chrome-about-download.md` — header chrome refresh + session-model

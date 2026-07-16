@@ -583,21 +583,26 @@ def get_session_models(
     form: Literal["raw", "agg"] = Query(
         "raw",
         description=(
-            "'raw' = programs exactly as submitted (from the object cache); "
-            "'agg' = canonical, dependency-ordered DecL from the underwriter's "
-            "session knowledge (re-loadable)."
+            "'raw' = programs exactly as submitted, verbatim (from the object "
+            "cache; compact syntax like ranges preserved); 'agg' = canonical, "
+            "line-wrapped, dependency-ordered DecL from the underwriter's session "
+            "knowledge (re-loadable)."
         ),
     ),
     cache: ObjectCache = Depends(_get_cache),
 ) -> Response:
     """Download every DecL program built this session as one ``.agg`` file.
 
-    Two forms. ``raw`` walks the api object cache and emits each built object's
-    program verbatim -- your formatting, comments and layout preserved. ``agg``
-    reads the shared ``build`` underwriter's knowledge base, keeps the entries it
-    flagged ``source='session'`` (every in-session ``build(...)``), and re-renders
-    each through ``decl_writer.spec_to_decl`` (verbatim fallback) in dependency
-    order, producing a canonical, re-loadable program set.
+    Two forms, kept deliberately distinct. ``raw`` walks the api object cache and
+    emits each built object's program **verbatim** -- your exact source, compact
+    syntax and all (a range ``[10:100:10]`` stays ``[10:100:10]``). ``agg`` reads
+    the shared ``build`` underwriter's knowledge base, keeps the entries it
+    flagged ``source='session'`` (every in-session ``build(...)``), renders each
+    through ``decl_writer.spec_to_decl`` (verbatim fallback) and then
+    ``format_program`` for the spread / line-wrapped layout, in dependency order
+    -- a **canonical, re-flowed, re-loadable** set (ranges expanded to
+    ``[10 20 ... 100]``). Formatting ``raw`` too would collapse it into ``agg``,
+    so it is intentionally left un-reflowed.
 
     Notes
     -----
@@ -608,7 +613,12 @@ def get_session_models(
     """
     programs: list[str] = []
     if form == "raw":
-        # Programs as typed -- unique decls in cache (MRU) order.
+        # Programs exactly as typed -- unique decls in cache (MRU) order. This is
+        # deliberately NOT run through ``format_program``: that re-parses and so
+        # expands compact syntax (a range ``[10:100:10]`` becomes
+        # ``[10 20 ... 100]``). Preserving the user's exact source -- ranges and
+        # all -- is the whole point of the ``raw`` form; the ``agg`` form is the
+        # canonical, re-flowed one.
         seen: set[str] = set()
         with cache._lock:  # noqa: SLF001 -- intentional cross-module use
             for entry in cache._store.values():
@@ -617,7 +627,7 @@ def get_session_models(
                     seen.add(decl)
                     programs.append(decl)
     else:  # form == "agg"
-        from aggregate.decl_writer import spec_to_decl
+        from aggregate.decl_writer import format_program, spec_to_decl
 
         kn = _build_singleton.knowledge
         session = kn[kn["source"] == "session"]
@@ -628,15 +638,22 @@ def get_session_models(
         )
         for r in rows:
             kind, name = r.Index
+            # Canonical text from the parsed spec (ranges expanded, deduped) ...
             try:
-                programs.append(spec_to_decl(r.spec, kind, name))
+                text = spec_to_decl(r.spec, kind, name)
             except Exception:  # noqa: BLE001
-                # Best-effort export: any spec the unparser can't render (minimum
-                # / mixture distortions, or a kind spec_to_decl doesn't cover)
-                # falls back to the verbatim program text. Never 500 the download
-                # over one un-round-trippable entry.
-                if isinstance(r.program, str) and r.program.strip():
-                    programs.append(r.program.strip())
+                # Best-effort: any spec the unparser can't render (minimum /
+                # mixture distortions, or a kind it doesn't cover) falls back to
+                # the verbatim program. Never 500 over one un-round-trippable entry.
+                text = r.program if isinstance(r.program, str) else ""
+            if not text.strip():
+                continue
+            # ... then the spread text layout (line wraps) for readability.
+            try:
+                text = format_program(text, fmt="text")
+            except Exception:  # noqa: BLE001 -- keep the unwrapped canonical text
+                pass
+            programs.append(text.strip())
 
     header = f"# aggregate_api session models ({form}), {len(programs)} program(s)"
     body = header + "\n\n" + "\n\n".join(programs) + "\n"
