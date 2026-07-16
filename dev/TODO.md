@@ -110,5 +110,12 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
       grand-result grid (dict `density_df`), mean/cv + `construction_explanation`
       fallbacks, `_ITEM_LINE` gains `xpnl`, SPA label/timing/gating + rebuild.
       *(done; in `dev/done/`)*
+- [x] **plan-overview-polish — Overview landing punch-ups** (→ 1.0.0a15). Overview
+      tables get a `Static | Interactive` toggle (curated exhibit default, CsvGrid
+      on demand; the one table exception to the all-CsvGrid rule, since it's the
+      demo landing); density/exceedance uPlot capped at 720px; x-axis cropped to
+      ~`q(0.001)..q(0.999)` (client-side, mirroring `Aggregate._limits`). Design
+      call: no upstream `plot_hero` (FCCs share no base; our uPlot is the hero).
+      *(done; in `dev/done/`)*
 - [ ] Revisit a dedicated **severity-stats** view (the "sev stats" sub-button
       was dropped — no clean upstream accessor).

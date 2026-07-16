@@ -380,6 +380,79 @@ async function loadTab(name) {
 // on the grid registry; uPlot is not, so we track it ourselves).
 let overviewChart = null;
 
+// Overview table view mode. The Overview is the landing demo ("demo-central"),
+// where the curated *static* exhibit -- lit 1-in-200 / 1-in-250 anchors, bold
+// Agg / total "what's my number" -- tells the story better than a bare grid, and
+// the frames are 3-11 rows so CsvGrid's sort / filter / search buys little. But
+// a returning power user often wants the interactive grid, so the exhibits carry
+// a Static | Interactive toggle. Static is the default; the choice is sticky per
+// browser. (CsvGrid has no row highlighting, so the two views are genuinely
+// different instruments, not just styling -- hence a toggle, not a restyle.)
+let overviewView = (() => {
+    try { return localStorage.getItem('aggapi.overviewView') || 'static'; }
+    catch { return 'static'; }
+})();
+function setOverviewView(mode) {
+    overviewView = mode;
+    try { localStorage.setItem('aggapi.overviewView', mode); } catch { /* private mode */ }
+}
+
+// The Static | Interactive segmented control; `onChange` re-renders the exhibits.
+function exhibitToggle(onChange) {
+    const group = el('div', { className: 'btn-group btn-group-sm', role: 'group' });
+    const btns = [['static', 'Static'], ['interactive', 'Interactive']].map(([mode, label]) => {
+        const b = el('button', { type: 'button', className: 'btn btn-outline-secondary' }, label);
+        if (overviewView === mode) b.classList.add('active');
+        b.addEventListener('click', () => {
+            if (overviewView === mode) return;
+            setOverviewView(mode);
+            for (const x of btns) x.classList.toggle('active', x === b);
+            onChange();
+        });
+        return b;
+    });
+    group.append(...btns);
+    return el('div', { className: 'overview-view-toggle' },
+        el('span', { className: 'overview-view-label' }, 'Tables'), group);
+}
+
+// Render the summary_df + tail_df exhibits into `box` per the current view mode.
+// Interactive grids register under 'pane-overview', so clearGrids tears down the
+// previous mode's grids before each (re-)render.
+function renderOverviewExhibits(box, summary, tail) {
+    clearGrids('pane-overview');
+    empty(box);
+    if (summary) renderOneExhibit(box, summary, {
+        title: 'Summary — what it’s made of',
+        caption: 'Moments and key percentiles. CV blank for signed / near-break-even '
+            + 'rows; Freq percentiles blank by design (PGF-only).',
+        emphasize: (r) => r.X === 'Agg' || r.unit === 'total',
+    });
+    if (tail) renderOneExhibit(box, tail, {
+        title: 'Tail risk — how bad it gets',
+        caption: '1-in-200 (Solvency II) and 1-in-250 (US) are the capital anchors. '
+            + 'Exact from the FFT grid, not simulated.',
+        highlight: (r) => Number(r.T) === 200 || Number(r.T) === 250,
+        emphasize: (r) => r.unit === 'total',
+    });
+}
+
+// One exhibit: the curated static table (with highlight / emphasis) or, in
+// interactive mode, a titled + captioned CsvGrid (GRID_PLAIN -- sort only, since
+// these frames are tiny). The highlight/emphasis predicates are ignored by the
+// grid (CsvGrid has no row styling), which is the whole reason both views exist.
+function renderOneExhibit(box, frame, opts) {
+    if (overviewView !== 'interactive') {
+        box.appendChild(renderExhibit(frame, opts));
+        return;
+    }
+    if (opts.title) box.appendChild(el('h6', { className: 'exhibit-title' }, opts.title));
+    const host = el('div', { className: 'grid-host' });
+    box.appendChild(host);
+    mountGrid('pane-overview', host, frame, GRID_PLAIN);
+    if (opts.caption) box.appendChild(el('div', { className: 'exhibit-caption' }, opts.caption));
+}
+
 // ---- Overview tab: note + interactive plot + summary_df + tail_df ----
 // The landing exhibit. Each section is best-effort: a frame the object doesn't
 // carry (a distortion has no summary_df; a bivariate has no validation_df) just
@@ -416,30 +489,17 @@ async function loadOverview() {
         }
     } catch { /* plot is a bonus; skip on failure */ }
 
-    // 3. summary_df exhibit -- moments + percentiles, Agg / total emphasized.
-    try {
-        const summary = await api.summary(state.id);
-        pane.appendChild(renderExhibit(summary, {
-            title: 'Summary — what it’s made of',
-            caption: 'Moments and key percentiles. CV blank for signed / near-break-even '
-                + 'rows; Freq percentiles blank by design (PGF-only).',
-            emphasize: (r) => r.X === 'Agg' || r.unit === 'total',
-        }));
+    // 3. Risk exhibits (summary_df + tail_df) with a Static | Interactive toggle.
+    // Fetch once; the toggle re-renders from the stashed frames (no refetch).
+    const summary = await api.summary(state.id).catch(() => null);
+    const tailFrame = await api.tail_df(state.id).catch(() => null);
+    if (summary || tailFrame) {
+        const box = el('div', { className: 'overview-exhibits' });
+        pane.appendChild(exhibitToggle(() => renderOverviewExhibits(box, summary, tailFrame)));
+        pane.appendChild(box);
+        renderOverviewExhibits(box, summary, tailFrame);
         rendered = true;
-    } catch { /* no summary_df for this kind */ }
-
-    // 4. tail_df exhibit -- return periods, the 1-in-200 / 1-in-250 anchors lit.
-    try {
-        const tail = await api.tail_df(state.id);
-        pane.appendChild(renderExhibit(tail, {
-            title: 'Tail risk — how bad it gets',
-            caption: '1-in-200 (Solvency II) and 1-in-250 (US) are the capital anchors. '
-                + 'Exact from the FFT grid, not simulated.',
-            highlight: (r) => Number(r.T) === 200 || Number(r.T) === 250,
-            emphasize: (r) => r.unit === 'total',
-        }));
-        rendered = true;
-    } catch { /* no tail_df for this kind */ }
+    }
 
     if (!rendered) {
         pane.appendChild(el('div', { className: 'text-muted small' },

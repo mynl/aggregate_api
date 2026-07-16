@@ -4,6 +4,29 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a15
+
+From `dev/plan-overview-polish.md` — punch-ups to the a13 Overview landing
+("demo-central"). Frontend only; no backend or api change.
+
+- **Overview tables get a `Static | Interactive` toggle (Static default).** Every
+  table in the app is a CsvGrid except the two Overview exhibits (`summary_df`,
+  `tail_df`), which stayed hand-built because the landing demo reads better with
+  the curated static exhibit — lit **1-in-200 / 1-in-250** capital anchors, bold
+  **Agg / total** — and CsvGrid has no row-highlight to reproduce it. Rather than
+  force one, the exhibits now carry a small `Static | Interactive` segmented
+  toggle: Static (the curated exhibit) is the default, Interactive swaps in the
+  CsvGrid (sort / filter / search); the choice is sticky per browser. All other
+  tables are unchanged (CsvGrid).
+- **Overview density / exceedance plot width capped.** The uPlot chart was
+  full-bleed (`width: 100%`); now `max-width: 720px`, reflowing to the container.
+- **Overview density plot x-axis cropped to a sensible window.** The plot auto-fit
+  to the whole FFT grid, so a heavy tail squashed the visible mass into a sliver.
+  It now crops to ~`q(0.001)..q(0.999)` with 2% padding — the window
+  `aggregate`'s `Aggregate._limits` / `Portfolio._limits` use — computed
+  client-side from the `F` column already in the payload, which handles signed
+  (PnL) vs non-negative (agg / port) grids automatically. Drag still zooms.
+
 ## 1.0.0a14
 
 From `dev/plan-pnl-kind.md` — pick up the `aggregate` a114→a145 surface (the

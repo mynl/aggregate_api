@@ -43,16 +43,23 @@ export function mountInteractivePlot(host, density, tail) {
 
     const loss = density.rows.map((r) => Number(r[iLoss]));
     const dens = column(density, 'p_total');
+    // Cumulative F(loss), reused for the exceedance series and the x-window.
+    const cdf = cumulativeF(density);
     // Exceedance S = 1 - F; prefer an explicit S column, else derive from F.
     let surv = column(density, 'S');
-    if (!surv) {
-        const F = column(density, 'F');
-        surv = F ? F.map((v) => 1 - Number(v)) : null;
-    }
+    if (!surv) surv = cdf ? cdf.map((v) => 1 - v) : null;
 
     const series = [{}];          // x (loss) -- no style
     const data = [loss];
+    // Crop the x-axis to a sensible density window (mirrors aggregate's
+    // Aggregate._limits / q(0.999)) so a heavy tail doesn't squash the visible
+    // mass into a sliver. Drag still zooms; auto-fit when there's no cdf to crop.
+    // NB: a deliberate one-off -- computed here from the F we already ship rather
+    // than round-tripping the library. Not a pattern to extend; prefer
+    // server/library-provided values elsewhere.
     const scales = { x: { time: false } };
+    const xr = densityXRange(loss, cdf);
+    if (xr) scales.x.range = xr;
     if (dens) {
         series.push({
             label: 'density', scale: 'd', stroke: '#0d6efd', width: 1.5,
@@ -153,6 +160,39 @@ function tailMarkers(tail) {
         if (MARKER_PERIODS.includes(T)) out.push({ T, var: Number(r[iVaR]) });
     }
     return out.sort((a, b) => a.T - b.T);
+}
+
+/** Cumulative F(loss): prefer the F column, else 1 - S, else cumsum(p_total). */
+function cumulativeF(density) {
+    const F = column(density, 'F');
+    if (F) return F.map(Number);
+    const S = column(density, 'S');
+    if (S) return S.map((v) => 1 - Number(v));
+    const p = column(density, 'p_total');
+    if (!p) return null;
+    let acc = 0;
+    return p.map((v) => (acc += Number(v)));
+}
+
+/**
+ * A sensible density x-window, mirroring aggregate's `Aggregate._limits`: crop
+ * to roughly q(0.001)..q(0.999) with 2% padding. A non-negative loss grid
+ * anchors the left edge at 0; a signed P&L grid uses the low quantile. Returns
+ * null (uPlot auto-fit) when there's no usable cdf or the window is degenerate.
+ */
+function densityXRange(loss, cdf) {
+    if (!cdf || cdf.length !== loss.length || loss.length < 2) return null;
+    const n = loss.length;
+    let hi = Number(loss[n - 1]);
+    for (let i = 0; i < n; i++) { if (cdf[i] >= 0.999) { hi = Number(loss[i]); break; } }
+    const signed = Number(loss[0]) < 0;
+    let lo = signed ? Number(loss[0]) : Math.min(0, Number(loss[0]));
+    if (signed) {
+        for (let i = 0; i < n; i++) { if (cdf[i] >= 0.001) { lo = Number(loss[i]); break; } }
+    }
+    if (!(hi > lo)) return null;
+    const pad = 0.02 * (hi - lo);
+    return [lo - pad, hi + pad];
 }
 
 /** Build a name -> column-index lookup over a {columns} frame. */
