@@ -125,6 +125,13 @@ mirrors the main `aggregate` project.
 - **Every plan-based change bumps the version.** Any code change executed from a
   `dev/plan-*.md` bumps the `1.0.0a*` version in `pyproject.toml`. Pure tidying
   (file moves, comment/doc-only edits with no behavior change) does not.
+- **Commit each version bump.** When a plan-based change bumps the `1.0.0a*`
+  version, commit the whole batch (source + tests + `CHANGELOG.md` + the plan doc
+  + `dev/TODO.md` + `pyproject.toml` + `uv.lock`) in one commit with a **one-line**
+  message — the matching `CHANGELOG.md` section is the commit's detailed
+  description, so the subject shouldn't restate it. Match the git-log convention:
+  `[aNN] <terse summary>`. The built SPA under `src/aggregate_api/static/` is
+  gitignored (rebuilt at deploy), so it is never part of the commit.
 - **One plan doc per step.** Work proceeds from a `dev/plan-NNNN-*.md`. When it
   lands, move it to `dev/done/` and tick the matching `dev/TODO.md` entry.
 - **Keep `CHANGELOG.md` current.** Each version bump adds a `## <version>`
@@ -137,8 +144,10 @@ mirrors the main `aggregate` project.
 
 ## Working with the author
 
-- The author handles all git commits. Do not commit. To check status, read the
-  git log; if an expected commit is missing, mention it.
+- Commit **version-bump batches** (see Release & housekeeping) with a one-line
+  message. The author handles all other commits — don't commit doc-only or
+  in-progress work unless asked. To check status, read the git log; if an
+  expected commit is missing, mention it.
 - Diagnose / design / propose before editing source or tests. Don't change code
   until told to proceed ("go ahead"). "Can you see the issue?" means explain,
   not fix.
