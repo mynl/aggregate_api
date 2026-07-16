@@ -4,6 +4,33 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a16
+
+From `dev/plan-grid-full-chrome.md` — turn on the CsvGrid feature set so the grids
+are actually useful, and consolidate export onto the grid. Frontend only.
+
+- **csv-grid 3.1.0 → 3.9.0 (dependency bump).** The pinned 3.1.0 (`6033b20`)
+  predated the copy / save export controls, so they couldn't be "enabled" — 3.9.0
+  (`01a9773`) adds them (a default-on `exportButtons` option) plus row selection.
+  The `web/package.json` spec is now **pinned to the exact commit** (was a bare
+  git URL): with the bare URL, `npm install` re-resolved from npm's cache to the
+  old commit and silently reverted the build to 3.1.0. (Lockfile still records
+  `git+ssh://`; a deploy host needs GitHub SSH or the `insteadOf` git config — see
+  a7.)
+- **Every grid gets the full chrome by default.** fzf global search, per-column
+  filters, the status bar, and copy / save export — all CsvGrid defaults — are no
+  longer stripped. The `GRID_PLAIN` (chrome-off) preset is gone.
+- **Expand/Contract is conditional on width.** Shown only from 6 columns up,
+  omitted below that (`grid.js`), so it doesn't clutter narrow tables.
+- **Custom per-tab CSV download buttons removed.** The `data-csv` buttons
+  (summary / validation / stats / density / bs-window) and the reins `csv` button
+  are gone — CsvGrid's own copy / save is the single export path; the unused
+  `api.frameCsvUrl` helper is dropped. The Info-text **copy** and the Plot **SVG**
+  download stay (not table exports). **Note:** the grid exports the *displayed*
+  data, so for density (binned) and stats (raw moments dropped) that isn't the
+  full frame the old buttons gave — the `/frame/{which}.csv` backend endpoints
+  remain for full-frame access. *(Rebuild the SPA bundle — `scripts/build-web.ps1`.)*
+
 ## 1.0.0a15
 
 From `dev/plan-overview-polish.md` — punch-ups to the a13 Overview landing

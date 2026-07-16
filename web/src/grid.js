@@ -63,7 +63,16 @@ export function mountGrid(paneId, host, frame, opts = {}) {
     // clashing with the rest of the page. Forcing data-theme="light" on the
     // host (CsvGrid adds its .csvgrid class to this element) opts the grid out.
     host.setAttribute('data-theme', 'light');
-    const grid = new CsvGrid(host, { columns, records: rows }, { worker: false, ...opts });
+    // Full chrome by default -- fzf global search, per-column filters, status
+    // bar, and the copy / save export controls are all CsvGrid defaults, and they
+    // are what make the grid useful (filter to narrow, copy / download to take
+    // the data away). Expand/Contract only earns its space on wide tables, so it
+    // is shown from 6 columns up and omitted below that. Callers override via opts.
+    const grid = new CsvGrid(host, { columns, records: rows }, {
+        worker: false,
+        expandButtons: columns.length >= 6,
+        ...opts,
+    });
     const grids = registry.get(paneId) || [];
     grids.push(grid);
     registry.set(paneId, grids);

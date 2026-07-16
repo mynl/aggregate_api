@@ -33,13 +33,11 @@ import { fmt } from './utils/format.js';
 // ----------------------------------------------------------------------
 // CsvGrid option presets (see grid.js)
 // ----------------------------------------------------------------------
-// FULL: the default chrome (sort / fzf search / per-column filters / expand)
-// for the substantive frames. PLAIN: chrome stripped for the small 3–8 row
-// frames where search/filter is just noise (sort stays — it's free and handy).
+// Every grid gets the full chrome (fzf search, per-column filters, status bar,
+// copy / save export). Expand/Contract is auto: mountGrid shows it only from 6
+// columns up (see grid.js). GRID_FULL stays as an explicit "defaults" marker at
+// call sites; frame-specific tweaks (formats, maxRows) spread over it.
 const GRID_FULL = {};
-const GRID_PLAIN = {
-    globalSearch: false, columnFilters: false, statusBar: false, expandButtons: false,
-};
 
 // ----------------------------------------------------------------------
 // Module state
@@ -367,7 +365,7 @@ async function loadTab(name) {
             // 2**11 = 2048 binned grid shows without the "show all" prompt.
             replacePaneGrid('pane-density', frame, { ...GRID_FULL, maxRows: 25, renderCap: 2048 });
         } else if (name === 'bswin') {
-            replacePaneGrid('pane-bswin', await api.bs_window_df(state.id), GRID_PLAIN);
+            replacePaneGrid('pane-bswin', await api.bs_window_df(state.id), GRID_FULL);
         }
     } catch (err) {
         state.loaded.delete(name);   // allow a retry on the next activation
@@ -438,9 +436,9 @@ function renderOverviewExhibits(box, summary, tail) {
 }
 
 // One exhibit: the curated static table (with highlight / emphasis) or, in
-// interactive mode, a titled + captioned CsvGrid (GRID_PLAIN -- sort only, since
-// these frames are tiny). The highlight/emphasis predicates are ignored by the
-// grid (CsvGrid has no row styling), which is the whole reason both views exist.
+// interactive mode, a titled + captioned CsvGrid with the full chrome. The
+// highlight/emphasis predicates are ignored by the grid (CsvGrid has no row
+// styling), which is the whole reason both views exist.
 function renderOneExhibit(box, frame, opts) {
     if (overviewView !== 'interactive') {
         box.appendChild(renderExhibit(frame, opts));
@@ -449,7 +447,7 @@ function renderOneExhibit(box, frame, opts) {
     if (opts.title) box.appendChild(el('h6', { className: 'exhibit-title' }, opts.title));
     const host = el('div', { className: 'grid-host' });
     box.appendChild(host);
-    mountGrid('pane-overview', host, frame, GRID_PLAIN);
+    mountGrid('pane-overview', host, frame, GRID_FULL);
     if (opts.caption) box.appendChild(el('div', { className: 'exhibit-caption' }, opts.caption));
 }
 
@@ -622,9 +620,9 @@ function renderPrice(payload) {
         mountGrid(paneId, host, frame, opts);
     };
 
-    section('Pricing pentagon', payload.pentagon, GRID_PLAIN);
+    section('Pricing pentagon', payload.pentagon, GRID_FULL);
     if (payload.distortion_df) {
-        section('Calibrated distortions', payload.distortion_df, GRID_PLAIN,
+        section('Calibrated distortions', payload.distortion_df, GRID_FULL,
             'price-section-title mt-3');
     }
     for (const w of payload.warnings || []) {
@@ -635,7 +633,7 @@ function renderPrice(payload) {
             const frame = payload.distortions[stat];
             if (!frame) continue;
             section(`${PRICE_TITLE[stat]} (${stat}) by distortion`, frame,
-                { ...GRID_PLAIN, formats: statFormats(frame, PRICE_FMT_CODE[stat]) },
+                { ...GRID_FULL, formats: statFormats(frame, PRICE_FMT_CODE[stat]) },
                 'price-section-title mt-3');
         }
     }
@@ -672,7 +670,9 @@ document.querySelectorAll('input[name="price-target"]').forEach((radio) => {
 });
 
 // ----------------------------------------------------------------------
-// Tab tools: copy / csv / plot download
+// Tab tools: copy Info text / download the plot SVG. Per-frame CSV download
+// and copy are handled by CsvGrid's own export controls (copy / save), so the
+// old per-tab "csv" buttons are gone -- the grid is the single export path.
 // ----------------------------------------------------------------------
 document.querySelectorAll('[data-copy]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -681,18 +681,6 @@ document.querySelectorAll('[data-copy]').forEach((btn) => {
         try { await navigator.clipboard.writeText(text); flash(btn, 'copied'); }
         catch { /* clipboard blocked -- ignore */ }
     });
-});
-
-document.querySelectorAll('[data-csv]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-        if (!state.id) return;
-        window.open(api.frameCsvUrl(state.id, btn.dataset.csv), '_blank');
-    });
-});
-
-$('reins-csv').addEventListener('click', () => {
-    if (!state.id) return;
-    window.open(api.frameCsvUrl(state.id, state.reinsWhich), '_blank');
 });
 
 document.querySelector('[data-plot-download]').addEventListener('click', () => {

@@ -179,7 +179,6 @@
             <div class="tab-pane fade" id="t-summary">
                 <div class="tab-tools">
                     <button class="btn btn-outline-secondary" data-copy="pane-summary"><i class="bi bi-clipboard"></i> copy</button>
-                    <button class="btn btn-outline-secondary" data-csv="summary"><i class="bi bi-download"></i> csv</button>
                 </div>
                 <div id="pane-summary" class="pane"></div>
             </div>
@@ -188,7 +187,6 @@
             <div class="tab-pane fade" id="t-validation">
                 <div class="tab-tools">
                     <button class="btn btn-outline-secondary" data-copy="pane-validation"><i class="bi bi-clipboard"></i> copy</button>
-                    <button class="btn btn-outline-secondary" data-csv="validation_df"><i class="bi bi-download"></i> csv</button>
                     <span class="text-muted ms-1" style="font-size:.7rem;">theoretical vs empirical moments — reads “not unreasonable” on a clean build</span>
                 </div>
                 <div id="pane-validation" class="pane"></div>
@@ -205,9 +203,6 @@
 
             <!-- Stats -->
             <div class="tab-pane fade" id="t-stats">
-                <div class="tab-tools">
-                    <button class="btn btn-outline-secondary" data-csv="stats_df"><i class="bi bi-download"></i> csv</button>
-                </div>
                 <div id="pane-stats" class="pane"></div>
             </div>
 
@@ -217,7 +212,6 @@
                     <button class="btn btn-outline-secondary active" data-reins="reins_summary_df">reins summary</button>
                     <button class="btn btn-outline-secondary"        data-reins="reins_stats_df">reins stats</button>
                     <button class="btn btn-outline-secondary"        data-reins="reins_density_df">reins density</button>
-                    <button class="btn btn-outline-secondary"        id="reins-csv"><i class="bi bi-download"></i> csv</button>
                 </div>
                 <div class="reins-desc" id="reins-desc"></div>
                 <div id="pane-reins" class="pane"></div>
@@ -244,8 +238,7 @@
             <!-- Density (under More ▾) — density_df, p_total>0, ~300-row preview -->
             <div class="tab-pane fade" id="t-density">
                 <div class="tab-tools">
-                    <button class="btn btn-outline-secondary" data-csv="density_df"><i class="bi bi-download"></i> csv</button>
-                    <span class="text-muted ms-1" style="font-size:.7rem;">loss · p_total · F · S — p_total&gt;0, downsampled; full data via csv</span>
+                    <span class="text-muted ms-1" style="font-size:.7rem;">loss · p_total · F · S — binned to a 2¹¹ display grid; copy / save from the grid</span>
                 </div>
                 <div id="pane-density" class="pane"></div>
             </div>
@@ -253,7 +246,6 @@
             <!-- bs window (under More ▾) — bucket/window estimator summary -->
             <div class="tab-pane fade" id="t-bswin">
                 <div class="tab-tools">
-                    <button class="btn btn-outline-secondary" data-csv="bs_window_df"><i class="bi bi-download"></i> csv</button>
                     <span class="text-muted ms-1" style="font-size:.7rem;">bucket / window estimator — the <code>selected</code> row is the chosen grid</span>
                 </div>
                 <div id="pane-bswin" class="pane"></div>

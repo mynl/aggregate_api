@@ -84,7 +84,6 @@ export const api = {
 
     /** Plot URL: handed straight to an <img>. Native multi-panel by default. */
     plotUrl:      (id, p = {})      => `${API_BASE}/v1/objects/${id}/plot?${qs(p)}`,
-
-    /** Full-frame CSV download URL (summary / stats_df / reins_* / density_df). */
-    frameCsvUrl:  (id, which)       => `${API_BASE}/v1/objects/${id}/frame/${which}.csv`,
+    // Per-frame CSV download/copy is handled by CsvGrid's own export controls;
+    // the /frame/{which}.csv backend endpoints remain for full-frame API access.
 };

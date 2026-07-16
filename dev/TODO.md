@@ -117,5 +117,11 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
       ~`q(0.001)..q(0.999)` (client-side, mirroring `Aggregate._limits`). Design
       call: no upstream `plot_hero` (FCCs share no base; our uPlot is the hero).
       *(done; in `dev/done/`)*
+- [x] **plan-grid-full-chrome — useful CsvGrid** (→ 1.0.0a16). Bumped csv-grid
+      3.1.0 → 3.9.0 (pinned commit; 3.1.0 predated copy/save export). Full chrome
+      on by default (fzf + column filters + status bar + copy/save); Expand/
+      Contract only from 6 cols up; removed the custom per-tab CSV download buttons
+      (grid handles export; `/frame/*.csv` endpoints stay for full-frame access).
+      *(done; in `dev/done/`)*
 - [ ] Revisit a dedicated **severity-stats** view (the "sev stats" sub-button
       was dropped — no clean upstream accessor).
