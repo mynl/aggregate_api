@@ -214,6 +214,42 @@ def _resolve_object(oid: str, cache: ObjectCache) -> CacheEntry:
     return entry
 
 
+def _locked_entry(oid: str, cache: ObjectCache = Depends(_get_cache)):
+    """Dependency: resolve an object and hold its lock for the whole request.
+
+    Every route that pulls data off a built object depends on this rather than
+    calling :func:`_resolve_object` in its body, which makes the guarantee
+    structural instead of a habit each new handler has to remember.
+
+    Why a lock at all, for something described as a read: an ``Aggregate`` or
+    ``Portfolio`` materializes several frames lazily and caches them on the
+    instance, so the first read *is* a write. FastAPI runs these synchronous
+    handlers in a thread pool, so two requests for different frames of the same
+    object are genuinely two threads racing to build them.
+
+    Measured, not theoretical. Fetching ``unit_density_df`` and ``tail_df``
+    together for one Portfolio (exactly what the Overview exhibit does, in a
+    single ``Promise.all``) raised ``KeyError: "['F', 'S'] not in index"`` from
+    inside ``Portfolio.unit_density_df`` on roughly half of cold-object runs,
+    and never once the frames were warm.
+
+    The lock is per entry, so unrelated objects still serve in parallel, and
+    contention is confined to the first access of each frame.
+
+    A bare generator, deliberately **not** wrapped in ``@contextmanager``:
+    FastAPI drives a yield-dependency as an iterator itself, and the wrapper
+    hands it a context-manager object instead, which fails with
+    ``'_GeneratorContextManager' object is not an iterator``.
+
+    Yields
+    ------
+    CacheEntry
+    """
+    entry = _resolve_object(oid, cache)
+    with entry.lock:
+        yield entry
+
+
 def _summary_fields(obj: Any) -> dict:
     """Headline ``mean`` / ``cv`` / ``validation`` for the build summary.
 
@@ -472,6 +508,28 @@ def post_object(
                 elapsed_ms=elapsed,
             )
             raise HTTPException(status_code=422, detail=str(orig))
+        except (NotImplementedError, KeyError) as exc:
+            # Two more shapes of "your program cannot be built", both of which
+            # the library already reports well and neither of which is a server
+            # fault, so neither belongs in the 500 family:
+            #
+            # * ``NotImplementedError`` for an unsupported combination, e.g.
+            #   ``xpnl`` over a portfolio ("the portfolio total hides its
+            #   units, so there is nothing to explode. Use 'pnl' ...").
+            # * ``KeyError`` for a ``sev.X`` / ``agg.X`` / ``port.X`` reference
+            #   that resolves to nothing ("no recipe named 'X' of kind 'port'").
+            #
+            # ``str()`` on a KeyError re-quotes its argument, which would show
+            # the user a message wrapped in stray quotes, so read args[0].
+            detail = (exc.args[0] if isinstance(exc, KeyError) and exc.args
+                      else str(exc))
+            elapsed = int((time.monotonic() - t0) * 1000)
+            audit.record_build(
+                ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
+                status="build_error", error_msg=str(detail),
+                elapsed_ms=elapsed,
+            )
+            raise HTTPException(status_code=422, detail=str(detail))
         except Exception as exc:
             elapsed = int((time.monotonic() - t0) * 1000)
             audit.record_build(
@@ -760,8 +818,7 @@ def delete_object(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
 # ----------------------------------------------------------------------
 
 @router.get("/objects/{oid}/info", response_model=models.InfoResponse)
-def get_info(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
-    entry = _resolve_object(oid, cache)
+def get_info(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
     return info_to_payload(entry.obj)
 
 
@@ -770,7 +827,7 @@ def get_info(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
 # ----------------------------------------------------------------------
 
 @router.get("/objects/{oid}/meta", response_model=models.ObjectMetaResponse)
-def get_meta(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+def get_meta(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
     """The object's own DecL metadata: trailer clauses plus both programs.
 
     Every first-class citizen carries ``note`` / ``tags`` / ``hints`` and the
@@ -787,7 +844,6 @@ def get_meta(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
     comes back as ``''``, which serializes as ``null`` here so the SPA can test
     presence without trimming.
     """
-    entry = _resolve_object(oid, cache)
     obj = entry.obj
 
     def text(name: str) -> str | None:
@@ -814,7 +870,7 @@ def get_meta(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
 # ----------------------------------------------------------------------
 
 @router.get("/objects/{oid}/summary", response_model=models.FrameResponse)
-def get_summary(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+def get_summary(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
     """At-a-glance risk view -- moments + key percentiles (``summary_df``).
 
     Since ``aggregate`` 1.0.0a113 ``summary_df`` is the user-facing risk
@@ -823,7 +879,6 @@ def get_summary(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
     :func:`get_validation_df` (``validation_df``). ``CV`` and the Freq-row
     percentiles are blank (NaN -> JSON ``null``) by design.
     """
-    entry = _resolve_object(oid, cache)
     df = _resolve_frame(entry.obj, "summary_df")
     if df is None:
         raise HTTPException(
@@ -842,7 +897,7 @@ def get_summary(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
 # ----------------------------------------------------------------------
 
 @router.get("/objects/{oid}/tail_df", response_model=models.FrameResponse)
-def get_tail_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+def get_tail_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
     """Return-period / exceedance table (``tail_df``).
 
     The centerpiece risk view: columns ``p | VaR | TVaR | xsVaR | VaR/Mean``,
@@ -857,7 +912,6 @@ def get_tail_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
     each axis), which ``aggregate`` 1.0.0a171 renamed ``axis_support_df`` because
     two reports under one name is how a reader gets the wrong one.
     """
-    entry = _resolve_object(oid, cache)
     df = _resolve_frame(entry.obj, "tail_df")
     if df is None:
         raise HTTPException(
@@ -872,7 +926,7 @@ def get_tail_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
 # ----------------------------------------------------------------------
 
 @router.get("/objects/{oid}/validation_df", response_model=models.FrameResponse)
-def get_validation_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+def get_validation_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
     """Moment-vs-estimate QA table (``validation_df``).
 
     The old ``summary_df`` payload, renamed upstream: theoretical vs
@@ -880,7 +934,6 @@ def get_validation_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dic
     on a clean build. Demoted under the SPA's **More** menu now that
     ``summary_df`` is the headline risk view.
     """
-    entry = _resolve_object(oid, cache)
     df = _resolve_frame(entry.obj, "validation_df")
     if df is None:
         raise HTTPException(
@@ -895,8 +948,7 @@ def get_validation_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dic
 # ----------------------------------------------------------------------
 
 @router.get("/objects/{oid}/stats_df", response_model=models.FrameResponse)
-def get_stats_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
-    entry = _resolve_object(oid, cache)
+def get_stats_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
     df = getattr(entry.obj, "stats_df", None)
     if df is None:
         raise HTTPException(
@@ -924,7 +976,7 @@ def get_density_df(
         False,
         description="Drop zero-mass rows (keep only p_total > 0) before slicing.",
     ),
-    cache: ObjectCache = Depends(_get_cache),
+    entry: CacheEntry = Depends(_locked_entry),
 ) -> dict:
     """Density_df reduced to a faithful power-of-two display grid.
 
@@ -943,7 +995,6 @@ def get_density_df(
     ``BivariateAggregate`` joint matrix) skip binning and honor the legacy
     ``cols`` / ``start`` / ``stop`` / ``downsample`` / ``nonzero`` params.
     """
-    entry = _resolve_object(oid, cache)
     col_list = [c.strip() for c in cols.split(",")] if cols else None
 
     if entry.kind == "sev":
@@ -1005,7 +1056,7 @@ def get_density_df(
 # ----------------------------------------------------------------------
 
 @router.get("/objects/{oid}/unit_density_df", response_model=models.FrameResponse)
-def get_unit_density_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+def get_unit_density_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
     """Per-unit densities and survivals on the portfolio's common grid.
 
     Columns ``loss``, then ``p_<unit>`` and ``S_<unit>`` for each unit, plus the
@@ -1032,7 +1083,6 @@ def get_unit_density_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> d
       exactly right for the ``S_*`` survivals, so both families bin correctly in
       one pass.
     """
-    entry = _resolve_object(oid, cache)
     if entry.kind != "port":
         raise HTTPException(
             status_code=400,
@@ -1070,10 +1120,9 @@ def get_unit_density_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> d
 def get_kappa(
     oid: str,
     downsample: int | None = Query(None, ge=1, le=10_000),
-    cache: ObjectCache = Depends(_get_cache),
+    entry: CacheEntry = Depends(_locked_entry),
 ) -> dict:
     """Per-unit conditional expected losses (the ``exeqa_*`` slice)."""
-    entry = _resolve_object(oid, cache)
     if entry.kind != "port":
         raise HTTPException(status_code=400, detail="kappa is Portfolio-only")
     df = entry.obj.density_df
@@ -1096,7 +1145,7 @@ def get_kappa(
 # ----------------------------------------------------------------------
 
 @router.get("/objects/{oid}/bs_window_df", response_model=models.FrameResponse)
-def get_bs_window_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+def get_bs_window_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
     """Bucket/window estimator summary (``_bs_window_df``).
 
     A small per-method frame the library builds while choosing the grid
@@ -1104,7 +1153,6 @@ def get_bs_window_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict
     actually used. Stored on the private ``_bs_window_df`` attribute, so a
     getattr miss (e.g. on a Portfolio) yields a clean 400.
     """
-    entry = _resolve_object(oid, cache)
     df = _frame_attr(entry.obj, "_bs_window_df")
     if df is None:
         raise HTTPException(
@@ -1140,7 +1188,7 @@ def _frame_attr(obj: Any, name: str):
     "/objects/{oid}/reins_description",
     response_model=models.ReinsDescriptionResponse,
 )
-def get_reins_description(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+def get_reins_description(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
     """Always-visible text block describing the reinsurance program.
 
     ``Aggregate.reins_description`` is a short string attribute (e.g.
@@ -1149,7 +1197,6 @@ def get_reins_description(oid: str, cache: ObjectCache = Depends(_get_cache)) ->
     there we report availability from ``reins_summary_df`` and leave the text
     empty (the Reins table carries the detail).
     """
-    entry = _resolve_object(oid, cache)
     obj = entry.obj
     # ``reins_summary_df`` is None exactly when the object has no reinsurance, so
     # it's the canonical availability signal. ``reins_description`` is a plain
@@ -1160,9 +1207,8 @@ def get_reins_description(oid: str, cache: ObjectCache = Depends(_get_cache)) ->
 
 
 @router.get("/objects/{oid}/reins_summary_df", response_model=models.FrameResponse)
-def get_reins_summary_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+def get_reins_summary_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
     """Per-layer gross/ceded/net reference-vs-model frame."""
-    entry = _resolve_object(oid, cache)
     df = _frame_attr(entry.obj, "reins_summary_df")
     if df is None:
         raise HTTPException(status_code=400, detail="no reinsurance on this object")
@@ -1170,9 +1216,8 @@ def get_reins_summary_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> 
 
 
 @router.get("/objects/{oid}/reins_stats_df", response_model=models.FrameResponse)
-def get_reins_stats_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+def get_reins_stats_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
     """Per-layer summary statistics (small frame -> shown in full)."""
-    entry = _resolve_object(oid, cache)
     df = _frame_attr(entry.obj, "reins_stats_df")
     if df is None:
         raise HTTPException(status_code=400, detail="no reinsurance on this object")
@@ -1180,7 +1225,7 @@ def get_reins_stats_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> di
 
 
 @router.get("/objects/{oid}/reins_density_df", response_model=models.FrameResponse)
-def get_reins_density_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+def get_reins_density_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
     """Reinsurance density preview, binned to the power-of-two display grid.
 
     The full frame spans the whole loss grid (2**log2 rows). We bin it to a
@@ -1188,7 +1233,6 @@ def get_reins_density_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> 
     sums and ``loss`` right-edges, so the previewed masses stay faithful. The
     csv download has the full, exact frame.
     """
-    entry = _resolve_object(oid, cache)
     df = _frame_attr(entry.obj, "reins_density_df")
     if df is None:
         raise HTTPException(status_code=400, detail="no reinsurance on this object")
@@ -1221,7 +1265,7 @@ _CSV_FRAMES = {
 
 @router.get("/objects/{oid}/frame/{which}.csv")
 def get_frame_csv(
-    oid: str, which: str, cache: ObjectCache = Depends(_get_cache)
+    oid: str, which: str, entry: CacheEntry = Depends(_locked_entry)
 ) -> Response:
     """Return the full named frame as a CSV download."""
     attr = _CSV_FRAMES.get(which)
@@ -1230,7 +1274,6 @@ def get_frame_csv(
             status_code=404,
             detail=f"unknown frame {which!r}; expected one of {sorted(_CSV_FRAMES)}",
         )
-    entry = _resolve_object(oid, cache)
     if entry.kind == "pnl" and which == "density_df":
         # A PnL's density_df is a dict of GridDistributions, not a frame; export
         # the grand-result density instead (the full, unbinned shape the Density
@@ -1266,7 +1309,7 @@ def get_plot(
     width: float | None = Query(None, gt=0, le=30),
     height: float | None = Query(None, gt=0, le=30),
     dpi: float | None = Query(None, gt=0, le=600),
-    cache: ObjectCache = Depends(_get_cache),
+    entry: CacheEntry = Depends(_locked_entry),
 ) -> Response:
     """Render the requested plot.
 
@@ -1275,7 +1318,6 @@ def get_plot(
     rather than ``StreamingResponse`` because plot bytes are
     already in-memory.
     """
-    entry = _resolve_object(oid, cache)
     try:
         payload, media_type = render_plot(
             entry.obj, kind, fmt=format, width=width, height=height, dpi=dpi,
@@ -1294,14 +1336,13 @@ def get_plot(
 def post_price(
     oid: str,
     req: models.PriceRequest,
-    cache: ObjectCache = Depends(_get_cache),
+    entry: CacheEntry = Depends(_locked_entry),
 ) -> dict:
     """Pricing-pentagon completion (+ distortion analysis for Portfolios).
 
     Fix the capital level with ``p`` and supply exactly one target (``coc``
     or ``lr``); see :func:`aggregate_api.pricing.run_price_pentagon`.
     """
-    entry = _resolve_object(oid, cache)
     try:
         return run_price_pentagon(entry.obj, p=req.p, coc=req.coc, lr=req.lr)
     except ValueError as exc:
@@ -1312,9 +1353,8 @@ def post_price(
 def post_pricing(
     oid: str,
     req: models.PricingRequest,
-    cache: ObjectCache = Depends(_get_cache),
+    entry: CacheEntry = Depends(_locked_entry),
 ) -> dict:
-    entry = _resolve_object(oid, cache)
     try:
         return run_pricing(
             entry.obj,

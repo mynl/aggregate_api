@@ -4,6 +4,98 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a22
+
+From `dev/plan-exhibit-punchups.md`. The author's first inspection of the a21
+Overview, acted on, plus two bugs that inspection led to.
+
+### A race that made the landing page fail intermittently
+
+**The one that matters.** Fetching `unit_density_df` and `tail_df` for the same
+Portfolio at the same moment raised
+`KeyError: "['F', 'S'] not in index"` from inside
+`Portfolio.unit_density_df`, about half the time on a cold object and never on
+a warm one. That is exactly what the portfolio exhibit does, in a single
+`Promise.all`, and three of the eight landing heroes are portfolios, one of
+which auto-builds on load. So a11 in ten cold visits to the front page got a
+500 where a chart should be.
+
+An `Aggregate` or `Portfolio` materializes several frames lazily and caches
+them on the instance, so the first read *is* a write. FastAPI runs sync
+handlers in a thread pool, so two requests for different frames of one object
+are two threads racing to build them. Bisected to that and nothing else:
+sequential fetches always passed, concurrent ones failed on cold objects across
+repeated fresh server starts.
+
+`CacheEntry` gains a `threading.Lock`, and the eighteen routes that read object
+data now take their entry from a `_locked_entry` dependency that holds it for
+the request, rather than resolving it unlocked in the body. Structural rather
+than a habit each new handler has to remember. Per entry, so unrelated objects
+still serve in parallel, and contention is confined to the first access of each
+frame. Verified across four fresh cold starts, four passes.
+
+(The dependency is a bare generator, deliberately not wrapped in
+`@contextmanager`: FastAPI drives a yield-dependency as an iterator itself and
+the wrapper breaks it.)
+
+### Two unbuildable programs were 500s
+
+Both are statements about the program, not server faults, and the library
+already reports both well:
+
+- **`xpnl` over a portfolio** raises `NotImplementedError` ("the portfolio
+  total hides its units, so there is nothing to explode. Use 'pnl' ...").
+- **An unresolved `port.X` / `agg.X` / `sev.X` reference** raises `KeyError`
+  ("no recipe named 'X' of kind 'port'").
+
+Neither was caught, so both fell to the catch-all 500 with no useful body. Both
+are 422s now, carrying the library's own message. `str()` on a `KeyError`
+re-quotes its argument, so the detail is read from `args[0]` or the user would
+see a message wrapped in stray quotes.
+
+`pnl` over a portfolio, which does work, gained the regression test it never
+had.
+
+### The exhibit gets a control row
+
+Four toggles, sticky per browser like the Static | Interactive table switch, so
+a chosen view survives a rebuild and a reload:
+
+| toggle | what it does |
+|---|---|
+| **log y** | log density, where a heavy tail becomes readable. Zeros are emitted as gaps: a log axis cannot place zero, and the tail of a discretized density is full of exact zeros. The area fill turns off with it, since shading to a log axis floor is a different and false area |
+| **survival** | swaps the right panel from loss against return period to exceedance against loss. Same numbers transposed, and in this view both panels share the loss axis, so they read as one picture |
+| **full x** | drops the q(0.001) to q(0.999) crop. Answers "what am I not being shown", which the crop otherwise hides silently |
+| **reference lines** | the mean and the 1-in-200 anchor, on both panels. One anchor, not three: three dashed verticals over a density say nothing three times |
+
+Each exhibit declares which toggles it honors, so a distortion never offers a
+log-y button that would do nothing.
+
+**Zoom now rescales.** The `dataZoom` `filterMode` moves from `none` to
+`filter`, so the y-axis re-fits to what is left visible. Without it, zooming
+into a heavy tail zoomed into a flat strip near zero, which made the feature
+look present and useless.
+
+### Distortion and bivariate are square
+
+`aspect='equal'`, and it was a real error not to have it. A g(s) curve lives on
+the unit square and the only thing anyone reads off it is **concavity**, which
+a 1000-by-300 aspect ratio misrepresents. The joint-density heatmap is square
+for the same reason: stretched wide it lies about where the mass sits. Both now
+size a square plot area from the container width, bounded to 240 to 420 px.
+
+### Also
+
+- **The Overview program disclosure is gone.** It repeated what the editor
+  shows a few centimetres up the page, which is a poor use of the most valuable
+  strip of the tab. The toggle row takes that space. The hints line went with
+  it, same redundancy.
+- **Exhibit titles trimmed** to `Summary` and `Tail risk`. The captions stay:
+  unlike the titles they carry content, naming which anchor is Solvency II and
+  why the Freq percentiles are blank.
+- The build response's `mean` is now kept in the SPA's state, so the reference
+  line costs no extra fetch.
+
 ## 1.0.0a21
 
 From `dev/plan-echarts-exhibit.md`. The Overview gets a real chart engine and an

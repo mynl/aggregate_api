@@ -270,23 +270,27 @@ header .navbar { min-height: 56px; }
     font-size: .98rem; color: #374151; margin: 0 0 .5rem;
     max-width: 70ch; line-height: 1.45;
 }
-.overview-hints { font-size: .74rem; color: var(--mut); margin-bottom: .2rem; }
-.overview-program-toggle {
-    border: 0; background: transparent; padding: 0;
-    font-size: .74rem; color: var(--primary); cursor: pointer;
-}
-.overview-program-toggle:hover { text-decoration: underline; }
-.overview-program {
-    font-size: .78rem; color: #374151; background: var(--soft);
-    border: 1px solid var(--grid); border-radius: .3rem;
-    padding: .5rem .65rem; margin: .35rem 0 0; max-width: 70ch;
-    white-space: pre; overflow-x: auto;
-}
-
-/* The exhibit sizes itself: ECharts sets the host height from the panel
-   layout (side by side or stacked), so no fixed height here. The cap is wider
-   than the old single-panel chart because two panels need the room. */
+/* The exhibit sizes itself: ECharts sets the canvas height from the panel
+   layout (side by side, stacked, or square), so no fixed height here. The cap
+   is wider than the old single-panel chart because two panels need the room. */
 .overview-plot { width: 100%; max-width: 1000px; margin: .2rem 0 1rem; }
+.exhibit-canvas { width: 100%; }
+
+/* ---- Exhibit toggle row (log y / survival / full x / reference lines) ----
+   Sits where the program disclosure used to, directly above the chart. State is
+   sticky per browser, so a chosen view survives a rebuild. */
+.exhibit-controls {
+    display: flex; flex-wrap: wrap; gap: .35rem; margin: 0 0 .45rem;
+}
+.exhibit-toggle {
+    font-size: .72rem; line-height: 1; padding: .3rem .6rem;
+    color: var(--mut); background: #fff;
+    border: 1px solid var(--grid); border-radius: 999px; cursor: pointer;
+}
+.exhibit-toggle:hover { color: var(--primary); border-color: var(--primary); }
+.exhibit-toggle.active {
+    color: #fff; background: var(--primary); border-color: var(--primary);
+}
 
 /* ---- Overview table view toggle (Static | Interactive) ---- */
 .overview-view-toggle { display: flex; align-items: center; gap: .55rem; margin: .1rem 0 .8rem; }

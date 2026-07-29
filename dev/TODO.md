@@ -168,11 +168,17 @@ one version bump each.
       Overview header block off `/meta`; duplicate Summary dropped from More.
       Bundle 187 → 353 kB gzip, now split four ways.
       *(done; in `dev/`)*
-- [ ] **Eyeball the new Overview.** The a21 smoke test proves the data reaches
-      each chart in a drawable shape, not that any of them looks right. The
-      Chrome extension was not connected when a21 landed, so no rendered chart
-      was ever inspected. Check all six kinds, both breakpoints, and the legend
-      toggle on a portfolio.
+- [x] **plan-exhibit-punchups — first inspection acted on** (→ 1.0.0a22).
+      Control row (log y / survival / full x / reference lines), sticky per
+      browser; `dataZoom` rescales the y-axis; distortion and bivariate drawn
+      square; program disclosure dropped; exhibit titles trimmed. Plus two bugs
+      the inspection surfaced: a per-object read race that made the landing page
+      500 intermittently for portfolios, and `xpnl`-over-port /
+      unresolved-reference turned from 500s into 422s. *(done; in `dev/`)*
+- [ ] **Eyeball the Overview.** Still outstanding. The smoke test proves the
+      data reaches each chart in a drawable shape, not that any of them looks
+      right, and the Chrome extension has not been connected in any session so
+      far. Check all six kinds, both breakpoints, and the four toggles.
 - [ ] **Examples: topic groups, fuzzy find, hero sparklines** (→ a22). Pinned
       search + Ctrl+K palette over name / kind / tags / note; sparkline
       thumbnails from a cached heroes payload, built lazily with a fallback.

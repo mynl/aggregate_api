@@ -2,44 +2,96 @@
 //
 // The shape for anything with a loss distribution is two linked panels:
 //
-//   density (what it looks like)      EP curve (what it costs)
+//   density (what it looks like)      exceedance (what it costs)
 //   x = loss, linear, cropped         x = return period, log
 //   y = probability mass              y = loss
 //
-// The EP panel is the one an insurance reader looks at first, which is why it
-// gets equal billing rather than living behind a toggle: the capital anchors
-// (1-in-100 / 200 / 250) are points *on* the curve instead of dashed lines
-// floating over a density, and a portfolio becomes one curve per unit against
-// the total, which is the diversification story stated in a picture.
+// The right-hand panel is the one an insurance reader looks at first, which is
+// why it gets equal billing rather than living behind a toggle: the capital
+// anchors (1-in-100 / 200 / 250) are points *on* the curve instead of dashed
+// lines floating over a density, and a portfolio becomes one curve per unit
+// against the total, which is the diversification story stated in a picture.
 //
 // Both panels are drawn from the same row array, so a point's index means the
 // same thing in each. That is what lets the cursor link exactly: hovering a
 // loss on the left highlights its return period on the right, because they are
-// literally the same grid bucket seen two ways. Series dropped from the EP
-// panel (S = 0 out in the numerical noise) are emitted as `null` rather than
-// omitted, so the indices stay aligned and ECharts draws a clean trailing gap.
+// literally the same grid bucket seen two ways. Points the right panel cannot
+// show are emitted as `null` rather than omitted, so the indices stay aligned
+// and ECharts draws a clean trailing gap.
 //
-// A kind with no loss distribution gets its own single-panel exhibit: a
-// distortion its g-curve against the diagonal, a bivariate its joint density as
-// a heatmap. The registry is total over the six kinds, so the Overview always
-// lands on something rather than reporting that it has nothing to draw.
+// A kind with no loss distribution gets its own single-panel exhibit, and those
+// are drawn **square**: a distortion's g(s) lives on the unit square, so
+// stretching it wide misrepresents concavity, which is the only thing anyone
+// looks at a distortion to see. The bivariate heatmap is square for the same
+// reason, that a 1000-by-300 joint density lies about where the mass sits.
+//
+// The registry is total over the six kinds, so the Overview always lands on
+// something rather than reporting that it has nothing to draw.
 
 import { api } from '../api.js';
+import { el, empty } from '../utils/dom.js';
 import { fmt } from '../utils/format.js';
 import { echarts, baseOption, axisStyle, seriesColor, fade, lineWidth, houseStyle }
     from './theme.js';
 
-// Return periods flagged on the EP curve: the capital anchors first.
+// Return periods flagged on the exceedance curve: the capital anchors first.
 const ANCHORS = [100, 200, 250];
 
-// The EP x-axis runs from an annual event out to 1-in-100,000. Past that the
-// survival function is FFT noise, not tail, and plotting it would invite
-// reading precision that is not there.
+// The anchor carried onto the density panel as a reference line. One, not three:
+// the point is to say where capital sits, and three dashed verticals over a
+// density say nothing three times.
+const REF_ANCHOR = 200;
+
+// The return-period window runs from an annual event out to 1-in-100,000. Past
+// that the survival function is FFT noise rather than tail, and plotting it
+// would invite reading precision that is not there.
 const T_MIN = 1;
 const T_MAX = 1e5;
 
 // Side-by-side needs room for two readable axes; below this the panels stack.
 const WIDE_PX = 720;
+
+// Bounds on the square plot area used by the single-panel exhibits.
+const SQUARE_MIN = 240;
+const SQUARE_MAX = 420;
+
+// ---- view state -------------------------------------------------------
+//
+// Sticky per browser, like the Static | Interactive table toggle: a chosen view
+// survives a rebuild and a reload, so you are not re-clicking log-y every time
+// you press Build.
+
+const VIEW_KEY = 'aggapi.exhibitView';
+
+const VIEW_DEFAULTS = {
+    logY: false,        // density panel: linear or log mass
+    epMode: 'rp',       // right panel: 'rp' (loss vs return period) or 'survival'
+    xFull: false,       // density x: cropped to q(0.001)..q(0.999), or the full grid
+    refLines: true,     // mean and the 1-in-200 anchor, drawn on both panels
+};
+
+let view = (() => {
+    try {
+        return { ...VIEW_DEFAULTS, ...JSON.parse(localStorage.getItem(VIEW_KEY) || '{}') };
+    } catch {
+        return { ...VIEW_DEFAULTS };
+    }
+})();
+
+function setView(patch) {
+    view = { ...view, ...patch };
+    try { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch { /* private mode */ }
+}
+
+// What each toggle says and which exhibits it applies to. A spec declares the
+// subset it honors, so a distortion never shows a log-y button that does
+// nothing.
+const CONTROLS = {
+    logY: { label: 'log y', title: 'Log density: where a heavy tail becomes readable' },
+    epMode: { label: 'survival', title: 'Swap return period for survival, S against loss' },
+    xFull: { label: 'full x', title: 'Show the whole grid, not just q(0.001) to q(0.999)' },
+    refLines: { label: 'reference lines', title: 'Mean and the 1-in-200 anchor' },
+};
 
 // ---- frame helpers ----------------------------------------------------
 
@@ -63,10 +115,31 @@ function suffixes(frame, prefix) {
         .map((c) => c.slice(prefix.length));
 }
 
+/** The `VaR` at return period `T` for the total, from a tail_df payload. */
+function varAt(tail, T) {
+    if (!tail || !tail.rows) return null;
+    const at = indexer(tail);
+    const iT = at('T');
+    const iVaR = at('VaR');
+    const iUnit = at('unit');
+    if (iT < 0 || iVaR < 0) return null;
+    for (const r of tail.rows) {
+        if (iUnit >= 0 && String(r[iUnit]) !== 'total') continue;
+        if (Number(r[iT]) === T) return Number(r[iVaR]);
+    }
+    return null;
+}
+
 // ---- series builders --------------------------------------------------
 
 /**
- * The EP series: `[return period, loss]` per row, `null` where undefined.
+ * Right-panel points, index-aligned with `loss`.
+ *
+ * In `rp` mode a point is `[return period, loss]`; in `survival` mode it is
+ * `[loss, exceedance]`. Same numbers either way, transposed, which is the whole
+ * content of the toggle. A probability outside the plotted window becomes
+ * `null` rather than being dropped, so a dataIndex still identifies the same
+ * grid bucket in both panels.
  *
  * Parameters
  * ----------
@@ -74,18 +147,13 @@ function suffixes(frame, prefix) {
  * tailProb : number[]
  *     Exceedance probability per row. `S` for a loss distribution; `F` for a
  *     signed P&L, where the bad tail is the low end.
- *
- * Returns
- * -------
- * Array<[number, number]|null>
- *     Index-aligned with `loss`, so a dataIndex means the same row in either
- *     panel. A probability of zero or one falls outside the plotted window and
- *     becomes `null` rather than being dropped.
+ * mode : {'rp', 'survival'}
  */
-function epPairs(loss, tailProb) {
+function rightPairs(loss, tailProb, mode) {
     return loss.map((x, i) => {
         const p = tailProb[i];
         if (!(p > 0) || !Number.isFinite(p)) return null;
+        if (mode === 'survival') return [x, p];
         const T = 1 / p;
         if (!(T >= T_MIN) || T > T_MAX) return null;
         return [T, x];
@@ -97,10 +165,11 @@ function epPairs(loss, tailProb) {
  * `Aggregate._limits`.
  *
  * A heavy tail otherwise squashes all the visible mass into a sliver at the
- * origin. Drag still zooms past the crop; the EP panel is where the tail is
- * meant to be read anyway. Returns null (auto-fit) when there is no usable cdf.
+ * origin. Returns null (auto-fit) when there is no usable cdf, or when the
+ * `full x` toggle is on, in which case the whole grid is deliberately shown.
  */
 function densityWindow(loss, cdf) {
+    if (view.xFull) return null;
     if (!cdf || cdf.length !== loss.length || loss.length < 2) return null;
     const n = loss.length;
     let hi = loss[n - 1];
@@ -118,29 +187,36 @@ function densityWindow(loss, cdf) {
 /** One density line, filled under the curve when it is the only one. */
 function densitySeries(name, loss, mass, i, solo) {
     const color = seriesColor(i);
+    // A log axis cannot place zero, and the tail of a discretized density is
+    // full of exact zeros. Emit them as gaps rather than letting ECharts drop
+    // them silently or clamp them onto the axis floor.
+    const y = view.logY ? mass.map((v) => (v > 0 ? v : null)) : mass;
     return {
         name,
         type: 'line',
         xAxisIndex: 0,
         yAxisIndex: 0,
-        data: loss.map((x, k) => [x, mass[k]]),
+        data: loss.map((x, k) => (y[k] == null ? null : [x, y[k]])),
         showSymbol: false,
+        connectNulls: false,
         lineStyle: { width: lineWidth(), color },
         itemStyle: { color },
-        areaStyle: solo ? { color: fade(color, 0.10) } : undefined,
+        // No fill under a log axis: the shaded region would run to the axis
+        // floor rather than to zero, which is a different (and false) area.
+        areaStyle: (solo && !view.logY) ? { color: fade(color, 0.10) } : undefined,
         emphasis: { focus: 'series' },
     };
 }
 
-/** One EP line, on the right-hand panel. */
-function epSeries(name, loss, tailProb, i) {
+/** One right-panel line. */
+function rightSeries(name, loss, tailProb, i) {
     const color = seriesColor(i);
     return {
         name,
         type: 'line',
         xAxisIndex: 1,
         yAxisIndex: 1,
-        data: epPairs(loss, tailProb),
+        data: rightPairs(loss, tailProb, view.epMode),
         showSymbol: false,
         connectNulls: false,
         lineStyle: { width: lineWidth(), color },
@@ -150,7 +226,7 @@ function epSeries(name, loss, tailProb, i) {
 }
 
 /**
- * Capital-anchor markers for the EP panel, read from `tail_df`.
+ * Capital-anchor markers for the right panel, read from `tail_df`.
  *
  * Taken from `tail_df` rather than off the plotted curve because that frame is
  * the library's own quantile function at those return periods, while the curve
@@ -168,9 +244,9 @@ function anchorMarkPoints(tail) {
         if (iUnit >= 0 && String(r[iUnit]) !== 'total') continue;
         const T = Number(r[iT]);
         if (!ANCHORS.includes(T)) continue;
+        const VaR = Number(r[iVaR]);
         data.push({
-            coord: [T, Number(r[iVaR])],
-            value: `1-in-${T}`,
+            coord: view.epMode === 'survival' ? [VaR, 1 / T] : [T, VaR],
             name: `1-in-${T}`,
         });
     }
@@ -189,36 +265,101 @@ function anchorMarkPoints(tail) {
     };
 }
 
+/** A dashed reference line, styled the same wherever it appears. */
+function refLine(entries) {
+    if (!entries.length) return undefined;
+    return {
+        symbol: 'none',
+        silent: true,
+        label: { show: true, fontSize: 10, color: '#6c757d', position: 'insideEndTop',
+                 formatter: (p) => p.name },
+        lineStyle: { color: '#6c757d', type: 'dashed', width: 1 },
+        data: entries,
+    };
+}
+
 // ---- the two-panel option ---------------------------------------------
 
 /**
- * Assemble the two-panel option from per-series density and EP definitions.
+ * Assemble the two-panel option from per-series density and right-panel data.
  *
  * Series in the two panels share a `name`, which is what makes one legend entry
  * toggle a unit in both panels at once.
  */
-function twoPanel({ loss, cdf, series, tail, wide, epLabel = 'loss' }) {
+function twoPanel({ loss, cdf, series, tail, wide, mean, rightLabel = 'loss', zeroLine }) {
     const solo = series.length === 1;
+    const survival = view.epMode === 'survival';
     const density = series.map((s, i) => densitySeries(s.name, loss, s.mass, i, solo));
-    const ep = series.map((s, i) => epSeries(s.name, loss, s.tailProb, i));
+    const right = series.map((s, i) => rightSeries(s.name, loss, s.tailProb, i));
+
     const anchors = anchorMarkPoints(tail);
-    if (anchors && ep.length) ep[ep.length - 1].markPoint = anchors;
+    if (anchors && right.length) right[right.length - 1].markPoint = anchors;
+
+    // Reference lines go on the first series of each panel, so they draw once.
+    if (view.refLines || zeroLine != null) {
+        const anchorVaR = varAt(tail, REF_ANCHOR);
+        const dens = [];
+        const rightRefs = [];
+        if (zeroLine != null) dens.push({ xAxis: zeroLine, name: 'break even' });
+        if (view.refLines) {
+            if (Number.isFinite(mean)) {
+                dens.push({ xAxis: mean, name: 'mean' });
+                // In rp mode loss is the y-axis, in survival mode the x-axis.
+                rightRefs.push(survival ? { xAxis: mean, name: 'mean' }
+                                        : { yAxis: mean, name: 'mean' });
+            }
+            if (Number.isFinite(anchorVaR)) {
+                dens.push({ xAxis: anchorVaR, name: `1-in-${REF_ANCHOR}` });
+            }
+        }
+        if (dens.length) density[0].markLine = refLine(dens);
+        if (rightRefs.length && right.length) right[0].markLine = refLine(rightRefs);
+    }
 
     const window = densityWindow(loss, cdf);
     const grids = wide
-        ? [{ left: 48, right: '54%', top: 28, bottom: 62 },
-           { left: '52%', right: 24, top: 28, bottom: 62 }]
-        : [{ left: 56, right: 20, top: 28, height: 150 },
-           { left: 56, right: 20, top: 232, height: 150 }];
+        ? [{ left: 52, right: '54%', top: 28, bottom: 62 },
+           { left: '52%', right: 28, top: 28, bottom: 62 }]
+        : [{ left: 58, right: 24, top: 28, height: 150 },
+           { left: 58, right: 24, top: 232, height: 150 }];
+
+    // In survival mode the right panel shares the density's loss axis, so it
+    // takes the same window: the two panels then read as one picture.
+    const rightX = survival
+        ? axisStyle({
+            gridIndex: 1, type: 'value', name: 'loss', scale: true,
+            min: window ? window[0] : 'dataMin',
+            max: window ? window[1] : 'dataMax',
+            axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
+                         formatter: (v) => fmt(v) },
+        })
+        : axisStyle({
+            gridIndex: 1, type: 'log', logBase: 10, name: 'return period',
+            min: T_MIN, max: T_MAX,
+            axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
+                         formatter: (v) => (v >= 1000 ? `${v / 1000}k` : String(v)) },
+        });
+
+    const rightY = survival
+        ? axisStyle({
+            gridIndex: 1, type: 'log', logBase: 10, name: 'exceedance', scale: true,
+            axisLabel: { fontSize: 10, color: '#6c757d',
+                         formatter: (v) => (v >= 0.01 ? String(v) : v.toExponential(0)) },
+        })
+        : axisStyle({
+            gridIndex: 1, type: 'value', name: rightLabel, scale: true,
+            axisLabel: { fontSize: 10, color: '#6c757d', formatter: (v) => fmt(v) },
+        });
 
     return {
         ...baseOption(),
         grid: grids,
         title: [
-            { text: 'Density', left: wide ? '14%' : 56, top: 2,
+            { text: 'Density', left: wide ? 52 : 58, top: 2,
               textStyle: { fontSize: 12, fontWeight: 600 } },
-            { text: 'Exceedance probability', left: wide ? '62%' : 56,
-              top: wide ? 2 : 206, textStyle: { fontSize: 12, fontWeight: 600 } },
+            { text: survival ? 'Survival' : 'Exceedance probability',
+              left: wide ? '52%' : 58, top: wide ? 2 : 206,
+              textStyle: { fontSize: 12, fontWeight: 600 } },
         ],
         legend: { ...baseOption().legend, show: !solo, data: series.map((s) => s.name) },
         xAxis: [
@@ -229,58 +370,68 @@ function twoPanel({ loss, cdf, series, tail, wide, epLabel = 'loss' }) {
                 axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
                              formatter: (v) => fmt(v) },
             }),
-            axisStyle({
-                gridIndex: 1, type: 'log', logBase: 10, name: 'return period',
-                min: T_MIN, max: T_MAX,
-                axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
-                             formatter: (v) => (v >= 1000 ? `${v / 1000}k` : String(v)) },
-            }),
+            rightX,
         ],
         yAxis: [
             axisStyle({
-                gridIndex: 0, type: 'value', name: 'density', scale: true,
+                gridIndex: 0, type: view.logY ? 'log' : 'value',
+                name: view.logY ? 'log density' : 'density', scale: true,
                 axisLabel: { fontSize: 10, color: '#6c757d',
                              formatter: (v) => (v ? v.toExponential(0) : '0') },
             }),
-            axisStyle({
-                gridIndex: 1, type: 'value', name: epLabel, scale: true,
-                axisLabel: { fontSize: 10, color: '#6c757d',
-                             formatter: (v) => fmt(v) },
-            }),
+            rightY,
         ],
+        // filterMode 'filter' drops out-of-window points from the axis extent
+        // calculation, so the y-axis rescales to what is actually visible.
+        // Without it, zooming into a tail zooms into a flat strip near zero.
         dataZoom: [
-            { type: 'inside', xAxisIndex: 0, filterMode: 'none' },
-            { type: 'inside', xAxisIndex: 1, filterMode: 'none' },
+            { type: 'inside', xAxisIndex: 0, filterMode: 'filter' },
+            { type: 'inside', xAxisIndex: 1, filterMode: 'filter' },
         ],
         tooltip: {
             ...baseOption().tooltip,
             formatter: (params) => {
                 const rows = (Array.isArray(params) ? params : [params])
-                    .filter((p) => p.value != null && Array.isArray(p.value));
+                    .filter((p) => Array.isArray(p.value));
                 if (!rows.length) return '';
                 const first = rows[0];
-                const isEp = first.axisIndex === 1 || first.seriesIndex >= density.length;
-                const head = isEp
-                    ? `1-in-${fmt(first.value[0])}`
-                    : `loss ${fmt(first.value[0])}`;
+                const onRight = first.seriesIndex >= density.length;
+                let head;
+                if (!onRight) head = `loss ${fmt(first.value[0])}`;
+                else if (survival) head = `loss ${fmt(first.value[0])}`;
+                else head = `1-in-${fmt(first.value[0])}`;
                 const body = rows.map((p) => {
-                    const v = isEp ? fmt(p.value[1]) : p.value[1].toExponential(2);
+                    const v = onRight
+                        ? (survival ? p.value[1].toExponential(2) : fmt(p.value[1]))
+                        : p.value[1].toExponential(2);
                     return `${p.marker}${p.seriesName} <b>${v}</b>`;
                 }).join('<br>');
                 return `${head}<br>${body}`;
             },
         },
-        series: [...density, ...ep],
+        series: [...density, ...right],
     };
+}
+
+/** Grid, title and host height for a square single-panel exhibit. */
+function squareLayout(width, { left = 56, rightPad = 28 } = {}) {
+    const side = Math.max(SQUARE_MIN,
+        Math.min(SQUARE_MAX, (width || SQUARE_MAX) - left - rightPad));
+    return { side, left, top: 28, bottom: 52 };
 }
 
 // ---- per-kind exhibits ------------------------------------------------
 //
-// Each entry is {fetch, build}. `fetch` gathers the frames (and may return null
-// to mean "nothing to draw here"); `build` turns them into an ECharts option.
+// Each entry is {controls, fetch, build}. `fetch` gathers the frames; `build`
+// turns them into an ECharts option and is pure, so the node smoke test can
+// exercise it without a DOM. `controls` names the toggles the exhibit honors,
+// so a distortion never offers a log-y button that would do nothing.
+
+const TWO_PANEL_CONTROLS = ['logY', 'epMode', 'xFull', 'refLines'];
 
 const EXHIBITS = {
     agg: {
+        controls: TWO_PANEL_CONTROLS,
         async fetch(id) {
             const [density, tail] = await Promise.all([
                 api.density_df(id, { cols: 'loss,p_total,F,S' }),
@@ -288,19 +439,20 @@ const EXHIBITS = {
             ]);
             return { density, tail };
         },
-        build({ density, tail }, { name, wide }) {
+        build({ density, tail }, { name, wide, mean }) {
             const loss = col(density, 'loss');
             const mass = col(density, 'p_total');
             const S = col(density, 'S');
             if (!loss || !mass || !S) return null;
             return twoPanel({
-                loss, cdf: col(density, 'F'), tail, wide,
+                loss, cdf: col(density, 'F'), tail, wide, mean,
                 series: [{ name: name || 'aggregate', mass, tailProb: S }],
             });
         },
     },
 
     port: {
+        controls: TWO_PANEL_CONTROLS,
         async fetch(id) {
             const [units, tail] = await Promise.all([
                 api.unit_density_df(id),
@@ -308,7 +460,7 @@ const EXHIBITS = {
             ]);
             return { units, tail };
         },
-        build({ units, tail }, { wide }) {
+        build({ units, tail }, { wide, mean }) {
             const loss = col(units, 'loss');
             if (!loss) return null;
             // Units first, total last, so the total draws on top of them and
@@ -321,37 +473,39 @@ const EXHIBITS = {
             const totalS = col(units, 'S');
             if (total && totalS) series.push({ name: 'total', mass: total, tailProb: totalS });
             if (!series.length) return null;
-            return twoPanel({ loss, cdf: col(units, 'F'), tail, wide, series });
+            return twoPanel({ loss, cdf: col(units, 'F'), tail, wide, mean, series });
         },
     },
 
     sev: {
+        controls: TWO_PANEL_CONTROLS,
         async fetch(id) {
             return { density: await api.density_df(id) };
         },
-        build({ density }, { name, wide }) {
+        build({ density }, { name, wide, mean }) {
             const loss = col(density, 'loss');
             const pdf = col(density, 'pdf');
             const S = col(density, 'S');
             if (!loss || !pdf || !S) return null;
             const option = twoPanel({
-                loss, cdf: col(density, 'F'), tail: null, wide,
+                loss, cdf: col(density, 'F'), tail: null, wide, mean,
                 series: [{ name: name || 'severity', mass: pdf, tailProb: S }],
             });
             // A severity is a density ordinate, not a mass, and its support is
             // routinely unbounded. Say so on the axis rather than letting the
             // reader assume the aggregate's semantics.
-            option.yAxis[0].name = 'pdf';
+            option.yAxis[0].name = view.logY ? 'log pdf' : 'pdf';
             option.title[0].text = 'Severity density';
             return option;
         },
     },
 
     pnl: {
+        controls: TWO_PANEL_CONTROLS,
         async fetch(id) {
             return { density: await api.density_df(id, { cols: 'loss,p_total,F,S' }) };
         },
-        build({ density }, { name, wide }) {
+        build({ density }, { name, wide, mean }) {
             const loss = col(density, 'loss');
             const mass = col(density, 'p_total');
             const F = col(density, 'F');
@@ -360,36 +514,36 @@ const EXHIBITS = {
             // the return period runs off F, not S: a 1-in-200 year is the
             // outcome only 1/200 of years fall below, not above.
             const option = twoPanel({
-                loss, cdf: F, tail: null, wide, epLabel: 'outcome',
+                loss, cdf: F, tail: null, wide, mean, rightLabel: 'outcome', zeroLine: 0,
                 series: [{ name: name || 'P&L', mass, tailProb: F }],
             });
-            option.title[1].text = 'Downside return period';
-            option.series[0].markLine = {
-                symbol: 'none', silent: true,
-                label: { show: true, formatter: 'break even', fontSize: 10,
-                         position: 'insideEndTop', color: '#6c757d' },
-                lineStyle: { color: '#6c757d', type: 'dashed', width: 1 },
-                data: [{ xAxis: 0 }],
-            };
+            option.title[1].text = view.epMode === 'survival'
+                ? 'Downside probability' : 'Downside return period';
             return option;
         },
     },
 
     distortion: {
+        controls: [],
         async fetch(id) {
             return { curve: await api.density_df(id) };
         },
-        build({ curve }) {
+        build({ curve }, { width }) {
             const x = col(curve, 'x');
             const g = col(curve, 'g');
             if (!x || !g) return null;
             const color = seriesColor(0);
+            // Square, and both axes on [0, 1]: g(s) lives on the unit square and
+            // the only thing anyone reads off it is concavity, which a stretched
+            // aspect ratio misrepresents. This is `aspect='equal'`.
+            const { side, left, top, bottom } = squareLayout(width);
             return {
                 ...baseOption(),
-                grid: { left: 52, right: 24, top: 28, bottom: 52 },
-                title: [{ text: 'Distortion g(s)', left: 52, top: 2,
+                grid: { left, top, width: side, height: side },
+                title: [{ text: 'Distortion g(s)', left, top: 2,
                           textStyle: { fontSize: 12, fontWeight: 600 } }],
-                legend: { ...baseOption().legend, data: ['g(s)', 'identity'] },
+                legend: { ...baseOption().legend, data: ['g(s)', 'identity'],
+                          bottom: Math.max(0, bottom - 46) },
                 xAxis: axisStyle({ type: 'value', name: 's', min: 0, max: 1 }),
                 yAxis: axisStyle({ type: 'value', name: 'g(s)', min: 0, max: 1 }),
                 series: [
@@ -399,7 +553,7 @@ const EXHIBITS = {
                         lineStyle: { width: lineWidth() + 0.4, color },
                         itemStyle: { color },
                         // The load is the area between g and the diagonal. Fill
-                        // to the identity line so it is the visible quantity.
+                        // to the axis so it is the visible quantity.
                         areaStyle: { color: fade(color, 0.12), origin: 'start' },
                     },
                     {
@@ -425,6 +579,7 @@ const EXHIBITS = {
     },
 
     bvagg: {
+        controls: [],
         async fetch(id) {
             // stats_df carries both component names as its value columns. The
             // joint frame only names axis 0 (its first column); axis 1 arrives
@@ -436,15 +591,19 @@ const EXHIBITS = {
             ]);
             return { joint, stats };
         },
-        build({ joint, stats }) {
+        build({ joint, stats }, { width }) {
             const grid = heatmapData(joint, axisNames(joint, stats));
             if (!grid) return null;
             const s = houseStyle();
+            // Square for the same reason as the distortion: a joint density
+            // stretched wide lies about where the mass sits. The right pad
+            // leaves room for the colorbar.
+            const { side, left, top } = squareLayout(width, { left: 64, rightPad: 96 });
             return {
                 ...baseOption(),
-                grid: { left: 64, right: 76, top: 28, bottom: 52 },
+                grid: { left, top, width: side, height: side },
                 title: [{ text: `Joint density: ${grid.xName} vs ${grid.yName}`,
-                          left: 64, top: 2,
+                          left, top: 2,
                           textStyle: { fontSize: 12, fontWeight: 600 } }],
                 legend: { show: false },
                 xAxis: axisStyle({
@@ -454,15 +613,15 @@ const EXHIBITS = {
                                  formatter: (v) => fmt(Number(v)) },
                 }),
                 yAxis: axisStyle({
-                    type: 'category', name: grid.yName, data: grid.ys,
-                    nameGap: 44,
+                    type: 'category', name: grid.yName, data: grid.ys, nameGap: 46,
                     splitLine: { show: false },
                     axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
                                  formatter: (v) => fmt(Number(v)) },
                 }),
                 visualMap: {
-                    min: 0, max: grid.max, right: 8, top: 'middle', calculable: true,
-                    itemHeight: 110, textStyle: { fontSize: 10, color: '#6c757d' },
+                    min: 0, max: grid.max, left: left + side + 24, top: top + 10,
+                    calculable: true, itemHeight: Math.max(90, side - 60),
+                    textStyle: { fontSize: 10, color: '#6c757d' },
                     // Sequential, light to the primary color: a joint density is
                     // one-directional, so a diverging ramp would imply a
                     // midpoint that does not exist.
@@ -554,6 +713,35 @@ function heatmapData(frame, [xName, yName] = ['axis 1', 'axis 2'], CELLS = 96) {
     return { xs, ys, cells, max, xName, yName };
 }
 
+// ---- controls ---------------------------------------------------------
+
+/** The toggle row: one pressed-state button per control the exhibit honors. */
+function renderControls(names, onChange) {
+    const row = el('div', { className: 'exhibit-controls' });
+    for (const key of names) {
+        const spec = CONTROLS[key];
+        if (!spec) continue;
+        const on = key === 'epMode' ? view.epMode === 'survival' : Boolean(view[key]);
+        const btn = el('button', {
+            type: 'button',
+            className: `exhibit-toggle${on ? ' active' : ''}`,
+            title: spec.title,
+            onClick: () => {
+                const next = key === 'epMode'
+                    ? { epMode: view.epMode === 'survival' ? 'rp' : 'survival' }
+                    : { [key]: !view[key] };
+                setView(next);
+                const nowOn = key === 'epMode'
+                    ? view.epMode === 'survival' : Boolean(view[key]);
+                btn.classList.toggle('active', nowOn);
+                onChange();
+            },
+        }, spec.label);
+        row.appendChild(btn);
+    }
+    return row;
+}
+
 // ---- mount ------------------------------------------------------------
 
 /**
@@ -561,9 +749,11 @@ function heatmapData(frame, [xName, yName] = ['axis 1', 'axis 2'], CELLS = 96) {
  *
  * Parameters
  * ----------
- * host : HTMLElement
- *     Mount point, already attached so ECharts can size to it.
- * state : {id, kind, name}
+ * container : HTMLElement
+ *     Already attached, so the chart can size to it. The control row and the
+ *     canvas are both created inside it, keeping every chart concern here
+ *     rather than split across main.js.
+ * state : {id, kind, name, mean}
  *
  * Returns
  * -------
@@ -571,7 +761,7 @@ function heatmapData(frame, [xName, yName] = ['axis 1', 'axis 2'], CELLS = 96) {
  *     A handle with `dispose()`, or null when this kind has nothing to draw or
  *     the frames it needs are unavailable.
  */
-export async function mountExhibit(host, state) {
+export async function mountExhibit(container, state) {
     const spec = EXHIBITS[state.kind];
     if (!spec) return null;
 
@@ -582,30 +772,52 @@ export async function mountExhibit(host, state) {
         return null;                     // a frame this kind lacks; not an error
     }
 
-    const wideNow = () => (host.clientWidth || 0) >= WIDE_PX;
-    let wide = wideNow();
-    const option = spec.build(data, { ...state, wide });
-    if (!option) return null;
+    empty(container);
+    const controls = spec.controls || [];
+    const host = el('div', { className: 'exhibit-canvas' });
+    // Controls first so the chart measures against its final width.
+    if (controls.length) container.appendChild(renderControls(controls, () => redraw()));
+    container.appendChild(host);
 
-    host.style.height = `${chartHeight(wide, option)}px`;
+    const opts = () => ({
+        ...state,
+        wide: (host.clientWidth || 0) >= WIDE_PX,
+        width: host.clientWidth || 0,
+    });
+
+    let option = spec.build(data, opts());
+    if (!option) { empty(container); return null; }
+
+    host.style.height = `${chartHeight(option)}px`;
     const chart = echarts.init(host, null, { renderer: 'canvas' });
     chart.setOption(option);
     linkPanels(chart, option);
 
-    // Re-lay out on resize, and rebuild across the stacked/side-by-side
-    // breakpoint since that changes the grid count's geometry, not just its size.
-    const ro = new ResizeObserver(() => {
-        const nowWide = wideNow();
-        if (nowWide !== wide) {
-            wide = nowWide;
-            const next = spec.build(data, { ...state, wide });
-            if (next) {
-                host.style.height = `${chartHeight(wide, next)}px`;
-                chart.setOption(next, true);
-                linkPanels(chart, next);
-            }
-        }
+    // `notMerge` on every redraw: a toggle can change an axis *type*
+    // (value -> log) and swap which series carry markLines, and a merged
+    // setOption would leave the old ones behind.
+    function redraw() {
+        const next = spec.build(data, opts());
+        if (!next) return;
+        option = next;
+        host.style.height = `${chartHeight(option)}px`;
+        chart.setOption(option, true);
         chart.resize();
+        linkPanels(chart, option);
+    }
+
+    // Rebuild on resize: the stacked / side-by-side breakpoint changes the grid
+    // geometry, and the square exhibits size their plot area from the width.
+    let lastWide = opts().wide;
+    let lastWidth = opts().width;
+    const ro = new ResizeObserver(() => {
+        const now = opts();
+        const breakpointCrossed = now.wide !== lastWide;
+        const resized = Math.abs(now.width - lastWidth) > 8;
+        lastWide = now.wide;
+        lastWidth = now.width;
+        if (breakpointCrossed || (resized && controls.length === 0)) redraw();
+        else chart.resize();
     });
     ro.observe(host);
 
@@ -617,11 +829,16 @@ export async function mountExhibit(host, state) {
     };
 }
 
-/** Exhibit height: side-by-side is one band, stacked needs two. */
-function chartHeight(wide, option) {
-    const panels = Array.isArray(option.grid) ? option.grid.length : 1;
-    if (panels < 2) return 300;
-    return wide ? 320 : 420;
+/** Host height: two panels stack on narrow, a square exhibit sizes to its side. */
+function chartHeight(option) {
+    const grids = Array.isArray(option.grid) ? option.grid : [option.grid];
+    if (grids.length >= 2) {
+        // Stacked panels declare an explicit `top`; side-by-side ones do not.
+        return grids[1].top ? 420 : 320;
+    }
+    const g = grids[0] || {};
+    if (typeof g.height === 'number') return g.height + (g.top || 0) + 52;
+    return 300;
 }
 
 /**
@@ -629,14 +846,14 @@ function chartHeight(wide, option) {
  *
  * Both panels are built from the same row array, so a dataIndex identifies the
  * same grid bucket in either. Hovering the density therefore highlights the
- * matching point on the EP curve and vice versa: not an approximation, the same
- * bucket read two ways. A single-panel exhibit is left alone.
+ * matching point on the right-hand curve and vice versa: not an approximation,
+ * the same bucket read two ways. A single-panel exhibit is left alone.
  */
 function linkPanels(chart, option) {
     const total = (option.series || []).length;
     if (total < 2 || !Array.isArray(option.grid) || option.grid.length < 2) return;
-    // twoPanel emits every density series then every EP series, so the two
-    // halves are the same series in the same order and the offset is constant.
+    // twoPanel emits every density series then every right-panel series, so the
+    // two halves are the same series in the same order and the offset is fixed.
     const half = total / 2;
 
     // The mirrored dispatch re-enters this handler; the guard stops the two

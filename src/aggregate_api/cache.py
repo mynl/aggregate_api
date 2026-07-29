@@ -44,7 +44,7 @@ import hashlib
 import re
 import threading
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -108,6 +108,27 @@ class CacheEntry:
     The other fields are metadata returned by
     ``GET /v1/objects/{id}`` and used by the build endpoint to
     fill out the response without consulting the underlying object.
+
+    Thread-safety of ``obj``
+    ------------------------
+
+    ``lock`` serializes *reads of the built object*, which sounds unnecessary
+    and is not. An ``Aggregate`` and a ``Portfolio`` materialize several of
+    their frames lazily and cache them on the instance, so a "read" is a write
+    the first time. Two requests that touch the same object concurrently can
+    therefore see a half-built frame.
+
+    That is not hypothetical. Fetching ``unit_density_df`` and ``tail_df`` for
+    one Portfolio at the same moment (which the Overview exhibit does, in a
+    single ``Promise.all``) raised
+    ``KeyError: "['F', 'S'] not in index"`` from inside
+    ``Portfolio.unit_density_df`` roughly half the time on a cold object, and
+    never once the frames were warm. FastAPI runs sync handlers in a thread
+    pool, so those two requests really are two threads on one object.
+
+    The lock is per entry rather than global so unrelated objects still serve
+    in parallel, and contention is confined to the first access of each frame:
+    afterwards every read is a cache hit and the critical section is trivial.
     """
 
     obj: Any
@@ -117,6 +138,9 @@ class CacheEntry:
     kind: str
     name: str
     created_at: datetime
+    # Guards reads *of the object*, not of this dataclass. See below.
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False,
+                                 compare=False)
 
 
 class ObjectCache:

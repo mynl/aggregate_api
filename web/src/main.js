@@ -51,6 +51,7 @@ const state = {
     id: null,
     kind: null,
     name: null,
+    mean: null,             // headline mean, for the exhibit's reference line
     log2: null,             // null = auto
     bs: null,               // null = auto
     loaded: new Set(),      // tab names whose data has been fetched
@@ -153,13 +154,16 @@ async function build() {
         state.id = res.id;
         state.kind = res.kind;
         state.name = res.name;
+        // The exhibit draws a mean reference line; the build response already
+        // carries it, so there is no reason to refetch a frame to find it.
+        state.mean = res.mean;
         state.loaded = new Set();
         renderSummary(res);
         history.record(decl);
         clearPanes();
         loadActiveTab();
     } catch (err) {
-        state.id = state.kind = state.name = null;
+        state.id = state.kind = state.name = state.mean = null;
         renderBuildFailure(err);
     } finally {
         buildBtn.disabled = false;
@@ -427,13 +431,13 @@ function renderOverviewExhibits(box, summary, tail) {
     clearGrids('pane-overview');
     empty(box);
     if (summary) renderOneExhibit(box, summary, {
-        title: 'Summary: what it’s made of',
+        title: 'Summary',
         caption: 'Moments and key percentiles. CV blank for signed / near-break-even '
             + 'rows; Freq percentiles blank by design (PGF-only).',
         emphasize: (r) => r.X === 'Agg' || r.unit === 'total',
     });
     if (tail) renderOneExhibit(box, tail, {
-        title: 'Tail risk: how bad it gets',
+        title: 'Tail risk',
         caption: '1-in-200 (Solvency II) and 1-in-250 (US) are the capital anchors. '
             + 'Exact from the FFT grid, not simulated.',
         highlight: (r) => Number(r.T) === 200 || Number(r.T) === 250,
@@ -458,7 +462,7 @@ function renderOneExhibit(box, frame, opts) {
 }
 
 /**
- * The object's own header block: name, kind, note, tags, and its program.
+ * The object's own header block: name, kind, tags, and the note as the lead.
  *
  * Reads `/v1/objects/{id}/meta`, so it works for anything that was built,
  * including a hand-typed program carrying `note{}`. This replaces the old
@@ -467,6 +471,13 @@ function renderOneExhibit(box, frame, opts) {
  *
  * A missing note is ordinary, not a defect: most library entries carry one and
  * nothing requires it, so an object without one simply has no lead paragraph.
+ *
+ * Notes
+ * -----
+ * The program and its hints are deliberately **not** shown here. They sit in
+ * the editor a few centimetres up the page, so a disclosure repeating them was
+ * spending the most valuable strip of the tab on something already on screen.
+ * The exhibit's toggle row occupies that space instead.
  */
 function renderOverviewHeader(meta) {
     if (!meta) return null;
@@ -481,26 +492,6 @@ function renderOverviewHeader(meta) {
     head.appendChild(line);
 
     if (meta.note) head.appendChild(el('p', { className: 'overview-note' }, meta.note));
-
-    // pprogram is what the parser understood, re-rendered canonically, which is
-    // the one to show a reader. Collapsed: the chart is the point of the tab.
-    if (meta.pprogram) {
-        const body = el('pre', { className: 'overview-program mono' }, meta.pprogram);
-        body.hidden = true;
-        const toggle = el('button', {
-            type: 'button', className: 'overview-program-toggle',
-            onClick: () => {
-                body.hidden = !body.hidden;
-                toggle.textContent = body.hidden ? 'show program' : 'hide program';
-            },
-        }, 'show program');
-        if (meta.hints) {
-            head.appendChild(el('div', { className: 'overview-hints mono' },
-                `hints: ${meta.hints}`));
-        }
-        head.appendChild(toggle);
-        head.appendChild(body);
-    }
     return head;
 }
 

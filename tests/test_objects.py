@@ -506,6 +506,56 @@ def test_pnl_builds_and_reports(client):
 
 
 # ----------------------------------------------------------------------
+# Unbuildable programs are 422s, not 500s
+# ----------------------------------------------------------------------
+
+def test_pnl_over_portfolio_builds(client):
+    """``pnl`` over a portfolio is supported and reports the whole surface."""
+    port = ("port PB.Book agg A 80 claims 500 xs 0 sev lognorm 50 cv 1.2 poisson "
+            "agg B 20 claims 2000 xs 0 sev lognorm 250 cv 2.0 mixed gamma 0.4")
+    assert client.post("/v1/objects", json={"decl": port}).status_code == 200
+    r = client.post("/v1/objects",
+                    json={"decl": "pnl PB.Over 12000 prem less port.PB.Book"})
+    assert r.status_code == 200, r.text
+    oid = r.json()["id"]
+    assert r.json()["kind"] == "pnl"
+    for which in ("info", "meta", "summary", "stats_df", "density_df"):
+        assert client.get(f"/v1/objects/{oid}/{which}").status_code == 200, which
+
+
+def test_xpnl_over_portfolio_is_422(client):
+    """An unsupported combination is a 422 carrying the library's own reason.
+
+    ``xpnl`` explodes a P&L across its units, and a portfolio total has none to
+    expose, so the library raises ``NotImplementedError`` with a message that
+    names the fix. That is a statement about the program, not a server fault,
+    so it must not fall through to the catch-all 500.
+    """
+    port = ("port XP.Book agg A 80 claims 500 xs 0 sev lognorm 50 cv 1.2 poisson "
+            "agg B 20 claims 2000 xs 0 sev lognorm 250 cv 2.0 mixed gamma 0.4")
+    assert client.post("/v1/objects", json={"decl": port}).status_code == 200
+    r = client.post("/v1/objects",
+                    json={"decl": "xpnl XP.Over 12000 prem less port.XP.Book"})
+    assert r.status_code == 422, r.text
+    detail = str(r.json()["detail"])
+    assert "xpnl" in detail and "portfolio" in detail
+
+
+def test_unresolved_reference_is_422(client):
+    """A reference to a name that is not in the recipe base is a 422.
+
+    The library raises ``KeyError``, whose ``str()`` re-quotes the message, so
+    the detail must come from ``args[0]`` or the user sees stray quotes.
+    """
+    r = client.post("/v1/objects",
+                    json={"decl": "pnl NR.Over 9000 prem less port.NoSuchBook"})
+    assert r.status_code == 422, r.text
+    detail = str(r.json()["detail"])
+    assert "NoSuchBook" in detail
+    assert not detail.startswith('"'), f"quoted KeyError leaked through: {detail}"
+
+
+# ----------------------------------------------------------------------
 # Severity (sev -> kind='sev', near-first-class)
 # ----------------------------------------------------------------------
 
