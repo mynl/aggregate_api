@@ -4,6 +4,57 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a24
+
+From `dev/plan-examples-find.md`. The examples menu becomes findable, and the
+hero cards show what they build.
+
+### Finding, not remembering
+
+The library is 186 entries. Grouping them by topic was the right successor to
+the letter categories, but scrolling nine groups to reach `CatXOLTower` is not
+finding, it is remembering where it lives. The author's verdict on a19 was
+short: "no filtering on examples yet, right? if there is i don't understand it".
+
+One list component, two surfaces, both fed by the same payload:
+
+- **the dropdown**, grouped by topic, with a search box pinned at the top and
+  focused when the menu opens, so it is type-to-find;
+- **`Ctrl+K`**, the same rows full width with room for the note on its own line.
+
+Matching is `@leeoniya/ufuzzy` (about 5 kB gzipped) over
+`name + kind + tags + note`, so "cat xol", "reins tower" and "ilw" all reach the
+same entry, and `intraMode: 1` means "porfolio" and "distorton" still land. Tags
+keep their namespace, so `topic:reinsurance` and `reinsurance` both match.
+
+Typing switches both surfaces from grouped to a **flat ranked list**. A search
+result is already ordered by relevance and re-grouping it would scatter the best
+matches down the page. Once you are searching, the grouping is noise.
+
+Search keystrokes are stopped from reaching Bootstrap's dropdown handler, which
+otherwise steals the arrow keys and closes the menu on Escape mid-word.
+
+### Hero cards show their distribution
+
+New `GET /v1/examples/heroes/sparklines`: a peak-normalized 48-point density
+silhouette per hero, rendered as a small inline SVG on the card. Shape only, no
+axes and no way to read a number off it, which is what a card thumbnail should
+promise.
+
+**Deliberately a separate endpoint from `/heroes`, and called after first
+paint.** It builds every hero, and one of them (`CatXOLTower`) carries
+`hints{log2=16}`, so a cold call costs seconds. Cards mount immediately on their
+placeholder gradient and upgrade in place when the payload lands; a hero that
+fails to build keeps its gradient. Nothing on the landing path waits on it.
+
+The silhouette **sums** into its buckets rather than sampling every n-th point.
+On a spiky discrete support, sampling lands between the atoms and returns a row
+of zeros, so a dice book's thumbnail would be a flat line.
+
+### Bundle
+
+The app chunk goes 28.8 to 34.1 kB gzip; the vendor chunks are untouched.
+
 ## 1.0.0a23
 
 From `dev/plan-exhibit-punchups-2.md`. The author's second pass on the exhibit,

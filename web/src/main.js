@@ -21,7 +21,7 @@ import './styles/cm6.css';
 // ---- App modules ----
 import { api, ApiError } from './api.js';
 import { createEditor, emacsEnabledDefault } from './editor.js';
-import { mountExamples, loadExamples } from './examples.js';
+import { mountExamples, mountPalette, loadExamples } from './examples.js';
 import { renderInfo, renderExhibit } from './renderers.js';
 import { mountExhibit } from './charts/exhibits.js';
 import { loadStyle } from './charts/theme.js';
@@ -753,10 +753,17 @@ function loadExample(decl, formatted = true) {
     }).catch(() => { /* keep raw */ });
 }
 
-mountExamples($('examples-menu'), (item) => {
+function pickExample(item) {
     exampleRing.cursor = exampleRing.decls.indexOf(item.decl);  // sync the ring
     loadExample(item.decl);
-});
+}
+
+mountExamples($('examples-menu'), pickExample);
+
+// Ctrl+K opens the same library as a wider palette. Registered here rather
+// than inside the dropdown so it works from anywhere on the page, including
+// with focus in the editor.
+mountPalette(pickExample);
 
 // The Alt-↑/↓ ring walks every example in the library, flattened out of the
 // grouped payload. An entry tagged in two topics appears in two groups, so
@@ -779,30 +786,63 @@ api.heroes().then((data) => {
 }).catch(() => { /* no gallery; the page still works */ });
 
 // ----------------------------------------------------------------------
-// Hero gallery (group A) -- clickable showcase cards above the editor
+// Hero gallery -- clickable showcase cards above the editor
 // ----------------------------------------------------------------------
+// Cards mount immediately on their placeholder gradient, then upgrade to a
+// real density silhouette when the sparkline payload lands. That order is
+// deliberate: the sparkline endpoint *builds every hero*, one of which carries
+// hints{log2=16}, so a card that waited for it would leave the landing page
+// blank for seconds. Nothing on the landing path may block on that request.
 function mountHeroes(items) {
     const row = $('hero-row');
     if (!row) return;
     empty(row);
     if (!items.length) { row.classList.add('d-none'); return; }
     row.classList.remove('d-none');
+
+    const thumbs = new Map();
     items.forEach((item, i) => {
-        const card = el('button', {
+        const thumb = el('span', {
+            className: 'hero-thumb',
+            style: `background:${gradientFor(item.name)}`,
+        });
+        thumbs.set(item.name, thumb);
+        row.appendChild(el('button', {
             className: 'hero-card', type: 'button', title: item.note || '',
             onClick: () => { loadExample(item.decl); build(); },
-        },
-            el('span', { className: 'hero-thumb', style: `background:${gradientFor(item.name)}` }),
-            el('span', { className: 'hero-name' }, item.name));
-        row.appendChild(card);
+        }, thumb, el('span', { className: 'hero-name' }, item.name)));
         // Auto-build the first card so the visitor lands on a populated page.
         if (i === 0) { loadExample(item.decl); build(); }
     });
+
+    api.heroSparklines().then((data) => {
+        for (const [name, values] of Object.entries(data.sparklines || {})) {
+            const thumb = thumbs.get(name);
+            if (thumb && values.length) upgradeThumb(thumb, values);
+        }
+    }).catch(() => { /* placeholders stay; a thumbnail is not worth an error */ });
 }
 
-// A deterministic placeholder thumbnail: a gradient seeded by the name hash.
-// (Final per-example art / sparklines are a later decision; this needs no
-// network and stays stable per example.)
+/** Replace a card's gradient with an SVG silhouette of its density. */
+function upgradeThumb(thumb, values) {
+    const W = 100;
+    const H = 40;
+    const step = W / Math.max(values.length - 1, 1);
+    // Values are peak-normalized in [0, 1]; invert for SVG's y-down axis and
+    // leave a 2px margin so the peak is not clipped by the viewBox edge.
+    const pts = values.map((v, i) => `${(i * step).toFixed(2)},${(H - 2 - v * (H - 4)).toFixed(2)}`);
+    const area = `0,${H} ${pts.join(' ')} ${W},${H}`;
+    thumb.style.background = '';
+    thumb.classList.add('hero-thumb-spark');
+    // Built as markup rather than through el(): SVG needs createElementNS, and
+    // this is a fixed shape with no user content in it.
+    thumb.innerHTML =
+        `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">`
+        + `<polygon points="${area}"/><polyline points="${pts.join(' ')}"/></svg>`;
+}
+
+// The placeholder thumbnail: a gradient seeded by the name hash. Shown until
+// the sparkline arrives, and permanently for a hero whose build failed.
 function gradientFor(name) {
     let h = 0;
     for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;

@@ -123,6 +123,37 @@ def test_hero_example_builds(client):
     assert r.json()["kind"] in ("agg", "port", "sev", "bvagg", "pnl", "distortion")
 
 
+def test_hero_sparklines(client):
+    """Thumbnail silhouettes: peak-normalized, short, keyed by entry name.
+
+    Deliberately a separate endpoint from ``/heroes`` because it *builds* every
+    hero and one of them carries ``hints{log2=16}``. The SPA calls it after
+    first paint, so the landing page never waits on it.
+    """
+    r = client.get("/v1/examples/heroes/sparklines")
+    assert r.status_code == 200, r.text
+    sparks = r.json()["sparklines"]
+    assert sparks, "no hero produced a sparkline"
+
+    heroes = {i["name"] for i in client.get("/v1/examples/heroes").json()["items"]}
+    for name, values in sparks.items():
+        assert name in heroes, f"{name} is not a hero"
+        assert len(values) == 48
+        assert all(0.0 <= v <= 1.0 for v in values), name
+        # Peak-normalized: something must reach the top of the frame or the
+        # thumbnail would render as a flat line.
+        assert max(values) == 1.0, name
+        # And it must not be flat, or the silhouette says nothing.
+        assert min(values) < 1.0, name
+
+
+def test_hero_sparklines_are_cached(client):
+    """Repeat calls return the identical object; building 8 heroes is not free."""
+    from aggregate_api.examples import load_hero_sparklines
+
+    assert load_hero_sparklines() is load_hero_sparklines()
+
+
 def test_session_builds_do_not_leak_into_examples(client):
     """A program built through the api must not show up as a library example.
 

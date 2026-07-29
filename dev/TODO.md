@@ -188,9 +188,16 @@ one version bump each.
 > **Server policy (2026-07-29).** The author starts and stops servers; the
 > tooling here must not. `dev/capture_fixtures.py` and `uv run pytest` both
 > drive the app in-process through `TestClient`, binding no port.
-- [ ] **Examples: topic groups, fuzzy find, hero sparklines** (→ a22). Pinned
-      search + Ctrl+K palette over name / kind / tags / note; sparkline
-      thumbnails from a cached heroes payload, built lazily with a fallback.
+- [x] **plan-examples-find — fuzzy find + hero sparklines** (→ 1.0.0a24).
+      Pinned search box in the dropdown and a Ctrl+K palette, both uFuzzy over
+      name / kind / tags / note, flat ranked list while searching; hero cards
+      upgrade from a placeholder gradient to a real density silhouette from a
+      cached `heroes/sparklines` payload fetched after first paint.
+      *(done; in `dev/`)*
+- [ ] **Retire or repoint the hamburger's "Example source…" placeholder.**
+      Shipped greyed-out in a17 for a source switcher that a159 made moot (the
+      three shipped libraries are one). The live axis is
+      `?group=topic|kind|role`.
 - [ ] **More as a tab, Bounds placeholder, Reins graphs** (→ a23). More becomes
       a pill with a Reins-style sub-button row; Bounds ships greyed out; Reins
       gains a gross / net / ceded density + EP overlay.

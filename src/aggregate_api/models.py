@@ -383,6 +383,23 @@ class HeroesResponse(BaseModel):
     items: list[ExampleItem]
 
 
+class SparklinesResponse(BaseModel):
+    """``GET /v1/examples/heroes/sparklines`` -- thumbnail silhouettes.
+
+    ``sparklines`` maps an entry name to a short list of values in ``[0, 1]``,
+    the density binned and scaled so its peak is 1. Shape only: there are no
+    axes, no units and no way to read a number off it, which is what a card
+    thumbnail should promise.
+
+    A hero that fails to build is simply absent, so the client must treat a
+    missing key as ordinary and keep its placeholder.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    sparklines: dict[str, list[float]]
+
+
 # ======================================================================
 # Meta / health
 # ======================================================================

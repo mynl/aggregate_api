@@ -17,7 +17,7 @@ from typing import Literal
 from fastapi import APIRouter, Query
 
 from .. import models
-from ..examples import load_examples, load_heroes
+from ..examples import load_examples, load_hero_sparklines, load_heroes
 
 
 router = APIRouter()
@@ -49,3 +49,17 @@ def list_heroes() -> dict:
     frame, so this is as cheap as the full listing.
     """
     return load_heroes()
+
+
+@router.get("/examples/heroes/sparklines", response_model=models.SparklinesResponse)
+def hero_sparklines() -> dict:
+    """Density silhouettes for the hero cards, keyed by entry name.
+
+    **Slow on the first call**, which is the whole reason it is a separate
+    endpoint: it builds every hero, and one of them carries ``hints{log2=16}``.
+    Cached for the process afterwards.
+
+    The SPA calls this *after* first paint and leaves the cards on their
+    placeholder art until it resolves, so the landing page never waits on it.
+    """
+    return load_hero_sparklines()

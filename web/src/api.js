@@ -84,6 +84,8 @@ export const api = {
     // group: 'topic' (default) | 'kind' | 'role'
     examples:     (group = '')      => _json('GET',  `/v1/examples?${qs({ group })}`),
     heroes:       ()                => _json('GET',  '/v1/examples/heroes'),
+    /** Hero thumbnails. Slow on the first call: it builds every hero. */
+    heroSparklines: ()              => _json('GET',  '/v1/examples/heroes/sparklines'),
     meta:         ()                => _json('GET',  '/v1/meta'),
     /** House plot style (aggregate.style's color cycle etc.) for the charts. */
     style:        ()                => _json('GET',  '/v1/meta/style'),

@@ -1,26 +1,127 @@
-// Examples dropdown, loaded once from /v1/examples.
+// The examples picker: a topic-grouped dropdown with fuzzy find, and the same
+// list as a wider Ctrl+K palette.
 //
-// The api returns the library grouped on one axis (topic by default) as
-// categories of {key, title, items}, each item {name, kind, tags, note, decl}.
-// A category header per group, one entry per example; clicking loads the DecL
-// into the editor without building.
+// The library is 186 entries. A plain grouped dropdown was the right successor
+// to the letter categories, but scrolling nine groups to find `CatXOLTower` is
+// not finding, it is remembering. So the same payload drives two surfaces:
 //
-// `note` is optional. Most library entries carry one and it is preferred, but
-// an entry without a note is ordinary, so the title attribute simply falls back
-// to the kind rather than showing an empty tooltip.
+//   * the dropdown, grouped by topic, with a search box pinned at its top;
+//   * Ctrl+K, the same rows full width with more room for the note.
+//
+// Both filter through uFuzzy over `name + kind + tags + note`, so "cat xol",
+// "reins tower" and "ilw" all reach the same entry. Typing switches the view
+// from groups to a flat ranked list, because once you are searching, the
+// grouping is noise.
 
+import uFuzzy from '@leeoniya/ufuzzy';
 import { api } from './api.js';
 import { el, empty } from './utils/dom.js';
 
 let cached = null;
+let flat = null;      // every entry once, with its haystack line
+let haystack = null;  // the strings uFuzzy searches, index-aligned with `flat`
+
+// intraMode 1 allows single-character typos/transposition inside a term, which
+// is what makes "porfolio" and "distorton" still land.
+const uf = new uFuzzy({ intraMode: 1, interLft: 0, interRgt: 0 });
 
 /** Fetch (and memoize) the grouped example payload. */
 export async function loadExamples() {
-    if (!cached) cached = await api.examples();
+    if (!cached) {
+        cached = await api.examples();
+        buildIndex(cached);
+    }
     return cached;
 }
 
-/** Populate the dropdown menu element. */
+/**
+ * Flatten the grouped payload into one searchable list.
+ *
+ * An entry tagged in two topics appears in two groups; the flat list holds it
+ * once, keyed by name, so a search never shows a duplicate.
+ */
+function buildIndex(payload) {
+    const byName = new Map();
+    for (const cat of payload.categories || []) {
+        for (const item of cat.items || []) {
+            if (!byName.has(item.name)) byName.set(item.name, item);
+        }
+    }
+    flat = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+    // Tags keep their namespace so "topic:reinsurance" and "reinsurance" both
+    // match, and the note is included so a search can be about the subject
+    // rather than the name.
+    haystack = flat.map((i) =>
+        `${i.name} ${i.kind} ${(i.tags || []).join(' ')} ${i.note || ''}`);
+}
+
+/** Entries matching `needle`, best first; everything when the needle is empty. */
+function search(needle) {
+    const q = needle.trim();
+    if (!q) return flat;
+    const [idxs, info, order] = uf.search(haystack, q);
+    if (!idxs) return [];
+    // `order` ranks by match quality when uFuzzy returns the extra passes;
+    // fall back to the raw index order when it does not.
+    const ranked = (order && info) ? order.map((o) => info.idx[o]) : idxs;
+    return ranked.map((i) => flat[i]);
+}
+
+/** One clickable row: name, kind badge, and the note as a blurb. */
+function row(item, onPick, className = 'dropdown-item example-row') {
+    return el('a', {
+        className,
+        href: '#',
+        title: item.note || item.kind || '',
+        onClick: (ev) => { ev.preventDefault(); onPick?.(item); },
+    },
+        el('span', { className: 'example-name' }, item.name),
+        el('span', { className: 'example-kind' }, item.kind),
+        item.note ? el('span', { className: 'example-note' }, item.note) : null);
+}
+
+/**
+ * Render results into a container: grouped by topic when idle, flat when
+ * searching.
+ *
+ * The grouped view is the browsable one; a search result is already ordered by
+ * relevance, and re-grouping it would scatter the best matches down the page.
+ */
+function renderList(container, payload, needle, onPick, rowClass) {
+    empty(container);
+    const q = needle.trim();
+
+    if (!q) {
+        let first = true;
+        for (const cat of payload.categories || []) {
+            if (!cat.items || !cat.items.length) continue;
+            if (!first) container.appendChild(el('li', {},
+                el('hr', { className: 'dropdown-divider' })));
+            first = false;
+            container.appendChild(el('li', {},
+                el('h6', { className: 'dropdown-header' }, cat.title)));
+            for (const item of cat.items) {
+                container.appendChild(el('li', {}, row(item, onPick, rowClass)));
+            }
+        }
+        return;
+    }
+
+    const hits = search(q);
+    if (!hits.length) {
+        container.appendChild(el('li', {}, el('span', {
+            className: 'dropdown-item-text text-muted small',
+        }, `no example matches “${q}”`)));
+        return;
+    }
+    container.appendChild(el('li', {}, el('h6', { className: 'dropdown-header' },
+        `${hits.length} match${hits.length === 1 ? '' : 'es'}`)));
+    for (const item of hits) {
+        container.appendChild(el('li', {}, row(item, onPick, rowClass)));
+    }
+}
+
+/** Populate the dropdown menu element with a pinned search box + the list. */
 export async function mountExamples(menuEl, onPick) {
     let payload;
     try {
@@ -34,36 +135,86 @@ export async function mountExamples(menuEl, onPick) {
     }
 
     empty(menuEl);
-    const categories = payload.categories || [];
+    const list = el('div', { className: 'example-list' });
+    const input = el('input', {
+        type: 'search',
+        className: 'form-control form-control-sm example-search',
+        placeholder: 'search 186 examples…',
+        autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: false,
+    });
+    input.addEventListener('input', () => renderList(list, payload, input.value, onPick));
+    // Keystrokes inside a dropdown otherwise reach Bootstrap's own item
+    // navigation, which steals the arrow keys and closes on Escape mid-word.
+    input.addEventListener('keydown', (ev) => ev.stopPropagation());
 
-    if (!categories.length) {
-        menuEl.appendChild(el('li', {}, el('span', {
-            className: 'dropdown-item-text text-muted small',
-        }, 'no examples')));
-        return;
+    menuEl.appendChild(el('li', { className: 'example-search-wrap' }, input));
+    menuEl.appendChild(el('li', {}, list));
+    renderList(list, payload, '', onPick);
+
+    // Focus the box when the menu opens, so the dropdown is type-to-find.
+    const toggle = menuEl.previousElementSibling;
+    if (toggle) {
+        toggle.addEventListener('shown.bs.dropdown', () => input.focus());
+    }
+}
+
+/**
+ * The Ctrl+K palette: the same rows, full width, with room for the note.
+ *
+ * Built once and reused, because it holds the whole library and rebuilding the
+ * list on every open is wasted work.
+ */
+export function mountPalette(onPick) {
+    let root = null;
+    let input = null;
+    let list = null;
+
+    async function ensure() {
+        if (root) return true;
+        let payload;
+        try {
+            payload = await loadExamples();
+        } catch {
+            return false;
+        }
+        list = el('div', { className: 'example-list palette-list' });
+        input = el('input', {
+            type: 'search',
+            className: 'form-control example-search',
+            placeholder: 'search the library…',
+            autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: false,
+        });
+        const pick = (item) => { close(); onPick?.(item); };
+        input.addEventListener('input', () => renderList(list, payload, input.value, pick));
+        root = el('div', { className: 'palette-backdrop', role: 'dialog', 'aria-modal': 'true' },
+            el('div', { className: 'palette' }, input, list));
+        // Click outside closes; clicks on the panel itself must not.
+        root.addEventListener('mousedown', (ev) => { if (ev.target === root) close(); });
+        document.body.appendChild(root);
+        renderList(list, payload, '', pick);
+        return true;
     }
 
-    let first = true;
-    for (const cat of categories) {
-        if (!first) {
-            menuEl.appendChild(el('li', {}, el('hr', { className: 'dropdown-divider' })));
-        }
-        first = false;
-        menuEl.appendChild(el('li', {}, el('h6', {
-            className: 'dropdown-header',
-        }, cat.title)));
-
-        for (const item of cat.items || []) {
-            const a = el('a', {
-                className: 'dropdown-item',
-                href:      '#',
-                title:     item.note || item.kind || '',
-                onClick:   (ev) => {
-                    ev.preventDefault();
-                    onPick?.(item);
-                },
-            }, item.name);
-            menuEl.appendChild(el('li', {}, a));
-        }
+    function close() {
+        if (root) root.classList.remove('open');
     }
+
+    async function open() {
+        if (!(await ensure())) return;
+        root.classList.add('open');
+        input.value = '';
+        renderList(list, cached, '', (item) => { close(); onPick?.(item); });
+        input.focus();
+    }
+
+    document.addEventListener('keydown', (ev) => {
+        if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'k') {
+            ev.preventDefault();
+            open();
+        } else if (ev.key === 'Escape' && root && root.classList.contains('open')) {
+            close();
+        }
+    });
+
+    return { open, close };
 }

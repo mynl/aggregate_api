@@ -337,3 +337,81 @@ def load_heroes() -> dict:
             continue
         items.append(_entry(recipe.kind, name, recipe))
     return {"items": sorted(items, key=lambda i: i["name"])}
+
+
+# Points in a hero sparkline. Enough to show a shape at thumbnail size and
+# nothing like enough to read a number off, which is the point: the card is an
+# invitation, not an exhibit.
+SPARKLINE_POINTS = 48
+
+
+def _sparkline(obj) -> list[float] | None:
+    """A normalized density silhouette for a built object, or ``None``.
+
+    Returns
+    -------
+    list of float or None
+        ``SPARKLINE_POINTS`` values scaled so the peak is 1, cropped to the
+        q(0.999) window so a heavy tail does not flatten the shape into a
+        spike at the origin. ``None`` when the object carries no usable
+        density.
+
+    Notes
+    -----
+    Bins by **summing** into equal-width buckets rather than sampling every
+    n-th point. On a spiky discrete support, sampling would land between the
+    atoms and return a row of zeros, so the thumbnail for a dice book would be
+    a flat line.
+    """
+    import numpy as np
+
+    frame = getattr(obj, "density_df", None)
+    if frame is None or "p_total" not in getattr(frame, "columns", ()):
+        return None
+    mass = np.asarray(frame["p_total"], dtype=float)
+    if mass.size == 0 or not np.isfinite(mass).any():
+        return None
+    # Crop to the visible body, mirroring the exhibit's density window.
+    cdf = np.cumsum(np.nan_to_num(mass))
+    hi = int(np.searchsorted(cdf, 0.999)) + 1
+    mass = np.nan_to_num(mass[:max(hi, SPARKLINE_POINTS)])
+    if mass.size < SPARKLINE_POINTS:
+        mass = np.pad(mass, (0, SPARKLINE_POINTS - mass.size))
+    # Sum into equal buckets; a ragged tail bucket is fine at this resolution.
+    edges = np.linspace(0, mass.size, SPARKLINE_POINTS + 1).astype(int)
+    binned = np.array([mass[a:b].sum() for a, b in zip(edges[:-1], edges[1:])])
+    peak = binned.max()
+    if not np.isfinite(peak) or peak <= 0:
+        return None
+    return [round(float(v), 5) for v in binned / peak]
+
+
+@lru_cache(maxsize=1)
+def load_hero_sparklines() -> dict:
+    """Return ``{name: [floats]}`` silhouettes for the hero gallery.
+
+    Notes
+    -----
+    **This builds every hero**, which is why it is a separate call rather than
+    a field on :func:`load_heroes`. One of them (``CatXOLTower``) carries
+    ``hints{log2=16}``, so a cold call costs seconds. The SPA therefore asks
+    for it *after* first paint and lets the cards sit on their placeholder art
+    until it lands: nothing on the landing path may wait on this.
+
+    Cached for the process, so only the first caller pays. A hero that fails to
+    build is skipped rather than raising, since a missing thumbnail is a
+    cosmetic loss and a 500 here would be a real one.
+    """
+    from aggregate import build as _build
+
+    out: dict[str, list[float]] = {}
+    for item in load_heroes()["items"]:
+        try:
+            obj = _build(item["decl"])
+            spark = _sparkline(obj)
+        except Exception:  # noqa: BLE001
+            logger.warning("no sparkline for hero %s", item["name"])
+            continue
+        if spark is not None:
+            out[item["name"]] = spark
+    return {"sparklines": out}
