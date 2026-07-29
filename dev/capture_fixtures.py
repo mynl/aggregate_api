@@ -34,6 +34,9 @@ CASES = {
     # A discrete book: small support on an integer grid, which is the case the
     # step-drawn density exists for. Three dice sum to 3..18, so 16 points.
     "discrete": "agg FIX.Dice dfreq [3] dsev [1:6]",
+    # A reinsured book, for the Reins tab's gross / ceded / net exhibit.
+    "reins": ("agg FIX.Re 100 claims 1000 xs 0 sev lognorm 90 cv 1.5 "
+              "occurrence net of 500 xs 500 poisson"),
 }
 
 # What each kind's exhibit asks for, mirroring EXHIBITS[kind].fetch.
@@ -45,6 +48,7 @@ FRAMES = {
     "distortion": [("curve", "density_df")],
     "pnl": [("density", "density_df?cols=loss,p_total,F,S")],
     "bvagg": [("joint", "density_df"), ("stats", "stats_df")],
+    "reins": [("reins", "reins_density_df")],
 }
 
 

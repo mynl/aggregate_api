@@ -4,6 +4,61 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a25
+
+From `dev/plan-more-tab.md`. The output tabs stop having two different kinds of
+control in one bar, Bounds takes its place, and Reins gets the exhibit.
+
+### More is a tab
+
+Overview · Plot · Price · Reins · Bounds · **More**, and More's pane carries a
+sub-button row: Validation | Stats | Density | bs window | Info (raw). Exactly
+the Reins pattern.
+
+The dropdown it replaces was the one control on the page that behaved
+differently from everything around it: a menu nested inside a pill bar, so half
+the output views opened like tabs and half like a menu. Five panes collapse into
+one, with the per-view hint line and copy button rendered from a small registry
+rather than duplicated in the markup.
+
+**Info moved with it**, which changes one thing worth knowing: a *failed* build
+used to dump its parse-error report into the Info pane and switch there. A
+failed build has no object, so sending the reader into a sub-menu to find out
+why was the wrong direction. The error now renders on the landing tab.
+
+### Bounds
+
+A sixth pill, greyed out. The house rule is that the menu set never changes
+shape, so what is coming is visible and plainly not ready rather than absent and
+unmentioned. Its pane exists and says so.
+
+### The Reins exhibit
+
+The same two-panel instrument, pointed at three views of one book instead of at
+the units of a portfolio: **gross, ceded and net** densities on the left and
+their exceedance curves on the right, above the per-layer tables. That is the
+question a reinsurance structure exists to answer, and until now the tab
+answered it only in numbers.
+
+`reins_density_df` carries the masses but no survival column, so `S` is
+accumulated from them. Exact, not approximate: each `p_agg_*` column is a pmf
+over the same grid and sums to one, so `1 - cumsum` **is** its survival. Clamped
+at zero, because accumulating 2,048 floats to 1 overshoots by a few parts in
+1e15 and a survival of `-3.6e-15` is not a number to hand a log axis.
+
+The smoke test checks the derived survivals are non-increasing, bounded and
+finish at zero. It deliberately does **not** assert they start at 1: the ceded
+distribution is small next to the gross, so on a grid scaled for the gross its
+whole mass lands in the first display bucket and its survival legitimately
+starts at 0. Writing that assertion the obvious way is what found this.
+
+### Gating
+
+Reworked for the new shape. Top-level tabs gate to `price` and `reins`; the
+frames that a kind lacks are now sub-views, so they grey out inside More
+instead. A sticky sub-view that the current kind cannot answer falls back rather
+than firing a request that would 400.
+
 ## 1.0.0a24
 
 From `dev/plan-examples-find.md`. The examples menu becomes findable, and the

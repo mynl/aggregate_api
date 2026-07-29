@@ -198,9 +198,15 @@ one version bump each.
       Shipped greyed-out in a17 for a source switcher that a159 made moot (the
       three shipped libraries are one). The live axis is
       `?group=topic|kind|role`.
-- [ ] **More as a tab, Bounds placeholder, Reins graphs** (→ a23). More becomes
-      a pill with a Reins-style sub-button row; Bounds ships greyed out; Reins
-      gains a gross / net / ceded density + EP overlay.
+- [x] **plan-more-tab — More as a tab, Bounds, Reins exhibit** (→ 1.0.0a25).
+      More is a pill whose pane carries a Reins-style sub-button row (Validation
+      / Stats / Density / bs window / Info); Bounds ships greyed out; Reins gains
+      the gross / ceded / net two-panel exhibit above its tables. Build errors
+      now render on Overview rather than in a sub-menu. *(done; in `dev/`)*
+- [ ] **Reins ceded density is a first-bucket spike** on the shared linear
+      window, since the ceded distribution is small next to the gross. The
+      `log y` and `full x` toggles cover it for now; if it stays hard to read,
+      give each series its own crop rather than one shared window.
 - [ ] **Bivariate 3D viewer** (later). `echarts-gl` surface on the joint density
       behind a dynamic import, with a server-side downsample to ~128x128.
 

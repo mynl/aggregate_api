@@ -142,23 +142,18 @@
         </div>
         <div class="summary-timing" id="summary-timing"></div>
 
-        <!-- Output tabs: Overview·Plot·Price·Reins·More(▾ Summary·Validation·Stats·Density·bs·Info) -->
+        <!-- Output tabs. More is a real tab whose pane carries a Reins-style
+             sub-button row, so the two work the same way; the dropdown-inside-
+             pills it replaces was the odd one out. Bounds ships greyed out:
+             the house rule is that the menu set never changes shape, so what
+             is coming is visible and plainly not ready. -->
         <ul class="nav nav-pills out-tabs" role="tablist">
             <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#t-overview" data-tab="overview" type="button">Overview</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-plot"  data-tab="plot"  type="button">Plot</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-price" data-tab="price" type="button">Price</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-reins" data-tab="reins" type="button">Reins</button></li>
-            <li class="nav-item dropdown">
-                <button class="nav-link dropdown-toggle" data-bs-toggle="dropdown" type="button" aria-expanded="false">More</button>
-                <ul class="dropdown-menu shadow-sm">
-                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-validation" data-tab="validation" type="button">Validation</button></li>
-                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-stats"      data-tab="stats"      type="button">Stats</button></li>
-                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-density"    data-tab="density"    type="button">Density</button></li>
-                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-bswin"      data-tab="bswin"      type="button">bs window</button></li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li><button class="dropdown-item" data-bs-toggle="pill" data-bs-target="#t-info"       data-tab="info"       type="button">Info (raw)</button></li>
-                </ul>
-            </li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-plot"   data-tab="plot"   type="button">Plot</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-price"  data-tab="price"  type="button">Price</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-reins"  data-tab="reins"  type="button">Reins</button></li>
+            <li class="nav-item"><button class="nav-link disabled" disabled aria-disabled="true" data-bs-toggle="pill" data-bs-target="#t-bounds" data-tab="bounds" type="button" title="pricing bounds — coming">Bounds</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-more"   data-tab="more"   type="button">More</button></li>
         </ul>
 
         <div class="tab-content">
@@ -167,21 +162,21 @@
                 <div id="pane-overview" class="pane"></div>
             </div>
 
-            <!-- Info (raw, under More) -->
-            <div class="tab-pane fade" id="t-info">
-                <div class="tab-tools">
-                    <button class="btn btn-outline-secondary" data-copy="pane-info"><i class="bi bi-clipboard"></i> copy</button>
-                </div>
-                <div id="pane-info" class="pane"></div>
+            <!-- More: one pane, a Reins-style sub-button row selects the view.
+                 The hint line and the copy button are per view and rendered by
+                 main.js, since they differ for each. -->
+            <div class="tab-pane fade" id="t-more">
+                <div class="tab-tools" id="more-tools"></div>
+                <div id="pane-more" class="pane"></div>
             </div>
 
-            <!-- Validation (under More): moment-vs-estimate QA table -->
-            <div class="tab-pane fade" id="t-validation">
-                <div class="tab-tools">
-                    <button class="btn btn-outline-secondary" data-copy="pane-validation"><i class="bi bi-clipboard"></i> copy</button>
-                    <span class="text-muted ms-1" style="font-size:.7rem;">theoretical vs empirical moments; reads “not unreasonable” on a clean build</span>
+            <!-- Bounds: greyed out in the tab bar, so this pane is unreachable
+                 for now. It exists so the tab has a target and the shape of
+                 what is coming is on record. -->
+            <div class="tab-pane fade" id="t-bounds">
+                <div id="pane-bounds" class="pane">
+                    <div class="text-muted small">Pricing bounds are not wired up yet.</div>
                 </div>
-                <div id="pane-validation" class="pane"></div>
             </div>
 
             <!-- Plot -->
@@ -193,12 +188,8 @@
                 <div id="pane-plot" class="pane"></div>
             </div>
 
-            <!-- Stats -->
-            <div class="tab-pane fade" id="t-stats">
-                <div id="pane-stats" class="pane"></div>
-            </div>
-
-            <!-- Reins -->
+            <!-- Reins: the description line, the gross / ceded / net exhibit,
+                 then the per-layer frames. -->
             <div class="tab-pane fade" id="t-reins">
                 <div class="tab-tools">
                     <button class="btn btn-outline-secondary active" data-reins="reins_summary_df">reins summary</button>
@@ -206,6 +197,7 @@
                     <button class="btn btn-outline-secondary"        data-reins="reins_density_df">reins density</button>
                 </div>
                 <div class="reins-desc" id="reins-desc"></div>
+                <div id="reins-plot" class="overview-plot"></div>
                 <div id="pane-reins" class="pane"></div>
             </div>
 
@@ -227,21 +219,6 @@
                 <div id="pane-price" class="pane"></div>
             </div>
 
-            <!-- Density (under More ▾): density_df, p_total>0, ~300-row preview -->
-            <div class="tab-pane fade" id="t-density">
-                <div class="tab-tools">
-                    <span class="text-muted ms-1" style="font-size:.7rem;">loss · p_total · F · S, binned to a 2¹¹ display grid; copy / save from the grid</span>
-                </div>
-                <div id="pane-density" class="pane"></div>
-            </div>
-
-            <!-- bs window (under More ▾): bucket/window estimator summary -->
-            <div class="tab-pane fade" id="t-bswin">
-                <div class="tab-tools">
-                    <span class="text-muted ms-1" style="font-size:.7rem;">bucket / window estimator; the <code>selected</code> row is the chosen grid</span>
-                </div>
-                <div id="pane-bswin" class="pane"></div>
-            </div>
         </div>
     </main>
 
@@ -287,12 +264,12 @@
 
             <h6>Output tabs</h6>
             <ul class="help-tabs">
-                <li><span class="t">Info</span>: object summary &amp; grid settings</li>
-                <li><span class="t">Summary</span>: Freq / Sev / Agg moments</li>
-                <li><span class="t">Plot</span>: visualize the object</li>
+                <li><span class="t">Overview</span>: what you built, its density and exceedance curve, and the risk tables</li>
+                <li><span class="t">Plot</span>: the object's own native plot</li>
                 <li><span class="t">Price</span>: pricing metrics and allocation analysis</li>
-                <li><span class="t">Reins</span>: ceded / net by layer</li>
-                <li><span class="t">More ▾</span>: Stats · Density · bs window</li>
+                <li><span class="t">Reins</span>: ceded / net by layer, with a gross / ceded / net exhibit</li>
+                <li><span class="t">Bounds</span>: pricing bounds (coming)</li>
+                <li><span class="t">More</span>: Validation · Stats · Density · bs window · Info</li>
             </ul>
 
             <h6>Learn more</h6>

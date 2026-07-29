@@ -23,7 +23,7 @@ import { api, ApiError } from './api.js';
 import { createEditor, emacsEnabledDefault } from './editor.js';
 import { mountExamples, mountPalette, loadExamples } from './examples.js';
 import { renderInfo, renderExhibit } from './renderers.js';
-import { mountExhibit } from './charts/exhibits.js';
+import { mountExhibit, mountReinsExhibit } from './charts/exhibits.js';
 import { loadStyle } from './charts/theme.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
 import { renderError, renderRateLimit } from './error-pane.js';
@@ -56,6 +56,7 @@ const state = {
     bs: null,               // null = auto
     loaded: new Set(),      // tab names whose data has been fetched
     reinsWhich: 'reins_summary_df',
+    moreWhich: 'validation',   // which sub-view the More tab is showing
 };
 
 // ----------------------------------------------------------------------
@@ -246,14 +247,16 @@ function renderBuildFailure(err) {
         limited ? 'rate limited; please pause a moment' : 'build failed'));
     $('summary-timing').textContent = '';
     syncSummaryMore();
-    // Surface the rich parse-error report (or the friendly rate-limit card)
-    // in the Info pane and show it.
-    const pane = $('pane-info');
+    // Surface the rich parse-error report (or the friendly rate-limit card) on
+    // the landing tab. It used to go to Info, which is now a More sub-view: a
+    // failed build has no object, so sending the reader into a sub-menu to read
+    // why would be the wrong direction.
+    const pane = $('pane-overview');
     empty(pane);
     if (limited) pane.appendChild(renderRateLimit(err.retryAfter));
     else if (err instanceof ApiError) pane.appendChild(renderError(err));
     else pane.appendChild(el('div', { className: 'alert alert-danger' }, err.message));
-    showTab('info');
+    showTab('overview');
 }
 
 // Show the ⌄ expander only when the summary text actually overflows.
@@ -273,27 +276,24 @@ window.addEventListener('resize', syncSummaryMore);
 // ----------------------------------------------------------------------
 // Tabs -- lazy load + cache per built object
 // ----------------------------------------------------------------------
-// Note there is no `summary` entry: summary_df is an Overview exhibit and
-// showing it twice under More was the same table in two places.
+// One pane per top-level tab. There is no `summary` entry: summary_df is an
+// Overview exhibit, and showing it twice was the same table in two places.
 const PANE_OF = {
-    overview: 'pane-overview', info: 'pane-info',
-    validation: 'pane-validation', plot: 'pane-plot',
-    stats: 'pane-stats', reins: 'pane-reins',
-    density: 'pane-density', bswin: 'pane-bswin', price: 'pane-price',
+    overview: 'pane-overview', plot: 'pane-plot', price: 'pane-price',
+    reins: 'pane-reins', bounds: 'pane-bounds', more: 'pane-more',
 };
 
 function clearPanes() {
     destroyAllGrids();
     for (const id of Object.values(PANE_OF)) empty($(id));
     empty($('reins-desc'));
+    if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
+    empty($('reins-plot'));
 }
 
-// Tab triggers carry data-tab; they live either as top-level .nav-link or
-// as .dropdown-item inside the More dropdown, so select on [data-tab] (not
-// .nav-link) to catch both.
 function activeTabName() {
     const link = document.querySelector('.out-tabs [data-tab].active');
-    return link ? link.dataset.tab : 'info';
+    return link ? link.dataset.tab : 'overview';
 }
 
 function showTab(name) {
@@ -301,20 +301,127 @@ function showTab(name) {
     if (btn) bootstrap.Tab.getOrCreateInstance(btn).show();
 }
 
-// Tabs that need a loss distribution. A standalone Distortion, a
-// BivariateAggregate or a PnL exposes info / summary / stats / density / plot
-// but has no pricing, reinsurance or bs window. A Severity is a look-through
-// onto a frozen scipy variable, so it carries info and plot and none of the
-// frames. Per the playground house rule we NEVER hide menu items (the menu set
-// stays stable), we grey them out so the user can see what does not apply.
-// agg and port disable nothing.
-const NA_TABS_BY_KIND = {
-    distortion: ['price', 'reins', 'bswin'],
-    bvagg: ['price', 'reins', 'bswin'],
-    pnl: ['price', 'reins', 'bswin'],
-    sev: ['price', 'reins', 'bswin', 'validation', 'stats'],
+// ---- More: one pane, a sub-button row selects the view ----
+// The same shape as Reins, which is the point: a dropdown nested inside a pill
+// bar was the one control on the page that behaved differently from everything
+// around it.
+const MORE_VIEWS = {
+    validation: {
+        label: 'Validation',
+        hint: 'theoretical vs empirical moments; reads “not unreasonable” on a clean build',
+        copy: true,
+        load: async () => replacePaneGrid('pane-more', await api.validation_df(state.id),
+            { columnFilters: false }),
+    },
+    stats: {
+        label: 'Stats',
+        hint: 'frequency / severity / aggregate moments; raw moment rows are dropped',
+        load: async () => replacePaneGrid('pane-more', await api.stats_df(state.id), GRID_FULL),
+    },
+    density: {
+        label: 'Density',
+        hint: 'binned to a 2¹¹ display grid; copy / save from the grid',
+        load: async () => {
+            // A distortion's density_df is the g-curve over s in [0,1]; a
+            // bivariate's is the joint matrix; a severity's is a sampled
+            // loss / pdf / F / S curve. None has the aggregate's columns, so
+            // pull the whole frame for those.
+            const frame = WHOLE_DENSITY_KINDS.has(state.kind)
+                ? await api.density_df(state.id)
+                : await api.density_df(state.id, { cols: 'loss,p_total,F,S' });
+            // renderCap lifts CsvGrid's 2,000-row default so the full 2**11
+            // grid shows without a "show all" prompt.
+            replacePaneGrid('pane-more', frame, { ...GRID_FULL, maxRows: 25, renderCap: 2048 });
+        },
+    },
+    bswin: {
+        label: 'bs window',
+        hint: 'bucket / window estimator; the selected row is the chosen grid',
+        load: async () => replacePaneGrid('pane-more', await api.bs_window_df(state.id), GRID_FULL),
+    },
+    info: {
+        label: 'Info (raw)',
+        hint: 'the object’s own info block, verbatim',
+        copy: true,
+        load: async () => replacePane('pane-more', renderInfo(await api.info(state.id))),
+    },
 };
-const GATED_TABS = ['price', 'reins', 'bswin', 'validation', 'stats'];
+
+// Sub-views a kind cannot answer, greyed out rather than removed, same rule as
+// the tabs. A Severity carries no frames at all beyond its sampled density.
+const NA_MORE_BY_KIND = {
+    distortion: ['bswin'],
+    bvagg: ['bswin'],
+    pnl: ['bswin'],
+    sev: ['validation', 'stats', 'bswin'],
+};
+
+/** Render the More sub-button row for the current kind. */
+function renderMoreTools() {
+    const tools = $('more-tools');
+    if (!tools) return;
+    empty(tools);
+    const na = new Set(NA_MORE_BY_KIND[state.kind] || []);
+    for (const [key, view] of Object.entries(MORE_VIEWS)) {
+        const off = na.has(key);
+        const btn = el('button', {
+            type: 'button',
+            className: `btn btn-outline-secondary${key === state.moreWhich ? ' active' : ''}`
+                + (off ? ' disabled' : ''),
+            onClick: () => {
+                if (off) return;
+                state.moreWhich = key;
+                renderMoreTools();
+                loadMoreView();
+            },
+        }, view.label);
+        if (off) btn.setAttribute('disabled', '');
+        tools.appendChild(btn);
+    }
+    const view = MORE_VIEWS[state.moreWhich];
+    if (view?.copy) {
+        const copyBtn = el('button', { className: 'btn btn-outline-secondary' }, 'copy');
+        copyBtn.addEventListener('click', () => copyPane('pane-more', copyBtn));
+        tools.appendChild(copyBtn);
+    }
+    if (view?.hint) {
+        tools.appendChild(el('span', {
+            className: 'text-muted ms-1', style: 'font-size:.7rem;',
+        }, view.hint));
+    }
+}
+
+async function loadMoreView() {
+    if (!state.id) return;
+    const view = MORE_VIEWS[state.moreWhich];
+    if (!view) return;
+    // A disabled view can still be the sticky default from a previous kind;
+    // fall back rather than firing a request that will 400.
+    if ((NA_MORE_BY_KIND[state.kind] || []).includes(state.moreWhich)) {
+        state.moreWhich = 'info';
+        renderMoreTools();
+        return loadMoreView();
+    }
+    try {
+        await view.load();
+    } catch (err) {
+        replacePane('pane-more', errorNode(err));
+    }
+}
+
+// Tabs that need something the object does not have. A Distortion, a
+// BivariateAggregate or a PnL has no pricing, reinsurance or bs window; a
+// Severity is a look-through onto a frozen scipy variable and has none of the
+// frames. Per the house rule we NEVER hide menu items (the menu set stays
+// stable), we grey them out so the user can see what does not apply. Bounds is
+// disabled for every kind until it is built.
+const NA_TABS_BY_KIND = {
+    distortion: ['price', 'reins'],
+    bvagg: ['price', 'reins'],
+    pnl: ['price', 'reins'],
+    sev: ['price', 'reins'],
+};
+const GATED_TABS = ['price', 'reins'];
 
 function applyKindGating(kind) {
     const na = new Set(NA_TABS_BY_KIND[kind] || []);
@@ -330,8 +437,9 @@ function applyKindGating(kind) {
         btn.toggleAttribute('disabled', off);
         btn.setAttribute('aria-disabled', off ? 'true' : 'false');
     }
-    // If the active tab was just disabled, fall back to Info.
-    if (na.has(activeTabName())) showTab('info');
+    // If the active tab was just disabled, fall back to the landing tab, which
+    // every kind can answer.
+    if (na.has(activeTabName())) showTab('overview');
 }
 
 function loadActiveTab() { loadTab(activeTabName()); }
@@ -348,38 +456,18 @@ async function loadTab(name) {
     try {
         if (name === 'overview') {
             await loadOverview();
-        } else if (name === 'info') {
-            replacePane('pane-info', renderInfo(await api.info(state.id)));
-        } else if (name === 'validation') {
-            replacePaneGrid('pane-validation', await api.validation_df(state.id), { columnFilters: false });
         } else if (name === 'plot') {
             const img = el('img', { src: api.plotUrl(state.id, { format: 'svg' }), alt: 'native plot' });
             replacePane('pane-plot', img);
-        } else if (name === 'stats') {
-            replacePaneGrid('pane-stats', await api.stats_df(state.id), GRID_FULL);
         } else if (name === 'reins') {
             await loadReins();
-        } else if (name === 'density') {
-            // A distortion's density_df is the g-curve (g, g_inv, g_dual,
-            // g_prime, ...) over s in [0,1], about 100 rows; a
-            // BivariateAggregate's is the full joint-density matrix; a
-            // Severity's is a sampled loss / pdf / F / S curve. None of them has
-            // the aggregate's loss,p_total,F,S columns, so pull the whole frame
-            // for those. For agg / port / pnl the server bins to a faithful
-            // 2**11 display grid (p_total stays correct), so we ask for the
-            // curated columns only, with no nonzero or downsample needed.
-            const frame = WHOLE_DENSITY_KINDS.has(state.kind)
-                ? await api.density_df(state.id)
-                : await api.density_df(state.id, { cols: 'loss,p_total,F,S' });
-            // renderCap lifts CsvGrid's default 2,000-row render cap so the full
-            // 2**11 = 2048 binned grid shows without the "show all" prompt.
-            replacePaneGrid('pane-density', frame, { ...GRID_FULL, maxRows: 25, renderCap: 2048 });
-        } else if (name === 'bswin') {
-            replacePaneGrid('pane-bswin', await api.bs_window_df(state.id), GRID_FULL);
+        } else if (name === 'more') {
+            renderMoreTools();
+            await loadMoreView();
         }
     } catch (err) {
         state.loaded.delete(name);   // allow a retry on the next activation
-        replacePane(PANE_OF[name] || 'pane-info', errorNode(err));
+        replacePane(PANE_OF[name] || 'pane-overview', errorNode(err));
     }
 }
 
@@ -581,7 +669,11 @@ function errorNode(err) {
     return el('div', { className: 'text-muted small' }, err.message);
 }
 
-// ---- Reins tab: description line + per-layer frame ----
+// ---- Reins tab: description line + gross/ceded/net exhibit + per-layer frame ----
+// The live ECharts instance on the Reins tab, tracked for teardown the same way
+// the Overview one is.
+let reinsChart = null;
+
 async function loadReins() {
     const descEl = $('reins-desc');
     empty(descEl);
@@ -598,7 +690,28 @@ async function loadReins() {
         return;
     }
     if (info.text) descEl.appendChild(el('span', { className: 'mono' }, info.text));
-    await loadReinsFrame();
+    await Promise.all([loadReinsExhibit(), loadReinsFrame()]);
+}
+
+/**
+ * The gross / ceded / net exhibit, above the per-layer tables.
+ *
+ * Reuses the Overview's two-panel instrument pointed at three views of one
+ * book, so the same reading applies: the left panel is what the cession does to
+ * the shape, the right is what it does to the tail, which is the question a
+ * reinsurance structure exists to answer.
+ */
+async function loadReinsExhibit() {
+    const host = $('reins-plot');
+    if (!host) return;
+    if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
+    empty(host);
+    try {
+        await loadStyle();
+        const frame = await api.reinsFrame(state.id, 'reins_density_df');
+        reinsChart = mountReinsExhibit(host, frame);
+    } catch { /* the exhibit is a bonus; the frames carry the numbers */ }
+    if (!reinsChart) empty(host);
 }
 
 async function loadReinsFrame() {
@@ -705,17 +818,25 @@ document.querySelectorAll('input[name="price-target"]').forEach((radio) => {
 });
 
 // ----------------------------------------------------------------------
-// Tab tools: copy Info text / download the plot SVG. Per-frame CSV download
+// Tab tools: copy a pane's text / download the plot SVG. Per-frame CSV download
 // and copy are handled by CsvGrid's own export controls (copy / save), so the
-// old per-tab "csv" buttons are gone -- the grid is the single export path.
+// old per-tab "csv" buttons are gone: the grid is the single export path.
 // ----------------------------------------------------------------------
+
+/** Copy a pane's rendered text to the clipboard. */
+async function copyPane(paneId, btn) {
+    const text = ($(paneId)?.innerText || '').trim();
+    if (!text) return;
+    try {
+        await navigator.clipboard.writeText(text);
+        if (btn) flash(btn, 'copied');
+    } catch { /* clipboard blocked; nothing useful to say */ }
+}
+
+// Static copy buttons declared in the markup. The More tab builds its own,
+// because which views offer one depends on the sub-view being shown.
 document.querySelectorAll('[data-copy]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-        const text = ($(btn.dataset.copy)?.innerText || '').trim();
-        if (!text) return;
-        try { await navigator.clipboard.writeText(text); flash(btn, 'copied'); }
-        catch { /* clipboard blocked -- ignore */ }
-    });
+    btn.addEventListener('click', () => copyPane(btn.dataset.copy, btn));
 });
 
 document.querySelector('[data-plot-download]').addEventListener('click', () => {

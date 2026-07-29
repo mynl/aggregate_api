@@ -681,6 +681,117 @@ const EXHIBITS = {
 // a test can assemble every kind's option and inspect it without a DOM.
 export { EXHIBITS };
 
+// ---- reinsurance exhibit ----------------------------------------------
+//
+// Not in EXHIBITS: it is keyed by tab, not by object kind, and it is the same
+// two-panel instrument pointed at three views of one book rather than at units
+// of a portfolio.
+
+// The three aggregate bases in `reins_density_df` worth drawing together.
+// Gross first so the cession reads as something taken out of it, and so `net`
+// draws on top where the two nearly coincide.
+const REINS_BASES = [
+    ['p_agg_gross', 'gross'],
+    ['p_agg_ceded', 'ceded'],
+    ['p_agg_net', 'net'],
+];
+
+/**
+ * The gross / ceded / net series from a `reins_density_df` payload.
+ *
+ * Exported for the offline smoke test, which checks the derived survivals
+ * without needing a DOM.
+ *
+ * Notes
+ * -----
+ * The frame carries the masses but no survival column, so `S` is accumulated
+ * here. That is exact rather than an approximation: each `p_agg_*` column is a
+ * probability mass function over the same grid and sums to one, so `1 - cumsum`
+ * *is* its survival function.
+ */
+export function reinsSeries(frame) {
+    const series = [];
+    for (const [column, label] of REINS_BASES) {
+        const mass = col(frame, column);
+        if (!mass) continue;
+        let acc = 0;
+        // Clamped at zero: accumulating 2,048 floats to 1 overshoots by a few
+        // parts in 1e15, and a survival of -3.6e-15 is not a number to hand a
+        // log axis.
+        const tailProb = mass.map((v) => {
+            acc += (v || 0);
+            return Math.max(0, 1 - acc);
+        });
+        series.push({ name: label, mass, tailProb });
+    }
+    return series;
+}
+
+/**
+ * Mount the gross / ceded / net exhibit for a reinsured object.
+ *
+ * Parameters
+ * ----------
+ * container : HTMLElement
+ * frame : {columns, rows}
+ *     A `reins_density_df` payload, already binned to the display grid.
+ *
+ * Returns
+ * -------
+ * object or null
+ *     A handle with `dispose()`, or null when the frame carries none of the
+ *     aggregate bases (a severity-only cession, say).
+ */
+export function mountReinsExhibit(container, frame) {
+    const loss = col(frame, 'loss');
+    if (!loss) return null;
+    const series = reinsSeries(frame);
+    if (!series || !series.length) return null;
+
+    empty(container);
+    const controls = ['logY', 'epMode', 'xFull'];
+    container.appendChild(renderControls(controls, () => redraw()));
+    const host = el('div', { className: 'exhibit-canvas' });
+    container.appendChild(host);
+
+    // The gross basis carries the cdf for the x-window: it is the widest of
+    // the three, so cropping to it keeps all of them on screen.
+    const cdf = series[0].mass.map(((acc) => (v) => (acc += (v || 0)))(0));
+
+    const buildOption = () => twoPanel({
+        loss, cdf, series, tail: null,
+        wide: (host.clientWidth || 0) >= WIDE_PX,
+    });
+
+    let option = buildOption();
+    host.style.height = `${chartHeight(option)}px`;
+    const chart = echarts.init(host, null, { renderer: 'canvas' });
+    chart.setOption(option);
+    linkPanels(chart, option);
+
+    function redraw() {
+        option = buildOption();
+        host.style.height = `${chartHeight(option)}px`;
+        chart.setOption(option, true);
+        chart.resize();
+        linkPanels(chart, option);
+    }
+
+    let lastWide = (host.clientWidth || 0) >= WIDE_PX;
+    const ro = new ResizeObserver(() => {
+        const nowWide = (host.clientWidth || 0) >= WIDE_PX;
+        if (nowWide !== lastWide) { lastWide = nowWide; redraw(); } else chart.resize();
+    });
+    ro.observe(host);
+
+    return {
+        dispose() {
+            try { ro.disconnect(); } catch { /* already gone */ }
+            try { chart.dispose(); } catch { /* already gone */ }
+        },
+    };
+}
+
 /**
  * The two component names for a bivariate, `[axis0, axis1]`.
  *

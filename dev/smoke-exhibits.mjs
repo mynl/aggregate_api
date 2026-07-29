@@ -51,7 +51,7 @@ if (BASE) {
         typeof input === 'string' && input.startsWith('/') ? BASE + input : input, init);
 }
 
-const { EXHIBITS } = await import(
+const { EXHIBITS, reinsSeries } = await import(
     pathToFileURL(path.join(here, '..', 'web', 'src', 'charts', 'exhibits.js')).href);
 
 // Each case names the exhibit to build and the fixture key holding its payloads.
@@ -159,6 +159,34 @@ for (const [kind, key] of CASES) {
         : `square=${grids[0].width}`;
     console.log(`OK   ${key.padEnd(11)} ${shape} marklines=${marks}`
         + (stepped.length ? `  steps=[${stepped.join(',')}]` : ''));
+}
+
+// The Reins exhibit is keyed by tab rather than by object kind, so it is not in
+// EXHIBITS and gets its own check. Offline only: it needs the captured frame.
+if (fixtures && fixtures.reins) {
+    const frame = fixtures.reins.frames.reins;
+    const series = reinsSeries(frame);
+    if (!series.length) fail('reins: no aggregate bases in reins_density_df');
+    else {
+        // Each column is a pmf, so its derived survival must be non-increasing,
+        // inside [0, 1], and finish at zero. It must NOT be asserted to *start*
+        // at 1: the ceded distribution is small next to the gross, so on a grid
+        // scaled for the gross its whole mass lands in the first display bucket
+        // and its survival legitimately starts at 0.
+        const bad = series.filter((s) => {
+            const t = s.tailProb;
+            const ends = t[t.length - 1] < 1e-9;
+            const bounded = t.every((v) => v >= 0 && v <= 1 + 1e-12);
+            let falling = true;
+            for (let i = 1; i < t.length; i++) if (t[i] > t[i - 1] + 1e-12) falling = false;
+            return !(ends && bounded && falling);
+        });
+        if (bad.length) fail(`reins: bad survival on ${bad.map((s) => s.name).join(', ')}`);
+        else {
+            console.log(`OK   ${'reins'.padEnd(11)} `
+                + `series=[${series.map((s) => s.name).join(',')}]`);
+        }
+    }
 }
 
 // The discrete case exists to prove the step rendering fires, and the
