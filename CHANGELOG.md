@@ -4,6 +4,111 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a19
+
+From `dev/plan-relink-library.md`. The api catches up with `aggregate`
+1.0.0a148 to 1.0.0a174. The library moved a long way in that span (the recipe
+layer, one merged `library.agg`, and a declared first-class-citizen contract),
+and the api had stopped tracking it. Everything here is a consequence of
+following upstream rather than a new idea.
+
+### The example library was dead
+
+`examples.py` read `agg/examples.agg`, which stopped existing when a159 merged
+the three shipped libraries into one `library.agg`. `load_examples()` raised
+`FileNotFoundError`, so `/v1/examples` returned 500 and took both the Examples
+dropdown and the landing hero gallery with it.
+
+The whole text-parsing layer is gone with it: no Contents block to read
+(`_CONTENTS_LINE`), no `<Letter>.<Name>` convention to match (`_ITEM_LINE`), no
+`note{...}` to pick out of a folded statement (`_NOTE`), no
+`UnderwritingLexer.preprocess` call. The library is now read the way the library
+asks to be read, off `build.recipes` and `build.recipe(name)`.
+
+Grouping moved from filing letters to the tag namespaces a161 introduced, with
+`?group=` selecting the axis:
+
+| | |
+|---|---|
+| `topic` (default) | the successor to the letters: aggregate 31, severity 55, frequency 16, reinsurance 13, portfolio 29, distortion 8, pnl 24, bivariate 12, numerics 17 |
+| `kind` | the object type, off the recipe index: agg 114, port 29, sev 13, bvagg 12, pnl 10, distortion 8 |
+| `role` | hero, intro, reference, paper, plus an `other` bucket for the untagged majority |
+
+An entry tagged in two topics appears under both, which is intended.
+`GET /v1/examples/heroes` is new and is exactly
+`build.discover(tags='role:hero')`, the eight landing-gallery entries.
+
+Two details worth knowing:
+
+- **`Recipe.decl` is already canonical.** It is the entry re-rendered from its
+  spec: doc-free, in spread layout, carrying `hints{}` because those change how
+  the object builds. So the SPA's post-load `POST /v1/decl/format` round-trip is
+  gone. It comes back *empty* for a spec the unparser cannot render (the shipped
+  case is `dist MinimumDistortion minimum dist.A dist.B`, whose spec holds
+  constructed `Distortion` objects rather than names); the loader falls back to
+  the stored program with the same trailer trim.
+- **Session builds no longer leak into the menu.** Every program built through
+  `POST /v1/objects` is added to the underwriter's recipe base with
+  `source='session'`, and the api shares the `build` singleton, so an unfiltered
+  walk put the user's own untagged programs in the Examples dropdown. Filtered
+  out in both the listing and the hero lookup.
+
+### `bivariate` is `bvagg`
+
+**Breaking.** The parser's kind vocabulary is `agg`, `sev`, `port`, `bvagg`,
+`pnl`, `distortion`; the api said `bivariate`. Where the two disagree on a name
+the library wins and the api adapts. `BuildResponse.kind` changes accordingly,
+along with the SPA's gating keys, labels and density switch.
+
+`_classify_object` is now a table keyed on the class name, and the classes are
+exactly `aggregate.constants.FIRST_CLASS_CLASSES` plus `NEAR_FIRST_CLASS`, with
+a startup warning if upstream adds a first-class class the api has no kind for.
+`Distortion` and `Severity` reach the api as *subclasses* (`DistortionPH`,
+`SeverityScipy`), so those two taxonomies flatten to their base kind.
+
+### `sev` builds
+
+`Severity` is DecL-creatable and near-first-class, and the merged library ships
+13 `sev` entries that the Examples menu now offers, so refusing to build them was
+no longer defensible. It is a look-through onto a frozen scipy variable rather
+than a compute result, so it carries `info`, `plot` and the metadata surface and
+none of the frames: every frame route answers a clean 400 and the SPA greys out
+the tabs that do not apply.
+
+### Renames followed
+
+Three upstream renames were live bugs here, all silent:
+
+- **`agg_m` / `agg_cv` are `actual_m` / `actual_cv`** (a149). The build summary
+  line had been showing a blank mean and CV. A `PnL` carries only `est_m` /
+  `est_cv` (its outcome is emergent, so there is no input mean), which is now the
+  documented fallback rather than an accident.
+- **`validation_explanation` is the long form** (a172). It used to return
+  `'not unreasonable'`; it now returns a paragraph, and the terse verdict moved
+  to `validation_description`. The one-line summary chip reads the description.
+- **`Underwriter.knowledge` is `recipes`** (a164). The session `.agg` export
+  raised `AttributeError` on every `form=agg` download.
+
+Also corrected: `tail_df` is a property on `Aggregate` and `Portfolio` (a149,
+not a method), and a `BivariateAggregate` has no `tail_df` at all since a171
+renamed its same-named frame to `axis_support_df` because the two reports were
+unrelated.
+
+### `GET /v1/objects/{id}/meta`
+
+New. The object's own DecL metadata in one call: `note`, `tags`, `hints`,
+`program` (what the parser was handed, after preprocessing) and `pprogram` (what
+it understood, re-rendered canonically). One route for all six kinds.
+`doc{{{...}}}` is never served: it is the cookbook's long-form recipe, not
+playground content. Empty clauses serialize as `null` so the client can test
+presence without trimming.
+
+### Note
+
+A `note{}` is **preferred, never required**. 146 of the 186 shipped entries carry
+one; an entry without a note is ordinary, and the dropdown blurb, hero card and
+Overview lead all degrade to nothing rather than showing an empty element.
+
 ## 1.0.0a18
 
 Punch-ups to the a17 chrome/download pass.

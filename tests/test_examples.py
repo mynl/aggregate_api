@@ -1,82 +1,157 @@
-"""Tests for /v1/examples (examples.agg loader)."""
+"""Tests for /v1/examples and /v1/examples/heroes (aggregate's recipe base)."""
 
 from __future__ import annotations
 
-from aggregate_api.examples import _ITEM_LINE, _load_items
+import pytest
+
+from aggregate_api.examples import load_examples, load_heroes
 
 
-def test_xpnl_item_recognized():
-    """The item regex recognizes the ``xpnl`` P&L keyword.
-
-    ``xpnl`` is a valid top-level DecL statement (the multi-group P&L walk); it
-    isn't in the bundled ``examples.agg`` yet, so this guards the loader
-    directly. The ``^``-anchored ``pnl`` alternative must not shadow it.
-    """
-    line = (
-        "xpnl H.Walk 1000 prem less "
-        "agg H.L 1000 prem at 70% lr sev lognorm 100 cv 2 poisson"
-    )
-    assert _ITEM_LINE.match(line)
-    grouped = _load_items([line])
-    assert any(i["name"] == "H.Walk" for i in grouped.get("H", []))
-
-
-def test_examples_grouped_by_category(client):
+def test_examples_grouped_by_topic(client):
+    """The default grouping is the ``topic:`` tag namespace."""
     r = client.get("/v1/examples")
     assert r.status_code == 200
     body = r.json()
-    cats = body["categories"]
-    letters = {c["letter"] for c in cats}
-    # At least the canonical A-Z categories from the Contents block
-    # should be present (or close to it). A is the showcase heroes.
-    assert "A" in letters
-    assert "B" in letters
+    assert body["grouping"] == "topic"
+    keys = {c["key"] for c in body["categories"]}
+    # The shipped vocabulary; every one of these carries entries in library.agg.
+    assert {"aggregate", "severity", "portfolio", "distortion"} <= keys
+    # Almost every entry is topic-tagged, so the catch-all stays negligible.
+    # (One shipped entry, DefectivePareto, carries role:paper and no topic.)
+    other = next((c for c in body["categories"] if c["key"] == "other"), None)
+    assert other is None or len(other["items"]) <= 5
 
 
-def test_examples_contain_dice(client):
-    """The B.ThreeDice example from examples.agg should appear in section B
-    (section A is now the showcase heroes)."""
+def test_examples_group_by_kind(client):
+    """``group=kind`` files entries by the parser's own type token."""
+    r = client.get("/v1/examples?group=kind")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["grouping"] == "kind"
+    keys = {c["key"] for c in body["categories"]}
+    # All six DecL-creatable kinds are represented in the shipped library.
+    assert {"agg", "port", "sev", "bvagg", "pnl", "distortion"} <= keys
+    for cat in body["categories"]:
+        for item in cat["items"]:
+            assert item["kind"] == cat["key"]
+
+
+def test_examples_group_by_role(client):
+    """``group=role`` is sparse, so it carries the ``other`` bucket."""
+    r = client.get("/v1/examples?group=role")
+    body = r.json()
+    keys = [c["key"] for c in body["categories"]]
+    assert "hero" in keys
+    assert keys[-1] == "other", "the untagged majority sorts last"
+
+
+def test_examples_rejects_unknown_grouping(client):
+    """An unknown ``group`` is a 422 from FastAPI's Literal validation."""
+    assert client.get("/v1/examples?group=letter").status_code == 422
+
+
+def test_example_items_carry_decl_kind_and_tags(client):
+    """Every item has runnable DecL, a kind and at least one tag."""
     r = client.get("/v1/examples")
-    cats = {c["letter"]: c for c in r.json()["categories"]}
-    b = cats["B"]
-    names = {item["name"] for item in b["items"]}
-    assert any("Dice" in n for n in names)
+    seen = 0
+    for cat in r.json()["categories"]:
+        for item in cat["items"]:
+            seen += 1
+            assert item["decl"].strip(), f"empty decl for {item['name']}"
+            assert item["name"]
+            assert item["kind"]
+            assert item["tags"], f"untagged entry {item['name']}"
+            # A note is preferred but never required, so None is ordinary.
+            assert item["note"] is None or isinstance(item["note"], str)
+    assert seen > 100, "the shipped library has ~186 entries"
 
 
-def test_example_items_have_decl(client):
-    """Each example carries non-empty DecL text."""
+def test_example_decl_is_doc_free_and_reloadable(client):
+    """``Recipe.decl`` is canonical DecL: no trailer noise, no doc payload.
+
+    It carries ``hints{}`` (which change how the object builds) and drops
+    ``note`` / ``tags`` / ``doc``. The doc matters most: a stored program holds
+    the preprocessor's base64 one-liner, and leaking that into the editor would
+    be unreadable.
+    """
     r = client.get("/v1/examples")
     for cat in r.json()["categories"]:
         for item in cat["items"]:
-            assert item["decl"].strip(), f"empty decl for {item['name']}"
-            assert item["name"]
-            # note may be None; if present it's a string.
-            assert item["note"] is None or isinstance(item["note"], str)
+            decl = item["decl"]
+            assert "doc{{{" not in decl
+            assert "note{" not in decl
+            assert "tags{" not in decl
 
 
-def test_multiline_and_keyword_examples_captured(client):
-    """Statement-model parsing: multi-line ``port`` and ``bivariate`` items
-    survive folding, and ``;``-terminated programs keep a clean decl + note.
+def test_heroes_are_the_role_hero_entries(client):
+    """``/examples/heroes`` is ``discover(tags='role:hero')``."""
+    r = client.get("/v1/examples/heroes")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert items, "library.agg ships role:hero entries"
+    for item in items:
+        assert "role:hero" in item["tags"]
+        assert item["decl"].strip()
+    names = [i["name"] for i in items]
+    assert names == sorted(names)
 
-    Regression for the switch to ``aggregate``'s statement syntax (line
-    breaks instead of ``\\`` continuations, ``;`` terminators). A multi-line
-    ``port`` must fold whole (not just its header), the ``bivariate``/``bv``
-    keyword must be recognized, and a trailing ``;`` must not leak into the
-    decl or swallow the ``note{...}``.
+
+def test_heroes_subset_of_examples(client):
+    """Every hero also appears in the full listing, under the same decl."""
+    heroes = {i["name"]: i for i in client.get("/v1/examples/heroes").json()["items"]}
+    everything = {
+        i["name"]: i
+        for c in client.get("/v1/examples").json()["categories"]
+        for i in c["items"]
+    }
+    for name, hero in heroes.items():
+        assert name in everything
+        assert everything[name]["decl"] == hero["decl"]
+
+
+def test_hero_example_builds(client):
+    """A hero's decl is runnable as shipped: load it, build it, get an object.
+
+    This is the landing-page path (the gallery auto-builds the first card), so a
+    hero that does not build is a blank front page.
     """
-    r = client.get("/v1/examples")
-    items = {i["name"]: i for c in r.json()["categories"] for i in c["items"]}
-    # Multi-line portfolio folds whole: header + both component aggs.
-    book = items["G.Book"]
-    assert book["decl"].startswith("port G.Book agg ")
-    assert book["decl"].count("agg ") == 2
-    assert ";" not in book["decl"]
-    assert book["note"] and "note{" not in book["decl"]
-    # bivariate keyword recognized.
-    assert "I.Copula" in items
-    assert items["I.Copula"]["decl"].startswith("bivariate I.Copula ")
-    # ``;``-terminated single-line program: no stray terminator, note kept.
-    dice = items["B.ThreeDice"]
-    assert ";" not in dice["decl"]
-    assert "note{" not in dice["decl"]
-    assert dice["note"]
+    heroes = client.get("/v1/examples/heroes").json()["items"]
+    # Pick the cheapest hero rather than the first: some carry hints{log2=16}.
+    hero = min(heroes, key=lambda i: len(i["decl"]))
+    r = client.post("/v1/objects", json={"decl": hero["decl"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["kind"] in ("agg", "port", "sev", "bvagg", "pnl", "distortion")
+
+
+def test_session_builds_do_not_leak_into_examples(client):
+    """A program built through the api must not show up as a library example.
+
+    ``build()`` adds every program it parses to the underwriter's recipe base
+    with ``source='session'``. Since the api and the example library share the
+    ``build`` singleton, an unfiltered walk would put the user's own untagged,
+    unnamed programs in the Examples menu.
+    """
+    decl = "agg SessionLeakProbe 7 claims sev lognorm 42 cv 1.1 poisson"
+    assert client.post("/v1/objects", json={"decl": decl}).status_code == 200
+    load_examples.cache_clear()
+    try:
+        names = {
+            i["name"]
+            for c in client.get("/v1/examples").json()["categories"]
+            for i in c["items"]
+        }
+    finally:
+        load_examples.cache_clear()
+    assert "SessionLeakProbe" not in names
+
+
+def test_loader_rejects_unknown_grouping():
+    """The loader validates too, not just the route."""
+    with pytest.raises(ValueError, match="unknown grouping"):
+        load_examples("letter")
+
+
+def test_loaders_are_cached():
+    """Repeat calls return the identical object (``lru_cache``)."""
+    assert load_examples("topic") is load_examples("topic")
+    assert load_heroes() is load_heroes()

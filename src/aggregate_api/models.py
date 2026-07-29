@@ -75,7 +75,9 @@ class BuildResponse(BaseModel):
     model_config = _RESPONSE_CFG
 
     id: str
-    kind: Literal["agg", "port", "distortion", "bivariate", "pnl"]
+    # The parser's own kind vocabulary. ``bvagg`` (not ``bivariate``) because
+    # where the api and the library disagree on a name, the library wins.
+    kind: Literal["agg", "port", "sev", "distortion", "bvagg", "pnl"]
     name: str
     warnings: list[str] = []
     cached: bool
@@ -156,6 +158,34 @@ class InfoResponse(BaseModel):
     model_config = _RESPONSE_CFG
 
     info: str
+
+
+class ObjectMetaResponse(BaseModel):
+    """``GET /v1/objects/{id}/meta`` -- the object's own DecL metadata.
+
+    The trailer clauses a first-class citizen carries (``note`` / ``tags`` /
+    ``hints``) plus the two program renderings. ``doc{{{...}}}`` is deliberately
+    absent: it is the cookbook's long-form recipe, not something the playground
+    displays.
+
+    ``program`` is what the parser was handed, after preprocessing (folded onto
+    one line, comments stripped, any doc body base64-encoded), not the user's
+    keystrokes. ``pprogram`` is what the parser understood, re-rendered
+    canonically, and is the one to show a reader.
+
+    Every field is optional. They are read through ``getattr`` so a class that
+    does not carry one reports ``None`` rather than raising.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    kind: str
+    name: str
+    note: str | None = None
+    tags: list[str] = []
+    hints: str | None = None
+    program: str | None = None
+    pprogram: str | None = None
 
 
 # ======================================================================
@@ -305,29 +335,52 @@ class LexResponse(BaseModel):
 
 
 # ======================================================================
-# Examples (test_suite.agg)
+# Examples (aggregate's library.agg, via the recipe base)
 # ======================================================================
 
 class ExampleItem(BaseModel):
+    """One library entry.
+
+    ``note`` is preferred but never guaranteed: most entries carry one, and an
+    entry without a note is ordinary, not defective. ``decl`` is the entry's
+    canonical doc-free declaration (``Recipe.decl``), already in spread layout
+    and carrying ``hints{}``, so it drops straight into the editor.
+    """
+
     model_config = _RESPONSE_CFG
 
     name: str
+    kind: str
+    tags: list[str] = []
+    note: str | None = None
     decl: str
-    note: str | None
 
 
 class ExampleCategory(BaseModel):
+    """One group of entries. ``key`` is the raw tag / kind, ``title`` is display."""
+
     model_config = _RESPONSE_CFG
 
-    letter: str
+    key: str
     title: str
     items: list[ExampleItem]
 
 
 class ExamplesResponse(BaseModel):
+    """``GET /v1/examples`` -- the library grouped on one axis."""
+
     model_config = _RESPONSE_CFG
 
+    grouping: Literal["topic", "kind", "role"]
     categories: list[ExampleCategory]
+
+
+class HeroesResponse(BaseModel):
+    """``GET /v1/examples/heroes`` -- the entries tagged ``role:hero``."""
+
+    model_config = _RESPONSE_CFG
+
+    items: list[ExampleItem]
 
 
 # ======================================================================

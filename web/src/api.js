@@ -56,6 +56,7 @@ export const api = {
 
     // Per-button data
     info:         (id)              => _json('GET',  `/v1/objects/${id}/info`),
+    meta_of:      (id)              => _json('GET',  `/v1/objects/${id}/meta`),
     summary:      (id)              => _json('GET',  `/v1/objects/${id}/summary`),
     tail_df:      (id)              => _json('GET',  `/v1/objects/${id}/tail_df`),
     validation_df:(id)              => _json('GET',  `/v1/objects/${id}/validation_df`),
@@ -78,7 +79,9 @@ export const api = {
     formatDecl:   (decl)            => _json('POST', '/v1/decl/format', { decl }),
 
     // Metadata
-    examples:     ()                => _json('GET',  '/v1/examples'),
+    // group: 'topic' (default) | 'kind' | 'role'
+    examples:     (group = '')      => _json('GET',  `/v1/examples?${qs({ group })}`),
+    heroes:       ()                => _json('GET',  '/v1/examples/heroes'),
     meta:         ()                => _json('GET',  '/v1/meta'),
     health:       ()                => _json('GET',  '/v1/health'),
 

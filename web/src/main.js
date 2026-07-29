@@ -21,7 +21,7 @@ import './styles/cm6.css';
 // ---- App modules ----
 import { api, ApiError } from './api.js';
 import { createEditor, emacsEnabledDefault } from './editor.js';
-import { mountExamples } from './examples.js';
+import { mountExamples, loadExamples } from './examples.js';
 import { renderInfo, renderExhibit } from './renderers.js';
 import { mountInteractivePlot, markerLegend } from './plot-interactive.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
@@ -177,6 +177,24 @@ buildBtn.addEventListener('click', build);
 // ----------------------------------------------------------------------
 // Build summary line
 // ----------------------------------------------------------------------
+// The api reports the library's own kind vocabulary (`bvagg`, not `bivariate`):
+// where the two disagree on a name, aggregate wins and this app follows.
+// KIND_LABEL is the display form, KIND_WORD the lower-case noun for the timing
+// line ("Calculated <word> in 0.123 seconds").
+const KIND_LABEL = {
+    agg: 'Aggregate', port: 'Portfolio', sev: 'Severity',
+    distortion: 'Distortion', bvagg: 'Bivariate', pnl: 'P&L',
+};
+const KIND_WORD = {
+    agg: 'aggregate', port: 'portfolio', sev: 'severity',
+    distortion: 'distortion', bvagg: 'bivariate', pnl: 'P&L',
+};
+
+// Kinds whose density frame is not the loss / p_total / F / S shape, so the
+// curated column subset would come back empty: a distortion's is the g-curve
+// over [0,1], a bivariate's the joint-density matrix. Ask for the whole frame.
+const WHOLE_DENSITY_KINDS = new Set(['distortion', 'bvagg']);
+
 function sep() { return el('span', { className: 'sep' }, '·'); }
 
 /** Bucket size for display: a sub-unit bs shows as 1/2^k (e.g. 1/64). */
@@ -192,11 +210,7 @@ function renderSummary(res) {
     const inner = $('summary-inner');
     empty(inner);
     applyKindGating(res.kind);
-    const kindLabel = res.kind === 'port' ? 'Portfolio'
-        : res.kind === 'distortion' ? 'Distortion'
-        : res.kind === 'bivariate' ? 'Bivariate'
-        : res.kind === 'pnl' ? 'P&L'
-        : 'Aggregate';
+    const kindLabel = KIND_LABEL[res.kind] || 'Aggregate';
     const bits = [
         el('span', { className: 'nm' }, res.name || '(anonymous)'),
         el('span', { className: 'mono ms-2' }, kindLabel),
@@ -219,11 +233,7 @@ function renderTiming(res) {
     const node = $('summary-timing');
     if (!node) return;
     if (res.elapsed_ms == null) { node.textContent = ''; return; }
-    const word = res.kind === 'port' ? 'portfolio'
-        : res.kind === 'distortion' ? 'distortion'
-        : res.kind === 'bivariate' ? 'bivariate'
-        : res.kind === 'pnl' ? 'P&L'
-        : 'aggregate';
+    const word = KIND_WORD[res.kind] || 'aggregate';
     node.textContent = res.cached
         ? `Loaded ${word} from cache`
         : `Calculated ${word} in ${(res.elapsed_ms / 1000).toFixed(3)} seconds`;
@@ -291,17 +301,21 @@ function showTab(name) {
 }
 
 // Tabs that need a loss distribution. A standalone Distortion, a
-// BivariateAggregate, or a PnL exposes info / summary / stats / density / plot
-// but has no pricing, reinsurance, or bs window. Per the playground house rule
-// we NEVER hide menu items — the menu set stays stable — we grey them out
-// (disabled) so the user can see what's not applicable. agg / port disable
-// nothing.
+// BivariateAggregate or a PnL exposes info / summary / stats / density / plot
+// but has no pricing, reinsurance or bs window. A Severity is a look-through
+// onto a frozen scipy variable, so it carries info and plot and none of the
+// frames. Per the playground house rule we NEVER hide menu items (the menu set
+// stays stable), we grey them out so the user can see what does not apply.
+// agg and port disable nothing.
 const NA_TABS_BY_KIND = {
     distortion: ['price', 'reins', 'bswin'],
-    bivariate: ['price', 'reins', 'bswin'],
+    bvagg: ['price', 'reins', 'bswin'],
     pnl: ['price', 'reins', 'bswin'],
+    sev: ['price', 'reins', 'bswin', 'summary', 'validation', 'stats', 'density'],
 };
-const GATED_TABS = ['price', 'reins', 'bswin'];
+const GATED_TABS = [
+    'price', 'reins', 'bswin', 'summary', 'validation', 'stats', 'density',
+];
 
 function applyKindGating(kind) {
     const na = new Set(NA_TABS_BY_KIND[kind] || []);
@@ -358,7 +372,7 @@ async function loadTab(name) {
             // bins the density to a faithful 2**11 display grid (p_total stays
             // correct), so we only ask for the curated columns -- no nonzero /
             // downsample needed.
-            const frame = (state.kind === 'distortion' || state.kind === 'bivariate')
+            const frame = WHOLE_DENSITY_KINDS.has(state.kind)
                 ? await api.density_df(state.id)
                 : await api.density_df(state.id, { cols: 'loss,p_total,F,S' });
             // renderCap lifts CsvGrid's default 2,000-row render cap so the full
@@ -470,7 +484,7 @@ async function loadOverview() {
 
     // 2. Interactive density / exceedance plot (uPlot), with VaR markers.
     try {
-        const density = state.kind === 'distortion' || state.kind === 'bivariate'
+        const density = WHOLE_DENSITY_KINDS.has(state.kind)
             ? await api.density_df(state.id)
             : await api.density_df(state.id, { cols: 'loss,p_total,F,S' });
         const tail = await api.tail_df(state.id).catch(() => null);
@@ -702,15 +716,17 @@ function flash(btn, text) {
 // Alt-↑/↓ for quick inspection of the whole library. Not surfaced in the UI.
 const exampleRing = { decls: [], cursor: -1 };
 
-// Load a program into the editor, then standardize it via format_program
-// (now multiline/spread by default). Raw text shows instantly; the formatted
-// version replaces it unless the user has since stepped to another example
-// (stale-format guard). `note` rides along to the Overview lead on the next
-// build; passing null clears any inherited description.
-function loadExample(decl, note = null) {
+// Load a program into the editor. A library example arrives as `Recipe.decl`,
+// already canonical spread-form DecL carrying its hints, so there is nothing to
+// normalize: the old post-load /v1/decl/format round-trip is gone. `formatted`
+// false (the Help panel's hand-written sample, say) still takes that trip.
+// `note` rides along to the Overview lead on the next build; passing null
+// clears any inherited description.
+function loadExample(decl, note = null, formatted = true) {
     pendingNote = note;
     editor.setText(decl);
     editor.focus();
+    if (formatted) return;
     const at = exampleRing.cursor;
     api.formatDecl(decl).then((res) => {
         if (exampleRing.cursor === at && res && res.decl) editor.setText(res.decl);
@@ -722,15 +738,25 @@ mountExamples($('examples-menu'), (item) => {
     loadExample(item.decl, item.note);
 });
 
-api.examples().then((data) => {
-    const cats = data.categories || [];
-    exampleRing.decls = cats.flatMap((c) => (c.items || []).map((i) => i.decl));
-    // Hero gallery: a random handful from group A (the curated "Showcase"
-    // set, which grows over time -- never assume a fixed count). One of them
-    // auto-builds so the page lands fully populated, zero clicks.
-    const groupA = (cats.find((c) => c.letter === 'A') || {}).items || [];
-    mountHeroes(pickRandom(groupA, 4));
+// The Alt-↑/↓ ring walks every example in the library, flattened out of the
+// grouped payload. An entry tagged in two topics appears in two groups, so
+// dedupe on the decl to keep the ring a genuine cycle.
+loadExamples().then((data) => {
+    const seen = new Set();
+    for (const cat of data.categories || []) {
+        for (const item of cat.items || []) {
+            if (seen.has(item.decl)) continue;
+            seen.add(item.decl);
+            exampleRing.decls.push(item.decl);
+        }
+    }
 }).catch(() => { /* dropdown still works; Alt-nav just stays empty */ });
+
+// Hero gallery: the entries tagged `role:hero` in library.agg. The set grows
+// over time, so never assume a fixed count; a random handful shows each load.
+api.heroes().then((data) => {
+    mountHeroes(pickRandom(data.items || [], 4));
+}).catch(() => { /* no gallery; the page still works */ });
 
 // ----------------------------------------------------------------------
 // Hero gallery (group A) -- clickable showcase cards above the editor
@@ -788,10 +814,10 @@ function exampleStep(dir) {
 // ----------------------------------------------------------------------
 // Help offcanvas: "Load it" drops the sample program into the editor
 // ----------------------------------------------------------------------
-// Reuse loadExample so the program is format_program-normalized just like the
-// Examples dropdown. Close the panel and return focus to the editor once it has
-// finished animating out, so Bootstrap's focus-restore doesn't bounce back to
-// the "?" trigger.
+// Reuse loadExample, with formatted=false so the hand-written sample gets the
+// format_program round-trip a library entry no longer needs. Close the panel and
+// return focus to the editor once it has finished animating out, so Bootstrap's
+// focus-restore doesn't bounce back to the trigger.
 const helpLoad = $('help-load');
 if (helpLoad) {
     helpLoad.addEventListener('click', () => {
@@ -799,7 +825,7 @@ if (helpLoad) {
         const panel = $('helpPanel');
         panel.addEventListener('hidden.bs.offcanvas',
             () => editor.focus(), { once: true });
-        loadExample(sample);
+        loadExample(sample, null, false);
         bootstrap.Offcanvas.getOrCreateInstance(panel).hide();
     });
 }

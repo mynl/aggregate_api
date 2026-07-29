@@ -129,10 +129,56 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
       defines); new `GET /v1/session/models.agg?form=raw|agg` downloads the
       session's built programs (raw = as typed; agg = canonical/re-loadable).
       *(done; in `dev/done/`)*
-- [ ] **Example-source switcher** (next; placeholder shipped greyed-out in a17).
-      `GET /v1/examples?source=` with a keyed cache; curated `examples.agg` stays
-      the default, add `cookbook`, `all` (the whole `build.knowledge`), and
-      optionally the tester set (filter decl-testers' section-X error fixtures).
-      Wire the hamburger's "Example source…" placeholder to a picker.
+- [x] **Example-source switcher** *(closed — superseded by `plan-relink-library`
+      / 1.0.0a19. `aggregate` merged its three shipped libraries into one
+      `library.agg` at a159, so there is no longer a set of sources to switch
+      between. The axis that replaced it is `GET /v1/examples?group=topic|kind|role`
+      over the tag namespaces. The hamburger's greyed-out "Example source…"
+      placeholder should be retired or repointed at the grouping picker.)*
 - [ ] Revisit a dedicated **severity-stats** view (the "sev stats" sub-button
-      was dropped — no clean upstream accessor).
+      was dropped — no clean upstream accessor). Note `sev` became a buildable
+      kind in a19, so the object is now reachable from the playground.
+
+## aggregate Loss Library (aLL) work, staged
+
+The plan behind these is the harness plan of 2026-07-29; one `dev/plan-*.md` and
+one version bump each.
+
+- [x] **plan-relink-library — catch up with `aggregate` a148 to a174**
+      (→ 1.0.0a19). Examples read off `build.recipes` / `Recipe` instead of the
+      deleted `examples.agg`; `?group=topic|kind|role` + `/examples/heroes`;
+      `bivariate` → `bvagg`; `sev` buildable; new `/objects/{id}/meta`; the
+      `actual_*` / `validation_description` / `recipes` renames followed.
+      *(done; in `dev/`, move to `dev/done/` when the stage set closes)*
+- [ ] **Branding: aggregate Loss Library (aLL)** (→ a20). Two-line banner
+      ("aggregate Loss Library" over "description to distribution" in grey small
+      caps), title / meta / manifest / About / Help. Adopt the REFACTOR
+      no-dashes-as-punctuation rule into `CLAUDE.md` and sweep user-visible
+      strings.
+- [ ] **ECharts exhibit engine + two-panel Overview** (→ a21). Retire uPlot;
+      `web/src/charts/` with a house theme and a per-kind exhibit registry;
+      density + EP/return-period panels, linked cursor, `dataZoom`; Overview
+      header block off `/meta`; drop the duplicate Summary from More.
+      Needs a per-unit density route: a `Portfolio.density_df` has `p_total` and
+      the allocation columns but no per-unit densities (those are on the unit
+      `Aggregate`s, on the same grid).
+- [ ] **Examples: topic groups, fuzzy find, hero sparklines** (→ a22). Pinned
+      search + Ctrl+K palette over name / kind / tags / note; sparkline
+      thumbnails from a cached heroes payload, built lazily with a fallback.
+- [ ] **More as a tab, Bounds placeholder, Reins graphs** (→ a23). More becomes
+      a pill with a Reins-style sub-button row; Bounds ships greyed out; Reins
+      gains a gross / net / ceded density + EP overlay.
+- [ ] **Bivariate 3D viewer** (later). `echarts-gl` surface on the joint density
+      behind a dynamic import, with a server-side downsample to ~128x128.
+
+## Raised with `aggregate` (not fixed here)
+
+- [ ] Two `role:hero` portfolios carry `note{}` after the last unit, where the
+      positional rule binds it to that unit: `TwoLineBook` and
+      `BodoffWindQuake`. Visible as a blank tooltip and Overview lead on the
+      landing gallery.
+- [ ] `DefectivePareto` has no `topic:` tag, only `role:paper`; it is the sole
+      occupant of the topic view's `other` bucket.
+- [ ] `Recipe.decl` is `''` for `MinimumDistortion`: `spec_to_decl` has no case
+      for a composite distortion whose spec holds constructed `Distortion`
+      objects. Worked around with a stored-program fallback.

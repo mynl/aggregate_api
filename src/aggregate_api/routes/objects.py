@@ -10,6 +10,7 @@ The /v1/objects/* family covers everything object-shaped:
 * ``GET    /v1/objects/{id}``    -- per-object manifest.
 * ``DELETE /v1/objects/{id}``    -- evict from cache.
 * ``GET    /v1/objects/{id}/info``        -- text summary.
+* ``GET    /v1/objects/{id}/meta``        -- note / tags / hints / program / pprogram.
 * ``GET    /v1/objects/{id}/summary``     -- summary_df risk view (moments + percentiles).
 * ``GET    /v1/objects/{id}/tail_df``     -- return-period / exceedance table.
 * ``GET    /v1/objects/{id}/validation_df`` -- moment-vs-estimate QA table.
@@ -57,6 +58,7 @@ return in milliseconds.
 
 from __future__ import annotations
 
+import logging
 import re
 import threading
 import time
@@ -69,7 +71,8 @@ from fastapi.responses import Response
 
 from lark.exceptions import UnexpectedInput, VisitError
 
-from aggregate import Distortion, build as _build_singleton
+from aggregate import Distortion, Severity, build as _build_singleton
+from aggregate.constants import FIRST_CLASS_CLASSES, NEAR_FIRST_CLASS
 from aggregate.parser_errors import ErrorReport, format_error
 
 from .. import models
@@ -87,6 +90,8 @@ from ..serializers import (
     reset_index_safe,
 )
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -209,16 +214,22 @@ def _resolve_object(oid: str, cache: ObjectCache) -> CacheEntry:
 def _summary_fields(obj: Any) -> dict:
     """Headline ``mean`` / ``cv`` / ``validation`` for the build summary.
 
-    Both ``Aggregate`` and ``Portfolio`` expose ``agg_m`` / ``agg_cv``
-    and a validation blurb that reads "not unreasonable" on a clean build. A
-    ``PnL`` has no ``agg_m`` / ``agg_cv`` but carries the same headline on
-    ``mean`` / ``cv``, so those are accepted as fallbacks. Everything is
-    getattr-gated so a future object kind without any of them simply reports
-    ``None``.
+    ``Aggregate`` and ``Portfolio`` carry the analytic moments on ``actual_m`` /
+    ``actual_cv`` and the realized (model-output) ones on ``est_m`` / ``est_cv``.
+    The summary shows the analytic value, which is what the program asked for,
+    and falls back to the estimate: a ``PnL`` has only ``est_*`` (its outcome is
+    emergent, so there is no input mean to report).
+
+    Notes
+    -----
+    The ``agg_m`` / ``agg_cv`` spellings this used to read were renamed to
+    ``actual_*`` at ``aggregate`` 1.0.0a149, and there is no alias. Everything is
+    getattr-gated, so an object kind carrying none of them reports ``None``
+    rather than raising.
     """
     def _num(*names: str) -> float | None:
         # First present, float-coercible attribute wins; skip missing or
-        # non-numeric ones so a PnL's ``mean`` backs up an ``agg_m`` miss.
+        # non-numeric ones so a PnL's ``est_m`` backs up the ``actual_m`` miss.
         for name in names:
             v = getattr(obj, name, None)
             if v is None:
@@ -229,18 +240,20 @@ def _summary_fields(obj: Any) -> dict:
                 continue
         return None
 
-    # ``validation_explanation`` is a string property (e.g. "not unreasonable" /
-    # "fails sev mean, agg mean"). getattr-gated so an object kind without it
-    # simply reports ``None``.
+    # The terse verdict ("not unreasonable" / "fails sev mean, agg mean") is
+    # ``validation_description``. Do NOT read ``validation_explanation``: since
+    # aggregate 1.0.0a172 that is the long form it always claimed to be, a whole
+    # paragraph naming what was checked, which would swamp the one-line summary.
+    # getattr-gated so an object kind without it simply reports ``None``.
     validation: str | None = None
-    explanation = getattr(obj, "validation_explanation", None)
-    if explanation is not None:
-        validation = str(explanation)
+    description = getattr(obj, "validation_description", None)
+    if description is not None:
+        validation = str(description)
 
     return {
         "bs": _num("bs"),
-        "mean": _num("agg_m", "mean"),
-        "cv": _num("agg_cv", "cv"),
+        "mean": _num("actual_m", "est_m"),
+        "cv": _num("actual_cv", "est_cv"),
         "validation": validation,
     }
 
@@ -275,12 +288,12 @@ def _drop_raw_moments(df):
 def _resolve_frame(obj: Any, name: str):
     """Return the named frame, calling it when it is a method.
 
-    The risk frames are exposed inconsistently upstream: ``summary_df`` /
-    ``validation_df`` are properties, but ``tail_df`` is a *method* on
-    ``Aggregate`` / ``Portfolio`` (``tail_df(periods=None)``) and a property
-    on ``BivariateAggregate``. Resolve both: a missing or ``None`` attribute
-    yields ``None`` (the route answers 400); a callable is invoked with its
-    defaults; anything else is returned as-is.
+    The risk frames are properties as of ``aggregate`` 1.0.0a149, which turned
+    ``tail_df`` from a method into one. Both shapes are still resolved, so a
+    frame that goes back to being callable (or a class that never converted)
+    keeps working: a missing or ``None`` attribute yields ``None`` (the route
+    answers 400), a callable is invoked with its defaults, anything else is
+    returned as-is.
 
     Parameters
     ----------
@@ -465,14 +478,16 @@ def post_object(
             )
             raise HTTPException(status_code=500, detail=str(exc))
 
-    # Classify the result. The api stores
-    # 'agg' | 'port' | 'distortion' | 'bivariate' | 'pnl'. Distortions,
-    # BivariateAggregates and PnLs carry the common reporting surface (info,
-    # summary, stats_df, density_df, plot) so the playground can explore
-    # them -- they just have no pricing / reinsurance / bs-window (those
-    # routes return a clean 400). 'sev' and anything else is rejected.
+    # Classify the result. The api serves exactly the six DecL-creatable kinds
+    # the library declares as first-class (plus near-first-class ``sev``), and
+    # nothing else. They do not all carry the same surface: an Aggregate and a
+    # Portfolio have the lot, while a Distortion, a BivariateAggregate and a PnL
+    # have the reporting frames but no pricing / reinsurance / bs window, and a
+    # Severity is a look-through onto a frozen scipy variable with ``info`` and
+    # ``plot`` but no frames at all. Every frame route answers a clean 400 for a
+    # kind that does not carry it, so the SPA degrades rather than erroring.
     kind = _classify_object(obj)
-    if kind not in ("agg", "port", "distortion", "bivariate", "pnl"):
+    if kind not in SUPPORTED_KINDS:
         elapsed = int((time.monotonic() - t0) * 1000)
         audit.record_build(
             ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
@@ -483,8 +498,8 @@ def post_object(
         raise HTTPException(
             status_code=422,
             detail=(
-                "api supports 'agg', 'port', 'distortion', 'bivariate' and "
-                f"'pnl' only; got {kind!r}"
+                f"api supports {', '.join(repr(k) for k in SUPPORTED_KINDS)} "
+                f"only; got {kind!r}"
             ),
         )
 
@@ -514,34 +529,70 @@ def post_object(
     }
 
 
-def _classify_object(obj: Any) -> str:
-    """Return 'agg' | 'port' | 'distortion' | 'bivariate' | 'pnl' | <type-name>.
+# Class name -> the parser's own kind token. The keys are exactly
+# ``aggregate.constants.FIRST_CLASS_CLASSES`` plus ``NEAR_FIRST_CLASS``, and the
+# values are the kinds ``Underwriter._factory`` dispatches on, so the api speaks
+# the library's vocabulary rather than a parallel one of its own. Note
+# ``bvagg``, not ``bivariate``: where the two disagree the library wins.
+_KIND_OF_CLASS = {
+    "Aggregate": "agg",
+    "Portfolio": "port",
+    "BivariateAggregate": "bvagg",
+    "PnL": "pnl",
+    "Distortion": "distortion",
+    "Severity": "sev",
+}
 
-    Uses class-name discrimination because Aggregate / Portfolio
-    don't carry an explicit .kind attribute on the instances --
-    that's only on ParsedProgram, which we don't see here (we
-    called ``build()``, which unwraps). Every ``Distortion`` subclass
-    (PHDistortion, WangDistortion, ...) is normalized to the generic
-    ``'distortion'`` so the SPA and endpoints treat them uniformly; the
-    specific subclass shows up in ``info`` / ``summary``. A
-    ``BivariateAggregate`` (``bivariate`` / ``bv`` / ``clash`` and the
-    ``netceded`` / ``grossceded`` / ``grossnet`` view-pair keywords) maps
-    to the generic ``'bivariate'``. A ``PnL`` (the ``pnl`` / ``xpnl``
-    P&L engine -- ``xpnl`` builds the same class with a multi-group walk)
-    maps to ``'pnl'``; the name check matches both since it has no subclasses.
+# The two taxonomies whose subclasses reach the api under the base name.
+# ``build('dist X ph .7')`` returns a ``DistortionPH`` and
+# ``build('sev X lognorm 50 cv 1.5')`` a ``SeverityScipy``; both flatten to the
+# base kind so the endpoints treat every member uniformly. The specific subclass
+# still shows up in ``info``.
+_KIND_OF_BASE = ((Distortion, "distortion"), (Severity, "sev"))
+
+# What POST /v1/objects will build, in the library's own vocabulary.
+SUPPORTED_KINDS = ("agg", "port", "sev", "distortion", "bvagg", "pnl")
+
+# Guard: the contract declares which classes flow through to this service, so a
+# class added upstream without a kind here should be noticed, not silently
+# lower-cased into a stray kind string.
+_UNMAPPED_FCC = tuple(
+    name for name in (*FIRST_CLASS_CLASSES, *NEAR_FIRST_CLASS)
+    if name not in _KIND_OF_CLASS
+)
+if _UNMAPPED_FCC:  # pragma: no cover -- fires only on an upstream addition
+    logger.warning(
+        "first-class classes with no api kind mapping: %s", ", ".join(_UNMAPPED_FCC)
+    )
+
+
+def _classify_object(obj: Any) -> str:
+    """Return the parser kind for a built object, or the lower-cased class name.
+
+    Uses class discrimination because a built object carries no ``.kind`` of its
+    own: the kind lives on the :class:`Recipe`, and ``build()`` unwraps to the
+    object. A ``BivariateAggregate`` (``bivariate`` / ``bv`` / ``clash`` and the
+    ``netceded`` / ``grossceded`` / ``grossnet`` view pairs) maps to ``'bvagg'``,
+    and a ``PnL`` (built by both ``pnl`` and ``xpnl``) to ``'pnl'``.
+
+    Parameters
+    ----------
+    obj : Any
+        A built object.
+
+    Returns
+    -------
+    str
+        A parser kind token, or the lower-cased class name for anything the
+        contract does not cover.
     """
-    cls = type(obj).__name__
-    if cls == "Portfolio":
-        return "port"
-    if cls == "Aggregate":
-        return "agg"
-    if cls == "BivariateAggregate":
-        return "bivariate"
-    if cls == "PnL":
-        return "pnl"
-    if isinstance(obj, Distortion):
-        return "distortion"
-    return cls.lower()
+    kind = _KIND_OF_CLASS.get(type(obj).__name__)
+    if kind is not None:
+        return kind
+    for base, base_kind in _KIND_OF_BASE:
+        if isinstance(obj, base):
+            return base_kind
+    return type(obj).__name__.lower()
 
 
 # ----------------------------------------------------------------------
@@ -573,9 +624,12 @@ def list_objects(cache: ObjectCache = Depends(_get_cache)) -> dict:
 # ----------------------------------------------------------------------
 
 # Dependency order for the canonical ('agg') export, mirroring the library's
-# write order: a sev precedes the agg that uses it, an agg precedes the port
-# that references it, so the emitted file re-loads cleanly.
-_KIND_ORDER = {"sev": 0, "agg": 1, "port": 2, "distortion": 3}
+# write order: a sev precedes the agg that uses it, an agg precedes the port,
+# bvagg and pnl that reference it, so the emitted file re-loads cleanly. A
+# distortion depends on nothing and sorts last. An unlisted kind falls to 99.
+_KIND_ORDER = {
+    "sev": 0, "agg": 1, "port": 2, "bvagg": 3, "pnl": 4, "distortion": 5,
+}
 
 
 @router.get("/session/models.agg")
@@ -629,8 +683,11 @@ def get_session_models(
     else:  # form == "agg"
         from aggregate.decl_writer import format_program, spec_to_decl
 
-        kn = _build_singleton.knowledge
-        session = kn[kn["source"] == "session"]
+        # ``recipes`` replaced ``knowledge`` at aggregate 1.0.0a164: one frame,
+        # one class, indexed (kind, name), with ``source`` marking where an
+        # entry came from. A program built through this api is a session entry.
+        recipes = _build_singleton.recipes
+        session = recipes[recipes["source"] == "session"]
         # (kind, name) MultiIndex; order by kind dependency then name.
         rows = sorted(
             session.itertuples(),
@@ -706,6 +763,50 @@ def get_info(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
 
 
 # ----------------------------------------------------------------------
+# GET /v1/objects/{id}/meta
+# ----------------------------------------------------------------------
+
+@router.get("/objects/{oid}/meta", response_model=models.ObjectMetaResponse)
+def get_meta(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+    """The object's own DecL metadata: trailer clauses plus both programs.
+
+    Every first-class citizen carries ``note`` / ``tags`` / ``hints`` and the
+    ``program`` / ``pprogram`` pair, so this is one route for all six kinds.
+    ``doc{{{...}}}`` is deliberately never served: it is the cookbook's
+    long-form recipe, not playground content.
+
+    Notes
+    -----
+    Read through ``getattr`` rather than direct attribute access. The library
+    declares its own contract holes in
+    ``aggregate.constants.FCC_CONTRACT_EXCEPTIONS`` (empty as of 1.0.0a172, but
+    the mechanism exists precisely because they recur), and an empty clause
+    comes back as ``''``, which serializes as ``null`` here so the SPA can test
+    presence without trimming.
+    """
+    entry = _resolve_object(oid, cache)
+    obj = entry.obj
+
+    def text(name: str) -> str | None:
+        value = getattr(obj, name, None)
+        if value is None:
+            return None
+        value = str(value).strip()
+        return value or None
+
+    tags = getattr(obj, "tags", ()) or ()
+    return {
+        "kind": entry.kind,
+        "name": entry.name,
+        "note": text("note"),
+        "tags": [str(t) for t in tags],
+        "hints": text("hints"),
+        "program": text("program"),
+        "pprogram": text("pprogram"),
+    }
+
+
+# ----------------------------------------------------------------------
 # GET /v1/objects/{id}/summary
 # ----------------------------------------------------------------------
 
@@ -741,13 +842,17 @@ def get_summary(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
 def get_tail_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
     """Return-period / exceedance table (``tail_df``).
 
-    The centerpiece risk view: index = return period ``T`` (the default
-    ladder includes the 1-in-200 / 1-in-250 capital anchors); columns
-    ``p | VaR | TVaR | xsVaR | VaR/Mean``. On ``Aggregate`` / ``Portfolio``
-    ``tail_df`` is a *method* (``tail_df(periods=None)``); on
-    ``BivariateAggregate`` it is a property -- :func:`_resolve_frame` calls
-    or reads it accordingly, so both forms answer here. ``None`` before a
-    grid exists (no realised density) -> 400.
+    The centerpiece risk view: columns ``p | VaR | TVaR | xsVaR | VaR/Mean``,
+    indexed by return period ``T`` on an ``Aggregate`` and by ``(unit, T)`` on a
+    ``Portfolio``, whose ladder includes the 1-in-200 / 1-in-250 capital
+    anchors. ``None`` before a grid exists (no realised density) -> 400.
+
+    Notes
+    -----
+    A ``BivariateAggregate`` has no ``tail_df`` and answers 400. It once carried
+    the name for a different report entirely (where the realized mass sits on
+    each axis), which ``aggregate`` 1.0.0a171 renamed ``axis_support_df`` because
+    two reports under one name is how a reader gets the wrong one.
     """
     entry = _resolve_object(oid, cache)
     df = _resolve_frame(entry.obj, "tail_df")

@@ -441,11 +441,15 @@ _BV = (
 
 
 def test_bivariate_builds_and_reports(client):
-    """A BivariateAggregate builds as kind='bivariate' with the common surface."""
+    """A BivariateAggregate builds as kind='bvagg' with the common surface.
+
+    ``bvagg`` is the parser's own token. The api used to say ``bivariate``; where
+    the two disagree on a name the library wins, so the api moved.
+    """
     r = client.post("/v1/objects", json={"decl": _BV})
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["kind"] == "bivariate"
+    assert body["kind"] == "bvagg"
     oid = body["id"]
     # Common reporting surface works.
     for which in ("info", "summary", "stats_df"):
@@ -480,7 +484,8 @@ def test_pnl_builds_and_reports(client):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["kind"] == "pnl"
-    # The summary-line mean/cv fall back to PnL's mean/cv (no agg_m).
+    # The summary-line mean/cv fall back to est_m / est_cv: a P&L outcome is
+    # emergent, so it carries no analytic actual_m to report.
     assert body["mean"] is not None
     oid = body["id"]
     # Common reporting surface works (density exercises the dict->frame path).
@@ -498,6 +503,88 @@ def test_pnl_builds_and_reports(client):
     ).status_code == 400
     assert client.get(f"/v1/objects/{oid}/reins_summary_df").status_code == 400
     assert client.get(f"/v1/objects/{oid}/bs_window_df").status_code == 400
+
+
+# ----------------------------------------------------------------------
+# Severity (sev -> kind='sev', near-first-class)
+# ----------------------------------------------------------------------
+
+def test_sev_builds_and_reports(client):
+    """A ``sev`` builds as kind='sev' with info + plot and no frames.
+
+    ``Severity`` is near-first-class: DecL-creatable and carrying the metadata
+    and narrative surface, but a look-through onto a frozen scipy variable
+    rather than a compute result, so it is exempt from the DataFrame quartet.
+    Every frame route must therefore answer a clean 400, not a 500. It also
+    arrives as a *subclass* (``SeverityScipy``), which is why classification
+    falls back to an isinstance check.
+    """
+    r = client.post("/v1/objects", json={"decl": "sev SEV.Test lognorm 50 cv 1.5"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "sev"
+    oid = body["id"]
+    assert client.get(f"/v1/objects/{oid}/info").status_code == 200
+    assert client.get(f"/v1/objects/{oid}/plot").status_code == 200
+    for which in ("summary", "stats_df", "density_df", "validation_df",
+                  "tail_df", "bs_window_df", "reins_summary_df"):
+        got = client.get(f"/v1/objects/{oid}/{which}").status_code
+        assert got == 400, f"{which} -> {got}"
+
+
+# ----------------------------------------------------------------------
+# GET /v1/objects/{id}/meta -- the DecL trailer + both programs
+# ----------------------------------------------------------------------
+
+def test_meta_reports_trailer_and_programs(client):
+    """``/meta`` carries note / tags / hints and both program renderings."""
+    decl = (
+        "agg META.Probe 10 claims sev lognorm 50 cv 1.5 poisson "
+        "note{a stored note} tags{topic:aggregate, role:intro} hints{log2=12}"
+    )
+    oid = client.post("/v1/objects", json={"decl": decl}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/meta")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "agg"
+    assert body["name"] == "META.Probe"
+    assert body["note"] == "a stored note"
+    assert body["tags"] == ["topic:aggregate", "role:intro"]
+    assert "log2=12" in body["hints"]
+    # pprogram is what the parser understood, re-rendered canonically.
+    assert "META.Probe" in body["pprogram"]
+    assert body["program"]
+    # doc is never served: it is cookbook content, not playground content.
+    assert "doc" not in body
+
+
+def test_meta_empty_clauses_are_null(client):
+    """A program with no trailer reports ``None``, not empty strings."""
+    oid = client.post(
+        "/v1/objects",
+        json={"decl": "agg META.Bare 5 claims sev lognorm 10 cv 1 poisson"},
+    ).json()["id"]
+    body = client.get(f"/v1/objects/{oid}/meta").json()
+    assert body["note"] is None
+    assert body["hints"] is None
+    assert body["tags"] == []
+
+
+def test_meta_works_for_every_kind(client):
+    """One route serves all six kinds, including the frame-less ones."""
+    for decl, kind in (
+        ("sev META.Sev lognorm 50 cv 1.5", "sev"),
+        ("dist META.Dist ph 0.7", "distortion"),
+        (_PNL.replace("P.PnL", "META.PnL").replace("P.Loss", "META.Loss"), "pnl"),
+    ):
+        oid = client.post("/v1/objects", json={"decl": decl}).json()["id"]
+        body = client.get(f"/v1/objects/{oid}/meta").json()
+        assert body["kind"] == kind, decl
+        assert body["pprogram"], f"no pprogram for {kind}"
+
+
+def test_meta_unknown_object_404(client):
+    assert client.get("/v1/objects/nope/meta").status_code == 404
 
 
 # ----------------------------------------------------------------------
