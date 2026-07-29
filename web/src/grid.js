@@ -1,15 +1,15 @@
 // CsvGrid integration: mount the embeddable grid into a pane and keep it
 // leak-free.
 //
-// CsvGrid (mynl/CSV_Viewer) holds DOM listeners — and, when enabled, a Web
-// Worker — so a grid must be destroy()ed before its pane is re-rendered or the
+// CsvGrid (mynl/CSV_Viewer) holds DOM listeners, and, when enabled, a Web
+// Worker, so a grid must be destroy()ed before its pane is re-rendered or the
 // object is rebuilt, or those handles leak. We track every live instance by the
 // pane it lives in and tear them down on clear/rebuild. The Price pane stacks
 // several grids in one pane, hence paneId -> CsvGrid[]. See dev/done/plan-grid.md.
 //
 // Worker note: the parse worker is disabled by default here (see mountGrid).
 // CsvGrid otherwise resolves its worker from `import.meta.url`, which under our
-// Vite build points at the hashed bundle, not a co-located worker file — so the
+// Vite build points at the hashed bundle, not a co-located worker file, so the
 // main-thread parser is the robust choice until the worker asset is shipped.
 // Our frames are small (summary/stats/reins) or server-downsampled (density),
 // well under CsvGrid's render cap, so main-thread parsing is imperceptible.

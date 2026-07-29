@@ -37,14 +37,14 @@ export function renderRateLimit(retryAfter) {
         el('div', { className: 'agg-ratelimit-icon' },
             el('i', { className: 'bi bi-cup-hot' })),
         el('div', {},
-            el('div', { className: 'agg-ratelimit-title' }, 'Easy there — grab a coffee ☕'),
+            el('div', { className: 'agg-ratelimit-title' }, 'Easy there. Grab a coffee ☕'),
             el('div', { className: 'agg-ratelimit-msg' },
                 "We're glad you're enjoying ", el('code', {}, 'aggregate'),
                 "! It's a shared, free resource, so builds are gently rate-limited "
                 + 'to keep it snappy for everyone. ', wait),
             el('div', { className: 'agg-ratelimit-sub small text-muted' },
                 'Want unlimited builds? ', el('code', {}, 'aggregate'),
-                ' is open source — ',
+                ' is open source, so you can ',
                 el('a', {
                     href: 'https://github.com/mynl/aggregate',
                     target: '_blank', rel: 'noopener',

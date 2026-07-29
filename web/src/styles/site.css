@@ -16,7 +16,7 @@
     --mut:  #6c757d;     /* muted text */
     --code: #a81313;     /* mynl code red */
     --soft: #f8f9fa;
-    --dot:  #6c757d;     /* separator dots — match the feedback row */
+    --dot:  #6c757d;     /* separator dots, matching the feedback row */
 }
 
 body { font-family: var(--ui); color: #212529; background: #fff; }
@@ -25,8 +25,13 @@ code { color: var(--code); }
 
 /* ---- Header ---- */
 header .navbar { min-height: 56px; }
-.brand-title  { line-height: 1; font-size: 1.25rem; font-weight: 700; }
-.brand-kicker { font-family: var(--mono); font-size: .52rem; letter-spacing: .3em;
+/* Two-line banner: the app name over its tagline. The kicker is set in grey
+   small caps rather than a second title, so the name reads as the name and the
+   tagline as a gloss on it. `font-variant` (not uppercase) keeps real small
+   caps where the face has them and degrades to synthesized ones where it does
+   not; the letter-spacing is what makes either legible at this size. */
+.brand-title  { line-height: 1.05; font-size: 1.25rem; font-weight: 700; }
+.brand-kicker { font-size: .6rem; font-variant: small-caps; letter-spacing: .18em;
                 color: var(--mut); margin-top: 2px; }
 .nav-meta     { display: flex; align-items: center; gap: .45rem; font-size: .74rem; color: var(--mut); }
 .nav-meta a   { color: var(--mut); text-decoration: none; }

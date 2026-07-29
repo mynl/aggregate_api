@@ -150,11 +150,16 @@ one version bump each.
       `bivariate` → `bvagg`; `sev` buildable; new `/objects/{id}/meta`; the
       `actual_*` / `validation_description` / `recipes` renames followed.
       *(done; in `dev/`, move to `dev/done/` when the stage set closes)*
-- [ ] **Branding: aggregate Loss Library (aLL)** (→ a20). Two-line banner
-      ("aggregate Loss Library" over "description to distribution" in grey small
-      caps), title / meta / manifest / About / Help. Adopt the REFACTOR
-      no-dashes-as-punctuation rule into `CLAUDE.md` and sweep user-visible
-      strings.
+- [x] **plan-all-branding — aggregate Loss Library (aLL)** (→ 1.0.0a20).
+      Two-line banner (name over "description to distribution" in grey small
+      caps); name through title / meta / manifest / sw / About / Help / README /
+      package description. No-dashes-as-punctuation rule adopted into
+      `CLAUDE.md`, user-visible strings swept. *(done; in `dev/`)*
+- [ ] **Dash tidy: the ~190 legacy ` -- ` glosses** in internal docstrings and
+      comments. Deliberately deferred out of a20 so it does not bury the staged
+      diffs; the rule in `CLAUDE.md` says they are cleaned as their file is next
+      edited. Promote to its own tidying commit if the author would rather have
+      it in one go.
 - [ ] **ECharts exhibit engine + two-panel Overview** (→ a21). Retire uPlot;
       `web/src/charts/` with a house theme and a per-kind exhibit registry;
       density + EP/return-period panels, linked cursor, `dataZoom`; Overview

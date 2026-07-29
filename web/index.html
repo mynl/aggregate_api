@@ -3,9 +3,9 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="aggregate · DecL playground — build and explore compound probability distributions via the aggregate API.">
+    <meta name="description" content="aggregate Loss Library (aLL): build and explore compound probability distributions from a DecL program.">
     <meta name="theme-color" content="#ffffff">
-    <title>aggregate · DecL playground</title>
+    <title>aggregate Loss Library</title>
 
     <link rel="icon"            type="image/x-icon" href="/favicon.ico">
     <link rel="icon"            type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -26,10 +26,10 @@
         <nav class="navbar navbar-expand-lg py-1">
             <div class="container-fluid px-3 px-md-4" style="max-width:1280px;">
                 <a href="/" class="d-flex align-items-center text-decoration-none me-auto">
-                    <img src="/logo.png" alt="aggregate" style="height:40px;width:auto;">
-                    <div class="d-flex flex-column align-items-center px-3">
-                        <div class="brand-title text-dark">Description to distribution</div>
-                        <div class="brand-kicker">AGGREGATE</div>
+                    <img src="/logo.png" alt="aggregate Loss Library" style="height:40px;width:auto;">
+                    <div class="d-flex flex-column px-3">
+                        <div class="brand-title text-dark">aggregate Loss Library</div>
+                        <div class="brand-kicker">description to distribution</div>
                     </div>
                 </a>
                 <div class="nav-meta">
@@ -60,8 +60,9 @@
         <p class="subhead">Describe an insurance book and get its full loss
             distribution, tail risk, and price.</p>
 
-        <!-- Hero row: a few showcase examples (group A), picked at random each
-             load; one auto-builds so the page lands fully populated. -->
+        <!-- Hero row: a few showcase examples (tagged role:hero in library.agg),
+             picked at random each load; one auto-builds so the page lands fully
+             populated. -->
         <div id="hero-row" class="hero-row" aria-label="example gallery"></div>
 
         <!-- Editor box (CM6 mounts into #editor-host) -->
@@ -72,7 +73,7 @@
             <i class="bi bi-x-circle editor-clear" id="editor-clear" title="clear" role="button" aria-label="clear editor"></i>
         </div>
 
-        <!-- Feedback line (folds away below sm — no Ctrl key on phones) -->
+        <!-- Feedback line (folds away below sm, since phones have no Ctrl key) -->
         <div class="feedback d-none d-sm-flex">
             <span class="fb-text">Ctrl+Enter build · Ctrl+Space complete · ↑↓ history</span>
             <span class="fb-emacs">
@@ -162,7 +163,7 @@
         </ul>
 
         <div class="tab-content">
-            <!-- Overview — the landing tab: note + interactive plot + summary_df + tail_df -->
+            <!-- Overview, the landing tab: note + interactive plot + summary_df + tail_df -->
             <div class="tab-pane fade show active" id="t-overview">
                 <div id="pane-overview" class="pane"></div>
             </div>
@@ -175,7 +176,7 @@
                 <div id="pane-info" class="pane"></div>
             </div>
 
-            <!-- Summary (under More) — summary_df risk view as a plain grid -->
+            <!-- Summary (under More): summary_df risk view as a plain grid -->
             <div class="tab-pane fade" id="t-summary">
                 <div class="tab-tools">
                     <button class="btn btn-outline-secondary" data-copy="pane-summary"><i class="bi bi-clipboard"></i> copy</button>
@@ -183,11 +184,11 @@
                 <div id="pane-summary" class="pane"></div>
             </div>
 
-            <!-- Validation (under More) — moment-vs-estimate QA table -->
+            <!-- Validation (under More): moment-vs-estimate QA table -->
             <div class="tab-pane fade" id="t-validation">
                 <div class="tab-tools">
                     <button class="btn btn-outline-secondary" data-copy="pane-validation"><i class="bi bi-clipboard"></i> copy</button>
-                    <span class="text-muted ms-1" style="font-size:.7rem;">theoretical vs empirical moments — reads “not unreasonable” on a clean build</span>
+                    <span class="text-muted ms-1" style="font-size:.7rem;">theoretical vs empirical moments; reads “not unreasonable” on a clean build</span>
                 </div>
                 <div id="pane-validation" class="pane"></div>
             </div>
@@ -217,7 +218,7 @@
                 <div id="pane-reins" class="pane"></div>
             </div>
 
-            <!-- Price — pentagon completion (+ distortion analysis for Portfolios) -->
+            <!-- Price: pentagon completion (+ distortion analysis for Portfolios) -->
             <div class="tab-pane fade" id="t-price">
                 <div class="tab-tools price-form">
                     <label class="price-field">p
@@ -235,18 +236,18 @@
                 <div id="pane-price" class="pane"></div>
             </div>
 
-            <!-- Density (under More ▾) — density_df, p_total>0, ~300-row preview -->
+            <!-- Density (under More ▾): density_df, p_total>0, ~300-row preview -->
             <div class="tab-pane fade" id="t-density">
                 <div class="tab-tools">
-                    <span class="text-muted ms-1" style="font-size:.7rem;">loss · p_total · F · S — binned to a 2¹¹ display grid; copy / save from the grid</span>
+                    <span class="text-muted ms-1" style="font-size:.7rem;">loss · p_total · F · S, binned to a 2¹¹ display grid; copy / save from the grid</span>
                 </div>
                 <div id="pane-density" class="pane"></div>
             </div>
 
-            <!-- bs window (under More ▾) — bucket/window estimator summary -->
+            <!-- bs window (under More ▾): bucket/window estimator summary -->
             <div class="tab-pane fade" id="t-bswin">
                 <div class="tab-tools">
-                    <span class="text-muted ms-1" style="font-size:.7rem;">bucket / window estimator — the <code>selected</code> row is the chosen grid</span>
+                    <span class="text-muted ms-1" style="font-size:.7rem;">bucket / window estimator; the <code>selected</code> row is the chosen grid</span>
                 </div>
                 <div id="pane-bswin" class="pane"></div>
             </div>
@@ -258,12 +259,13 @@
          ============================================================ -->
     <div class="offcanvas offcanvas-end help-panel" tabindex="-1" id="helpPanel" aria-labelledby="helpLabel">
         <div class="offcanvas-header">
-            <h5 class="offcanvas-title" id="helpLabel">DecL playground—quick help</h5>
+            <h5 class="offcanvas-title" id="helpLabel">Quick help</h5>
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
         </div>
         <div class="offcanvas-body help-body">
-            <p class="help-lead">Build and explore compound <em>(aggregate)</em> loss
-               distributions from simple <strong>DecL</strong> programs.</p>
+            <p class="help-lead">The <strong>aggregate Loss Library</strong>. Build and
+               explore compound <em>(aggregate)</em> loss distributions from simple
+               <strong>DecL</strong> programs.</p>
 
             <h6>Try it</h6>
             <div class="help-try">
@@ -308,7 +310,8 @@
             </p>
 
             <p class="help-fair mb-0">This is a shared, free demo, so builds are
-               rate-limited. Want no limits? <code>aggregate</code> is open source—<a href="https://github.com/mynl/aggregate" target="_blank" rel="noopener">run it locally</a>.</p>
+               rate-limited. Want no limits? <code>aggregate</code> is open source, so you can
+               <a href="https://github.com/mynl/aggregate" target="_blank" rel="noopener">run it locally</a>.</p>
         </div>
     </div>
 
@@ -319,17 +322,17 @@
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
         </div>
         <div class="offcanvas-body help-body">
-            <p class="help-lead">The <strong>DecL playground</strong>—build and explore
-               compound <em>(aggregate)</em> loss distributions in the browser, powered by
-               the open-source <code>aggregate</code> library.</p>
+            <p class="help-lead">The <strong>aggregate Loss Library</strong> (aLL): build and
+               explore compound <em>(aggregate)</em> loss distributions in the browser,
+               powered by the open-source <code>aggregate</code> library.</p>
 
             <h6>Versions</h6>
             <dl class="about-versions">
-                <dt>aggregate</dt><dd id="about-aggregate" class="mono">—</dd>
-                <dt>aggregate_api</dt><dd id="about-api" class="mono">—</dd>
-                <dt>csv-grid</dt><dd id="about-grid" class="mono">—</dd>
-                <dt>uPlot</dt><dd id="about-uplot" class="mono">—</dd>
-                <dt>Bootstrap</dt><dd id="about-bootstrap" class="mono">—</dd>
+                <dt>aggregate</dt><dd id="about-aggregate" class="mono">…</dd>
+                <dt>aggregate_api</dt><dd id="about-api" class="mono">…</dd>
+                <dt>csv-grid</dt><dd id="about-grid" class="mono">…</dd>
+                <dt>uPlot</dt><dd id="about-uplot" class="mono">…</dd>
+                <dt>Bootstrap</dt><dd id="about-bootstrap" class="mono">…</dd>
             </dl>
 
             <h6>Learn more</h6>

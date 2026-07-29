@@ -22,14 +22,14 @@ Author: Stephen J. Mildenhall. Private repo: https://github.com/mynl/aggregate_a
 
 This package **depends on** `aggregate`; it does not vendor it. The api imports:
 
-- `aggregate.build` — the top-level entry point
-- `aggregate.parser._PARSER` and `aggregate.parser_errors` — completion + rich
+- `aggregate.build`, the top-level entry point
+- `aggregate.parser._PARSER` and `aggregate.parser_errors`, for completion and rich
   parse-error reporting (line/column/caret/suggestions)
-- `aggregate.style` — plot styling context
+- `aggregate.style`, the plot styling context
 
 `aggregate.parser_errors` is recent and lives only in the in-development
 `1.0.0a` line (not on PyPI). For co-development, install `aggregate` editable
-from its local checkout — see `[tool.uv.sources]` in `pyproject.toml` and
+from its local checkout. See `[tool.uv.sources]` in `pyproject.toml` and
 `dev/plan-0001-bootstrap-standalone.md`. Do **not** copy library internals into
 this repo; depend on them and, if something is missing or awkward to import,
 raise it as an upstream change in `aggregate`.
@@ -37,7 +37,7 @@ raise it as an upstream change in `aggregate`.
 ## Commands
 
 Use `uv` for all environment and dependency management. Set
-`$env:UV_LINK_MODE = "copy"` (PowerShell) — the repo path defeats uv's default
+`$env:UV_LINK_MODE = "copy"` (PowerShell), because the repo path defeats uv's default
 hardlink mode.
 
 **Sync environment (with dev extras):**
@@ -69,7 +69,7 @@ cd web; npm install; npm run dev
 
 ## Architecture
 
-### Backend — `src/aggregate_api/`
+### Backend: `src/aggregate_api/`
 
 FastAPI application factory pattern. `create_app()` (in `app.py`) is the single
 entry point: installs CORS if configured, mounts the `/v1` routers, and serves
@@ -96,13 +96,15 @@ plus wall-clock timeout (default 10 s). Parse failures return HTTP 422 with the
 `aggregate.parser_errors` `ErrorReport` dict so the SPA can render a rich error
 pane.
 
-### Frontend — `web/`
+### Frontend: `web/`
 
-Vanilla JS, no framework. Vite 5 build, Bootstrap 5.3, CodeMirror 6. Entry
-`web/src/main.js`; a DecL CodeMirror mode (`decl-mode.js`), action toolbar
-(`actions.js`), panes (`plot-pane.js`, `pricing-pane.js`, `error-pane.js`),
-history, completion, and renderers. The build output lands in the backend's
-`static/` dir so a single `aggregate-api` process serves UI + api same-origin.
+Vanilla JS, no framework. Vite 5 build, Bootstrap 5.3, CodeMirror 6, `csv-grid`
+for every table. Entry `web/src/main.js`, which wires the editor
+(`editor.js`, `decl-mode.js`, `completion.js`), the fetch layer (`api.js`), the
+output panes (`renderers.js`, `error-pane.js`, `grid.js`), the interactive
+Overview chart, the examples menu (`examples.js`) and history. The build output
+lands in the backend's `static/` dir so a single `aggregate-api` process serves
+UI and api same-origin.
 
 ## Naming conventions
 
@@ -115,11 +117,36 @@ established.
 
 NumPy-style docstrings (Parameters / Returns / Notes) on all new and modified
 functions. For non-trivial logic explain the *why* in Notes. US spelling
-throughout (prose, docstrings, comments, identifiers — "behavior", "color").
+throughout (prose, docstrings, comments, identifiers, so "behavior", "color").
+
+### No dashes as punctuation. Ever.
+
+Adopted verbatim from the `aggregate` house rule. Not the em dash `—`, not the
+ASCII double `--`, not a spaced hyphen ` - `. The dash-as-aside is the single
+loudest AI tell in prose, and the author does not write that way. It applies
+everywhere text is authored: UI strings, docstrings, comments, `CHANGELOG.md`,
+`dev/` plans, commit subjects, and replies in the terminal.
+
+Rewrite instead of substituting. A dash is almost always doing a job that a
+comma, a colon, parentheses, or a full stop does better:
+
+- aside or gloss, use commas or parentheses: ~~`the count is an output -- not an input`~~ to `the count is an output, not an input`
+- explanation or expansion, use a colon: ~~`one frame -- identity first`~~ to `one frame: identity first`
+- a second thought, use a second sentence: ~~`it works -- but watch the tail`~~ to `it works. Watch the tail.`
+
+Still fine, because these are not punctuation: hyphenated compounds
+(`loss-ratio`, `first-class`), negative numbers, ranges written with `to`,
+command-line flags (`--all-extras`), CSS custom properties
+(`--bs-btn-font-size`), and `--` inside code or DecL.
+
+This is an **authoring** rule: it binds every string you write or touch. The
+pre-existing internal docstrings and comments still carry roughly 190 legacy
+` -- ` glosses, and those are cleaned as their file is next edited rather than
+in one mechanical sweep that would bury real diffs.
 
 ## Release & housekeeping workflow
 
-These are standing rules — follow them without being re-asked. The cadence
+These are standing rules, to follow without being re-asked. The cadence
 mirrors the main `aggregate` project.
 
 - **Every plan-based change bumps the version.** Any code change executed from a
@@ -128,15 +155,15 @@ mirrors the main `aggregate` project.
 - **Commit each version bump.** When a plan-based change bumps the `1.0.0a*`
   version, commit the whole batch (source + tests + `CHANGELOG.md` + the plan doc
   + `dev/TODO.md` + `pyproject.toml` + `uv.lock`) in one commit with a **one-line**
-  message — the matching `CHANGELOG.md` section is the commit's detailed
+  message. The matching `CHANGELOG.md` section is the commit's detailed
   description, so the subject shouldn't restate it. Match the git-log convention:
   `[aNN] <terse summary>`. The built SPA under `src/aggregate_api/static/` is
   gitignored (rebuilt at deploy), so it is never part of the commit.
 - **One plan doc per step.** Work proceeds from a `dev/plan-NNNN-*.md`. When it
   lands, move it to `dev/done/` and tick the matching `dev/TODO.md` entry.
 - **Keep `CHANGELOG.md` current.** Each version bump adds a `## <version>`
-  section describing what landed and any breaking changes — at the close of the
-  iteration, don't defer.
+  section describing what landed and any breaking changes. Write it at the close
+  of the iteration; don't defer.
 - **`README.md`** is the stable front page (purpose, install, getting started);
   touch it only when that material changes. It points at `CHANGELOG.md`.
 - **`dev/TODO.md`** holds the roadmap and pending ideas. Check it before
@@ -145,7 +172,7 @@ mirrors the main `aggregate` project.
 ## Working with the author
 
 - Commit **version-bump batches** (see Release & housekeeping) with a one-line
-  message. The author handles all other commits — don't commit doc-only or
+  message. The author handles all other commits, so don't commit doc-only or
   in-progress work unless asked. To check status, read the git log; if an
   expected commit is missing, mention it.
 - Diagnose / design / propose before editing source or tests. Don't change code
@@ -154,4 +181,4 @@ mirrors the main `aggregate` project.
 - Environment is **PowerShell on Windows**. No `awk`/`sed`/`head`/`tail` (even
   via the Bash tool). Use `rg` + Read/Edit/Write.
 - Prefer explicit, documented recipes over magic / auto-install behavior.
-- Keep rendered output tight — no gratuitous blank lines in blocks.
+- Keep rendered output tight, with no gratuitous blank lines in blocks.

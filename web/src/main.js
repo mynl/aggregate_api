@@ -244,7 +244,7 @@ function renderBuildFailure(err) {
     const inner = $('summary-inner');
     empty(inner);
     inner.appendChild(el('span', { className: 'mono warn' },
-        limited ? 'rate limited — please pause a moment' : 'build failed'));
+        limited ? 'rate limited; please pause a moment' : 'build failed'));
     $('summary-timing').textContent = '';
     syncSummaryMore();
     // Surface the rich parse-error report (or the friendly rate-limit card)
@@ -352,7 +352,7 @@ async function loadTab(name) {
         } else if (name === 'info') {
             replacePane('pane-info', renderInfo(await api.info(state.id)));
         } else if (name === 'summary') {
-            // Keep the fzf bar but drop the per-column filter row — the summary
+            // Keep the fzf bar but drop the per-column filter row: the summary
             // table is narrow and the global search covers it.
             replacePaneGrid('pane-summary', await api.summary(state.id), { columnFilters: false });
         } else if (name === 'validation') {
@@ -435,13 +435,13 @@ function renderOverviewExhibits(box, summary, tail) {
     clearGrids('pane-overview');
     empty(box);
     if (summary) renderOneExhibit(box, summary, {
-        title: 'Summary — what it’s made of',
+        title: 'Summary: what it’s made of',
         caption: 'Moments and key percentiles. CV blank for signed / near-break-even '
             + 'rows; Freq percentiles blank by design (PGF-only).',
         emphasize: (r) => r.X === 'Agg' || r.unit === 'total',
     });
     if (tail) renderOneExhibit(box, tail, {
-        title: 'Tail risk — how bad it gets',
+        title: 'Tail risk: how bad it gets',
         caption: '1-in-200 (Solvency II) and 1-in-250 (US) are the capital anchors. '
             + 'Exact from the FFT grid, not simulated.',
         highlight: (r) => Number(r.T) === 200 || Number(r.T) === 250,
@@ -515,7 +515,7 @@ async function loadOverview() {
 
     if (!rendered) {
         pane.appendChild(el('div', { className: 'text-muted small' },
-            'No risk views for this object — see the other tabs.'));
+            'No risk views for this object. See the other tabs.'));
     }
 }
 
@@ -857,7 +857,7 @@ $('dl-agg')?.addEventListener('click', () => window.open(api.sessionModelsUrl('a
 // Registered only in the built bundle so the Vite dev server's HMR isn't
 // intercepted. Makes the SPA installable and speeds repeat loads; the caching
 // strategy lives in web/public/sw.js (served verbatim at /sw.js, scope /).
-// Requires a secure context (HTTPS or localhost) — a no-op otherwise.
+// Requires a secure context (HTTPS or localhost), and is a no-op otherwise.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').catch(() => { /* non-fatal */ });

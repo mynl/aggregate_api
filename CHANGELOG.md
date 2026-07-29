@@ -4,6 +4,53 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a20
+
+From `dev/plan-all-branding.md`. The app gets a name and the house prose rule.
+
+### aggregate Loss Library (aLL)
+
+`aggregate_api` is the package; **aggregate Loss Library** is the app it serves.
+The banner reads the app name on the first line with *description to
+distribution* under it in grey small caps, which inverts the old pair
+("Description to distribution" set as the title, over "AGGREGATE" as a kicker).
+The tagline was doing the title's job.
+
+The name follows through the page `<title>`, the `meta description`, the PWA
+manifest (`short_name` is `aLL`, so an installed icon is labeled), the service
+worker header, the Help and About leads, `README.md` and the package
+description. The lower-case `a` is deliberate throughout: `aggregate` is the
+package, `Aggregate` is the class.
+
+`.brand-kicker` moves from mono, `.52rem`, `.3em` tracking to
+`font-variant: small-caps` at `.6rem` with `.18em` tracking. Real small caps
+where the face has them, synthesized where it does not, and legible either way.
+
+### No dashes as punctuation
+
+The `aggregate` house rule is adopted verbatim into `CLAUDE.md`: not the em dash
+`—`, not the ASCII double `--`, not a spaced hyphen. Rewrite rather than
+substitute, so a comma, a colon, parentheses or a full stop does the work.
+Hyphenated compounds, CLI flags and CSS custom properties are unaffected, since
+those are not punctuation.
+
+Every user-visible string is swept: the tab captions and hint lines in
+`index.html`, the Overview exhibit titles ("Summary: what it's made of", "Tail
+risk: how bad it gets"), the rate-limit card, the build-failure line, the
+empty-Overview message, and `CLAUDE.md` itself. The About panel's placeholder
+`—` becomes `…`, which reads as "loading" rather than as an em dash.
+
+It is an **authoring** rule, so it binds strings as they are written or touched.
+Roughly 190 legacy ` -- ` glosses remain in internal docstrings and comments;
+those are cleaned as their file is next edited, rather than in one mechanical
+sweep that would bury the real diffs. Recorded in `CLAUDE.md` so the policy is
+explicit rather than looking like an oversight.
+
+### Also
+
+`CLAUDE.md`'s frontend section listed `actions.js`, `plot-pane.js` and
+`pricing-pane.js`, all deleted at 1.0.0a7. Replaced with the modules that exist.
+
 ## 1.0.0a19
 
 From `dev/plan-relink-library.md`. The api catches up with `aggregate`

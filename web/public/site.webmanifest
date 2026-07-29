@@ -1,6 +1,6 @@
 {
-  "name": "aggregate DecL playground",
-  "short_name": "aggregate",
+  "name": "aggregate Loss Library",
+  "short_name": "aLL",
   "description": "Build and explore compound (aggregate) loss distributions from a simple DecL program.",
   "start_url": "/",
   "scope": "/",

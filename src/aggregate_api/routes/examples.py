@@ -2,8 +2,8 @@
 
 Two endpoints over ``aggregate``'s recipe base (``library.agg``):
 
-* ``GET /v1/examples?group=topic|kind|role`` -- the whole library, grouped.
-* ``GET /v1/examples/heroes`` -- just the ``role:hero`` entries, for the
+* ``GET /v1/examples?group=topic|kind|role``: the whole library, grouped.
+* ``GET /v1/examples/heroes``: just the ``role:hero`` entries, for the
   landing gallery.
 
 Both loaders are ``lru_cache``d in :mod:`aggregate_api.examples`, so the recipe

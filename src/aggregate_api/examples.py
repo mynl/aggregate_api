@@ -278,7 +278,7 @@ def load_examples(grouping: Grouping = "topic") -> dict:
     for kind, name in frame.index:
         try:
             recipe = uw.recipe(name, kind)
-        except Exception:  # noqa: BLE001 -- one bad entry must not blank the menu
+        except Exception:  # noqa: BLE001 (one bad entry must not blank the menu)
             logger.warning("skipping library entry %s.%s: cannot resolve", kind, name)
             continue
         item = _entry(kind, name, recipe)

@@ -1,11 +1,11 @@
-/* Service worker for the aggregate DecL playground PWA.
+/* Service worker for the aggregate Loss Library PWA.
  *
  * Deliberately minimal. A build *requires* the backend (you cannot compute an
  * Aggregate offline), so this is NOT an offline-first app. The worker exists to
- * (a) make the SPA installable -- Chrome only offers "Install" when a service
- * worker with a fetch handler is registered -- and (b) speed repeat loads by
- * caching the static shell. It must never cache /v1/* (the dynamic API plus the
- * CSV / density frames) or it would serve stale builds and stale data.
+ * (a) make the SPA installable, since Chrome only offers "Install" when a
+ * service worker with a fetch handler is registered, and (b) speed repeat loads
+ * by caching the static shell. It must never cache /v1/* (the dynamic API plus
+ * the CSV / density frames) or it would serve stale builds and stale data.
  *
  * Strategy:
  *   - non-GET / cross-origin / /v1/*  -> pass through, never cached
@@ -14,7 +14,7 @@
  *                                        still opens
  *   - other same-origin GETs          -> cache-first (Vite content-hashes the
  *     (js / css / icons / fonts)         js/css asset filenames, so a new build
- *                                        produces new URLs -- safe to keep)
+ *                                        produces new URLs, safe to keep)
  *   - activate                        -> delete caches from older CACHE_VERSIONs
  *
  * Bump CACHE_VERSION on any change to the caching behavior to evict old caches.
