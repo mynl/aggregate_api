@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import pytest
 
+from aggregate_api.serializers import display_log2_for
+
 
 _DICE = "agg Dice dfreq [3] dsev [1:6]"
 
@@ -177,12 +179,17 @@ def test_density_df_unknown_cols_filtered(client):
 
 
 def test_density_df_bins_to_display_grid(client):
-    """A fine grid (log2 > 11) bins to exactly 2**11 = 2048 display rows.
+    """A fine grid bins to exactly the display row target, and stays faithful.
 
-    The reduction stays on the power-of-two paradigm (``k = 2**(log2-11)``),
-    so a 2**16-row build collapses to exactly 2048 grid nodes while p_total
+    The reduction stays on the power-of-two paradigm (``k = 2**(log2 - m)``),
+    so a 2**16-row build collapses to exactly 2**m grid nodes while p_total
     still sums to ~1. Nodes are centered: the loss grid is 0, bs', 2*bs', ...
     (first label 0), and F is the running cumulative so F[i]-F[i-1] == p[i].
+
+    The row target is read from ``display_log2_for`` rather than hardcoded: it
+    depends on the column count (the payload is budgeted in cells, not rows), and
+    a test that pinned a literal would have to be edited every time the budget
+    moved, which is exactly when it should be checking rather than agreeing.
     """
     oid = client.post(
         "/v1/objects",
@@ -193,7 +200,7 @@ def test_density_df_bins_to_display_grid(client):
     body = r.json()
     assert body["columns"] == ["loss", "p_total", "F"]
     rows = body["rows"]
-    assert len(rows) == 2048
+    assert len(rows) == 2 ** display_log2_for(3)
     total = sum(row[1] for row in rows if row[1] is not None)
     assert total == pytest.approx(1.0, abs=1e-4)
     # Centered nodes: first label 0, then a constant coarse step bs'.
@@ -323,15 +330,50 @@ def test_reins_frames_present(client):
         assert len(body["rows"]) > 0
 
 
+def test_reinsured_summary_reports_the_net_mean(client):
+    """Under a cession the headline mean is the net one, matching ``summary_df``.
+
+    ``actual_m`` is the analytic mean of the *subject* book and ``est_m`` the
+    realized mean of the object's own (net) distribution. Preferring ``actual_m``
+    unconditionally, which is right for a gross build, put a gross number on the
+    summary bar directly above a table of net ones, and sent the exhibit's mean
+    reference line off the end of the loss axis.
+    """
+    body = client.post("/v1/objects", json={"decl": _REINS}).json()
+    oid = body["id"]
+    summary = client.get(f"/v1/objects/{oid}/summary").json()
+    cols = summary["columns"]
+    agg_row = next(r for r in summary["rows"] if str(r[cols.index("X")]) == "Agg")
+    net_mean = agg_row[cols.index("Mean")]
+    assert body["mean"] == pytest.approx(net_mean, rel=1e-6)
+
+    # And the gross case is untouched: no cession, so the analytic mean stands.
+    plain = client.post(
+        "/v1/objects",
+        json={"decl": "agg NoReins 5 claims 100 xs 0 sev lognorm 10 cv .75 poisson"},
+    ).json()
+    plain_summary = client.get(f"/v1/objects/{plain['id']}/summary").json()
+    pcols = plain_summary["columns"]
+    prow = next(r for r in plain_summary["rows"] if str(r[pcols.index("X")]) == "Agg")
+    # Analytic vs realized differ only by discretization here, so a loose match
+    # is the honest assertion: the point is that it is the same variable.
+    assert plain["mean"] == pytest.approx(prow[pcols.index("Mean")], rel=1e-3)
+
+
 def test_reins_density_preview_is_binned(client):
-    """Reins density bins to the 2**11 display grid (faithful gross/ceded/net mass)."""
+    """Reins density bins to the display grid (faithful gross/ceded/net mass).
+
+    Ten columns wide, so the cell budget backs the row target off below the
+    narrow-frame maximum. That trade is the point of ``display_log2_for``, and
+    asserting against it here is what keeps the two in step.
+    """
     oid = client.post("/v1/objects", json={"decl": _REINS, "log2": 16}).json()["id"]
     r = client.get(f"/v1/objects/{oid}/reins_density_df")
     assert r.status_code == 200, r.text
     body = r.json()
-    assert len(body["rows"]) == 2048
-    # The gross aggregate density column sums to ~1 across the binned grid.
     cols = body["columns"]
+    assert len(body["rows"]) == 2 ** display_log2_for(len(cols))
+    # The gross aggregate density column sums to ~1 across the binned grid.
     assert "p_agg_gross" in cols
     gi = cols.index("p_agg_gross")
     total = sum(row[gi] for row in body["rows"] if row[gi] is not None)

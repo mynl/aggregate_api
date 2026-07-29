@@ -409,7 +409,9 @@ class StyleResponse(BaseModel):
 
     Served so the SPA's interactive charts and the server-rendered matplotlib
     plots share one source for their look. ``colors`` is the ``axes.prop_cycle``
-    color list, in order.
+    color list, in order; ``fig_w`` / ``fig_h`` are the house per-panel figure
+    size in inches (``aggregate.constants.FIG_W`` / ``FIG_H``), whose ratio the
+    SPA uses to shape its own panels.
     """
 
     model_config = _RESPONSE_CFG
@@ -419,6 +421,8 @@ class StyleResponse(BaseModel):
     text_color: str
     line_width: float
     font_size: float
+    fig_w: float
+    fig_h: float
 
 
 class HealthResponse(BaseModel):

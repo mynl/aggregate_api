@@ -335,7 +335,25 @@ header .navbar { min-height: 56px; }
    Sits where the program disclosure used to, directly above the chart. State is
    sticky per browser, so a chosen view survives a rebuild. */
 .exhibit-controls {
-    display: flex; flex-wrap: wrap; gap: .35rem; margin: 0 0 .45rem;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0;
+    margin: 0 0 .45rem;
+}
+/* One group per panel, with a rule between adjacent groups so a button reads as
+   belonging to the panel below it rather than to one undifferentiated row. */
+.exhibit-group {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .35rem;
+    padding: .1rem .7rem;
+}
+.exhibit-group + .exhibit-group { border-left: 1px solid var(--grid); }
+.exhibit-group:first-child { padding-left: 0; }
+.exhibit-group-label {
+    font-size: .68rem; color: var(--mut);
+    text-transform: uppercase; letter-spacing: .04em;
+}
+/* Side by side: push the exceedance-panel group into the right half so it sits
+   over the panel it drives. Whitespace separates it, so it drops its rule. */
+.exhibit-controls-split .exhibit-group-right {
+    margin-left: auto; border-left: 0; padding-right: 0;
 }
 .exhibit-toggle {
     font-size: .72rem; line-height: 1; padding: .3rem .6rem;
@@ -346,11 +364,24 @@ header .navbar { min-height: 56px; }
 .exhibit-toggle.active {
     color: #fff; background: var(--primary); border-color: var(--primary);
 }
+/* Same control, different subject: these switch the *tables* below, not the
+   chart above. Same shape so they read as one family of controls, a distinct
+   color so a glance tells you which half of the tab you are steering. */
+.exhibit-toggle--table.active {
+    background: var(--code, #6f42c1); border-color: var(--code, #6f42c1);
+}
+.exhibit-toggle--table:hover {
+    color: var(--code, #6f42c1); border-color: var(--code, #6f42c1);
+}
+.exhibit-toggle--table.active:hover { color: #fff; }
 
 /* ---- Overview table view toggle (Static | Interactive) ---- */
-.overview-view-toggle { display: flex; align-items: center; gap: .55rem; margin: .1rem 0 .8rem; }
+.overview-view-toggle {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .35rem;
+    margin: .1rem 0 .8rem;
+}
 .overview-view-label {
-    font-size: .72rem; color: var(--mut);
+    font-size: .68rem; color: var(--mut); margin-right: .2rem;
     text-transform: uppercase; letter-spacing: .04em;
 }
 

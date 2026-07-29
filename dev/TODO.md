@@ -181,9 +181,54 @@ one version bump each.
       curve; return periods rounded to integers. Smoke test reworked to replay
       captured fixtures so it needs no server. *(done; in `dev/`)*
 - [ ] **Eyeball the Overview.** Still outstanding. The smoke test proves the
-      data reaches each chart in a drawable shape, not that any of them looks
+      data reaches each chart in a drawable shape and now that the panels hold
+      the house aspect at both breakpoints, but not that any of them looks
       right, and the Chrome extension has not been connected in any session so
-      far. Check all six kinds, both breakpoints, and the four toggles.
+      far. Check all six kinds, both breakpoints, and the five toggles.
+
+- [ ] **Draw atoms as atoms.** (a26 raised the display grid to `2**13`, which
+      makes a point mass read as a spine, but it is still smeared across one
+      display bucket and located only to within half of one.) A discretized
+      aggregate over layer limits is genuinely atomic: on the a26 test program,
+      single `bs=1` buckets carry 13% of the mass each. The faithful rendering
+      splits the frame into **atoms** (exact loss, drawn as stems) and
+      **continuum** (binned, drawn as a line), which is a different payload
+      shape than the uniform grid every consumer assumes. Worth doing; not worth
+      doing casually.
+
+- [ ] **Ask: what does "better rules for what to plot" mean?** Raised in the a26
+      feedback between the Price-tab grid chrome and the log-floor items, so the
+      referent is ambiguous: which columns the Reins exhibit offers (answered
+      separately in a26), which series a Portfolio draws by default, or which
+      kinds get an exhibit at all.
+
+- [ ] **Reinsurance-aware pricing (blocked upstream).** Wanted: on an object
+      carrying reinsurance, a `Price Gross | Price Net` selector; calibrate the
+      distortion set on the chosen basis, price **both** at the same asset level,
+      and report three rows per distortion (gross, net, and the difference, the
+      implied reinsurance allowance in the rate), with a `*` marking the
+      calibrated basis and the distortion parameters below the table.
+
+      The blocker is calibration on the **gross** basis.
+      `Aggregate.calibrate_distortions` resolves its survival, expected loss and
+      premium target from the object's own `density_df`, which under a cession is
+      the net. Pricing the other basis afterwards is fine and fully public
+      (`Distortion.price(ser, a=...)` takes any pmf Series, and
+      `reins_density_df` carries `p_agg_gross` on the same grid). Only the
+      calibration anchor is missing.
+
+      Two ways out, and this is the author's call:
+
+      1. **Upstream**, the clean one. Let `calibrate_distortions` take the
+         distribution it calibrates against rather than always reading
+         `self.density_df`, e.g. a `density=` or `basis='gross'|'net'` keyword.
+         Everything else here is then public API.
+      2. **Here**, reproducing `_pricing._calibration_survival` (the `S`
+         truncation and `ess_sup` convention) and the CoC to premium inversion
+         in this repo. That breaks the standing rule against copying library
+         internals, and getting the truncation subtly wrong yields prices that
+         are plausible and wrong, which is the worst failure mode a pricing
+         table has.
 
 > **Server policy (2026-07-29).** The author starts and stops servers; the
 > tooling here must not. `dev/capture_fixtures.py` and `uv run pytest` both

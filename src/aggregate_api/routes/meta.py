@@ -58,6 +58,11 @@ _STYLE_FALLBACK = {
     "text_color": "#212529",
     "line_width": 1.4,
     "font_size": 8.5,
+    # The house panel size in inches. Only the *ratio* travels to the SPA (a
+    # browser panel is sized in CSS pixels), but both are served so the client
+    # never has to hardcode a divisor and a future absolute use has the numbers.
+    "fig_w": 3.5,
+    "fig_h": 2.45,
 }
 
 
@@ -82,8 +87,22 @@ def _plot_style() -> dict:
     once here and cached. Every key is read defensively: a style that stops
     setting one falls back rather than 500ing a route the front page calls on
     load.
+
+    ``fig_w`` / ``fig_h`` come from ``aggregate.constants`` rather than from the
+    rc mapping, because ``figure.figsize`` is not what the library's own plots
+    use: they pass explicit multiples of ``FIG_W`` / ``FIG_H`` per panel
+    (``figsize=(2 * FIG_W, FIG_H)`` and so on). The SPA wants the **per-panel**
+    aspect, which is exactly that pair.
     """
     style = dict(_STYLE_FALLBACK)
+    try:
+        from aggregate.constants import FIG_H, FIG_W
+
+        style["fig_w"] = float(FIG_W)
+        style["fig_h"] = float(FIG_H)
+    except Exception:  # noqa: BLE001 (fall back to the shipped ratio)
+        pass
+
     try:
         from aggregate import style as agg_style
 

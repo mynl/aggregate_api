@@ -156,10 +156,60 @@ def frame_to_payload(
     return {"columns": columns, "rows": rows}
 
 
-# Default display resolution for the binned density: 2**11 = 2048 rows. A
+# Default display resolution for the binned density: 2**13 = 8192 rows. A
 # density built at log2 = N is reduced to this many grid-aligned super-buckets,
 # i.e. shown as if built at a coarser ``bs`` while the fine build is kept.
-DENSITY_DISPLAY_LOG2 = 11
+#
+# Why 13 and not the 11 this shipped with: a discretized aggregate is routinely
+# **atomic**, not merely spiky. A book written over layer limits, or with an
+# occurrence cession, puts point masses in the severity and the aggregate
+# inherits them at every multiple. Measured on one such program (limits
+# ``250 500 1000 2000 xs 0``, ``750 xs 750`` occurrence cession, ``log2=16``,
+# ``bs=1``): single buckets at 0 / 250 / 500 / 750 hold 8.6% / 12.9% / 10.0% /
+# 5.7% of the mass against a continuum of 0.07% per bucket. Binning 32 fine
+# buckets into one (which 2**11 does at ``log2=16``) merged each atom with 31
+# neighbours and located it only to within half a super-bucket, so the plot drew
+# a triangle 64 loss units wide where the truth is a spine one unit wide.
+DENSITY_DISPLAY_LOG2 = 13
+
+# Cell budget for one density payload, roughly 2**16 numbers. The row target
+# above is right for the four-column ``loss / p_total / F / S`` case; a
+# Portfolio's per-unit frame is 2 * units + 3 columns wide and would ship several
+# megabytes of JSON at the same row count. Trading rows for columns keeps the
+# payload flat instead of scaling with the unit count.
+DENSITY_DISPLAY_CELLS = 1 << 16
+
+
+def display_log2_for(n_cols: int, cap: int = DENSITY_DISPLAY_LOG2) -> int:
+    """Display ``log2`` for a frame ``n_cols`` wide, under the cell budget.
+
+    Parameters
+    ----------
+    n_cols : int
+        Number of columns the payload will carry.
+    cap : int, optional
+        Upper bound, :data:`DENSITY_DISPLAY_LOG2` by default.
+
+    Returns
+    -------
+    int
+        ``log2`` of the row target: ``cap`` for a narrow frame, reduced by whole
+        powers of two until ``rows * n_cols`` fits :data:`DENSITY_DISPLAY_CELLS`.
+        Never below 11, which is the resolution this shipped with and the floor
+        at which a density is still worth drawing.
+
+    Examples
+    --------
+    Four columns keep the full grid; an eleven-column portfolio frame steps down
+    one notch.
+
+    >>> display_log2_for(4)
+    13
+    >>> display_log2_for(11)
+    12
+    """
+    rows = DENSITY_DISPLAY_CELLS // max(1, int(n_cols))
+    return max(11, min(cap, rows.bit_length() - 1))
 
 
 def bin_density(
@@ -212,7 +262,9 @@ def bin_density(
         the frame is fine (then no column is treated as the label).
     display_log2 : int, default ``DENSITY_DISPLAY_LOG2``
         Target ``log2`` of the displayed grid. ``source_log2 <= display_log2``
-        means no binning (``k == 1``) -- the frame is returned unchanged.
+        means no binning (``k == 1``), the frame is returned unchanged. Callers
+        serving a wide frame should pass :func:`display_log2_for` rather than the
+        bare default, so the payload stays inside the cell budget.
 
     Returns
     -------

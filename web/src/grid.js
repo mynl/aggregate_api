@@ -66,11 +66,16 @@ export function mountGrid(paneId, host, frame, opts = {}) {
     // Full chrome by default -- fzf global search, per-column filters, status
     // bar, and the copy / save export controls are all CsvGrid defaults, and they
     // are what make the grid useful (filter to narrow, copy / download to take
-    // the data away). Expand/Contract only earns its space on wide tables, so it
-    // is shown from 6 columns up and omitted below that. Callers override via opts.
+    // the data away).
+    //
+    // Expand/Contract is the exception, and the threshold is 10 columns, not the
+    // 6 this shipped with. Below that the table already fits, so the buttons are
+    // chrome that does nothing: every frame on the Price tab (the pentagon, the
+    // calibrated distortions, each per-stat slice) is under 10 columns wide and
+    // carried a pair of dead controls. Callers override via opts.
     const grid = new CsvGrid(host, { columns, records: rows }, {
         worker: false,
-        expandButtons: columns.length >= 6,
+        expandButtons: columns.length > 10,
         ...opts,
     });
     const grids = registry.get(paneId) || [];

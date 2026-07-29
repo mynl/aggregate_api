@@ -4,6 +4,123 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a26
+
+From `dev/done/plan-exhibit-punchups-3.md`. Author feedback after the first
+visual inspection of the exhibits: resolution, panel shape, orientation, and
+where the controls sit. Plus one wrong number the verification turned up.
+
+### The density had lost its atoms
+
+A discretized aggregate is routinely **atomic**, not merely spiky, and the
+display grid was destroying that. On the reported program (limits
+`250 500 1000 2000 xs 0`, a `750 xs 750` occurrence cession, `log2=16`, `bs=1`)
+single buckets at 0 / 250 / 500 / 750 hold 8.6% / 12.9% / 10.0% / 5.7% of the
+mass against a continuum of 0.07% per bucket. Layer limits and an occurrence
+cession put point masses in the severity; the aggregate inherits them at every
+multiple.
+
+At `2**11` display rows the server was summing **32** fine buckets into one, so
+the atom at 250 landed in a bucket labeled 256 carrying its 12.9% plus 31
+neighbours' worth of continuum, located only to within 16 loss units, and drawn
+as a straight line to the next bucket center: a triangle 64 units wide where the
+truth is a spine one unit wide.
+
+`DENSITY_DISPLAY_LOG2` goes 11 to 13, under a new **cell budget** rather than a
+flat row count. `display_log2_for(n_cols)` keeps the full `2**13` for a narrow
+frame and steps down for a wide one, so a Portfolio's per-unit densities
+(`2 * units + 3` columns) ship the same number of JSON numbers however many units
+there are, instead of scaling with the unit count.
+
+Measured on that program: the peak now stands 23x above its neighbours in an
+8-unit bucket, roughly 1.4 px on a 400 px panel. Payload 0.12 MB to 0.46 MB.
+
+Not fixed: the atom still occupies one display bucket rather than being drawn at
+its exact loss. Doing that properly means splitting the frame into atoms (exact
+loss, stem) and continuum (binned, line). Recorded in `dev/TODO.md`.
+
+### Panels hold the house aspect
+
+`FIG_W` / `FIG_H` from `aggregate.constants` ride along on `/v1/meta/style` with
+the colors, and every panel is sized `width / (FIG_W / FIG_H)` from the host
+width. Nothing is hardcoded, which was the bug: the stacked layout pinned
+`height: 150` against a full-width panel and drew at roughly 3.5:1 against a
+house ratio of 1.43:1. The smoke test now asserts the ratio at both breakpoints,
+since panel shape is the one property of a rendered chart an offline test can
+genuinely verify.
+
+### Exceedance stops being a transpose
+
+Loss on x and exceedance probability on y is now the default; the transposed
+return-period view is the toggle. A second y-axis on the right of that panel
+reads the same curve as a return period, so `1e-5` and `1-in-100,000` are the
+same gridline and the capital question needs no re-orientation. It appears only
+against a log probability axis, because `T = 1/p` is log-linear in `p` and on a
+linear axis the twin would not line up.
+
+Tracking is now a **cross**: on that panel the y value is the answer, so a
+horizontal line reading it off the axis is worth as much as the vertical one.
+
+### Controls sit over the panel they drive
+
+Three groups with rule separators: density controls, the shared reference lines,
+then the exceedance-panel controls, pushed into the right half when the panels
+are side by side. `log y` becomes two independent toggles, one per panel.
+
+The Overview's Static | Interactive table switch takes the same pill shape in the
+code red rather than the primary blue: the same kind of control, steering a
+different half of the tab.
+
+### Reinsurance: the frame's own structure
+
+`reins_density_df` is not one gross / ceded / net triple, it is three, read at
+different points in the program. The exhibit now asks which: **occurrence** (the
+severity views), **after occurrence** (the aggregate of each, where gross is the
+true gross aggregate), **after aggregate** (the aggregate cover's subject, ceded
+and net). Plus which of the three curves to draw.
+
+The third triple's first column is labeled `subject`, not `gross`, for the reason
+the library's own docstring gives: `p_agg_subject` equals the true gross only
+when there is no occurrence cover, so calling it gross would quietly understate
+the cession whenever both stages are present.
+
+### A gross mean over a net distribution
+
+Found while verifying the density fix, not reported. Under a cession `actual_m`
+and `est_m` describe **different random variables**: `actual_m` is the analytic
+mean of the subject book, while the density, the percentiles, `summary_df` and
+everything plotted are net. The summary bar preferred `actual_m` unconditionally,
+so on the reported program it read `mean 12000` directly above a table whose Agg
+row said `549.48`, and the exhibit drew its mean reference line off the end of
+the axis. A Portfolio has the same problem via its units (1150 against 411).
+
+`_summary_fields` now prefers the realized moments when the object carries a
+cession and the analytic ones otherwise, where they are exact. The library was
+never wrong here: `validation_description` says "reinsurance; subject not
+unreasonable", which is it naming which variable `actual_m` belongs to.
+
+### Smaller things
+
+- Log axes floor at `1e-15`. Below that a survival built by `1 - cumsum` is
+  plotting its own accumulated rounding error, and the fringe reads as tail.
+- Expand / Contract on a grid now needs **more than 10** columns, was 6. Every
+  frame on the Price tab is under that and carried a pair of dead controls.
+- Reins moves ahead of Price in the tab bar: you decide what you are keeping
+  before you decide what to charge for it.
+- The sticky exhibit-view key is `aggapi.exhibitView.v2`. The default
+  orientation changed and a toggle was added, so a stored v1 state would have
+  restored a view nobody chose.
+
+### Not done
+
+Two of the twelve reported items are open questions rather than work, both put
+back to the author: what "better rules for what to plot" refers to, and how to
+calibrate a distortion set on the **gross** basis for the reinsurance-aware
+pricing table. The latter has no public route today (`calibrate_distortions`
+reads the object's own `density_df`, which under reinsurance is the net), and
+reproducing `aggregate._pricing._calibration_survival` here would break the
+standing rule against copying library internals.
+
 ## 1.0.0a25
 
 From `dev/plan-more-tab.md`. The output tabs stop having two different kinds of

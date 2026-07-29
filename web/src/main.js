@@ -320,7 +320,7 @@ const MORE_VIEWS = {
     },
     density: {
         label: 'Density',
-        hint: 'binned to a 2¹¹ display grid; copy / save from the grid',
+        hint: 'binned to a power-of-two display grid; copy / save from the grid',
         load: async () => {
             // A distortion's density_df is the g-curve over s in [0,1]; a
             // bivariate's is the joint matrix; a severity's is a sampled
@@ -329,9 +329,10 @@ const MORE_VIEWS = {
             const frame = WHOLE_DENSITY_KINDS.has(state.kind)
                 ? await api.density_df(state.id)
                 : await api.density_df(state.id, { cols: 'loss,p_total,F,S' });
-            // renderCap lifts CsvGrid's 2,000-row default so the full 2**11
-            // grid shows without a "show all" prompt.
-            replacePaneGrid('pane-more', frame, { ...GRID_FULL, maxRows: 25, renderCap: 2048 });
+            // renderCap lifts CsvGrid's 2,000-row default so the whole display
+            // grid shows without a "show all" prompt. 8,192 is the widest that
+            // grid gets (see serializers.display_log2_for).
+            replacePaneGrid('pane-more', frame, { ...GRID_FULL, maxRows: 25, renderCap: 8192 });
         },
     },
     bswin: {
@@ -493,12 +494,19 @@ function setOverviewView(mode) {
     try { localStorage.setItem('aggapi.overviewView', mode); } catch { /* private mode */ }
 }
 
-// The Static | Interactive segmented control; `onChange` re-renders the exhibits.
+// The Static | Interactive control; `onChange` re-renders the exhibits.
+//
+// Same pill shape as the chart's own toggles, in the code red rather than the
+// primary blue. They are the same kind of control (a sticky view switch) so they
+// should look like each other; they steer different halves of the tab, so a
+// glance should still tell them apart.
 function exhibitToggle(onChange) {
-    const group = el('div', { className: 'btn-group btn-group-sm', role: 'group' });
     const btns = [['static', 'Static'], ['interactive', 'Interactive']].map(([mode, label]) => {
-        const b = el('button', { type: 'button', className: 'btn btn-outline-secondary' }, label);
-        if (overviewView === mode) b.classList.add('active');
+        const b = el('button', {
+            type: 'button',
+            className: 'exhibit-toggle exhibit-toggle--table'
+                + (overviewView === mode ? ' active' : ''),
+        }, label);
         b.addEventListener('click', () => {
             if (overviewView === mode) return;
             setOverviewView(mode);
@@ -507,9 +515,8 @@ function exhibitToggle(onChange) {
         });
         return b;
     });
-    group.append(...btns);
     return el('div', { className: 'overview-view-toggle' },
-        el('span', { className: 'overview-view-label' }, 'Tables'), group);
+        el('span', { className: 'overview-view-label' }, 'Tables'), ...btns);
 }
 
 // Render the summary_df + tail_df exhibits into `box` per the current view mode.

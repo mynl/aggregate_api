@@ -84,8 +84,8 @@ from ..config import Settings, get_settings
 from ..plotting import render_plot
 from ..pricing import run_price_pentagon, run_pricing
 from ..serializers import (
-    DENSITY_DISPLAY_LOG2,
     bin_density,
+    display_log2_for,
     frame_to_payload,
     info_to_payload,
     pnl_density_frame,
@@ -250,6 +250,35 @@ def _locked_entry(oid: str, cache: ObjectCache = Depends(_get_cache)):
         yield entry
 
 
+def _has_reinsurance(obj: Any) -> bool:
+    """Does this object's distribution sit net of a cession?
+
+    Reads the cession specs directly (``occ_reins`` / ``agg_reins``) rather than
+    materializing ``reins_summary_df``, because this is called on the build path
+    for every object and that frame is not cheap.
+
+    A ``Portfolio`` carries no cession of its own, so it is asked about its
+    units. The recursion is gated on the class name rather than on iterability:
+    an ``Aggregate`` is iterable too, and walking one here would be a loop with
+    no base case.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    bool
+    """
+    if getattr(obj, "occ_reins", None) is not None:
+        return True
+    if getattr(obj, "agg_reins", None) is not None:
+        return True
+    if type(obj).__name__ == "Portfolio":
+        return any(_has_reinsurance(unit) for unit in obj)
+    return False
+
+
 def _summary_fields(obj: Any) -> dict:
     """Headline ``mean`` / ``cv`` / ``validation`` for the build summary.
 
@@ -258,6 +287,18 @@ def _summary_fields(obj: Any) -> dict:
     The summary shows the analytic value, which is what the program asked for,
     and falls back to the estimate: a ``PnL`` has only ``est_*`` (its outcome is
     emergent, so there is no input mean to report).
+
+    **Under reinsurance that order reverses**, and it is not a preference. The
+    two attributes then describe two different random variables: ``actual_m`` is
+    the analytic mean of the *subject* (gross) book, while the object's density,
+    every percentile, ``summary_df`` and the plotted distribution are all
+    **net**. On one measured program (limits ``250 500 1000 2000 xs 0`` with a
+    ``750 xs 750`` occurrence cession) that is 12,000 against 549.5, so the
+    summary bar reported a number twenty-two times the one in the table directly
+    beneath it, and the exhibit drew its mean reference line off the end of the
+    axis. The library is not wrong here: ``validation_description`` says
+    "reinsurance; subject not unreasonable", which is it telling you exactly
+    which variable ``actual_m`` belongs to.
 
     Notes
     -----
@@ -289,10 +330,17 @@ def _summary_fields(obj: Any) -> dict:
     if description is not None:
         validation = str(description)
 
+    # Net of a cession, the realized moments are the ones that describe what is
+    # on screen; gross, the analytic ones are exact and the estimates carry
+    # discretization error. Either way the fallback is the other one.
+    m, cv = ("est_m", "actual_m"), ("est_cv", "actual_cv")
+    if not _has_reinsurance(obj):
+        m, cv = m[::-1], cv[::-1]
+
     return {
         "bs": _num("bs"),
-        "mean": _num("actual_m", "est_m"),
-        "cv": _num("actual_cv", "est_cv"),
+        "mean": _num(*m),
+        "cv": _num(*cv),
         "validation": validation,
     }
 
@@ -981,7 +1029,8 @@ def get_density_df(
     """Density_df reduced to a faithful power-of-two display grid.
 
     For an object with a build grid (agg / port; ``log2`` present) the
-    2**log2-row frame is binned to a fixed 2**11 display grid: masses
+    2**log2-row frame is binned to a power-of-two display grid (2**13 rows for a
+    narrow frame, fewer for a wide one, see ``display_log2_for``): masses
     (``p_total`` / ``p_sev`` / ``p_*``) are summed and the pointwise columns
     (``loss`` / ``F`` / ``S`` / ``ex***``) take the super-bucket right edge, so
     ``p_total`` stays faithful (sums to ~1) instead of being understated by an
@@ -1009,7 +1058,7 @@ def get_density_df(
     if entry.kind == "pnl":
         # A PnL's density_df is a dict of per-leg GridDistributions, not a
         # DataFrame. Synthesize the grand-result density in the standard
-        # loss / p_total / F / S shape and bin it to the 2**11 display grid the
+        # loss / p_total / F / S shape and bin it to the display grid the
         # way an aggregate is binned -- the positional binning tolerates the
         # signed P&L outcome axis. ``(n - 1).bit_length()`` is ceil(log2(n)),
         # so a grid already at or under the display size skips binning.
@@ -1017,8 +1066,11 @@ def get_density_df(
         if col_list:
             df = df[[c for c in col_list if c in df.columns]]
         sum_cols = {c for c in df.columns if c.startswith("p")}
-        source_log2 = max(DENSITY_DISPLAY_LOG2, (len(df) - 1).bit_length())
-        return frame_to_payload(bin_density(df, source_log2, sum_cols=sum_cols))
+        display_log2 = display_log2_for(len(df.columns))
+        source_log2 = max(display_log2, (len(df) - 1).bit_length())
+        return frame_to_payload(
+            bin_density(df, source_log2, sum_cols=sum_cols, display_log2=display_log2)
+        )
 
     df = getattr(entry.obj, "density_df", None)
     if df is None:
@@ -1034,14 +1086,19 @@ def get_density_df(
 
     source_log2 = getattr(entry.obj, "log2", None)
     if source_log2 is not None:
-        # Bin the full grid to 2**11 rows. Apply the column subset first (so we
+        # Bin the full grid down. Apply the column subset first (so we
         # only sum the masses the SPA asked for), then bin: p_* columns sum,
         # loss/F/S right-edge.
         if col_list:
             existing = [c for c in col_list if c in df.columns]
             df = df[existing]
         sum_cols = {c for c in df.columns if c.startswith("p")}
-        return frame_to_payload(bin_density(df, source_log2, sum_cols=sum_cols))
+        return frame_to_payload(
+            bin_density(
+                df, source_log2, sum_cols=sum_cols,
+                display_log2=display_log2_for(len(df.columns)),
+            )
+        )
 
     # No build grid: leave the frame as-is and honor the legacy slice params.
     if nonzero and "p_total" in df.columns:
@@ -1109,7 +1166,15 @@ def get_unit_density_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) ->
     source_log2 = getattr(obj, "log2", None)
     if source_log2 is None:
         return frame_to_payload(df.reset_index(drop=True))
-    return frame_to_payload(bin_density(df, source_log2, sum_cols=sum_cols))
+    # The widest density payload the api serves: 2 * units + 3 columns. The cell
+    # budget trades rows for those columns so a 12-unit portfolio ships the same
+    # number of JSON numbers as a 2-unit one.
+    return frame_to_payload(
+        bin_density(
+            df, source_log2, sum_cols=sum_cols,
+            display_log2=display_log2_for(len(df.columns)),
+        )
+    )
 
 
 # ----------------------------------------------------------------------
@@ -1136,7 +1201,10 @@ def get_kappa(
     # (sum_cols empty). The full-frame CSV stays exact.
     source_log2 = getattr(entry.obj, "log2", None)
     if source_log2 is not None:
-        df = bin_density(df, source_log2, sum_cols=set())
+        df = bin_density(
+            df, source_log2, sum_cols=set(),
+            display_log2=display_log2_for(len(df.columns)),
+        )
     return frame_to_payload(df, downsample=downsample)
 
 
@@ -1166,7 +1234,7 @@ def get_bs_window_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> di
 # ----------------------------------------------------------------------
 # Fallback row budget for a density preview on an object *without* a build
 # grid (no ``log2`` to bin against). Grid-backed objects (agg / port) bin to a
-# faithful 2**11 display grid instead -- see ``bin_density``. The csv download
+# faithful power-of-two display grid instead, see ``bin_density``. The csv download
 # carries the full frame.
 DENSITY_PREVIEW_ROWS = 20
 
@@ -1229,7 +1297,7 @@ def get_reins_density_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -
     """Reinsurance density preview, binned to the power-of-two display grid.
 
     The full frame spans the whole loss grid (2**log2 rows). We bin it to a
-    fixed 2**11 display grid: every gross/ceded/net density column (``p_*``)
+    power-of-two display grid: every gross/ceded/net density column (``p_*``)
     sums and ``loss`` right-edges, so the previewed masses stay faithful. The
     csv download has the full, exact frame.
     """
@@ -1240,7 +1308,12 @@ def get_reins_density_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -
     source_log2 = getattr(entry.obj, "log2", None)
     if source_log2 is not None:
         sum_cols = {c for c in df.columns if c.startswith("p")}
-        return frame_to_payload(bin_density(df, source_log2, sum_cols=sum_cols))
+        return frame_to_payload(
+            bin_density(
+                df, source_log2, sum_cols=sum_cols,
+                display_log2=display_log2_for(len(df.columns)),
+            )
+        )
     return frame_to_payload(df, downsample=DENSITY_PREVIEW_ROWS)
 
 

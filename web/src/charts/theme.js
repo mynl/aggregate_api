@@ -17,6 +17,7 @@ import { LineChart, HeatmapChart } from 'echarts/charts';
 import {
     GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent,
     MarkLineComponent, TitleComponent, VisualMapContinuousComponent,
+    AxisPointerComponent,
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import { api } from '../api.js';
@@ -26,11 +27,13 @@ import { api } from '../api.js';
 // exhibits zoom by wheel and drag, never by a rail) and
 // `VisualMapContinuousComponent` without the piecewise legend. Importing the
 // umbrella `DataZoomComponent` / `VisualMapComponent` pulls both halves of each.
+// `AxisPointerComponent` is what draws the cross-hair tracking lines; the
+// tooltip's own `axisPointer` option is inert without it in a tree-shaken build.
 echarts.use([
     LineChart, HeatmapChart,
     GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent,
     MarkLineComponent, TitleComponent, VisualMapContinuousComponent,
-    CanvasRenderer,
+    AxisPointerComponent, CanvasRenderer,
 ]);
 
 export { echarts };
@@ -44,7 +47,20 @@ const FALLBACK = {
     text_color: '#212529',
     line_width: 1.4,
     font_size: 8.5,
+    fig_w: 3.5,
+    fig_h: 2.45,
 };
+
+/**
+ * The floor for anything drawn on a log axis.
+ *
+ * A discretized density accumulates floating-point dust: a survival built by
+ * `1 - cumsum` over thousands of terms lands a few parts in 1e15 either side of
+ * zero, and an FFT-derived mass has the same noise. Below 1e-15 a log axis is
+ * plotting arithmetic error, and it looks like signal: a ragged fringe running
+ * off the bottom of the panel that reads as a tail.
+ */
+export const LOG_FLOOR = 1e-15;
 
 let style = FALLBACK;
 let pending = null;
@@ -129,3 +145,28 @@ export function axisStyle(extra = {}) {
 
 /** The standard series line width, from the style. */
 export function lineWidth() { return style.line_width; }
+
+/**
+ * The house panel aspect, width divided by height.
+ *
+ * `FIG_W` / `FIG_H` = 3.5 / 2.45 = 10/7. Every `aggregate` plot is laid out in
+ * whole multiples of that pair, so a browser panel built to the same ratio reads
+ * as the same instrument as the matplotlib one on the Plot tab. It is a shape,
+ * not a size: the SPA panel is measured in CSS pixels and only the ratio crosses
+ * over.
+ */
+export function aspect() {
+    const w = Number(style.fig_w);
+    const h = Number(style.fig_h);
+    return (w > 0 && h > 0) ? w / h : FALLBACK.fig_w / FALLBACK.fig_h;
+}
+
+/**
+ * A log-axis `min` that never drops below :data:`LOG_FLOOR`.
+ *
+ * ECharts accepts a function for `min`, called with the data extent, so the
+ * axis still fits the data when the data is well clear of the floor.
+ */
+export function logMin() {
+    return (extent) => Math.max(LOG_FLOOR, extent.min > 0 ? extent.min : LOG_FLOOR);
+}
