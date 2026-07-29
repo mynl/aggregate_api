@@ -41,15 +41,30 @@ import { el, empty } from '../utils/dom.js';
 import { fmt } from '../utils/format.js';
 import {
     echarts, baseOption, axisStyle, seriesColor, fade, lineWidth, houseStyle,
-    aspect, logMin, LOG_FLOOR,
+    logMin, LOG_FLOOR,
 } from './theme.js';
+import { loadSurface, surfaceGrid, surfaceOption } from './surface.js';
 
-// Return periods flagged on the exceedance curve: the capital anchors first.
-const ANCHORS = [100, 200, 250];
+// Set once `loadSurface()` has resolved. Read synchronously inside a `build()`,
+// which must stay pure, so the async part happens in the mount and this is the
+// flag it leaves behind. False means the flat heatmap, which is also the answer
+// when WebGL is unavailable or the chunk failed to load.
+let surfaceReady = false;
 
-// The anchor carried onto the density panel as a reference line. One, not three:
-// the point is to say where capital sits, and three dashed verticals over a
-// density say nothing three times.
+// Return periods marked on the tail panel. **Two**, not three: 1-in-100 and
+// 1-in-250 sit far enough apart to label, and adding 1-in-200 between them put
+// three labels in a space that fits two. The pair still spans the regulatory
+// range (Solvency II reads 1-in-200, the US 1-in-250), and the tooltip gives any
+// other return period on demand.
+//
+// The first label is right-aligned to its line and the second left-aligned, so
+// they open away from each other and cannot collide even when the two lines are
+// close.
+const ANCHORS = [100, 250];
+
+// The anchor carried onto the density panel as a reference line. One, not two:
+// the point there is to say where capital sits, and a second dashed vertical
+// says it again.
 const REF_ANCHOR = 200;
 
 // The return-period window runs from an annual event out to 1-in-100,000. Past
@@ -83,17 +98,36 @@ const RP_AXIS = 52;        // the return-period twin on the right of panel 2
 const PANEL_MIN_H = 130;
 const PANEL_MAX_H = 380;
 
+// The target panel shape, **width to total vertical footprint**: the plot area
+// plus the title strip above it and the axis below it, which is what the panel
+// occupies on the page.
+//
+// a26 applied the house `FIG_W / FIG_H` (3.5 / 2.45, so 4:2.8) to the plot area
+// alone, and the chrome then made the *footprint* about 4:3.8. That is what read
+// as too tall. Measuring the footprint is also the fairer comparison with
+// matplotlib, where `FIG_W x FIG_H` is the whole figure including its margins,
+// not the axes box.
+//
+// 4:3.25 is the author's number. The house figure ratio is 4:2.8 if a closer
+// match to the Plot tab is ever wanted; one constant, and `aspect()` from the
+// style endpoint is still there to supply it.
+const PANEL_ASPECT = 4 / 3.25;
+
 // Bounds on the square plot area used by the single-panel exhibits.
 const SQUARE_MIN = 240;
 const SQUARE_MAX = 420;
 
-// At or below this many points carrying mass, the density is drawn as steps
-// rather than as a line: `drawstyle='steps-mid'` in matplotlib terms. A
-// discrete book (`dfreq [3] dsev [1:6]`, bs = 1) puts mass on 16 integers, and
-// joining those with a sloped line draws probability where there is none. The
-// threshold is generous because the failure is one-sided: steps are honest for
-// a coarse continuous grid too, whereas a line over a lattice is a lie.
-const STEP_MAX_POINTS = 256;
+// The density is drawn as steps, always. `step: 'middle'` is matplotlib's
+// `drawstyle='steps-mid'`: the value holds across a bucket centered on its grid
+// point, which is what a discretized density *is*. Every value in the frame is
+// the mass in one bucket, not a sample of a smooth curve, so joining two of them
+// with a slope draws probability at values between grid points that carry none.
+//
+// This used to be conditional, on a count of nonzero points, which was a guess
+// at "is this discrete". The guess is unnecessary: steps are correct for the
+// coarse case and correct for the fine case, where at 2**16 points a bucket is
+// sub-pixel and steps and lines are indistinguishable anyway. A condition that
+// can only be wrong in one direction should not be a condition.
 
 // ---- view state -------------------------------------------------------
 //
@@ -112,6 +146,8 @@ const VIEW_DEFAULTS = {
     rightLogY: true,    // right panel: log or linear y
     xFull: false,       // density x: cropped to q(0.001)..q(0.999), or the full grid
     refLines: true,     // mean and the 1-in-200 anchor, drawn on both panels
+    surface3d: true,    // bivariate: 3-D relief, or the flat heatmap
+    logZ: true,         // bivariate surface: log or linear height
 };
 
 let view = (() => {
@@ -159,6 +195,17 @@ const CONTROLS = {
         title: 'Log axis on the exceedance panel; also carries the '
             + 'return-period scale',
     },
+    surface3d: {
+        label: '3D surface',
+        title: 'Render the joint density in relief. Drag to rotate, scroll to '
+            + 'zoom. Dependence is a ridge off the diagonal, which a flat map '
+            + 'can only imply',
+    },
+    logZ: {
+        label: 'log height',
+        title: 'Log height scale. A joint density spans four or five orders of '
+            + 'magnitude, so on a linear axis everything but the mode is floor',
+    },
 };
 
 // Which panel each control drives. Rendered in this order with a rule between
@@ -166,7 +213,7 @@ const CONTROLS = {
 // undifferentiated row where the reader has to try each to find out.
 const CONTROL_GROUPS = [
     { key: 'left', controls: ['logY', 'xFull'] },
-    { key: 'both', controls: ['refLines'] },
+    { key: 'both', controls: ['refLines', 'surface3d', 'logZ'] },
     { key: 'right', controls: ['epMode', 'rightLogY'] },
 ];
 
@@ -285,20 +332,6 @@ function densityWindow(loss, cdf) {
     return [lo - pad, hi + pad];
 }
 
-/**
- * Should this series be drawn as steps rather than as a line?
- *
- * True when the mass sits on few enough points that the grid is a lattice, not
- * a sampled curve. See :data:`STEP_MAX_POINTS`.
- */
-function isStepped(mass) {
-    let n = 0;
-    for (const v of mass) {
-        if (v > 0 && ++n > STEP_MAX_POINTS) return false;
-    }
-    return n > 0;
-}
-
 /** One density line, filled under the curve when it is the only one. */
 function densitySeries(name, loss, mass, i, solo) {
     const color = seriesColor(i);
@@ -311,11 +344,7 @@ function densitySeries(name, loss, mass, i, solo) {
         type: 'line',
         xAxisIndex: 0,
         yAxisIndex: 0,
-        // `step: 'middle'` is matplotlib's `drawstyle='steps-mid'`: the value
-        // holds across a bucket centred on its grid point. For a discrete book
-        // that is what the distribution *is*; a sloped line between atoms draws
-        // probability at values that cannot occur.
-        step: isStepped(mass) ? 'middle' : false,
+        step: 'middle',
         data: loss.map((x, k) => (y[k] == null ? null : [x, y[k]])),
         showSymbol: false,
         connectNulls: false,
@@ -370,7 +399,7 @@ function anchorLines(tail) {
     const iVaR = at('VaR');
     const iUnit = at('unit');
     if (iT < 0 || iVaR < 0) return [];
-    const out = [];
+    const found = new Map();
     for (const r of tail.rows) {
         if (iUnit >= 0 && String(r[iUnit]) !== 'total') continue;
         const T = Number(r[iT]);
@@ -378,19 +407,34 @@ function anchorLines(tail) {
         // Both modes now put loss on x, so an anchor is a vertical at its VaR
         // in either. The return period only names the line.
         const x = Number(r[iVaR]);
-        if (!Number.isFinite(x)) continue;
-        out.push({
-            xAxis: x,
-            name: `1-in-${returnPeriod(T)}`,
-            lineStyle: { color: '#6c757d', type: 'dashed', width: 1, opacity: 0.45 },
-        });
+        if (Number.isFinite(x)) found.set(T, x);
     }
-    return out;
+    // Ordered by ANCHORS, not by frame order, so "first" and "second" mean the
+    // same thing every time and the label sides stay put.
+    return ANCHORS.filter((T) => found.has(T)).map((T, i) => ({
+        xAxis: found.get(T),
+        name: `1-in-${returnPeriod(T)}`,
+        lineStyle: { color: '#6c757d', type: 'dashed', width: 1, opacity: 0.45 },
+        label: {
+            // Inside the plot at the top, not above it: `position: 'end'` put
+            // the text over the panel's upper edge, where it collided with the
+            // title. For a vertical markLine, "end" is the top.
+            position: 'insideEndTop',
+            // First anchor's text runs left of its line, second's runs right, so
+            // two labels near each other open in opposite directions.
+            align: i === 0 ? 'right' : 'left',
+            padding: i === 0 ? [0, 5, 0, 0] : [0, 0, 0, 5],
+        },
+    }));
 }
 
 /**
- * A dashed reference line. Entries may override `lineStyle` per item, which is
- * how the faint capital anchors and the solid-weight mean share one markLine.
+ * A dashed reference line. Entries may override `lineStyle` and `label` per
+ * item, which is how the faint capital anchors and the solid-weight mean share
+ * one markLine and still place their labels differently.
+ *
+ * Labels sit **inside** the plot at the top. Outside (`position: 'end'`) put
+ * them over the panel's upper edge, on top of the title.
  */
 function refLine(entries) {
     if (!entries.length) return undefined;
@@ -399,7 +443,7 @@ function refLine(entries) {
         silent: true,
         label: {
             show: true, fontSize: 10, color: '#6c757d',
-            position: 'end', distance: 4, formatter: (p) => p.name,
+            position: 'insideEndTop', distance: 3, formatter: (p) => p.name,
         },
         lineStyle: { color: '#6c757d', type: 'dashed', width: 1 },
         data: entries,
@@ -409,12 +453,16 @@ function refLine(entries) {
 // ---- the two-panel option ---------------------------------------------
 
 /**
- * Plot-area geometry for the two panels, at the house aspect.
+ * Panel geometry, sized so each panel's **footprint** is at `PANEL_ASPECT`.
  *
- * The width falls out of the host and the chrome; the height is then
- * `width / aspect`, clamped. Nothing is hardcoded, which is the fix: the
- * stacked layout used to pin `height: 150` against a full-width panel and so
- * drew at roughly 3.5:1 where the house shape is 1.43:1.
+ * The width falls out of the host and the chrome. The height then comes from the
+ * footprint target with the per-panel chrome (title strip plus axis) taken back
+ * out, so what holds the ratio is the space the panel occupies rather than the
+ * plot rectangle inside it.
+ *
+ * Exported because the mount reserves the host height from it **before** the
+ * data arrives. A chart that sizes itself on arrival makes the page jump, and
+ * everything below it move, at the exact moment the reader started looking.
  *
  * Parameters
  * ----------
@@ -423,9 +471,9 @@ function refLine(entries) {
  *     default rather than collapsing the panel.
  * wide : bool
  *     Side by side, or stacked.
- * rpTwin : bool
- *     Whether the right panel carries the return-period twin axis, which needs
- *     its own strip of right-hand margin.
+ * twin : bool
+ *     Whether the tail panel carries its twin axis, which needs its own strip of
+ *     right-hand margin.
  *
  * Returns
  * -------
@@ -433,13 +481,16 @@ function refLine(entries) {
  *     `grids` are two ECharts grid objects with numeric geometry, `height` the
  *     host height the whole thing needs.
  */
-function panelGeometry(width, wide, rpTwin) {
+export function panelGeometry(width, wide, twin = true) {
     const w = width || 900;
-    const rightPad = PAD_RIGHT + (rpTwin ? RP_AXIS : 0);
+    const rightPad = PAD_RIGHT + (twin ? RP_AXIS : 0);
     const panelW = wide
         ? Math.max(160, (w - AXIS_LEFT - GAP_X - rightPad) / 2)
         : Math.max(200, w - AXIS_LEFT - rightPad);
-    const panelH = Math.max(PANEL_MIN_H, Math.min(PANEL_MAX_H, panelW / aspect()));
+    // Vertical chrome that belongs to one panel and sits inside its footprint.
+    const chrome = PAD_TOP + AXIS_BOTTOM;
+    const panelH = Math.max(PANEL_MIN_H,
+        Math.min(PANEL_MAX_H, panelW / PANEL_ASPECT - chrome));
 
     const grids = wide
         ? [{ left: AXIS_LEFT, top: PAD_TOP, width: panelW, height: panelH },
@@ -449,7 +500,27 @@ function panelGeometry(width, wide, rpTwin) {
            { left: AXIS_LEFT, top: PAD_TOP + panelH + AXIS_BOTTOM + GAP_Y,
              width: panelW, height: panelH }];
     const bottom = Math.max(...grids.map((g) => g.top + g.height));
-    return { grids, panelW, panelH, height: bottom + AXIS_BOTTOM + LEGEND_H };
+    return {
+        grids, panelW, panelH,
+        // What `PANEL_ASPECT` is measured against, carried out so a test can
+        // check the ratio that was actually targeted rather than re-deriving it
+        // from constants it would have to duplicate.
+        footprint: chrome + panelH,
+        height: bottom + AXIS_BOTTOM + LEGEND_H,
+    };
+}
+
+export { PANEL_ASPECT };
+
+/**
+ * The host height a two-panel exhibit will need at this width.
+ *
+ * Called before the fetch so the space is already reserved. It assumes the twin
+ * axis, which is the default view; being 52 px out on a non-default toggle is
+ * invisible next to the jump this exists to prevent.
+ */
+export function reservedHeight(width) {
+    return Math.round(panelGeometry(width, (width || 0) >= WIDE_PX, true).height);
 }
 
 /**
@@ -491,7 +562,7 @@ function twoPanel({
     if (rightRefs.length && right.length) right[0].markLine = refLine(rightRefs);
 
     const window = densityWindow(loss, cdf);
-    const { grids, height } = panelGeometry(width, wide, twin);
+    const { grids, height, footprint } = panelGeometry(width, wide, twin);
     const [sLo, sHi] = survivalRange(series);
 
     // Loss on x in BOTH panels, always. The right panel is the same book seen
@@ -609,9 +680,11 @@ function twoPanel({
         },
         series: [...density, ...right],
     };
-    // Not an ECharts key: the mount reads it back for the host height, so the
-    // geometry is computed once and in one place.
+    // Not ECharts keys: the mount reads `hostHeight` back so the geometry is
+    // computed once and in one place, and the smoke test reads `panelFootprint`
+    // to check the shape the layout was aiming for.
     option.hostHeight = height;
+    option.panelFootprint = footprint;
     return option;
 }
 
@@ -795,7 +868,9 @@ const EXHIBITS = {
     },
 
     bvagg: {
-        controls: [],
+        // The bivariate is the one kind whose exhibit is a 3-D surface, so it
+        // gets its own controls: which renderer, and how the height is scaled.
+        controls: ['surface3d', 'logZ'],
         async fetch(id) {
             // `view: 'joint'` is explicit: density_df answers a bivariate with
             // its two marginals by default, because that is what a *table* of
@@ -813,7 +888,24 @@ const EXHIBITS = {
             return { joint, stats };
         },
         build({ joint, stats }, { width }) {
-            const grid = heatmapData(joint, axisNames(joint, stats));
+            const [xName, yName] = axisNames(joint, stats);
+            // 3-D when the renderer is loaded and asked for; the flat heatmap
+            // otherwise, so a WebGL-less browser or a failed chunk still lands
+            // on a picture rather than an empty pane.
+            if (view.surface3d && surfaceReady) {
+                const grid = surfaceGrid(joint);
+                if (grid) {
+                    const { side } = squareLayout(width, { left: 20, rightPad: 90 });
+                    const option = surfaceOption(grid, {
+                        xName, yName, logZ: Boolean(view.logZ), side,
+                    });
+                    // The mount reads this back for the host height; a surface is
+                    // square like the heatmap it replaces.
+                    option.hostHeight = side + 60;
+                    return option;
+                }
+            }
+            const grid = heatmapData(joint, [xName, yName]);
             if (!grid) return null;
             const s = houseStyle();
             // Square for the same reason as the distortion: a joint density
@@ -1021,6 +1113,7 @@ export function mountReinsExhibit(container, frame) {
     const host = el('div', { className: 'exhibit-canvas' });
     container.appendChild(tools);
     container.appendChild(host);
+    host.style.height = `${reservedHeight(host.clientWidth || 0)}px`;
 
     const isWide = () => (host.clientWidth || 0) >= WIDE_PX;
 
@@ -1275,20 +1368,33 @@ export async function mountExhibit(container, state) {
     const spec = EXHIBITS[state.kind];
     if (!spec) return null;
 
-    let data;
-    try {
-        data = await spec.fetch(state.id);
-    } catch {
-        return null;                     // a frame this kind lacks; not an error
-    }
-
+    // Build the frame and reserve its height FIRST, before the fetch. A density
+    // payload is a couple of hundred kilobytes and takes a moment; a chart that
+    // sizes itself on arrival shoves everything below it down the page at the
+    // moment the reader has started reading. Reserving costs nothing and the
+    // number is exact, since the geometry is a function of the width.
     empty(container);
     const controls = spec.controls || [];
     const tools = el('div');
     const host = el('div', { className: 'exhibit-canvas' });
-    // Controls first so the chart measures against its final width.
     container.appendChild(tools);
     container.appendChild(host);
+    host.style.height = `${reservedHeight(host.clientWidth || 0)}px`;
+
+    // The 3-D chunk, if this exhibit can use one, in parallel with the data.
+    const needs3d = controls.includes('surface3d') && view.surface3d;
+    let data;
+    try {
+        const [payload, ready] = await Promise.all([
+            spec.fetch(state.id),
+            needs3d ? loadSurface() : Promise.resolve(false),
+        ]);
+        data = payload;
+        if (ready) surfaceReady = true;
+    } catch {
+        empty(container);
+        return null;                     // a frame this kind lacks; not an error
+    }
 
     const opts = () => ({
         ...state,
@@ -1301,7 +1407,7 @@ export async function mountExhibit(container, state) {
     function renderTools() {
         empty(tools);
         if (!controls.length) return;
-        tools.appendChild(renderControls(controls, opts().wide, () => redraw()));
+        tools.appendChild(renderControls(controls, opts().wide, () => onToggle()));
     }
 
     let option = spec.build(data, opts());
@@ -1313,17 +1419,38 @@ export async function mountExhibit(container, state) {
     chart.setOption(option);
     linkPanels(chart, option);
 
+    // Turning the 3-D view on for the first time has to fetch the renderer, so a
+    // toggle is not always a synchronous redraw. Mounting with it already off is
+    // the case that gets here: `loadSurface()` was skipped, and without this the
+    // button would appear to do nothing.
+    async function onToggle() {
+        if (view.surface3d && controls.includes('surface3d') && !surfaceReady) {
+            if (await loadSurface()) surfaceReady = true;
+        }
+        redraw();
+    }
+
     // `notMerge` on every redraw: a toggle can change an axis *type*
     // (value -> log) and swap which series carry markLines, and a merged
-    // setOption would leave the old ones behind.
+    // setOption would leave the old ones behind. A 2-D to 3-D switch changes
+    // more than that, so the instance is disposed and rebuilt: ECharts cannot
+    // migrate a `grid` option to a `grid3D` one in place.
+    let is3d = Boolean(option.grid3D);
+    let chartRef = chart;
     function redraw() {
         const next = spec.build(data, opts());
         if (!next) return;
         option = next;
+        const next3d = Boolean(option.grid3D);
         host.style.height = `${chartHeight(option)}px`;
-        chart.setOption(option, true);
-        chart.resize();
-        linkPanels(chart, option);
+        if (next3d !== is3d) {
+            is3d = next3d;
+            try { chartRef.dispose(); } catch { /* already gone */ }
+            chartRef = echarts.init(host, null, { renderer: 'canvas' });
+        }
+        chartRef.setOption(option, true);
+        chartRef.resize();
+        linkPanels(chartRef, option);
     }
 
     // Rebuild on resize, always: every panel is now sized from the host width so
@@ -1345,7 +1472,9 @@ export async function mountExhibit(container, state) {
     return {
         dispose() {
             try { ro.disconnect(); } catch { /* already gone */ }
-            try { chart.dispose(); } catch { /* already gone */ }
+            // `chartRef`, not `chart`: a 2-D to 3-D switch replaces the instance,
+            // and disposing the original would leak the live one's canvas.
+            try { chartRef.dispose(); } catch { /* already gone */ }
         },
     };
 }

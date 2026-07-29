@@ -64,7 +64,7 @@ provides-extras = ["dev", "notebook", "numba", "massive", "viz"]
 
 [[package]]
 name = "aggregate-api"
-version = "1.0.0a27"
+version = "1.0.0a28"
 source = { editable = "." }
 dependencies = [
     { name = "aggregate" },

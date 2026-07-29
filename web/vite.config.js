@@ -31,6 +31,7 @@ export default defineConfig({
     define: {
         __CSV_GRID_VERSION__: JSON.stringify(pkgVersion('csv-grid')),
         __ECHARTS_VERSION__: JSON.stringify(pkgVersion('echarts')),
+        __ECHARTS_GL_VERSION__: JSON.stringify(pkgVersion('echarts-gl')),
         __BOOTSTRAP_VERSION__: JSON.stringify(pkgVersion('bootstrap')),
     },
     build: {
@@ -42,12 +43,20 @@ export default defineConfig({
         sourcemap: false,
         rollupOptions: {
             output: {
-                // Split the three big vendors into their own chunks. They change
-                // only when their version does, while the app chunk changes every
+                // Split the big vendors into their own chunks. They change only
+                // when their version does, while the app chunk changes every
                 // release, so this keeps a redeploy from invalidating ~300 kB of
                 // cached library code in every returning browser. It also lets
                 // the browser fetch them in parallel rather than as one blob.
+                //
+                // `echarts-gl` is named here only to collect it into ONE chunk
+                // instead of the three opaquely-named ones Rollup emits on its
+                // own (`install-*`, `charts-*`, `components-*`). It stays lazy
+                // either way: naming a chunk does not make it eager, and its only
+                // importer is the dynamic import in charts/surface.js, so a
+                // visitor who never builds a bivariate never downloads it.
                 manualChunks: {
+                    'echarts-gl': ['echarts-gl/charts', 'echarts-gl/components'],
                     echarts: ['echarts/core', 'echarts/charts', 'echarts/components',
                               'echarts/renderers'],
                     codemirror: ['@codemirror/view', '@codemirror/state',
@@ -58,9 +67,12 @@ export default defineConfig({
                 },
             },
         },
-        // The vendor split leaves every chunk near or under this; the warning
-        // exists to catch a regression, so it stays at the default.
-        chunkSizeWarningLimit: 600,
+        // Raised for `echarts-gl`, which is 602 kB and irreducibly so: it is one
+        // vendor library serving one object kind, already isolated in a lazy
+        // chunk nothing on the landing path fetches. The warning is about the
+        // critical path, and this chunk is not on it. Every eager chunk stays
+        // well under.
+        chunkSizeWarningLimit: 650,
     },
     server: {
         port: 5173,

@@ -4,6 +4,88 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a28
+
+From `dev/done/plan-exhibit-punchups-5.md`. Third round of exhibit feedback: step
+rendering, two capital anchors, the bivariate 3-D surface, reserved space, and the
+panel aspect measured on the right rectangle at last.
+
+### Steps everywhere
+
+`step: 'middle'`, matplotlib's `drawstyle='steps-mid'`, on every density series
+unconditionally. Every value in the frame is the mass in **one bucket**, not a
+sample of a curve, so joining two with a slope draws probability at values between
+grid points that carry none. a23 gated this on a count of nonzero points, guessing
+at "is this discrete"; the guess was unnecessary, since steps are right for a
+coarse grid and right for a fine one. A condition that can only be wrong in one
+direction should not be a condition.
+
+### Two anchors, labels inside the panel
+
+`ANCHORS` drops to `[100, 250]`. The pair still spans the regulatory range and the
+tooltip gives any other return period, so the third line cost a label slot and
+bought nothing.
+
+Labels move to `position: 'insideEndTop'`: inside the plot at the top rather than
+above it, where they were landing on the panel title. That fixes the density
+panel's `mean` and `1-in-200` lines too. The first anchor's text is right-aligned
+and the second's left-aligned, so they open away from each other and cannot
+collide however close the two VaRs sit.
+
+### The bivariate 3-D surface
+
+New `web/src/charts/surface.js`: the joint density in relief, with linear and log
+height scaling (log the default, since a joint density spans four or five orders
+of magnitude and on a linear axis everything but the mode is floor). Dependence
+shows as a ridge off the diagonal, which a flat heatmap can only imply.
+
+`echarts-gl` sits behind a **dynamic import** in its own lazy chunk, 165.9 kB
+gzipped, absent from `index.html`, so a visitor who never builds a bivariate never
+downloads it. The joint grid is block-summed to 128 x 128, not sampled, for the
+same reason the heatmap is. Falls back to the heatmap when the chunk fails or
+WebGL is missing.
+
+One thing changed after measuring: a zero-mass cell was first sent as `null`, on
+the grounds that zero mass is no height rather than a small one. On the real
+fixture **41% of the mesh came back as holes**, because an FFT-built bivariate has
+large regions of exact zero, and the surface arrived moth-eaten. Zero now rests on
+the log floor, one decade below the smallest mass present, so the surface touches
+down where the model puts nothing. The tooltip says `< 1e-15` there rather than
+reporting the floor as data.
+
+### Reserved space
+
+The chart host's height is computed and set **before** the fetch, so the page no
+longer shifts when the density payload lands. Exact rather than a guess: the
+geometry is a function of the container width, known immediately.
+
+### The aspect was measured on the wrong rectangle
+
+a26 applied the house `FIG_W / FIG_H` (4:2.8) to the **plot area**, and the chrome
+around it made the panel's footprint on the page about **4:3.8**. That is what
+read as too tall, and it is why the author's "4:3.25" and "a bit too high" looked
+like they pointed opposite ways: 4:3.25 is *flatter* than 4:3.8.
+
+`PANEL_ASPECT = 4 / 3.25` now targets the **footprint** (plot area plus title
+strip and axis), with the plot height falling out of it. That is also the fairer
+comparison with matplotlib, where `FIG_W x FIG_H` is the whole figure including
+margins, not the axes box.
+
+At a 1000 px host: panels 398 x 251, footprint 323, so 1.23, and the exhibit is
+347 px tall where it was 375. Stacked at 560 px: 730 px, was 777.
+
+The smoke test now asserts the **footprint** ratio at both breakpoints, which is
+the check a26 should have had: it was asserting 1.43 on the plot rectangle and
+passing while the visible shape was 1.06. It also asserts every density series is
+stepped, and that the surface mesh is complete and has relief.
+
+### Bundle
+
+Eager: app 39.1, bootstrap 24.7, codemirror 114.2, echarts 197.8 kB gzipped. Lazy:
+echarts-gl 165.9. The echarts chunk grew 186.1 to 197.8, which is Rollup hoisting
+internals now shared with the lazy chunk into the eager one rather than shipping
+them twice.
+
 ## 1.0.0a27
 
 From `dev/done/plan-exhibit-punchups-4.md`. Second round of author feedback, and

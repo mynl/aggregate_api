@@ -23,7 +23,7 @@ import { api, ApiError } from './api.js';
 import { createEditor, emacsEnabledDefault } from './editor.js';
 import { mountExamples, mountPalette, loadExamples } from './examples.js';
 import { renderInfo, renderExhibit } from './renderers.js';
-import { mountExhibit, mountReinsExhibit } from './charts/exhibits.js';
+import { mountExhibit, mountReinsExhibit, reservedHeight } from './charts/exhibits.js';
 import { loadStyle } from './charts/theme.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
 import { renderError, renderRateLimit } from './error-pane.js';
@@ -634,10 +634,16 @@ async function loadOverview() {
     // a g-curve for a distortion, a joint heatmap for a bivariate.
     const host = el('div', { className: 'overview-plot' });
     pane.appendChild(host);
+    // Reserve the height now, not when the data lands. `loadStyle()` and the
+    // density fetch are both round trips, and a chart that sizes itself on
+    // arrival shoves the tables below it down the page at the moment the reader
+    // has started reading them.
+    host.style.minHeight = `${reservedHeight(host.clientWidth || 0)}px`;
     try {
         await loadStyle();               // colors, once per page load
         overviewChart = await mountExhibit(host, state);
     } catch { /* the exhibit is a bonus; the tables still carry the story */ }
+    host.style.minHeight = '';
     if (overviewChart) rendered = true;
     else pane.removeChild(host);
 
@@ -737,6 +743,7 @@ async function loadReinsExhibit() {
     if (!host) return;
     if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
     empty(host);
+    host.style.minHeight = `${reservedHeight(host.clientWidth || 0)}px`;
     try {
         await loadStyle();
         // Full resolution: this is a plot, and a ceded distribution is more
@@ -744,6 +751,7 @@ async function loadReinsExhibit() {
         const frame = await api.reinsFrame(state.id, 'reins_density_df');
         reinsChart = mountReinsExhibit(host, frame);
     } catch { /* the exhibit is a bonus; the frames carry the numbers */ }
+    host.style.minHeight = '';
     if (!reinsChart) empty(host);
 }
 
@@ -1176,6 +1184,7 @@ if (helpLoad) {
 // aggregate / api versions come from the backend at runtime.
 $('about-grid').textContent = __CSV_GRID_VERSION__;
 $('about-echarts').textContent = __ECHARTS_VERSION__;
+$('about-echarts-gl').textContent = __ECHARTS_GL_VERSION__;
 $('about-bootstrap').textContent = __BOOTSTRAP_VERSION__;
 api.meta().then((meta) => {
     $('about-aggregate').textContent = meta.aggregate_version;

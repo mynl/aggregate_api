@@ -147,13 +147,17 @@ export function axisStyle(extra = {}) {
 export function lineWidth() { return style.line_width; }
 
 /**
- * The house panel aspect, width divided by height.
+ * The house **figure** aspect, width divided by height.
  *
- * `FIG_W` / `FIG_H` = 3.5 / 2.45 = 10/7. Every `aggregate` plot is laid out in
- * whole multiples of that pair, so a browser panel built to the same ratio reads
- * as the same instrument as the matplotlib one on the Plot tab. It is a shape,
- * not a size: the SPA panel is measured in CSS pixels and only the ratio crosses
- * over.
+ * `FIG_W` / `FIG_H` = 3.5 / 2.45 = 4:2.8. Every `aggregate` plot is laid out in
+ * whole multiples of that pair. It is a shape, not a size: the SPA panel is
+ * measured in CSS pixels and only the ratio would cross over.
+ *
+ * Not currently what the exhibits use. `exhibits.PANEL_ASPECT` is 4:3.25, the
+ * author's number, and this is kept as the reference point that departure is
+ * measured from: matplotlib's `FIG_W x FIG_H` is the whole figure including its
+ * margins, so it is the honest comparison for a panel's *footprint* rather than
+ * for the plot rectangle inside it.
  */
 export function aspect() {
     const w = Number(style.fig_w);

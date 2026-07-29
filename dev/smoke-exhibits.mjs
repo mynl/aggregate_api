@@ -51,31 +51,33 @@ if (BASE) {
         typeof input === 'string' && input.startsWith('/') ? BASE + input : input, init);
 }
 
-const { EXHIBITS, reinsSeries } = await import(
+const { EXHIBITS, reinsSeries, PANEL_ASPECT } = await import(
     pathToFileURL(path.join(here, '..', 'web', 'src', 'charts', 'exhibits.js')).href);
-const { aspect } = await import(
-    pathToFileURL(path.join(here, '..', 'web', 'src', 'charts', 'theme.js')).href);
+const { surfaceGrid, surfaceOption } = await import(
+    pathToFileURL(path.join(here, '..', 'web', 'src', 'charts', 'surface.js')).href);
 
-// The house aspect, from the fallback style (no api in offline mode). Panels are
-// checked against it because the shape is the one property of a rendered chart
-// that is fully determined by the option object, and so the one thing this test
-// can genuinely verify about appearance. The tolerance absorbs the clamp: a very
-// narrow window hits PANEL_MIN_H and a very wide one PANEL_MAX_H, and a panel
-// pinned at a clamp is correct without being at the ratio.
-const ASPECT = aspect();
+// Panels are checked against the target aspect because the shape is the one
+// property of a rendered chart that is fully determined by the option object,
+// and so the one thing this test can genuinely verify about appearance.
+//
+// The ratio is measured on the panel's **footprint** (plot area plus its title
+// strip and axis), which is what it occupies on the page and what `PANEL_ASPECT`
+// targets. Measuring the plot rectangle alone is what let a26 hit 1.43 there
+// while the footprint came out near 1.06, i.e. much taller than intended.
 const ASPECT_TOL = 0.02;
 
-/** Two-panel geometry check: equal panels, house aspect unless clamped. */
-function checkAspect(grids, notes) {
+/** Two-panel geometry check: equal panels, target footprint unless clamped. */
+function checkAspect(grids, footprint, notes) {
     const [a, b] = grids;
     if (Math.abs(a.width - b.width) > 1 || Math.abs(a.height - b.height) > 1) {
         notes.push(`panels differ (${a.width}x${a.height} vs ${b.width}x${b.height})`);
         return null;
     }
-    const got = a.width / a.height;
+    if (!(footprint > 0)) { notes.push('no panel footprint'); return null; }
+    const got = a.width / footprint;
     const clamped = a.height <= 130 + 0.5 || a.height >= 380 - 0.5;
-    if (!clamped && Math.abs(got - ASPECT) > ASPECT_TOL) {
-        notes.push(`aspect ${got.toFixed(2)} not ${ASPECT.toFixed(2)}`);
+    if (!clamped && Math.abs(got - PANEL_ASPECT) > ASPECT_TOL) {
+        notes.push(`footprint aspect ${got.toFixed(2)} not ${PANEL_ASPECT.toFixed(2)}`);
     }
     return got;
 }
@@ -194,23 +196,30 @@ for (const [kind, key] of CASES) {
                 notes.push('density x window collapsed');
             }
             if (!(option.hostHeight > 0)) notes.push('no host height');
-            const got = checkAspect(grids, notes);
+            const got = checkAspect(grids, option.panelFootprint, notes);
+            // Steps are unconditional now, so *every* density series carries
+            // them. A value in the frame is the mass in one bucket, not a sample
+            // of a curve, so joining two with a slope draws probability between
+            // grid points that carry none. The density series are the first half.
+            const density = series.slice(0, series.length / 2);
+            const flat = density.filter((s) => s.step !== 'middle').map((s) => s.name);
+            if (flat.length) notes.push(`not stepped: ${flat.join(', ')}`);
             shape = `${Math.round(grids[0].width)}x${Math.round(grids[0].height)}`
-                + (got ? ` (${got.toFixed(2)})` : '') + ` h=${Math.round(option.hostHeight)}`;
+                + (got ? ` fp=${got.toFixed(2)}` : '') + ` h=${Math.round(option.hostHeight)}`;
         } else {
-            // A single-panel exhibit must be square: a stretched g(s) misreads
-            // as a different curve, which is the whole reason it is fixed.
+            // A single-panel 2-D exhibit must be square: a stretched g(s)
+            // misreads as a different curve, which is the whole reason it is
+            // fixed. A grid3D exhibit has no `grid` at all and is checked below.
             const g = grids[0] || {};
-            if (g.width !== g.height) notes.push(`not square (${g.width}x${g.height})`);
+            if (g == null) notes.push('no grid');
+            else if (g.width !== g.height) notes.push(`not square (${g.width}x${g.height})`);
             shape = `square=${g.width}`;
         }
 
         if (notes.length) { fail(`${key} (${layout.name}): ${notes.join('; ')}`); broke = true; break; }
 
-        const stepped = series.filter((s) => s.step === 'middle').map((s) => s.name);
         const marks = series.filter((s) => s.markLine).length;
-        lines.push(`${layout.name} ${shape} marks=${marks}`
-            + (stepped.length ? ` steps=[${stepped.join(',')}]` : ''));
+        lines.push(`${layout.name} ${shape} marks=${marks}`);
     }
     if (broke) continue;
     console.log(`OK   ${key.padEnd(11)} ${lines.join('  |  ')}`);
@@ -254,6 +263,46 @@ if (fixtures && fixtures.reins) {
     const sub = reinsSeries(frame, 'agg', ['gross']);
     if (sub.length !== 1 || sub[0].name !== 'subject') {
         fail('reins: `gross` does not select `subject` on the aggregate stage');
+    }
+}
+
+// The bivariate 3-D surface. `surfaceOption` is pure like the rest, so it can be
+// assembled here without WebGL or echarts-gl; what cannot be checked offline is
+// whether it *renders*, only whether the mesh is well formed.
+if (fixtures && fixtures.bvagg) {
+    const joint = fixtures.bvagg.frames.joint;
+    const grid = surfaceGrid(joint);
+    if (!grid) fail('surface: joint frame did not reduce to a grid');
+    else {
+        for (const logZ of [false, true]) {
+            const option = surfaceOption(grid, { xName: 'A', yName: 'B', logZ });
+            const s = (option.series || [])[0] || {};
+            const notes = [];
+            if (s.type !== 'surface') notes.push(`type ${s.type}`);
+            // dataShape must match the vertex count exactly or echarts-gl reads
+            // the flat list into the wrong mesh topology and draws a tangle.
+            const [nx, ny] = s.dataShape || [];
+            if (nx * ny !== (s.data || []).length) {
+                notes.push(`dataShape ${nx}x${ny} != ${(s.data || []).length} vertices`);
+            }
+            if (!option.grid3D) notes.push('no grid3D');
+            // The mesh must be complete. A zero-mass cell rests on the log floor
+            // rather than being a hole: on this fixture 41% of the cells are
+            // exact zeros, and as holes the surface arrived moth-eaten.
+            const holes = (s.data || []).filter((d) => !Number.isFinite(d[2])).length;
+            if (holes) notes.push(`${holes} holes in the mesh`);
+            // And it must have relief. A surface whose heights are all equal is
+            // what a broken reduction produces, and it draws as a flat plate.
+            const heights = (s.data || []).map((d) => d[2]);
+            const spread = Math.max(...heights) - Math.min(...heights);
+            if (!(spread > 0)) notes.push('no relief: every height equal');
+            if (notes.length) fail(`surface (logZ=${logZ}): ${notes.join('; ')}`);
+            else {
+                console.log(`OK   ${`surface/${logZ ? 'log' : 'lin'}`.padEnd(11)} `
+                    + `mesh=${nx}x${ny} z=[${Math.min(...heights).toExponential(1)}`
+                    + `, ${Math.max(...heights).toExponential(1)}]`);
+            }
+        }
     }
 }
 

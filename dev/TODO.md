@@ -201,6 +201,17 @@ one version bump each.
       survives for the Density *table*. Gzip made the payload a non-issue
       (3.65 MB to 0.35 MB on the wire). *(done)*
 
+- [ ] **The author is not sold on ECharts** (raised a28, alongside the step /
+      anchor / surface asks). Recorded so it is not lost: if the exhibits still
+      do not earn their keep after a28's changes are *seen*, the question is
+      whether the library is the problem or the chart designs are. Worth
+      separating before any swap, because most of the a26 to a28 fixes were
+      design errors (wrong rectangle measured, wrong default orientation,
+      binned data) rather than anything ECharts did. The realistic alternatives
+      are Plotly (bigger, more batteries) or back to server-rendered matplotlib
+      (which the author raised, and which would be large payloads but exactly
+      the house look).
+
 - [ ] **REMINDER for SM: better things to plot.** The author's note, verbatim:
       "this was a general comment that i need to work out better things to plot.
       Just remind me if i don't come back to it." Not an api task. Raise it next
@@ -254,8 +265,18 @@ one version bump each.
       window, since the ceded distribution is small next to the gross. The
       `log y` and `full x` toggles cover it for now; if it stays hard to read,
       give each series its own crop rather than one shared window.
-- [ ] **Bivariate 3D viewer** (later). `echarts-gl` surface on the joint density
-      behind a dynamic import, with a server-side downsample to ~128x128.
+- [x] **Bivariate 3D viewer** (→ 1.0.0a28). `echarts-gl` surface on the joint
+      density behind a dynamic import (own lazy chunk, 165.9 kB gzipped),
+      linear and log height, falling back to the heatmap without WebGL. The
+      downsample to 128x128 is client-side after all: the joint payload is
+      already only 2,560 rows, so a server-side reduction would have saved
+      nothing and added a route. *(done)*
+
+- [ ] **Nobody has seen the 3-D surface render.** `surfaceOption` is pure and the
+      smoke test checks the mesh is complete and has relief, but WebGL is not
+      exercisable offline. First look should check: does the ridge read on
+      `CopulaWindFlood`, is the log floor the right depth, and do the wall
+      projections show the marginals usefully or just add clutter.
 
 ## Raised with `aggregate` (not fixed here)
 
