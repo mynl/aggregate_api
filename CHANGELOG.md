@@ -4,6 +4,141 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a21
+
+From `dev/plan-echarts-exhibit.md`. The Overview gets a real chart engine and an
+exhibit per first-class citizen. uPlot retires.
+
+### What was wrong with the old plot
+
+Not the library, the design. Five separate faults, only one of which was uPlot's:
+
+1. **It cropped away the subject.** x stopped at `q(0.999)` on a linear scale,
+   so the tail (the thing an accurate FFT is *for*) was the part not drawn.
+2. **Two y-axes with incomparable scales.** Density around 1e-6 against an
+   exceedance in [0, 1]: the density dominated and S read as a cliff then a flat
+   line.
+3. **Portfolio blind.** It drew `p_total` and nothing else, so the best story in
+   the library, diversification, was invisible.
+4. **Only agg and port drew anything.** A distortion, severity, P&L or bivariate
+   landed on "No risk views for this object", and three of the eight landing
+   heroes are portfolios with a bivariate among them.
+5. **An instrument, not an exhibit.** No title, 10 px canvas-drawn dashed
+   labels, marker chips underneath, no legend, no export.
+
+### The exhibit
+
+Two panels for anything with a loss distribution:
+
+```
+density (what it looks like)      exceedance (what it costs)
+x = loss, linear, cropped         x = return period, log
+y = probability mass              y = loss
+```
+
+The EP curve gets equal billing rather than living behind a toggle, because it
+is the chart an insurance reader looks at first. The 1-in-100 / 200 / 250
+anchors become labeled points **on** the curve instead of dashed lines floating
+over a density, and they are read from `tail_df` rather than off the plotted
+line: that frame is the library's own quantile function, while the curve is a
+binned display grid, and where they differ the library is right.
+
+**The cursor link is exact, not an approximation.** Both panels are built from
+the same row array, so a point's index is the same grid bucket in either. A
+point the EP panel cannot show (S out in the numerical noise, or a return period
+past 1-in-100,000, where the survival function is FFT noise rather than tail) is
+emitted as `null` rather than dropped, which keeps the indices aligned and draws
+a clean trailing gap. Hovering a loss on the left therefore highlights its
+return period on the right because it is literally the same bucket.
+
+Series in the two panels share a `name`, so one legend entry toggles a unit in
+both at once.
+
+### One exhibit per kind
+
+The registry is total over the six kinds, so the Overview always lands:
+
+| kind | exhibit |
+|---|---|
+| `agg` | density + EP, anchors marked |
+| `port` | one density and one EP curve per unit, plus the total, legend-toggled |
+| `sev` | sampled density + EP; the y-axis says `pdf`, because it is an ordinate |
+| `pnl` | signed density with a break-even line; the EP panel runs off **F**, not S, since a P&L's bad tail is the low end |
+| `distortion` | g(s) against the diagonal, the load shaded between, tooltip reporting `g(s) - s` |
+| `bvagg` | the joint density as a heatmap, block-summed to 96 cells a side |
+
+The bivariate is **summed** into its display cells, not sampled: dropping cells
+would silently discard mass and lighten the tail. Its axis names come from
+`stats_df`, because the joint frame names only axis 0 (axis 1 arrives as bare
+grid values for column headers).
+
+### Two new routes, and why
+
+- **`GET /v1/objects/{id}/unit_density_df`** (Portfolio only). A
+  `Portfolio.density_df` carries `p_total` and the per-unit *allocation* columns
+  but no per-unit densities; since the windowed-grid work those live on
+  `unit_density_df()`, a long frame indexed `(unit, loss)`. Unstacked back to
+  wide it gives `p_<unit>` and `S_<unit>` on the portfolio's own grid, which is
+  what the portfolio exhibit draws. Verified to align even when the units are on
+  wildly different scales.
+- **`GET /v1/meta/style`**. The color cycle, grid color and line width read off
+  `aggregate.style.rc_params()`. The alternative was a second hardcoded copy of
+  the palette in the frontend, which would drift from the Plot tab's matplotlib
+  output and the drift would be visible. Falls back to the current values if the
+  style is unreadable, so the front page cannot be broken by it.
+
+A **severity now has a `density_df`**: the api samples the frozen scipy variable
+onto a quantile-spaced grid, the same presentation-layer move it already makes
+for a `PnL`. Columns are `loss / pdf / F / S`, and `pdf` is deliberately not
+called `p_total`: it is a density ordinate, not a mass, and reusing the
+aggregate's name would invite summing it. The grid inverts the survival function
+over log-spaced probabilities rather than walking loss linearly, because a
+severity is routinely heavy-tailed with unbounded support, where a linear grid
+either truncates the tail or spends every point on it.
+
+### The Overview header block
+
+`/v1/objects/{id}/meta` (new at a19) now feeds a header: name, kind, tag chips,
+the note as the lead, and a collapsible canonical `pprogram` with its hints.
+
+This replaces the `pendingNote` module variable, which could only ever show a
+note remembered from whichever example was last clicked. The lead is now the
+note the built object actually carries, so a **hand-typed** `note{...}` gets one
+too. A missing note remains ordinary: no lead paragraph, no empty element.
+
+### Bundle
+
+ECharts is not small and the split says so honestly:
+
+| chunk | gzip |
+|---|---|
+| app | 27.8 kB |
+| bootstrap | 24.7 kB |
+| codemirror | 114.2 kB |
+| echarts | 186.6 kB |
+
+353 kB total against 187 kB on uPlot. The vendor chunks are new: they change
+only with their own version while the app chunk changes every release, so a
+redeploy no longer invalidates ~325 kB of cached library code in every returning
+browser, and the four download in parallel. `echarts/core` with explicit `use()`
+registration keeps the unused two thirds of the library out; the narrow
+`DataZoomInsideComponent` and `VisualMapContinuousComponent` are imported
+deliberately, since the umbrella names pull both halves of each.
+
+### Also
+
+- **Summary is gone from More.** `summary_df` is an Overview exhibit; showing it
+  twice was the same table in two places.
+- `dev/smoke-exhibits.mjs` builds one object per kind against a live api and
+  asserts each option is drawable: series present, EP panel not entirely null,
+  density window not collapsed. It is a smoke test, not a rendering test, and
+  says so.
+- `config.js` guards `import.meta.env` with optional chaining, which is what
+  lets that smoke test import the chart code under bare node.
+- `CLAUDE.md` records the re-sync trap: `/v1/meta` reports the version recorded
+  when the editable install was built, so a bump without `uv sync` leaves the
+  running server (and the About panel) reporting the old one.
+
 ## 1.0.0a20
 
 From `dev/plan-all-branding.md`. The app gets a name and the house prose rule.

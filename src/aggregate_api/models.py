@@ -387,6 +387,23 @@ class HeroesResponse(BaseModel):
 # Meta / health
 # ======================================================================
 
+class StyleResponse(BaseModel):
+    """``GET /v1/meta/style`` -- the house plot style from ``aggregate.style``.
+
+    Served so the SPA's interactive charts and the server-rendered matplotlib
+    plots share one source for their look. ``colors`` is the ``axes.prop_cycle``
+    color list, in order.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    colors: list[str]
+    grid_color: str
+    text_color: str
+    line_width: float
+    font_size: float
+
+
 class HealthResponse(BaseModel):
     model_config = _RESPONSE_CFG
 

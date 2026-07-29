@@ -161,6 +161,12 @@ mirrors the main `aggregate` project.
   gitignored (rebuilt at deploy), so it is never part of the commit.
 - **One plan doc per step.** Work proceeds from a `dev/plan-NNNN-*.md`. When it
   lands, move it to `dev/done/` and tick the matching `dev/TODO.md` entry.
+- **Re-sync after a version bump, or `/v1/meta` lies.** `version` is read with
+  `importlib.metadata.version`, which returns what was recorded when the
+  editable install was built, not what `pyproject.toml` says now. Bump the
+  version and the running server keeps reporting the old one in `/v1/health`,
+  `/v1/meta` and the About panel. `uv sync --extra dev` re-records it. The same
+  trap applies to `aggregate_version` when the sibling checkout moves.
 - **Keep `CHANGELOG.md` current.** Each version bump adds a `## <version>`
   section describing what landed and any breaking changes. Write it at the close
   of the iteration; don't defer.

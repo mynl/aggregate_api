@@ -10,4 +10,8 @@
 // Vite inlines import.meta.env.VITE_* values at build time, so the
 // resulting bundle bakes the base URL in -- no runtime config file.
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+// `import.meta.env` is a Vite construct: it exists in a bundled build and is
+// undefined under a bare node import. Optional chaining keeps the module
+// importable outside the bundler, which is what lets a node smoke test load the
+// chart code without standing up a browser.
+export const API_BASE = import.meta.env?.VITE_API_BASE_URL || '';

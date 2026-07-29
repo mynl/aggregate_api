@@ -291,6 +291,63 @@ def pnl_density_frame(obj: Any) -> pd.DataFrame:
     return pd.DataFrame({"loss": x, "p_total": p, "F": cdf, "S": 1.0 - cdf})
 
 
+def severity_density_frame(obj: Any, n: int = 512) -> pd.DataFrame:
+    """Synthesize a ``loss / pdf / F / S`` curve from a frozen severity.
+
+    A :class:`Severity` is a look-through onto a frozen scipy random variable,
+    not a compute result, so it carries no ``density_df``: upstream lists it in
+    ``NEAR_FIRST_CLASS`` and exempts it from the DataFrame quartet for exactly
+    that reason. The api still needs *something* to draw, so it samples the
+    frozen variable here, the same presentation-layer move
+    :func:`pnl_density_frame` makes for a ``PnL``.
+
+    Parameters
+    ----------
+    obj : Any
+        A built ``Severity`` exposing the scipy surface (``isf`` / ``pdf`` /
+        ``cdf`` / ``sf``).
+    n : int, optional
+        Number of grid points. 512 is smooth at any plot width and trivial to
+        serialize.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns ``loss``, ``pdf``, ``F``, ``S``, one row per grid point,
+        ascending in ``loss``.
+
+    Notes
+    -----
+    The column is ``pdf``, **not** ``p_total``, and the distinction is load
+    bearing: an aggregate's ``p_total`` is a probability *mass* per bucket that
+    sums to one, while this is a density *ordinate* that does not. Reusing the
+    aggregate's column name would invite summing a column that has no business
+    being summed.
+
+    The grid is built by inverting the survival function over log-spaced
+    exceedance probabilities rather than by walking loss linearly. A severity is
+    routinely heavy-tailed and its support often unbounded, so a linear grid
+    either truncates the tail or wastes nearly every point on it. Quantile
+    spacing puts points where the probability is.
+    """
+    # Log-spaced exceedance probabilities: dense near the median, and still
+    # resolving the 1-in-100,000 tail without a huge grid.
+    ps = np.concatenate([
+        np.logspace(np.log10(1 - 1e-5), np.log10(0.5), n // 2, endpoint=False),
+        np.logspace(np.log10(0.5), np.log10(1e-5), n - n // 2),
+    ])
+    loss = np.asarray(obj.isf(ps), dtype=float)
+    # A bounded or discrete severity can repeat or invert; keep it monotone and
+    # finite so the client never has to defend against a bad axis.
+    ok = np.isfinite(loss)
+    loss = np.unique(loss[ok])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        pdf = np.asarray(obj.pdf(loss), dtype=float)
+        cdf = np.asarray(obj.cdf(loss), dtype=float)
+        sf = np.asarray(obj.sf(loss), dtype=float)
+    return pd.DataFrame({"loss": loss, "pdf": pdf, "F": cdf, "S": sf})
+
+
 def info_to_payload(obj: Any) -> dict:
     """Return ``{"info": "..."}``.
 

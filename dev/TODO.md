@@ -160,13 +160,19 @@ one version bump each.
       diffs; the rule in `CLAUDE.md` says they are cleaned as their file is next
       edited. Promote to its own tidying commit if the author would rather have
       it in one go.
-- [ ] **ECharts exhibit engine + two-panel Overview** (→ a21). Retire uPlot;
-      `web/src/charts/` with a house theme and a per-kind exhibit registry;
-      density + EP/return-period panels, linked cursor, `dataZoom`; Overview
-      header block off `/meta`; drop the duplicate Summary from More.
-      Needs a per-unit density route: a `Portfolio.density_df` has `p_total` and
-      the allocation columns but no per-unit densities (those are on the unit
-      `Aggregate`s, on the same grid).
+- [x] **plan-echarts-exhibit — ECharts engine + two-panel Overview**
+      (→ 1.0.0a21). uPlot retired; `web/src/charts/` with a served house theme
+      (`/v1/meta/style`) and an exhibit per kind; density + EP panels with an
+      exact index-aligned cursor link and `dataZoom`; new
+      `/objects/{id}/unit_density_df`; `sev` gains a sampled `density_df`;
+      Overview header block off `/meta`; duplicate Summary dropped from More.
+      Bundle 187 → 353 kB gzip, now split four ways.
+      *(done; in `dev/`)*
+- [ ] **Eyeball the new Overview.** The a21 smoke test proves the data reaches
+      each chart in a drawable shape, not that any of them looks right. The
+      Chrome extension was not connected when a21 landed, so no rendered chart
+      was ever inspected. Check all six kinds, both breakpoints, and the legend
+      toggle on a portfolio.
 - [ ] **Examples: topic groups, fuzzy find, hero sparklines** (→ a22). Pinned
       search + Ctrl+K palette over name / kind / tags / note; sparkline
       thumbnails from a cached heroes payload, built lazily with a fallback.

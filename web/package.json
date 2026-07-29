@@ -2,7 +2,7 @@
   "name": "aggregate-web",
   "private": true,
   "version": "0.1.0",
-  "description": "Single-page web UI for the aggregate FastAPI service (Plan D).",
+  "description": "aggregate Loss Library: single-page web UI for the aggregate FastAPI service.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -25,6 +25,6 @@
     "bootstrap-icons": "^1.13.1",
     "codemirror": "^6.0.1",
     "csv-grid": "github:mynl/CSV_Viewer#01a9773cfc6c7ac64d8a99133c23deba2c1f9263",
-    "uplot": "^1.6.30"
+    "echarts": "^5.6.0"
   }
 }

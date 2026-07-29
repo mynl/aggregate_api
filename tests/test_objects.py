@@ -510,14 +510,18 @@ def test_pnl_builds_and_reports(client):
 # ----------------------------------------------------------------------
 
 def test_sev_builds_and_reports(client):
-    """A ``sev`` builds as kind='sev' with info + plot and no frames.
+    """A ``sev`` builds as kind='sev' with info + plot and no library frames.
 
     ``Severity`` is near-first-class: DecL-creatable and carrying the metadata
     and narrative surface, but a look-through onto a frozen scipy variable
-    rather than a compute result, so it is exempt from the DataFrame quartet.
-    Every frame route must therefore answer a clean 400, not a 500. It also
-    arrives as a *subclass* (``SeverityScipy``), which is why classification
-    falls back to an isinstance check.
+    rather than a compute result, so upstream exempts it from the DataFrame
+    quartet. Every frame route must therefore answer a clean 400, not a 500.
+    It also arrives as a *subclass* (``SeverityScipy``), which is why
+    classification falls back to an isinstance check.
+
+    ``density_df`` is the exception: the api synthesizes a display curve, the
+    same presentation-layer move it makes for a ``PnL``. See
+    :func:`test_sev_density_is_a_sampled_curve`.
     """
     r = client.post("/v1/objects", json={"decl": "sev SEV.Test lognorm 50 cv 1.5"})
     assert r.status_code == 200, r.text
@@ -526,10 +530,90 @@ def test_sev_builds_and_reports(client):
     oid = body["id"]
     assert client.get(f"/v1/objects/{oid}/info").status_code == 200
     assert client.get(f"/v1/objects/{oid}/plot").status_code == 200
-    for which in ("summary", "stats_df", "density_df", "validation_df",
+    for which in ("summary", "stats_df", "validation_df",
                   "tail_df", "bs_window_df", "reins_summary_df"):
         got = client.get(f"/v1/objects/{oid}/{which}").status_code
         assert got == 400, f"{which} -> {got}"
+
+
+def test_sev_density_is_a_sampled_curve(client):
+    """A severity's density is ``loss / pdf / F / S``, sampled by quantile.
+
+    The column is ``pdf``, not ``p_total``: it is a density ordinate, not a
+    probability mass, and naming it after the aggregate's column would invite
+    summing something that has no business being summed.
+    """
+    oid = client.post(
+        "/v1/objects", json={"decl": "sev SEV.Curve lognorm 50 cv 1.5"},
+    ).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/density_df")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["columns"] == ["loss", "pdf", "F", "S"]
+    rows = body["rows"]
+    assert len(rows) > 100
+    at = {c: i for i, c in enumerate(body["columns"])}
+    loss = [r[at["loss"]] for r in rows]
+    cdf = [r[at["F"]] for r in rows]
+    surv = [r[at["S"]] for r in rows]
+    # Ascending in loss, so the client can plot it without sorting.
+    assert loss == sorted(loss)
+    # A cdf rises and S is its complement, both inside the unit interval.
+    assert cdf[0] < 0.01 and cdf[-1] > 0.99
+    assert all(abs(f + s - 1.0) < 1e-9 for f, s in zip(cdf, surv))
+    # Quantile spacing, not linear: the tail step dwarfs the body step, which
+    # is the whole point of inverting the survival function to build the grid.
+    body_step = loss[len(loss) // 2] - loss[len(loss) // 2 - 1]
+    tail_step = loss[-1] - loss[-2]
+    assert tail_step > body_step * 10
+
+
+# ----------------------------------------------------------------------
+# GET /v1/objects/{id}/unit_density_df  -- Portfolio only
+# ----------------------------------------------------------------------
+
+def test_unit_density_df_carries_every_unit(client):
+    """Per-unit densities and survivals on the portfolio's common grid.
+
+    This is what the Overview exhibit draws for a portfolio: a density and an
+    exceedance series per unit alongside the total. ``Portfolio.density_df``
+    has no per-unit densities (only ``p_total`` and the allocation columns), so
+    they come off ``unit_density_df()`` and are unstacked back to wide form.
+    """
+    decl = ("port UD.Book agg Property 80 claims 500 xs 0 sev lognorm 50 cv 1.2 poisson "
+            "agg Casualty 20 claims 2000 xs 0 sev lognorm 250 cv 2.0 mixed gamma 0.4")
+    oid = client.post("/v1/objects", json={"decl": decl}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/unit_density_df")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    cols = body["columns"]
+    for name in ("loss", "p_Property", "p_Casualty", "S_Property", "S_Casualty",
+                 "p_total", "S"):
+        assert name in cols, f"missing {name} in {cols}"
+
+    at = {c: i for i, c in enumerate(cols)}
+    rows = body["rows"]
+    # Masses survive the display binning: each unit still sums to one. This is
+    # the check that catches a binning path treating S_* as a mass, or p_* as a
+    # pointwise value.
+    for unit in ("p_Property", "p_Casualty", "p_total"):
+        total = sum(r[at[unit]] or 0 for r in rows)
+        assert abs(total - 1.0) < 1e-6, f"{unit} sums to {total}"
+    # Survivals fall from ~1 to ~0 and stay inside the unit interval.
+    for surv in ("S_Property", "S_Casualty", "S"):
+        series = [r[at[surv]] for r in rows if r[at[surv]] is not None]
+        assert series[0] > 0.9 and series[-1] < 1e-6
+        assert all(0.0 <= v <= 1.0 + 1e-9 for v in series)
+
+
+def test_unit_density_df_is_portfolio_only(client):
+    """Anything but a Portfolio gets a clean 400, not a 500."""
+    oid = client.post(
+        "/v1/objects", json={"decl": "agg UD.Single 10 claims sev lognorm 50 cv 1 poisson"},
+    ).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/unit_density_df")
+    assert r.status_code == 400
+    assert "Portfolio-only" in str(r.json()["detail"])
 
 
 # ----------------------------------------------------------------------

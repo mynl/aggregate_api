@@ -66,6 +66,8 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from datetime import datetime, timezone
 from typing import Any, Literal
 
+import pandas as pd
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 
@@ -88,6 +90,7 @@ from ..serializers import (
     info_to_payload,
     pnl_density_frame,
     reset_index_safe,
+    severity_density_frame,
 )
 
 
@@ -943,6 +946,15 @@ def get_density_df(
     entry = _resolve_object(oid, cache)
     col_list = [c.strip() for c in cols.split(",")] if cols else None
 
+    if entry.kind == "sev":
+        # A Severity has no density_df at all; sample the frozen variable onto a
+        # quantile-spaced grid. Not binned: the grid is already the display grid
+        # and its `pdf` is an ordinate, not a mass, so summing it would be wrong.
+        df = severity_density_frame(entry.obj)
+        if col_list:
+            df = df[[c for c in col_list if c in df.columns]]
+        return frame_to_payload(df)
+
     if entry.kind == "pnl":
         # A PnL's density_df is a dict of per-leg GridDistributions, not a
         # DataFrame. Synthesize the grand-result density in the standard
@@ -986,6 +998,68 @@ def get_density_df(
     return frame_to_payload(
         df, cols=col_list, start=start, stop=stop, downsample=downsample,
     )
+
+
+# ----------------------------------------------------------------------
+# GET /v1/objects/{id}/unit_density_df  -- Portfolio only
+# ----------------------------------------------------------------------
+
+@router.get("/objects/{oid}/unit_density_df", response_model=models.FrameResponse)
+def get_unit_density_df(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
+    """Per-unit densities and survivals on the portfolio's common grid.
+
+    Columns ``loss``, then ``p_<unit>`` and ``S_<unit>`` for each unit, plus the
+    portfolio's own ``p_total`` and ``S``. This is what the Overview exhibit
+    draws for a portfolio: one density series and one exceedance series per
+    unit, alongside the total, which is the diversification story.
+
+    Notes
+    -----
+    A ``Portfolio.density_df`` carries ``p_total`` and the per-unit *allocation*
+    columns (``exa_*``, ``lev_*``, ...) but no per-unit densities. Since the
+    windowed-grid work those live on ``unit_density_df()``, a long frame indexed
+    ``(unit, loss)``, and unstacking it recovers the wide common-index form.
+    Verified to align with the portfolio grid even when the units are on wildly
+    different scales.
+
+    Two pandas details worth knowing, both load bearing:
+
+    * ``unit_density_df()`` carries ``unit`` as **both** an index level and a
+      column, so a bare ``groupby('unit')`` raises ``ValueError: ambiguous``.
+      Nothing here groups, but the same trap catches the next reader.
+    * Binning treats a ``p``-prefixed column as a mass to **sum** and everything
+      else as a pointwise value read at the super-bucket right edge. That is
+      exactly right for the ``S_*`` survivals, so both families bin correctly in
+      one pass.
+    """
+    entry = _resolve_object(oid, cache)
+    if entry.kind != "port":
+        raise HTTPException(
+            status_code=400,
+            detail=f"unit_density_df is Portfolio-only; got {entry.kind!r}",
+        )
+    obj = entry.obj
+    long = obj.unit_density_df()
+    out = {}
+    for stat, prefix in (("p", "p_"), ("S", "S_")):
+        if stat not in long.columns:
+            continue
+        wide = long[stat].unstack("unit")
+        for unit in wide.columns:
+            out[f"{prefix}{unit}"] = wide[unit]
+
+    total = obj.density_df
+    df = pd.DataFrame(out)
+    df.insert(0, "loss", total["loss"].to_numpy() if "loss" in total else df.index)
+    for name in ("p_total", "S"):
+        if name in total.columns:
+            df[name] = total[name].to_numpy()
+
+    sum_cols = {c for c in df.columns if c.startswith("p")}
+    source_log2 = getattr(obj, "log2", None)
+    if source_log2 is None:
+        return frame_to_payload(df.reset_index(drop=True))
+    return frame_to_payload(bin_density(df, source_log2, sum_cols=sum_cols))
 
 
 # ----------------------------------------------------------------------

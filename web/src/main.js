@@ -23,7 +23,8 @@ import { api, ApiError } from './api.js';
 import { createEditor, emacsEnabledDefault } from './editor.js';
 import { mountExamples, loadExamples } from './examples.js';
 import { renderInfo, renderExhibit } from './renderers.js';
-import { mountInteractivePlot, markerLegend } from './plot-interactive.js';
+import { mountExhibit } from './charts/exhibits.js';
+import { loadStyle } from './charts/theme.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
 import { renderError, renderRateLimit } from './error-pane.js';
 import * as history from './history.js';
@@ -42,21 +43,19 @@ const GRID_FULL = {};
 // ----------------------------------------------------------------------
 // Module state
 // ----------------------------------------------------------------------
+// There is no `note` here any more. The Overview lead is read off the built
+// object via /v1/objects/{id}/meta, so it is the note the program actually
+// carries rather than one remembered from whichever example was last clicked.
+// That also gives a hand-typed `note{...}` a lead, which the old route could not.
 const state = {
     id: null,
     kind: null,
     name: null,
-    note: null,             // description for the Overview lead (from an example)
     log2: null,             // null = auto
     bs: null,               // null = auto
     loaded: new Set(),      // tab names whose data has been fetched
     reinsWhich: 'reins_summary_df',
 };
-
-// The note for the *next* build. Set when an example / hero is loaded; cleared
-// the moment the user types into the editor (so a hand-edited program doesn't
-// inherit a stale description). Captured into state.note at build time.
-let pendingNote = null;
 
 // ----------------------------------------------------------------------
 // Editor
@@ -78,10 +77,7 @@ editor.view.dom.addEventListener('keydown', (ev) => {
     // Plain ↑/↓ drive history navigation (see editor.js) -- don't reset the
     // cursor on them or sequential history walking breaks.
     if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') return;
-    if (!ev.ctrlKey && !ev.metaKey) {
-        history.resetCursor();
-        pendingNote = null;   // a hand-edited program is no longer "the example"
-    }
+    if (!ev.ctrlKey && !ev.metaKey) history.resetCursor();
 });
 
 function navigateHistory(dir) {
@@ -157,7 +153,6 @@ async function build() {
         state.id = res.id;
         state.kind = res.kind;
         state.name = res.name;
-        state.note = pendingNote;   // the example's description, if this is one
         state.loaded = new Set();
         renderSummary(res);
         history.record(decl);
@@ -193,7 +188,7 @@ const KIND_WORD = {
 // Kinds whose density frame is not the loss / p_total / F / S shape, so the
 // curated column subset would come back empty: a distortion's is the g-curve
 // over [0,1], a bivariate's the joint-density matrix. Ask for the whole frame.
-const WHOLE_DENSITY_KINDS = new Set(['distortion', 'bvagg']);
+const WHOLE_DENSITY_KINDS = new Set(['distortion', 'bvagg', 'sev']);
 
 function sep() { return el('span', { className: 'sep' }, '·'); }
 
@@ -274,8 +269,10 @@ window.addEventListener('resize', syncSummaryMore);
 // ----------------------------------------------------------------------
 // Tabs -- lazy load + cache per built object
 // ----------------------------------------------------------------------
+// Note there is no `summary` entry: summary_df is an Overview exhibit and
+// showing it twice under More was the same table in two places.
 const PANE_OF = {
-    overview: 'pane-overview', info: 'pane-info', summary: 'pane-summary',
+    overview: 'pane-overview', info: 'pane-info',
     validation: 'pane-validation', plot: 'pane-plot',
     stats: 'pane-stats', reins: 'pane-reins',
     density: 'pane-density', bswin: 'pane-bswin', price: 'pane-price',
@@ -311,11 +308,9 @@ const NA_TABS_BY_KIND = {
     distortion: ['price', 'reins', 'bswin'],
     bvagg: ['price', 'reins', 'bswin'],
     pnl: ['price', 'reins', 'bswin'],
-    sev: ['price', 'reins', 'bswin', 'summary', 'validation', 'stats', 'density'],
+    sev: ['price', 'reins', 'bswin', 'validation', 'stats'],
 };
-const GATED_TABS = [
-    'price', 'reins', 'bswin', 'summary', 'validation', 'stats', 'density',
-];
+const GATED_TABS = ['price', 'reins', 'bswin', 'validation', 'stats'];
 
 function applyKindGating(kind) {
     const na = new Set(NA_TABS_BY_KIND[kind] || []);
@@ -351,10 +346,6 @@ async function loadTab(name) {
             await loadOverview();
         } else if (name === 'info') {
             replacePane('pane-info', renderInfo(await api.info(state.id)));
-        } else if (name === 'summary') {
-            // Keep the fzf bar but drop the per-column filter row: the summary
-            // table is narrow and the global search covers it.
-            replacePaneGrid('pane-summary', await api.summary(state.id), { columnFilters: false });
         } else if (name === 'validation') {
             replacePaneGrid('pane-validation', await api.validation_df(state.id), { columnFilters: false });
         } else if (name === 'plot') {
@@ -366,12 +357,13 @@ async function loadTab(name) {
             await loadReins();
         } else if (name === 'density') {
             // A distortion's density_df is the g-curve (g, g_inv, g_dual,
-            // g_prime, ...) over x in [0,1] -- ~101 rows; a BivariateAggregate's
-            // is the full joint-density matrix. Neither has the loss,p_total,F,S
-            // columns, so pull the whole frame for those. For agg/port the server
-            // bins the density to a faithful 2**11 display grid (p_total stays
-            // correct), so we only ask for the curated columns -- no nonzero /
-            // downsample needed.
+            // g_prime, ...) over s in [0,1], about 100 rows; a
+            // BivariateAggregate's is the full joint-density matrix; a
+            // Severity's is a sampled loss / pdf / F / S curve. None of them has
+            // the aggregate's loss,p_total,F,S columns, so pull the whole frame
+            // for those. For agg / port / pnl the server bins to a faithful
+            // 2**11 display grid (p_total stays correct), so we ask for the
+            // curated columns only, with no nonzero or downsample needed.
             const frame = WHOLE_DENSITY_KINDS.has(state.kind)
                 ? await api.density_df(state.id)
                 : await api.density_df(state.id, { cols: 'loss,p_total,F,S' });
@@ -387,9 +379,9 @@ async function loadTab(name) {
     }
 }
 
-// The live uPlot on the Overview tab; destroyed before each re-render so its
-// canvas + ResizeObserver don't leak across builds (CsvGrid teardown is keyed
-// on the grid registry; uPlot is not, so we track it ourselves).
+// The live ECharts exhibit on the Overview tab, disposed before each re-render
+// so its canvas and ResizeObserver don't leak across builds. CsvGrid teardown
+// is keyed on the grid registry; the chart is not, so we track it ourselves.
 let overviewChart = null;
 
 // Overview table view mode. The Overview is the landing demo ("demo-central"),
@@ -465,41 +457,79 @@ function renderOneExhibit(box, frame, opts) {
     if (opts.caption) box.appendChild(el('div', { className: 'exhibit-caption' }, opts.caption));
 }
 
-// ---- Overview tab: note + interactive plot + summary_df + tail_df ----
-// The landing exhibit. Each section is best-effort: a frame the object doesn't
-// carry (a distortion has no summary_df; a bivariate has no validation_df) just
-// 400s and is skipped, so the tab degrades gracefully rather than erroring.
+/**
+ * The object's own header block: name, kind, note, tags, and its program.
+ *
+ * Reads `/v1/objects/{id}/meta`, so it works for anything that was built,
+ * including a hand-typed program carrying `note{}`. This replaces the old
+ * `pendingNote` route, where the lead could only ever come from an example that
+ * had just been clicked.
+ *
+ * A missing note is ordinary, not a defect: most library entries carry one and
+ * nothing requires it, so an object without one simply has no lead paragraph.
+ */
+function renderOverviewHeader(meta) {
+    if (!meta) return null;
+    const head = el('div', { className: 'overview-head' });
+
+    const line = el('div', { className: 'overview-ident' },
+        el('span', { className: 'overview-name' }, meta.name || '(anonymous)'),
+        el('span', { className: 'overview-kind mono' }, KIND_LABEL[meta.kind] || meta.kind));
+    for (const tag of meta.tags || []) {
+        line.appendChild(el('span', { className: 'overview-tag' }, tag));
+    }
+    head.appendChild(line);
+
+    if (meta.note) head.appendChild(el('p', { className: 'overview-note' }, meta.note));
+
+    // pprogram is what the parser understood, re-rendered canonically, which is
+    // the one to show a reader. Collapsed: the chart is the point of the tab.
+    if (meta.pprogram) {
+        const body = el('pre', { className: 'overview-program mono' }, meta.pprogram);
+        body.hidden = true;
+        const toggle = el('button', {
+            type: 'button', className: 'overview-program-toggle',
+            onClick: () => {
+                body.hidden = !body.hidden;
+                toggle.textContent = body.hidden ? 'show program' : 'hide program';
+            },
+        }, 'show program');
+        if (meta.hints) {
+            head.appendChild(el('div', { className: 'overview-hints mono' },
+                `hints: ${meta.hints}`));
+        }
+        head.appendChild(toggle);
+        head.appendChild(body);
+    }
+    return head;
+}
+
+// ---- Overview tab: header block + exhibit + summary_df / tail_df ----
+// The landing tab. Each section is best-effort: a frame the object doesn't
+// carry just 400s and is skipped, so the tab degrades gracefully rather than
+// erroring.
 async function loadOverview() {
-    if (overviewChart) { try { overviewChart.destroy(); } catch { /* gone */ } overviewChart = null; }
+    if (overviewChart) { overviewChart.dispose(); overviewChart = null; }
     clearGrids('pane-overview');
     const pane = $('pane-overview');
     empty(pane);
     let rendered = false;
 
-    // 1. Description lead -- the example's note, when this build came from one.
-    if (state.note) {
-        pane.appendChild(el('p', { className: 'overview-note' }, state.note));
-        rendered = true;
-    }
+    // 1. Header block: name / kind / tags / note / program, from the object.
+    const meta = await api.meta_of(state.id).catch(() => null);
+    const head = renderOverviewHeader(meta);
+    if (head) { pane.appendChild(head); rendered = true; }
 
-    // 2. Interactive density / exceedance plot (uPlot), with VaR markers.
+    // 2. The exhibit: two linked panels for anything with a loss distribution,
+    // a g-curve for a distortion, a joint heatmap for a bivariate.
+    const host = el('div', { className: 'overview-plot' });
+    pane.appendChild(host);
     try {
-        const density = WHOLE_DENSITY_KINDS.has(state.kind)
-            ? await api.density_df(state.id)
-            : await api.density_df(state.id, { cols: 'loss,p_total,F,S' });
-        const tail = await api.tail_df(state.id).catch(() => null);
-        const host = el('div', { className: 'overview-plot' });
-        pane.appendChild(host);
-        const chart = mountInteractivePlot(host, density, tail);
-        if (chart) {
-            overviewChart = chart;
-            const legend = markerLegend(tail);
-            if (legend) pane.appendChild(legend);
-            rendered = true;
-        } else {
-            pane.removeChild(host);   // nothing plottable (e.g. a g-curve)
-        }
-    } catch { /* plot is a bonus; skip on failure */ }
+        await loadStyle();               // colors, once per page load
+        overviewChart = await mountExhibit(host, state);
+    } catch { /* the exhibit is a bonus; the tables still carry the story */ }
+    if (overviewChart) rendered = true;
+    else pane.removeChild(host);
 
     // 3. Risk exhibits (summary_df + tail_df) with a Static | Interactive toggle.
     // Fetch once; the toggle re-renders from the stashed frames (no refetch).
@@ -718,12 +748,11 @@ const exampleRing = { decls: [], cursor: -1 };
 
 // Load a program into the editor. A library example arrives as `Recipe.decl`,
 // already canonical spread-form DecL carrying its hints, so there is nothing to
-// normalize: the old post-load /v1/decl/format round-trip is gone. `formatted`
-// false (the Help panel's hand-written sample, say) still takes that trip.
-// `note` rides along to the Overview lead on the next build; passing null
-// clears any inherited description.
-function loadExample(decl, note = null, formatted = true) {
-    pendingNote = note;
+// normalize: the old post-load /v1/decl/format round-trip is gone. Pass
+// `formatted: false` for hand-written text (the Help panel's sample) to take
+// that trip anyway. The Overview lead is read off the built object, so no note
+// has to ride along here.
+function loadExample(decl, formatted = true) {
     editor.setText(decl);
     editor.focus();
     if (formatted) return;
@@ -735,7 +764,7 @@ function loadExample(decl, note = null, formatted = true) {
 
 mountExamples($('examples-menu'), (item) => {
     exampleRing.cursor = exampleRing.decls.indexOf(item.decl);  // sync the ring
-    loadExample(item.decl, item.note);
+    loadExample(item.decl);
 });
 
 // The Alt-↑/↓ ring walks every example in the library, flattened out of the
@@ -770,13 +799,13 @@ function mountHeroes(items) {
     items.forEach((item, i) => {
         const card = el('button', {
             className: 'hero-card', type: 'button', title: item.note || '',
-            onClick: () => { loadExample(item.decl, item.note); build(); },
+            onClick: () => { loadExample(item.decl); build(); },
         },
             el('span', { className: 'hero-thumb', style: `background:${gradientFor(item.name)}` }),
             el('span', { className: 'hero-name' }, item.name));
         row.appendChild(card);
         // Auto-build the first card so the visitor lands on a populated page.
-        if (i === 0) { loadExample(item.decl, item.note); build(); }
+        if (i === 0) { loadExample(item.decl); build(); }
     });
 }
 
@@ -825,7 +854,7 @@ if (helpLoad) {
         const panel = $('helpPanel');
         panel.addEventListener('hidden.bs.offcanvas',
             () => editor.focus(), { once: true });
-        loadExample(sample, null, false);
+        loadExample(sample, false);
         bootstrap.Offcanvas.getOrCreateInstance(panel).hide();
     });
 }
@@ -836,7 +865,7 @@ if (helpLoad) {
 // Bundled-library versions are build-time constants (inlined by Vite's define);
 // aggregate / api versions come from the backend at runtime.
 $('about-grid').textContent = __CSV_GRID_VERSION__;
-$('about-uplot').textContent = __UPLOT_VERSION__;
+$('about-echarts').textContent = __ECHARTS_VERSION__;
 $('about-bootstrap').textContent = __BOOTSTRAP_VERSION__;
 api.meta().then((meta) => {
     $('about-aggregate').textContent = meta.aggregate_version;

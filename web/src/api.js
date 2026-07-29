@@ -62,6 +62,8 @@ export const api = {
     validation_df:(id)              => _json('GET',  `/v1/objects/${id}/validation_df`),
     stats_df:     (id)              => _json('GET',  `/v1/objects/${id}/stats_df`),
     density_df:   (id, p = {})      => _json('GET',  `/v1/objects/${id}/density_df?${qs(p)}`),
+    /** Portfolio only: per-unit p_<unit> / S_<unit> on the common grid. */
+    unit_density_df: (id)           => _json('GET',  `/v1/objects/${id}/unit_density_df`),
     bs_window_df: (id)              => _json('GET',  `/v1/objects/${id}/bs_window_df`),
     kappa:        (id, p = {})      => _json('GET',  `/v1/objects/${id}/kappa?${qs(p)}`),
 
@@ -83,6 +85,8 @@ export const api = {
     examples:     (group = '')      => _json('GET',  `/v1/examples?${qs({ group })}`),
     heroes:       ()                => _json('GET',  '/v1/examples/heroes'),
     meta:         ()                => _json('GET',  '/v1/meta'),
+    /** House plot style (aggregate.style's color cycle etc.) for the charts. */
+    style:        ()                => _json('GET',  '/v1/meta/style'),
     health:       ()                => _json('GET',  '/v1/health'),
 
     /** Plot URL: handed straight to an <img>. Native multi-panel by default. */

@@ -30,7 +30,7 @@ export default defineConfig({
     base: './',
     define: {
         __CSV_GRID_VERSION__: JSON.stringify(pkgVersion('csv-grid')),
-        __UPLOT_VERSION__: JSON.stringify(pkgVersion('uplot')),
+        __ECHARTS_VERSION__: JSON.stringify(pkgVersion('echarts')),
         __BOOTSTRAP_VERSION__: JSON.stringify(pkgVersion('bootstrap')),
     },
     build: {
@@ -40,6 +40,27 @@ export default defineConfig({
         // Keep the assets/ subdir name stable for the FastAPI mount.
         assetsDir: 'assets',
         sourcemap: false,
+        rollupOptions: {
+            output: {
+                // Split the three big vendors into their own chunks. They change
+                // only when their version does, while the app chunk changes every
+                // release, so this keeps a redeploy from invalidating ~300 kB of
+                // cached library code in every returning browser. It also lets
+                // the browser fetch them in parallel rather than as one blob.
+                manualChunks: {
+                    echarts: ['echarts/core', 'echarts/charts', 'echarts/components',
+                              'echarts/renderers'],
+                    codemirror: ['@codemirror/view', '@codemirror/state',
+                                 '@codemirror/language', '@codemirror/commands',
+                                 '@codemirror/autocomplete', '@codemirror/search',
+                                 '@codemirror/lint'],
+                    bootstrap: ['bootstrap'],
+                },
+            },
+        },
+        // The vendor split leaves every chunk near or under this; the warning
+        // exists to catch a regression, so it stays at the default.
+        chunkSizeWarningLimit: 600,
     },
     server: {
         port: 5173,
