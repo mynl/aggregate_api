@@ -1,25 +1,30 @@
-// Smoke-test every Overview exhibit against a live api.
+// Smoke-test every Overview exhibit.
 //
-//     node dev/smoke-exhibits.mjs [base-url]      # default http://127.0.0.1:8011
+//     uv run python dev/capture_fixtures.py     # once, or after an api change
+//     node dev/smoke-exhibits.mjs               # replay, offline
+//     node dev/smoke-exhibits.mjs http://127.0.0.1:8001    # or against a server
 //
 // `mountExhibit` needs a DOM, but each exhibit's `build()` is pure, so this
-// builds one object per first-class kind, assembles its ECharts option, and
-// checks the things that would show up as a broken chart rather than as an
-// exception: a missing series, an EP panel that is entirely null (which is what
-// a bad survival column looks like), or a collapsed density x-window.
+// assembles one ECharts option per first-class kind and checks the things that
+// would show up as a broken chart rather than as an exception: a missing
+// series, a right panel that is entirely null (what a bad survival column looks
+// like), or a collapsed density x-window.
+//
+// It defaults to replaying captured payloads rather than calling a live api, so
+// it needs no server. Pass a base URL to run against one.
 //
 // It is a smoke test, not a rendering test. It cannot tell you the chart looks
 // good; it tells you the data reached it in a drawable shape.
 
+import { readFileSync, existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
-const BASE = (process.argv[2] || 'http://127.0.0.1:8011').replace(/\/$/, '');
+const BASE = process.argv[2] ? process.argv[2].replace(/\/$/, '') : null;
 
-// The chart modules are browser code. These are the only globals they touch at
-// import time; nothing here renders, so a stub is enough.
-// zrender (ECharts' renderer) sniffs the environment at import time and reads
-// `document.documentElement.style`, so the stub has to carry that much.
+// The chart modules are browser code. zrender sniffs the environment at import
+// time and reads `document.documentElement.style`, so the stub carries that
+// much. Nothing here renders.
 const styleStub = new Proxy({}, { get: () => '', set: () => true });
 globalThis.window = globalThis;
 globalThis.document = {
@@ -28,93 +33,137 @@ globalThis.document = {
     addEventListener() {},
 };
 globalThis.ResizeObserver = class { observe() {} disconnect() {} };
-// node >= 21 defines `navigator` as a getter-only global, so assigning to it
-// throws. It already carries a `userAgent`, which is all zrender reads.
+// node >= 21 makes `navigator` a getter-only global, so assigning to it throws.
+// It already carries the `userAgent` zrender reads.
 if (!globalThis.navigator) globalThis.navigator = { userAgent: 'node' };
-
-// api.js fetches same-origin paths ('/v1/...'), which node cannot resolve.
-// Resolve them against BASE instead of threading a base URL through the app.
-const nodeFetch = globalThis.fetch;
-globalThis.fetch = (input, init) =>
-    nodeFetch(typeof input === 'string' && input.startsWith('/') ? BASE + input : input, init);
+// localStorage backs the sticky view toggles; an in-memory stand-in is enough,
+// and it keeps the test on the documented defaults.
+globalThis.localStorage = {
+    getItem: () => null, setItem() {}, removeItem() {},
+};
 
 const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+
+if (BASE) {
+    // api.js fetches same-origin paths, which node cannot resolve on its own.
+    const nodeFetch = globalThis.fetch;
+    globalThis.fetch = (input, init) => nodeFetch(
+        typeof input === 'string' && input.startsWith('/') ? BASE + input : input, init);
+}
+
 const { EXHIBITS } = await import(
     pathToFileURL(path.join(here, '..', 'web', 'src', 'charts', 'exhibits.js')).href);
 
-async function build(decl) {
+// Each case names the exhibit to build and the fixture key holding its payloads.
+const CASES = [
+    ['agg', 'agg'],
+    ['port', 'port'],
+    ['sev', 'sev'],
+    ['distortion', 'distortion'],
+    ['pnl', 'pnl'],
+    ['bvagg', 'bvagg'],
+    // A discrete book builds as an `agg`; it is here because the step-drawn
+    // density only triggers on a small support.
+    ['agg', 'discrete'],
+];
+
+let fixtures = null;
+if (!BASE) {
+    const file = path.join(here, 'fixtures', 'exhibits.json');
+    if (!existsSync(file)) {
+        console.error(`no fixtures at ${file}\n`
+            + 'run:  uv run python dev/capture_fixtures.py');
+        process.exit(2);
+    }
+    fixtures = JSON.parse(readFileSync(file, 'utf8'));
+}
+
+async function payloadFor(kind, key, spec) {
+    if (fixtures) {
+        const entry = fixtures[key];
+        if (!entry) throw new Error(`fixture ${key} missing; re-capture`);
+        return { data: entry.frames, build: entry.build };
+    }
     const r = await fetch('/v1/objects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ decl }),
+        body: JSON.stringify({ decl: LIVE_DECLS[key] }),
     });
-    if (!r.ok) throw new Error(`build failed ${r.status}: ${await r.text()}`);
-    return r.json();
+    if (!r.ok) throw new Error(`build failed ${r.status}`);
+    const build = await r.json();
+    return { data: await spec.fetch(build.id), build };
 }
 
-const CASES = [
-    ['agg', 'agg SMOKE.A 100 claims 1000 xs 0 sev lognorm 90 cv 1.5 poisson'],
-    ['port', 'port SMOKE.P agg U1 80 claims 500 xs 0 sev lognorm 50 cv 1.2 poisson '
-             + 'agg U2 20 claims 2000 xs 0 sev lognorm 250 cv 2.0 mixed gamma 0.4'],
-    ['sev', 'sev SMOKE.S lognorm 50 cv 1.5'],
-    ['distortion', 'dist SMOKE.D ph 0.7'],
-    ['pnl', 'pnl SMOKE.N 1000 prem less '
-            + 'agg SMOKE.L 1000 prem at 70% lr sev lognorm 100 cv 2 poisson'],
-    ['bvagg', 'bivariate SMOKE.B 25 claims '
-              + 'agg A dfreq [0 1] [.5 .5] sev lognorm 50 cv 1.5 '
-              + 'agg B dfreq [0 1] [.5 .5] sev gamma 50 cv 1.0 poisson'],
-];
+// Only needed in live mode; the fixture file carries its own programs.
+const LIVE_DECLS = {
+    agg: 'agg SMOKE.A 100 claims 1000 xs 0 sev lognorm 90 cv 1.5 poisson',
+    port: 'port SMOKE.P agg U1 80 claims 500 xs 0 sev lognorm 50 cv 1.2 poisson '
+        + 'agg U2 20 claims 2000 xs 0 sev lognorm 250 cv 2.0 mixed gamma 0.4',
+    sev: 'sev SMOKE.S lognorm 50 cv 1.5',
+    distortion: 'dist SMOKE.D ph 0.7',
+    pnl: 'pnl SMOKE.N 1000 prem less '
+        + 'agg SMOKE.L 1000 prem at 70% lr sev lognorm 100 cv 2 poisson',
+    bvagg: 'bivariate SMOKE.B 25 claims '
+        + 'agg A dfreq [0 1] [.5 .5] sev lognorm 50 cv 1.5 '
+        + 'agg B dfreq [0 1] [.5 .5] sev gamma 50 cv 1.0 poisson',
+    discrete: 'agg SMOKE.Dice dfreq [3] dsev [1:6]',
+};
 
 let bad = 0;
 const fail = (msg) => { console.log(`FAIL ${msg}`); bad++; };
 
-for (const [expectKind, decl] of CASES) {
-    let res;
-    try {
-        res = await build(decl);
-    } catch (err) {
-        fail(`${expectKind}: ${err.message}`);
-        continue;
-    }
-    if (res.kind !== expectKind) { fail(`${expectKind}: built as ${res.kind}`); continue; }
+console.log(BASE ? `live against ${BASE}` : 'replaying dev/fixtures/exhibits.json');
 
-    const spec = EXHIBITS[res.kind];
-    if (!spec) { fail(`${res.kind}: no exhibit registered`); continue; }
+for (const [kind, key] of CASES) {
+    const spec = EXHIBITS[kind];
+    if (!spec) { fail(`${key}: no exhibit registered for ${kind}`); continue; }
 
     let option;
     try {
-        const data = await spec.fetch(res.id);
-        option = spec.build(data, { name: res.name, kind: res.kind, wide: true });
+        const { data, build } = await payloadFor(kind, key, spec);
+        option = spec.build(data, {
+            name: build.name, kind, mean: build.mean, wide: true, width: 960,
+        });
     } catch (err) {
-        fail(`${res.kind}: ${err.message}`);
+        fail(`${key}: ${err.message}`);
         continue;
     }
-    if (!option) { fail(`${res.kind}: build() returned null`); continue; }
+    if (!option) { fail(`${key}: build() returned null`); continue; }
 
     const series = option.series || [];
-    const panels = Array.isArray(option.grid) ? option.grid.length : 1;
-    const counts = series.map((s) => {
-        const d = s.data || [];
-        return `${s.name}:${d.filter((p) => p != null).length}/${d.length}`;
-    });
-
+    const grids = Array.isArray(option.grid) ? option.grid : [option.grid];
     const notes = [];
-    if (panels === 2) {
+    if (!series.length) notes.push('no series');
+
+    if (grids.length >= 2) {
         const half = series.length / 2;
         if (!series.slice(half).every((s) => (s.data || []).some((p) => p != null))) {
-            notes.push('EP panel entirely null');
+            notes.push('right panel entirely null');
         }
         const x = option.xAxis[0];
         if (typeof x.min === 'number' && typeof x.max === 'number' && !(x.max > x.min)) {
             notes.push('density x window collapsed');
         }
+    } else {
+        // A single-panel exhibit must be square: a stretched g(s) misreads as a
+        // different curve, which is the whole reason the aspect is fixed.
+        const g = grids[0] || {};
+        if (g.width !== g.height) notes.push(`not square (${g.width}x${g.height})`);
     }
-    if (!series.length) notes.push('no series');
 
-    if (notes.length) { fail(`${res.kind}: ${notes.join('; ')}`); continue; }
-    console.log(`OK   ${res.kind.padEnd(11)} panels=${panels} series=${series.length}  `
-        + counts.join(' '));
+    if (notes.length) { fail(`${key}: ${notes.join('; ')}`); continue; }
+
+    const stepped = series.filter((s) => s.step === 'middle').map((s) => s.name);
+    const marks = series.filter((s) => s.markLine).length;
+    const shape = grids.length >= 2 ? `panels=2 series=${series.length}`
+        : `square=${grids[0].width}`;
+    console.log(`OK   ${key.padEnd(11)} ${shape} marklines=${marks}`
+        + (stepped.length ? `  steps=[${stepped.join(',')}]` : ''));
 }
 
-console.log(bad ? `\n${bad} problem(s)` : '\nall exhibits built cleanly');
+// The discrete case exists to prove the step rendering fires, and the
+// continuous one to prove it does not. A smoke test that cannot tell them apart
+// would pass forever with the feature broken either way.
+console.log('');
+console.log(bad ? `${bad} problem(s)` : 'all exhibits built cleanly');
 process.exit(bad ? 1 : 0);

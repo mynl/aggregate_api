@@ -41,6 +41,10 @@ web/dist/
 src/aggregate_api/static/assets/
 src/aggregate_api/static/index.html
 
+# Captured api payloads for the offline chart smoke test (output of
+# `uv run python dev/capture_fixtures.py`). Derived data, and ~17 MB of it.
+dev/fixtures/
+
 # obsidian
 .obsidian
 

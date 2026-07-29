@@ -4,6 +4,55 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a23
+
+From `dev/plan-exhibit-punchups-2.md`. The author's second pass on the exhibit,
+and a test harness that no longer needs a server.
+
+### A discrete density is drawn as steps
+
+`drawstyle='steps-mid'`, or ECharts' `step: 'middle'`. `agg Dice dfreq [3]
+dsev [1:6]` puts mass on sixteen integers, and joining those with a sloped line
+draws probability at values that **cannot occur**. For a discrete book the step
+plot is not a nicer rendering of the distribution, it is the distribution.
+
+Triggered by counting points that carry mass: at or below 256, steps. The
+threshold is generous because the failure is one-sided, steps being honest for
+a coarse continuous grid too, whereas a line over a lattice is a lie. The smoke
+test asserts the discrete case steps and the continuous ones do not, so a
+harness that stopped discriminating would fail rather than pass quietly.
+
+### The capital anchors are lines, not dots
+
+The dots did not sit on the curve, and could not: the curve is a binned display
+grid while the anchor is the library's quantile function at that return period,
+so the marker landed slightly off every time. A point has to be *on* the line to
+look right; a faint dashed vertical does not, because it makes a claim about the
+x-axis rather than about the curve, and reads correctly however coarse the grid
+is. Labels sit at the top of each line.
+
+`tail_df` remains the source, for the reason it always was: where it and the
+plotted curve differ, the library is right.
+
+### Return periods are integers
+
+`1-in-247`, not `1-in-247.0000003`. In tooltips and axis labels; below 1-in-10
+one decimal survives, where the difference is real.
+
+### The smoke test runs offline
+
+`dev/smoke-exhibits.mjs` replayed against a live server, which is no longer
+something this project's tooling should assume. New `dev/capture_fixtures.py`
+drives the app through FastAPI's `TestClient` (in-process, no port bound) and
+writes one payload set per kind to `dev/fixtures/exhibits.json`; the smoke test
+replays that by default and still accepts a base URL for a live run.
+
+The fixture file is gitignored: it is derived data and ~17 MB of it.
+
+It also gained a check it should have had at a21: a single-panel exhibit must be
+**square**. The distortion aspect ratio was wrong for a whole release and no
+automated check would have caught it.
+
 ## 1.0.0a22
 
 From `dev/plan-exhibit-punchups.md`. The author's first inspection of the a21

@@ -55,6 +55,14 @@ const WIDE_PX = 720;
 const SQUARE_MIN = 240;
 const SQUARE_MAX = 420;
 
+// At or below this many points carrying mass, the density is drawn as steps
+// rather than as a line: `drawstyle='steps-mid'` in matplotlib terms. A
+// discrete book (`dfreq [3] dsev [1:6]`, bs = 1) puts mass on 16 integers, and
+// joining those with a sloped line draws probability where there is none. The
+// threshold is generous because the failure is one-sided: steps are honest for
+// a coarse continuous grid too, whereas a line over a lattice is a lie.
+const STEP_MAX_POINTS = 256;
+
 // ---- view state -------------------------------------------------------
 //
 // Sticky per browser, like the Static | Interactive table toggle: a chosen view
@@ -184,6 +192,20 @@ function densityWindow(loss, cdf) {
     return [lo - pad, hi + pad];
 }
 
+/**
+ * Should this series be drawn as steps rather than as a line?
+ *
+ * True when the mass sits on few enough points that the grid is a lattice, not
+ * a sampled curve. See :data:`STEP_MAX_POINTS`.
+ */
+function isStepped(mass) {
+    let n = 0;
+    for (const v of mass) {
+        if (v > 0 && ++n > STEP_MAX_POINTS) return false;
+    }
+    return n > 0;
+}
+
 /** One density line, filled under the curve when it is the only one. */
 function densitySeries(name, loss, mass, i, solo) {
     const color = seriesColor(i);
@@ -196,6 +218,11 @@ function densitySeries(name, loss, mass, i, solo) {
         type: 'line',
         xAxisIndex: 0,
         yAxisIndex: 0,
+        // `step: 'middle'` is matplotlib's `drawstyle='steps-mid'`: the value
+        // holds across a bucket centred on its grid point. For a discrete book
+        // that is what the distribution *is*; a sloped line between atoms draws
+        // probability at values that cannot occur.
+        step: isStepped(mass) ? 'middle' : false,
         data: loss.map((x, k) => (y[k] == null ? null : [x, y[k]])),
         showSymbol: false,
         connectNulls: false,
@@ -225,54 +252,63 @@ function rightSeries(name, loss, tailProb, i) {
     };
 }
 
+/** A return period as a reader says it: `1-in-200`, never `1-in-200.0000003`. */
+function returnPeriod(T) {
+    return T >= 10 ? String(Math.round(T)) : T.toFixed(1);
+}
+
 /**
- * Capital-anchor markers for the right panel, read from `tail_df`.
+ * Capital-anchor lines for the right panel, read from `tail_df`.
  *
- * Taken from `tail_df` rather than off the plotted curve because that frame is
- * the library's own quantile function at those return periods, while the curve
- * is a binned display grid. Where they differ the library is right.
+ * Dashed verticals with the label at the top, not plotted points. A point has
+ * to sit exactly on the drawn curve to look right, and it cannot: the curve is
+ * a binned display grid while the anchor is the library's own quantile function
+ * at that return period, so the marker landed slightly off the line every time.
+ * A vertical line says "this return period is here on the x-axis", which is
+ * true of the axis rather than of the curve, and reads correctly however coarse
+ * the grid is.
+ *
+ * `tail_df` stays the source for the same reason as before: where it and the
+ * plotted curve differ, the library is right.
  */
-function anchorMarkPoints(tail) {
-    if (!tail || !tail.rows) return undefined;
+function anchorLines(tail) {
+    if (!tail || !tail.rows) return [];
     const at = indexer(tail);
     const iT = at('T');
     const iVaR = at('VaR');
     const iUnit = at('unit');
-    if (iT < 0 || iVaR < 0) return undefined;
-    const data = [];
+    if (iT < 0 || iVaR < 0) return [];
+    const out = [];
     for (const r of tail.rows) {
         if (iUnit >= 0 && String(r[iUnit]) !== 'total') continue;
         const T = Number(r[iT]);
         if (!ANCHORS.includes(T)) continue;
-        const VaR = Number(r[iVaR]);
-        data.push({
-            coord: view.epMode === 'survival' ? [VaR, 1 / T] : [T, VaR],
-            name: `1-in-${T}`,
+        // In rp mode the x-axis is the return period; in survival mode it is
+        // loss, so the same anchor sits at its VaR.
+        const x = view.epMode === 'survival' ? Number(r[iVaR]) : T;
+        if (!Number.isFinite(x)) continue;
+        out.push({
+            xAxis: x,
+            name: `1-in-${returnPeriod(T)}`,
+            lineStyle: { color: '#6c757d', type: 'dashed', width: 1, opacity: 0.45 },
         });
     }
-    if (!data.length) return undefined;
-    return {
-        symbol: 'circle',
-        symbolSize: 7,
-        label: {
-            show: true, position: 'right', fontSize: 10,
-            color: houseStyle().text_color,
-            formatter: (p) => p.name,
-        },
-        itemStyle: { color: houseStyle().text_color, opacity: 0.75 },
-        emphasis: { disabled: true },
-        data,
-    };
+    return out;
 }
 
-/** A dashed reference line, styled the same wherever it appears. */
+/**
+ * A dashed reference line. Entries may override `lineStyle` per item, which is
+ * how the faint capital anchors and the solid-weight mean share one markLine.
+ */
 function refLine(entries) {
     if (!entries.length) return undefined;
     return {
         symbol: 'none',
         silent: true,
-        label: { show: true, fontSize: 10, color: '#6c757d', position: 'insideEndTop',
-                 formatter: (p) => p.name },
+        label: {
+            show: true, fontSize: 10, color: '#6c757d',
+            position: 'end', distance: 4, formatter: (p) => p.name,
+        },
         lineStyle: { color: '#6c757d', type: 'dashed', width: 1 },
         data: entries,
     };
@@ -292,29 +328,26 @@ function twoPanel({ loss, cdf, series, tail, wide, mean, rightLabel = 'loss', ze
     const density = series.map((s, i) => densitySeries(s.name, loss, s.mass, i, solo));
     const right = series.map((s, i) => rightSeries(s.name, loss, s.tailProb, i));
 
-    const anchors = anchorMarkPoints(tail);
-    if (anchors && right.length) right[right.length - 1].markPoint = anchors;
-
     // Reference lines go on the first series of each panel, so they draw once.
-    if (view.refLines || zeroLine != null) {
+    // The capital anchors are always drawn on the right panel (they are what
+    // that panel is for); the mean and break-even lines follow the toggle.
+    const dens = [];
+    const rightRefs = anchorLines(tail);
+    if (zeroLine != null) dens.push({ xAxis: zeroLine, name: 'break even' });
+    if (view.refLines) {
         const anchorVaR = varAt(tail, REF_ANCHOR);
-        const dens = [];
-        const rightRefs = [];
-        if (zeroLine != null) dens.push({ xAxis: zeroLine, name: 'break even' });
-        if (view.refLines) {
-            if (Number.isFinite(mean)) {
-                dens.push({ xAxis: mean, name: 'mean' });
-                // In rp mode loss is the y-axis, in survival mode the x-axis.
-                rightRefs.push(survival ? { xAxis: mean, name: 'mean' }
-                                        : { yAxis: mean, name: 'mean' });
-            }
-            if (Number.isFinite(anchorVaR)) {
-                dens.push({ xAxis: anchorVaR, name: `1-in-${REF_ANCHOR}` });
-            }
+        if (Number.isFinite(mean)) {
+            dens.push({ xAxis: mean, name: 'mean' });
+            // In rp mode loss is the y-axis, in survival mode the x-axis.
+            rightRefs.push(survival ? { xAxis: mean, name: 'mean' }
+                                    : { yAxis: mean, name: 'mean' });
         }
-        if (dens.length) density[0].markLine = refLine(dens);
-        if (rightRefs.length && right.length) right[0].markLine = refLine(rightRefs);
+        if (Number.isFinite(anchorVaR)) {
+            dens.push({ xAxis: anchorVaR, name: `1-in-${REF_ANCHOR}` });
+        }
     }
+    if (dens.length) density[0].markLine = refLine(dens);
+    if (rightRefs.length && right.length) right[0].markLine = refLine(rightRefs);
 
     const window = densityWindow(loss, cdf);
     const grids = wide
@@ -337,7 +370,8 @@ function twoPanel({ loss, cdf, series, tail, wide, mean, rightLabel = 'loss', ze
             gridIndex: 1, type: 'log', logBase: 10, name: 'return period',
             min: T_MIN, max: T_MAX,
             axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
-                         formatter: (v) => (v >= 1000 ? `${v / 1000}k` : String(v)) },
+                         formatter: (v) => (v >= 1000 ? `${Math.round(v / 1000)}k`
+                                                      : returnPeriod(v)) },
         });
 
     const rightY = survival
@@ -396,10 +430,9 @@ function twoPanel({ loss, cdf, series, tail, wide, mean, rightLabel = 'loss', ze
                 if (!rows.length) return '';
                 const first = rows[0];
                 const onRight = first.seriesIndex >= density.length;
-                let head;
-                if (!onRight) head = `loss ${fmt(first.value[0])}`;
-                else if (survival) head = `loss ${fmt(first.value[0])}`;
-                else head = `1-in-${fmt(first.value[0])}`;
+                const head = (onRight && !survival)
+                    ? `1-in-${returnPeriod(first.value[0])}`
+                    : `loss ${fmt(first.value[0])}`;
                 const body = rows.map((p) => {
                     const v = onRight
                         ? (survival ? p.value[1].toExponential(2) : fmt(p.value[1]))

@@ -175,10 +175,19 @@ one version bump each.
       the inspection surfaced: a per-object read race that made the landing page
       500 intermittently for portfolios, and `xpnl`-over-port /
       unresolved-reference turned from 500s into 422s. *(done; in `dev/`)*
+- [x] **plan-exhibit-punchups-2 — second pass** (→ 1.0.0a23). Discrete
+      densities drawn as steps (`steps-mid`); capital anchors are faint dashed
+      verticals with top labels instead of points that could never sit on the
+      curve; return periods rounded to integers. Smoke test reworked to replay
+      captured fixtures so it needs no server. *(done; in `dev/`)*
 - [ ] **Eyeball the Overview.** Still outstanding. The smoke test proves the
       data reaches each chart in a drawable shape, not that any of them looks
       right, and the Chrome extension has not been connected in any session so
       far. Check all six kinds, both breakpoints, and the four toggles.
+
+> **Server policy (2026-07-29).** The author starts and stops servers; the
+> tooling here must not. `dev/capture_fixtures.py` and `uv run pytest` both
+> drive the app in-process through `TestClient`, binding no port.
 - [ ] **Examples: topic groups, fuzzy find, hero sparklines** (→ a22). Pinned
       search + Ctrl+K palette over name / kind / tags / note; sparkline
       thumbnails from a cached heroes payload, built lazily with a fallback.

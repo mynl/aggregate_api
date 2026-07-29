@@ -16,7 +16,7 @@ import * as echarts from 'echarts/core';
 import { LineChart, HeatmapChart } from 'echarts/charts';
 import {
     GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent,
-    MarkLineComponent, MarkPointComponent, TitleComponent, VisualMapContinuousComponent,
+    MarkLineComponent, TitleComponent, VisualMapContinuousComponent,
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import { api } from '../api.js';
@@ -29,8 +29,7 @@ import { api } from '../api.js';
 echarts.use([
     LineChart, HeatmapChart,
     GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent,
-    MarkLineComponent, MarkPointComponent, TitleComponent,
-    VisualMapContinuousComponent,
+    MarkLineComponent, TitleComponent, VisualMapContinuousComponent,
     CanvasRenderer,
 ]);
 
