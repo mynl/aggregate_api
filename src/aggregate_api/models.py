@@ -90,6 +90,12 @@ class BuildResponse(BaseModel):
     mean: float | None = None
     cv: float | None = None
     validation: str | None = None
+    # Does this object carry a cession? Two consumers: the SPA greys out the
+    # Reins tab when it does not (rather than opening a pane that says "no
+    # reinsurance on this object"), and it decides whether Price offers the
+    # gross / net basis selector. Cheap: read off the cession specs, never off
+    # ``reins_summary_df``, which would materialize a frame on every build.
+    has_reins: bool = False
 
 
 class ObjectSummary(BaseModel):
@@ -270,6 +276,46 @@ class PriceResponse(BaseModel):
     pentagon: FrameResponse
     distortion_df: FrameResponse | None = None
     distortions: dict[str, FrameResponse] | None = None
+    warnings: list[str] = []
+
+
+class ReinsPriceRequest(BaseModel):
+    """Body for ``POST /v1/objects/{id}/reins_price``.
+
+    Same shape as :class:`PriceRequest` plus ``basis``: which reinsurance basis
+    the distortion set is calibrated on. The others are then priced with that
+    same set, so the spread between them is attributable to the distribution
+    rather than to two different calibrations.
+    """
+
+    p: float = Field(..., gt=0, le=1, description="VaR probability in (0, 1].")
+    coc: float | None = Field(None, gt=0, description="Cost-of-capital (ROE) target.")
+    lr: float | None = Field(None, gt=0, description="Loss-ratio target.")
+    basis: str = Field(
+        "gross",
+        description="Calibration basis: 'gross', 'net occ' or 'net'.",
+    )
+
+
+class ReinsPriceResponse(BaseModel):
+    """``POST /v1/objects/{id}/reins_price`` result.
+
+    ``table`` carries one row per (distortion, basis) plus a difference row per
+    non-calibrated basis: the implied allowance for reinsurance in the rate.
+    ``distortion_df`` is the calibrated set's parameters, shown below the table.
+    ``a`` and ``roe`` are the calibration basis's own asset level and realized
+    cost of capital.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    basis: str
+    bases: list[str]
+    p: float
+    roe: float
+    a: float
+    table: FrameResponse
+    distortion_df: FrameResponse | None = None
     warnings: list[str] = []
 
 

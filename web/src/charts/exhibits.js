@@ -212,17 +212,18 @@ function varAt(tail, T) {
 /**
  * Right-panel points, index-aligned with `loss`.
  *
- * In `rp` mode a point is `[return period, loss]`; in `survival` mode it is
- * `[loss, exceedance]`. Same numbers either way, transposed, which is the whole
- * content of the toggle. A probability outside the plotted window becomes
- * `null` rather than being dropped, so a dataIndex still identifies the same
- * grid bucket in both panels.
+ * Loss is the x value in **both** modes; only y changes, between `S(x)` and its
+ * reciprocal as a return period. Same curve, two readings, never a transpose: a
+ * reader following a loss across the two panels should not have to swap axes to
+ * do it. A probability outside the plotted window becomes `null` rather than
+ * being dropped, so a dataIndex still identifies the same grid bucket in both
+ * panels.
  *
  * Parameters
  * ----------
  * loss : number[]
  * tailProb : number[]
- *     Exceedance probability per row. `S` for a loss distribution; `F` for a
+ *     Survival probability per row. `S` for a loss distribution; `F` for a
  *     signed P&L, where the bad tail is the low end.
  * mode : {'rp', 'survival'}
  */
@@ -233,15 +234,15 @@ function rightPairs(loss, tailProb, mode) {
         // of terms carries floating-point dust below 1e-15, and on a log axis
         // that dust draws as a ragged fringe that reads as tail.
         if (!(p > LOG_FLOOR) || !Number.isFinite(p)) return null;
-        if (mode === 'survival') return [x, p];
+        if (mode !== 'rp') return [x, p];
         const T = 1 / p;
         if (!(T >= T_MIN) || T > T_MAX) return null;
-        return [T, x];
+        return [x, T];
     });
 }
 
 /**
- * The exceedance-axis window, `[lo, 1]`, as whole decades.
+ * The survival-axis window, `[lo, 1]`, as whole decades.
  *
  * Fixing the axis at `[1/T_MAX, 1]` would be simpler but wastes the panel on a
  * light-tailed book: three dice have a minimum survival near 5e-3, so two and a
@@ -352,13 +353,12 @@ function returnPeriod(T) {
 /**
  * Capital-anchor lines for the right panel, read from `tail_df`.
  *
- * Dashed verticals with the label at the top, not plotted points. A point has
- * to sit exactly on the drawn curve to look right, and it cannot: the curve is
- * a binned display grid while the anchor is the library's own quantile function
- * at that return period, so the marker landed slightly off the line every time.
- * A vertical line says "this return period is here on the x-axis", which is
- * true of the axis rather than of the curve, and reads correctly however coarse
- * the grid is.
+ * Dashed verticals at each anchor's VaR, labeled at the top, not plotted points.
+ * A point has to sit exactly on the drawn curve to look right, and it cannot:
+ * the anchor is the library's own quantile function while the curve is a plotted
+ * grid, so the marker landed slightly off the line every time. A vertical says
+ * "the 1-in-200 loss is here", which is a statement about the x-axis and reads
+ * correctly regardless.
  *
  * `tail_df` stays the source for the same reason as before: where it and the
  * plotted curve differ, the library is right.
@@ -375,9 +375,9 @@ function anchorLines(tail) {
         if (iUnit >= 0 && String(r[iUnit]) !== 'total') continue;
         const T = Number(r[iT]);
         if (!ANCHORS.includes(T)) continue;
-        // In rp mode the x-axis is the return period; in survival mode it is
-        // loss, so the same anchor sits at its VaR.
-        const x = view.epMode === 'survival' ? Number(r[iVaR]) : T;
+        // Both modes now put loss on x, so an anchor is a vertical at its VaR
+        // in either. The return period only names the line.
+        const x = Number(r[iVaR]);
         if (!Number.isFinite(x)) continue;
         out.push({
             xAxis: x,
@@ -459,22 +459,21 @@ function panelGeometry(width, wide, rpTwin) {
  * toggle a unit in both panels at once.
  */
 function twoPanel({
-    loss, cdf, series, tail, wide, width, mean, rightLabel = 'loss', zeroLine,
+    loss, cdf, series, tail, wide, width, mean, zeroLine,
 }) {
     const solo = series.length === 1;
-    const survival = view.epMode !== 'rp';
+    const asRP = view.epMode === 'rp';
     const logRight = Boolean(view.rightLogY);
-    // The return-period twin only makes sense against a log probability axis:
-    // T = 1/p is log-linear in p, so on a linear axis the two scales would not
-    // line up and the twin would be decoration that lies.
-    const rpTwin = survival && logRight;
+    // The twin axis only lines up against a log primary: T = 1/p is log-linear
+    // in p, so on a linear axis the two scales would not correspond and the twin
+    // would be decoration that lies.
+    const twin = logRight;
 
     const density = series.map((s, i) => densitySeries(s.name, loss, s.mass, i, solo));
     const right = series.map((s, i) => rightSeries(s.name, loss, s.tailProb, i));
 
     // Reference lines go on the first series of each panel, so they draw once.
-    // The capital anchors are always drawn on the right panel (they are what
-    // that panel is for); the mean and break-even lines follow the toggle.
+    // Both panels are on the loss axis, so every one of them is a vertical.
     const dens = [];
     const rightRefs = anchorLines(tail);
     if (zeroLine != null) dens.push({ xAxis: zeroLine, name: 'break even' });
@@ -482,9 +481,7 @@ function twoPanel({
         const anchorVaR = varAt(tail, REF_ANCHOR);
         if (Number.isFinite(mean)) {
             dens.push({ xAxis: mean, name: 'mean' });
-            // In rp mode loss is the y-axis, in survival mode the x-axis.
-            rightRefs.push(survival ? { xAxis: mean, name: 'mean' }
-                                    : { yAxis: mean, name: 'mean' });
+            rightRefs.push({ xAxis: mean, name: 'mean' });
         }
         if (Number.isFinite(anchorVaR)) {
             dens.push({ xAxis: anchorVaR, name: `1-in-${REF_ANCHOR}` });
@@ -494,46 +491,40 @@ function twoPanel({
     if (rightRefs.length && right.length) right[0].markLine = refLine(rightRefs);
 
     const window = densityWindow(loss, cdf);
-    const { grids, height } = panelGeometry(width, wide, rpTwin);
+    const { grids, height } = panelGeometry(width, wide, twin);
     const [sLo, sHi] = survivalRange(series);
 
-    // In survival mode the right panel shares the density's loss axis, so it
-    // takes the same window: the two panels then read as one picture.
-    const rightX = survival
-        ? axisStyle({
-            gridIndex: 1, type: 'value', name: 'loss', scale: true,
-            min: window ? window[0] : 'dataMin',
-            max: window ? window[1] : 'dataMax',
-            axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
-                         formatter: (v) => fmt(v) },
-        })
-        : axisStyle({
-            gridIndex: 1, type: 'log', logBase: 10, name: 'return period',
-            min: T_MIN, max: T_MAX,
-            axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
-                         formatter: (v) => (v >= 1000 ? `${Math.round(v / 1000)}k`
-                                                      : returnPeriod(v)) },
-        });
+    // Loss on x in BOTH panels, always. The right panel is the same book seen
+    // through its tail rather than a transposed picture of it, so the two read
+    // as one exhibit and the eye never has to swap axes to follow a loss across.
+    const rightX = axisStyle({
+        gridIndex: 1, type: 'value', name: 'loss', scale: true,
+        min: window ? window[0] : 'dataMin',
+        max: window ? window[1] : 'dataMax',
+        axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
+                     formatter: (v) => fmt(v) },
+    });
 
-    // Four combinations, and each is a real reading. Survival + log is the
-    // default and the one that carries the return-period twin; survival +
-    // linear is the "how much of the mass is out here" view; rp + log spreads a
-    // heavy loss axis; rp + linear is the plain transpose.
-    const rightY = survival
-        ? axisStyle({
-            gridIndex: 1, name: 'exceedance',
-            ...(logRight
-                ? { type: 'log', logBase: 10, min: sLo, max: sHi }
-                : { type: 'value', min: 0, max: sHi, scale: true }),
-            axisLabel: { fontSize: 10, color: '#6c757d',
-                         formatter: (v) => (v >= 0.01 ? String(v) : v.toExponential(0)) },
-        })
-        : axisStyle({
-            gridIndex: 1, name: rightLabel, scale: true,
-            ...(logRight ? { type: 'log', logBase: 10, min: logMin() }
-                         : { type: 'value' }),
-            axisLabel: { fontSize: 10, color: '#6c757d', formatter: (v) => fmt(v) },
-        });
+    // The toggle changes the y-axis only: S(x), or its reciprocal as a return
+    // period. Same curve, two readings, and whichever is not primary is the
+    // twin on the right, so both are always legible.
+    const survivalAxis = (extra = {}) => axisStyle({
+        gridIndex: 1, name: 'S(x)',
+        ...(logRight ? { type: 'log', logBase: 10, min: sLo, max: sHi }
+                     : { type: 'value', min: 0, max: sHi }),
+        axisLabel: { fontSize: 10, color: '#6c757d',
+                     formatter: (v) => (v >= 0.01 ? String(v) : v.toExponential(0)) },
+        ...extra,
+    });
+    const returnAxis = (extra = {}) => axisStyle({
+        gridIndex: 1, name: 'return period', nameGap: 34,
+        ...(logRight ? { type: 'log', logBase: 10, min: 1 / sHi, max: 1 / sLo }
+                     : { type: 'value', min: 1 / sHi, max: 1 / sLo }),
+        axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
+                     formatter: (v) => (v >= 1000 ? `${Math.round(v / 1000)}k`
+                                                  : returnPeriod(v)) },
+        ...extra,
+    });
 
     const yAxes = [
         axisStyle({
@@ -543,21 +534,17 @@ function twoPanel({
             axisLabel: { fontSize: 10, color: '#6c757d',
                          formatter: (v) => (v ? v.toExponential(0) : '0') },
         }),
-        rightY,
+        asRP ? returnAxis() : survivalAxis(),
     ];
-    if (rpTwin) {
-        // The same curve read as a return period. `inverse` puts 1-in-1 at the
-        // top against exceedance 1, and both axes span the same whole decades,
-        // so T = 1/p holds gridline for gridline rather than approximately.
-        yAxes.push(axisStyle({
-            gridIndex: 1, type: 'log', logBase: 10, position: 'right',
-            inverse: true, min: 1 / sHi, max: 1 / sLo,
-            name: 'return period', nameGap: 34,
-            splitLine: { show: false },
-            axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
-                         formatter: (v) => (v >= 1000 ? `${Math.round(v / 1000)}k`
-                                                      : returnPeriod(v)) },
-        }));
+    if (twin) {
+        // `inverse` on the return-period side puts 1-in-1 at the top against
+        // S = 1, and both axes span the same whole decades, so T = 1/S holds
+        // gridline for gridline rather than approximately.
+        yAxes.push(asRP
+            ? survivalAxis({ position: 'right', inverse: true,
+                             splitLine: { show: false } })
+            : returnAxis({ position: 'right', inverse: true,
+                           splitLine: { show: false } }));
     }
 
     const option = {
@@ -566,7 +553,10 @@ function twoPanel({
         title: [
             { text: 'Density', left: grids[0].left, top: grids[0].top - 24,
               textStyle: { fontSize: 12, fontWeight: 600 } },
-            { text: survival ? 'Exceedance probability' : 'Return period',
+            // "Survival", not "EP curve": EP is a term of art in catastrophe
+            // modeling (OEP / AEP, occurrence and aggregate exceedance
+            // probability) and this is neither. It is S(x) = P(X > x).
+            { text: asRP ? 'Return period' : 'Survival',
               left: grids[1].left, top: grids[1].top - 24,
               textStyle: { fontSize: 12, fontWeight: 600 } },
         ],
@@ -606,13 +596,12 @@ function twoPanel({
                 if (!rows.length) return '';
                 const first = rows[0];
                 const onRight = first.seriesIndex >= density.length;
-                const head = (onRight && !survival)
-                    ? `1-in-${returnPeriod(first.value[0])}`
-                    : `loss ${fmt(first.value[0])}`;
+                // Loss on x in both panels now, so the head is the same
+                // sentence wherever the cursor is.
+                const head = `loss ${fmt(first.value[0])}`;
                 const body = rows.map((p) => {
-                    const v = onRight
-                        ? (survival ? epText(p.value[1]) : fmt(p.value[1]))
-                        : p.value[1].toExponential(2);
+                    const v = onRight ? tailText(p.value[1], asRP)
+                                      : p.value[1].toExponential(2);
                     return `${p.marker}${p.seriesName} <b>${v}</b>`;
                 }).join('<br>');
                 return `${head}<br>${body}`;
@@ -626,9 +615,17 @@ function twoPanel({
     return option;
 }
 
-/** An exceedance probability with its return period, the way it gets said. */
-function epText(p) {
-    return `${p.toExponential(2)} (1-in-${returnPeriod(1 / p)})`;
+/**
+ * The right panel's value, said both ways.
+ *
+ * Whichever of `S(x)` and the return period is on the axis, the tooltip gives
+ * the other in parentheses. They are reciprocals, so showing one alone makes the
+ * reader do arithmetic to answer the question they actually had.
+ */
+function tailText(value, asRP) {
+    return asRP
+        ? `1-in-${returnPeriod(value)} (S = ${(1 / value).toExponential(2)})`
+        : `${value.toExponential(2)} (1-in-${returnPeriod(1 / value)})`;
 }
 
 /** Grid, title and host height for a square single-panel exhibit. */
@@ -732,12 +729,12 @@ const EXHIBITS = {
             // the return period runs off F, not S: a 1-in-200 year is the
             // outcome only 1/200 of years fall below, not above.
             const option = twoPanel({
-                loss, cdf: F, tail: null, wide, width, mean,
-                rightLabel: 'outcome', zeroLine: 0,
+                loss, cdf: F, tail: null, wide, width, mean, zeroLine: 0,
                 series: [{ name: name || 'P&L', mass, tailProb: F }],
             });
             option.title[1].text = view.epMode === 'rp'
                 ? 'Downside return period' : 'Downside probability';
+            option.yAxis[1].name = view.epMode === 'rp' ? 'return period' : 'F(x)';
             return option;
         },
     },
@@ -800,12 +797,17 @@ const EXHIBITS = {
     bvagg: {
         controls: [],
         async fetch(id) {
+            // `view: 'joint'` is explicit: density_df answers a bivariate with
+            // its two marginals by default, because that is what a *table* of
+            // one should say. The heatmap is the one consumer that wants the
+            // whole matrix.
+            //
             // stats_df carries both component names as its value columns. The
             // joint frame only names axis 0 (its first column); axis 1 arrives
             // as bare grid values for column headers, so its name is not
             // recoverable from that payload alone.
             const [joint, stats] = await Promise.all([
-                api.density_df(id),
+                api.density_df(id, { view: 'joint' }),
                 api.stats_df(id).catch(() => null),
             ]);
             return { joint, stats };

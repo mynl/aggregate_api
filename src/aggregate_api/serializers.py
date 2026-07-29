@@ -400,6 +400,59 @@ def severity_density_frame(obj: Any, n: int = 512) -> pd.DataFrame:
     return pd.DataFrame({"loss": loss, "pdf": pdf, "F": cdf, "S": sf})
 
 
+def bivariate_marginal_frame(obj: Any) -> pd.DataFrame:
+    """The two component marginals of a bivariate, as one long frame.
+
+    A :class:`BivariateAggregate`'s ``density_df`` is the **joint** matrix: the
+    axis-0 grid as the index and the axis-1 grid as the columns, so 2**16 cells
+    or more. That is a picture, not a table, and serving it to a grid produces
+    something no reader can use and a payload nobody wants. The marginals are
+    what a table of a bivariate should say.
+
+    Parameters
+    ----------
+    obj : Any
+        A built ``BivariateAggregate`` exposing ``marginals`` (the exact pass-3
+        fold, precomputed), ``axis_xs`` and ``unit_names``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns ``unit``, ``loss``, ``p``, ``F``, ``S``; the two components
+        stacked, each ascending in ``loss``.
+
+    Notes
+    -----
+    Long rather than wide because the two axes have **different grids** (and
+    routinely different lengths: 2048 and 512 on one measured build). Aligning
+    them side by side would mean padding one with nulls and inviting a reader to
+    compare row `i` of one against row `i` of the other, which means nothing.
+    ``unit`` is a real column, so the grid's own filter narrows to one component.
+
+    ``marginals`` returns plain arrays that each sum to 1, so ``F`` is their
+    cumulative sum and ``S`` its complement, exactly as for an aggregate.
+    """
+    marginals = obj.marginals
+    grids = obj.axis_xs
+    names = list(getattr(obj, "unit_names", None) or ["axis 0", "axis 1"])
+
+    parts = []
+    for i, (mass, loss) in enumerate(zip(marginals, grids)):
+        mass = np.asarray(mass, dtype=float)
+        loss = np.asarray(loss, dtype=float)
+        cdf = np.cumsum(mass)
+        parts.append(pd.DataFrame({
+            "unit": names[i] if i < len(names) else f"axis {i}",
+            "loss": loss,
+            "p": mass,
+            "F": cdf,
+            # Clamped: accumulating thousands of floats to 1 overshoots by a few
+            # parts in 1e15, and a negative survival is not a thing to serve.
+            "S": np.maximum(0.0, 1.0 - cdf),
+        }))
+    return pd.concat(parts, ignore_index=True)
+
+
 def info_to_payload(obj: Any) -> dict:
     """Return ``{"info": "..."}``.
 

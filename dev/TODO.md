@@ -181,54 +181,56 @@ one version bump each.
       curve; return periods rounded to integers. Smoke test reworked to replay
       captured fixtures so it needs no server. *(done; in `dev/`)*
 - [ ] **Eyeball the Overview.** Still outstanding. The smoke test proves the
-      data reaches each chart in a drawable shape and now that the panels hold
-      the house aspect at both breakpoints, but not that any of them looks
-      right, and the Chrome extension has not been connected in any session so
-      far. Check all six kinds, both breakpoints, and the five toggles.
+      data reaches each chart in a drawable shape and that the panels hold the
+      house aspect at both breakpoints, but not that any of them looks right,
+      and the Chrome extension has not been connected in any session so far.
+      Check all six kinds, both breakpoints, and the five toggles.
 
-- [ ] **Draw atoms as atoms.** (a26 raised the display grid to `2**13`, which
-      makes a point mass read as a spine, but it is still smeared across one
-      display bucket and located only to within half of one.) A discretized
-      aggregate over layer limits is genuinely atomic: on the a26 test program,
-      single `bs=1` buckets carry 13% of the mass each. The faithful rendering
-      splits the frame into **atoms** (exact loss, drawn as stems) and
-      **continuum** (binned, drawn as a line), which is a different payload
-      shape than the uniform grid every consumer assumes. Worth doing; not worth
-      doing casually.
+- [ ] **Watch the full-resolution render cost.** a27 ships 2**16 points per
+      series. ECharts draws that fine on canvas, but nothing has measured the
+      redraw on a toggle for a *portfolio* (one series per unit plus the total,
+      so 5 or 6 polylines of 65,536 points each). If a toggle feels sluggish,
+      the fix is `large: true` on the line series, which trades per-point hover
+      for a fast path, or a client-side crop to the visible window before
+      handing ECharts the data. Do not reintroduce server-side binning.
 
-- [ ] **Ask: what does "better rules for what to plot" mean?** Raised in the a26
-      feedback between the Price-tab grid chrome and the log-floor items, so the
-      referent is ambiguous: which columns the Reins exhibit offers (answered
-      separately in a26), which series a Portfolio draws by default, or which
-      kinds get an exhibit at all.
+- [x] **Draw atoms as atoms.** Solved in a27 by dropping the binning entirely
+      rather than by detecting atoms, which is not possible from the frame: a
+      tall bucket and a point mass are the same number, so there is no
+      threshold. The plots take every grid point; `resolution='display'`
+      survives for the Density *table*. Gzip made the payload a non-issue
+      (3.65 MB to 0.35 MB on the wire). *(done)*
 
-- [ ] **Reinsurance-aware pricing (blocked upstream).** Wanted: on an object
-      carrying reinsurance, a `Price Gross | Price Net` selector; calibrate the
-      distortion set on the chosen basis, price **both** at the same asset level,
-      and report three rows per distortion (gross, net, and the difference, the
-      implied reinsurance allowance in the rate), with a `*` marking the
-      calibrated basis and the distortion parameters below the table.
+- [ ] **REMINDER for SM: better things to plot.** The author's note, verbatim:
+      "this was a general comment that i need to work out better things to plot.
+      Just remind me if i don't come back to it." Not an api task. Raise it next
+      time the exhibits come up.
 
-      The blocker is calibration on the **gross** basis.
-      `Aggregate.calibrate_distortions` resolves its survival, expected loss and
-      premium target from the object's own `density_df`, which under a cession is
-      the net. Pricing the other basis afterwards is fine and fully public
-      (`Distortion.price(ser, a=...)` takes any pmf Series, and
-      `reins_density_df` carries `p_agg_gross` on the same grid). Only the
-      calibration anchor is missing.
+- [x] **Reinsurance-aware pricing.** Landed in a27 as
+      `POST /v1/objects/{id}/reins_price`. The a26 blocker (no public way to
+      calibrate on the gross basis) dissolved once the author pointed at
+      `prob_loss_assets`: a `GridDistribution` over the `reins_density_df`
+      column supplies the `(p, L, a)` anchor, `Pentagon.solve` the premium
+      target, and `Aggregate.calibrate_distortions` runs against a small view of
+      that basis. No library internals reproduced. *(done)*
 
-      Two ways out, and this is the author's call:
+- [ ] **Upstream, small: let `calibrate_distortions` take its distribution.**
+      Not blocking, since `_BasisView` works, but the api currently calls
+      `Aggregate.calibrate_distortions` **unbound** on a duck-typed object,
+      which is a little sharp. A `density=` keyword (or `basis=`) reading the
+      distribution to calibrate against instead of always `self.density_df`
+      would let that call become an ordinary one. Also worth exporting
+      `GridDistribution` from `aggregate` rather than making consumers import
+      `aggregate._grid_distribution`.
 
-      1. **Upstream**, the clean one. Let `calibrate_distortions` take the
-         distribution it calibrates against rather than always reading
-         `self.density_df`, e.g. a `density=` or `basis='gross'|'net'` keyword.
-         Everything else here is then public API.
-      2. **Here**, reproducing `_pricing._calibration_survival` (the `S`
-         truncation and `ess_sup` convention) and the CoC to premium inversion
-         in this repo. That breaks the standing rule against copying library
-         internals, and getting the truncation subtly wrong yields prices that
-         are plausible and wrong, which is the worst failure mode a pricing
-         table has.
+- [ ] **Hero gallery empty on a first page load (not reproduced).** Reported by
+      the author; populated on the next load. The server side is clean:
+      `/v1/examples/heroes` answers 200 in ~2 s cold and returns all eight,
+      including fired concurrently with `/v1/examples` and `/v1/meta` across
+      four separate cold processes, and the service worker never touches
+      `/v1/*`. a27 split the fetch and render error paths (they shared one
+      silent `.catch`), added one retry after 750 ms, and logs on give-up. Next
+      recurrence: check the browser console for `[aLL] hero gallery`.
 
 > **Server policy (2026-07-29).** The author starts and stops servers; the
 > tooling here must not. `dev/capture_fixtures.py` and `uv run pytest` both

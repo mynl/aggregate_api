@@ -31,8 +31,13 @@ header .navbar { min-height: 56px; }
    caps where the face has them and degrades to synthesized ones where it does
    not; the letter-spacing is what makes either legible at this size. */
 .brand-title  { line-height: 1.05; font-size: 1.25rem; font-weight: 700; }
+/* Centered under the title. The flex column is only as wide as its widest
+   child, which is the title, so `text-align` alone does it; the trailing
+   letter-space on the last small cap would otherwise push the line left of
+   center by half a space, hence the matching indent. */
 .brand-kicker { font-size: .6rem; font-variant: small-caps; letter-spacing: .18em;
-                color: var(--mut); margin-top: 2px; }
+                color: var(--mut); margin-top: 2px;
+                text-align: center; text-indent: .18em; }
 .nav-meta     { display: flex; align-items: center; gap: .45rem; font-size: .74rem; color: var(--mut); }
 .nav-meta a   { color: var(--mut); text-decoration: none; }
 .nav-meta a:hover { color: var(--primary); }
@@ -145,7 +150,10 @@ header .navbar { min-height: 56px; }
     background: #f1f3f5; border: 1px solid #e9ecef; border-radius: .6rem; padding: .3rem;
     margin-bottom: .8rem;
 }
-.out-tabs .nav-link { padding: .25rem .9rem; font-size: .82rem; color: #495057; border-radius: .4rem; }
+.out-tabs .nav-link {
+    padding: .25rem .9rem; font-size: .82rem; color: #495057;
+    border-radius: var(--bs-border-radius, .375rem);
+}
 .out-tabs .nav-link.active {
     background: #fff; color: var(--primary); font-weight: 600;
     box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
@@ -237,7 +245,8 @@ header .navbar { min-height: 56px; }
 .hero-card {
     display: flex; flex-direction: column; align-items: stretch; gap: .35rem;
     flex: 1 1 150px; max-width: 220px; min-width: 130px;
-    padding: 0; border: 1px solid var(--grid); border-radius: 8px;
+    padding: 0; border: 1px solid var(--grid);
+    border-radius: var(--bs-border-radius, .375rem);
     background: #fff; overflow: hidden; cursor: pointer; text-align: left;
     transition: box-shadow .12s, transform .12s, border-color .12s;
 }
@@ -355,10 +364,16 @@ header .navbar { min-height: 56px; }
 .exhibit-controls-split .exhibit-group-right {
     margin-left: auto; border-left: 0; padding-right: 0;
 }
+/* Same corner as Build / Examples and every other button on the page. These are
+   smaller, so they read as a lighter-weight control, but the *shape* is shared:
+   a pill next to a rounded rectangle looks like a different kind of thing, and
+   these are not a different kind of thing. `--bs-border-radius` is Bootstrap's
+   own token, so the two cannot drift. */
 .exhibit-toggle {
     font-size: .72rem; line-height: 1; padding: .3rem .6rem;
     color: var(--mut); background: #fff;
-    border: 1px solid var(--grid); border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--grid); cursor: pointer;
+    border-radius: var(--bs-border-radius, .375rem);
 }
 .exhibit-toggle:hover { color: var(--primary); border-color: var(--primary); }
 .exhibit-toggle.active {

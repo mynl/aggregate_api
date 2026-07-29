@@ -82,9 +82,10 @@ from ..audit import AuditLog
 from ..cache import CacheEntry, ObjectCache, canonicalize_decl, object_id
 from ..config import Settings, get_settings
 from ..plotting import render_plot
-from ..pricing import run_price_pentagon, run_pricing
+from ..pricing import run_price_pentagon, run_pricing, run_reins_price
 from ..serializers import (
     bin_density,
+    bivariate_marginal_frame,
     display_log2_for,
     frame_to_payload,
     info_to_payload,
@@ -333,8 +334,9 @@ def _summary_fields(obj: Any) -> dict:
     # Net of a cession, the realized moments are the ones that describe what is
     # on screen; gross, the analytic ones are exact and the estimates carry
     # discretization error. Either way the fallback is the other one.
+    reinsured = _has_reinsurance(obj)
     m, cv = ("est_m", "actual_m"), ("est_cv", "actual_cv")
-    if not _has_reinsurance(obj):
+    if not reinsured:
         m, cv = m[::-1], cv[::-1]
 
     return {
@@ -342,6 +344,7 @@ def _summary_fields(obj: Any) -> dict:
         "mean": _num(*m),
         "cv": _num(*cv),
         "validation": validation,
+        "has_reins": reinsured,
     }
 
 
@@ -1024,27 +1027,61 @@ def get_density_df(
         False,
         description="Drop zero-mass rows (keep only p_total > 0) before slicing.",
     ),
+    resolution: Literal["full", "display"] = Query(
+        "full",
+        description=(
+            "'full' = every grid point, unbinned (what a plot wants); "
+            "'display' = binned to a power-of-two grid (what a table wants)."
+        ),
+    ),
+    view: Literal["marginal", "joint"] = Query(
+        "marginal",
+        description=(
+            "BivariateAggregate only. 'marginal' = the two component marginals; "
+            "'joint' = the full joint-density matrix."
+        ),
+    ),
     entry: CacheEntry = Depends(_locked_entry),
 ) -> dict:
-    """Density_df reduced to a faithful power-of-two display grid.
+    """The density frame. Full resolution by default.
 
-    For an object with a build grid (agg / port; ``log2`` present) the
-    2**log2-row frame is binned to a power-of-two display grid (2**13 rows for a
-    narrow frame, fewer for a wide one, see ``display_log2_for``): masses
-    (``p_total`` / ``p_sev`` / ``p_*``) are summed and the pointwise columns
-    (``loss`` / ``F`` / ``S`` / ``ex***``) take the super-bucket right edge, so
-    ``p_total`` stays faithful (sums to ~1) instead of being understated by an
-    even-spaced stride. The full-frame CSV download stays exact / unbinned.
+    ``resolution='full'`` ships every grid point, which is what a plot wants, and
+    is the default. A discretized aggregate is routinely **atomic**: layer limits
+    and occurrence cessions put point masses in the severity and the aggregate
+    inherits them at every multiple, so single ``bs``-wide buckets carry whole
+    percentage points of probability against a continuum three orders of
+    magnitude below. *Any* binning merges an atom with its neighbours and turns a
+    spine into a triangle, and no threshold avoids it, because from the frame
+    alone an atom is not distinguishable from a tall continuum bucket. So the
+    honest answer is to ship the grid and let the client draw it.
+
+    ``resolution='display'`` bins to a power-of-two grid (see
+    ``display_log2_for``): masses (``p_total`` / ``p_sev`` / ``p_*``) are summed
+    and the pointwise columns (``loss`` / ``F`` / ``S`` / ``ex***``) take the
+    super-bucket right edge, so ``p_total`` stays faithful (sums to ~1) rather
+    than being understated by an even-spaced stride. That is the right shape for
+    a **table**, where 2**16 rows is not a reading experience.
 
     A ``PnL`` has no DataFrame ``density_df`` (it is a dict of per-leg grids);
     its grand-result density is synthesized (:func:`pnl_density_frame`) into the
-    same ``loss / p_total / F / S`` shape and binned like an aggregate.
+    same ``loss / p_total / F / S`` shape.
 
-    Objects without a build grid (a distortion's g-curve, a
-    ``BivariateAggregate`` joint matrix) skip binning and honor the legacy
+    A ``BivariateAggregate`` answers with its two component **marginals** by
+    default (:func:`bivariate_marginal_frame`). Its joint density is a matrix of
+    2**16 cells or more, which is a picture rather than a table; ask for it with
+    ``view='joint'``, which the Overview heatmap does.
+
+    Objects without a build grid (a distortion's g-curve) honor the legacy
     ``cols`` / ``start`` / ``stop`` / ``downsample`` / ``nonzero`` params.
     """
     col_list = [c.strip() for c in cols.split(",")] if cols else None
+    binned = resolution == "display"
+
+    if entry.kind == "bvagg" and view == "marginal":
+        df = bivariate_marginal_frame(entry.obj)
+        if col_list:
+            df = df[[c for c in col_list if c in df.columns]]
+        return frame_to_payload(df)
 
     if entry.kind == "sev":
         # A Severity has no density_df at all; sample the frozen variable onto a
@@ -1058,13 +1095,15 @@ def get_density_df(
     if entry.kind == "pnl":
         # A PnL's density_df is a dict of per-leg GridDistributions, not a
         # DataFrame. Synthesize the grand-result density in the standard
-        # loss / p_total / F / S shape and bin it to the display grid the
-        # way an aggregate is binned -- the positional binning tolerates the
-        # signed P&L outcome axis. ``(n - 1).bit_length()`` is ceil(log2(n)),
-        # so a grid already at or under the display size skips binning.
+        # loss / p_total / F / S shape. When binning is asked for, the
+        # positional reduction tolerates the signed P&L outcome axis;
+        # ``(n - 1).bit_length()`` is ceil(log2(n)), so a grid already at or
+        # under the display size skips it.
         df = pnl_density_frame(entry.obj)
         if col_list:
             df = df[[c for c in col_list if c in df.columns]]
+        if not binned:
+            return frame_to_payload(df)
         sum_cols = {c for c in df.columns if c.startswith("p")}
         display_log2 = display_log2_for(len(df.columns))
         source_log2 = max(display_log2, (len(df) - 1).bit_length())
@@ -1084,14 +1123,12 @@ def get_density_df(
     # avoids the collision.
     df = reset_index_safe(df)
 
+    if col_list:
+        df = df[[c for c in col_list if c in df.columns]]
+
     source_log2 = getattr(entry.obj, "log2", None)
-    if source_log2 is not None:
-        # Bin the full grid down. Apply the column subset first (so we
-        # only sum the masses the SPA asked for), then bin: p_* columns sum,
-        # loss/F/S right-edge.
-        if col_list:
-            existing = [c for c in col_list if c in df.columns]
-            df = df[existing]
+    if source_log2 is not None and binned:
+        # Bin the full grid down: p_* columns sum, loss/F/S right-edge.
         sum_cols = {c for c in df.columns if c.startswith("p")}
         return frame_to_payload(
             bin_density(
@@ -1099,6 +1136,8 @@ def get_density_df(
                 display_log2=display_log2_for(len(df.columns)),
             )
         )
+    if source_log2 is not None:
+        return frame_to_payload(df)
 
     # No build grid: leave the frame as-is and honor the legacy slice params.
     if nonzero and "p_total" in df.columns:
@@ -1113,7 +1152,14 @@ def get_density_df(
 # ----------------------------------------------------------------------
 
 @router.get("/objects/{oid}/unit_density_df", response_model=models.FrameResponse)
-def get_unit_density_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
+def get_unit_density_df(
+    oid: str,
+    resolution: Literal["full", "display"] = Query(
+        "full",
+        description="'full' = every grid point; 'display' = binned.",
+    ),
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
     """Per-unit densities and survivals on the portfolio's common grid.
 
     Columns ``loss``, then ``p_<unit>`` and ``S_<unit>`` for each unit, plus the
@@ -1162,13 +1208,13 @@ def get_unit_density_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) ->
         if name in total.columns:
             df[name] = total[name].to_numpy()
 
-    sum_cols = {c for c in df.columns if c.startswith("p")}
     source_log2 = getattr(obj, "log2", None)
-    if source_log2 is None:
+    if source_log2 is None or resolution == "full":
         return frame_to_payload(df.reset_index(drop=True))
     # The widest density payload the api serves: 2 * units + 3 columns. The cell
     # budget trades rows for those columns so a 12-unit portfolio ships the same
     # number of JSON numbers as a 2-unit one.
+    sum_cols = {c for c in df.columns if c.startswith("p")}
     return frame_to_payload(
         bin_density(
             df, source_log2, sum_cols=sum_cols,
@@ -1293,20 +1339,28 @@ def get_reins_stats_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> 
 
 
 @router.get("/objects/{oid}/reins_density_df", response_model=models.FrameResponse)
-def get_reins_density_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
-    """Reinsurance density preview, binned to the power-of-two display grid.
+def get_reins_density_df(
+    oid: str,
+    resolution: Literal["full", "display"] = Query(
+        "full",
+        description="'full' = every grid point; 'display' = binned.",
+    ),
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """Reinsurance densities, full resolution by default.
 
-    The full frame spans the whole loss grid (2**log2 rows). We bin it to a
-    power-of-two display grid: every gross/ceded/net density column (``p_*``)
-    sums and ``loss`` right-edges, so the previewed masses stay faithful. The
-    csv download has the full, exact frame.
+    Same reasoning as :func:`get_density_df`: the Reins exhibit is a plot, and a
+    ceded distribution is more atomic than a gross one, not less (a layer output
+    piles every loss above its limit onto one point). ``resolution='display'``
+    bins for the table: every ``p_*`` column sums and ``loss`` right-edges, so
+    the previewed masses stay faithful.
     """
     df = _frame_attr(entry.obj, "reins_density_df")
     if df is None:
         raise HTTPException(status_code=400, detail="no reinsurance on this object")
     df = reset_index_safe(df)
     source_log2 = getattr(entry.obj, "log2", None)
-    if source_log2 is not None:
+    if source_log2 is not None and resolution == "display":
         sum_cols = {c for c in df.columns if c.startswith("p")}
         return frame_to_payload(
             bin_density(
@@ -1314,6 +1368,9 @@ def get_reins_density_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -
                 display_log2=display_log2_for(len(df.columns)),
             )
         )
+    if source_log2 is not None:
+        return frame_to_payload(df)
+    # No build grid to reason about: fall back to a small even-spaced preview.
     return frame_to_payload(df, downsample=DENSITY_PREVIEW_ROWS)
 
 
@@ -1418,6 +1475,30 @@ def post_price(
     """
     try:
         return run_price_pentagon(entry.obj, p=req.p, coc=req.coc, lr=req.lr)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/objects/{oid}/reins_price", response_model=models.ReinsPriceResponse)
+def post_reins_price(
+    oid: str,
+    req: models.ReinsPriceRequest,
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """Price every reinsurance basis off one calibration.
+
+    Calibrate the standard distortion set on ``basis`` (gross, net of the
+    occurrence program, or the object's own net) and apply that same set to the
+    others. The difference between the gross and the net premium is the implied
+    **allowance for reinsurance in the rate**, which is the question this answers
+    and which no single-basis pricing can.
+
+    See :func:`aggregate_api.pricing.run_reins_price`.
+    """
+    try:
+        return run_reins_price(
+            entry.obj, p=req.p, coc=req.coc, lr=req.lr, basis=req.basis,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

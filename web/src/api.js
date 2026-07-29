@@ -69,10 +69,12 @@ export const api = {
 
     // Reinsurance
     reinsDescription: (id)          => _json('GET',  `/v1/objects/${id}/reins_description`),
-    reinsFrame:   (id, which)       => _json('GET',  `/v1/objects/${id}/${which}`),
+    reinsFrame:   (id, which, p = {}) => _json('GET', `/v1/objects/${id}/${which}?${qs(p)}`),
 
     // Pricing
     price:        (id, body)        => _json('POST', `/v1/objects/${id}/price`, body),
+    /** Reinsured objects: calibrate on one basis, price them all. */
+    reinsPrice:   (id, body)        => _json('POST', `/v1/objects/${id}/reins_price`, body),
     pricing_at:   (id, body)        => _json('POST', `/v1/objects/${id}/pricing_at`, body),
 
     // DecL editor support

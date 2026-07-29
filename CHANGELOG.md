@@ -4,6 +4,99 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a27
+
+From `dev/done/plan-exhibit-punchups-4.md`. Second round of author feedback, and
+the two questions a26 left open are answered.
+
+### Every point
+
+a26 raised the display grid and kept binning. That improved the picture without
+fixing it: an atom in a `bs=1` bucket, binned by 8, is still 8 units wide and
+located only to within 4. And detecting atoms to treat them separately is not
+possible from the frame, because a tall bucket and a point mass are the same
+number. There is no threshold.
+
+`density_df`, `unit_density_df` and `reins_density_df` now default to
+`resolution='full'`: every row, unbinned. `resolution='display'` keeps the binned
+form and its only caller is the More to Density **table**, where 65,536 rows is
+not a reading experience and the CSV download is the exact export anyway.
+
+The payload objection turned out to cost ten minutes rather than a design
+compromise, because there was **no compression on the api at all**:
+
+| | rows | raw | gzipped |
+|---|---|---|---|
+| one aggregate's density (4 cols) | 65,536 | 3.65 MB | **0.35 MB** |
+| a 2-unit portfolio's per-unit frame | 65,536 | 6.99 MB | **1.29 MB** |
+
+`GZipMiddleware` at a 1 kB floor. Float text compresses about 10 to 1, so both
+land inside what an image costs. Installed before CORS so the stack unwinds with
+CORS headers on the outside, where a browser needs them even on a compressed
+response.
+
+### Both tail views put loss on x
+
+The right panel no longer transposes. Loss is on x in both modes and the toggle
+changes only the y-axis, between `S(x)` and its reciprocal as a return period.
+Whichever is not primary is the twin axis on the right, so both readings stay
+available without touching the toggle, and following a loss across the two panels
+never means swapping axes.
+
+"EP" is gone. In catastrophe modeling EP is a term of art (OEP / AEP) and this is
+neither: it is `S(x) = P(X > x)`. The panel says Survival and the axis says
+`S(x)`. Every reference line on that panel is now a vertical, since they are all
+loss values.
+
+### Reinsurance-aware pricing
+
+`POST /v1/objects/{id}/reins_price`. Calibrate the standard distortion set on one
+basis (gross, net of the occurrence program, or the object's own net) and apply
+it unchanged to the others, so the spread between them is attributable to the
+distribution rather than to two separate fits. The difference between the gross
+and the net premium is the implied **allowance for reinsurance in the rate**.
+
+Built entirely on library machinery: `GridDistribution` over a `reins_density_df`
+column, `prob_loss_assets` for the `(p, L, a)` anchor, `Pentagon.solve` for the
+premium target, `Aggregate.calibrate_distortions` for the fit, `Distortion.price`
+to apply it. The one piece of glue is `_BasisView`, which presents a chosen basis
+with the surface `calibrate_distortions` reads.
+
+One row per (distortion, basis), the calibrated one starred, plus a difference
+row per other basis. `net occ` is offered only when **both** cession stages
+exist, so an occurrence-only program gives exactly three rows per distortion. The
+difference row differences the levels and **recomputes** the ratios: a difference
+of two loss ratios is not a loss ratio, while the loss ratio of the differenced
+levels is the rate the cover is being bought at. Each basis takes its own
+`a = q(p)`, holding the threshold fixed rather than the capital, because a
+reinsured book needs less capital and that saving is part of what the cession
+bought.
+
+The Price tab grows a `calibrate on` selector, shown only when the object carries
+a cession.
+
+### Smaller items
+
+- **Bivariate More to Density** returns the two component **marginals**
+  (`unit / loss / p / F / S`), not the joint matrix. Long rather than wide
+  because the two axes have different grids and lengths; aligning them would
+  invite comparing row `i` of one against row `i` of the other. The Overview
+  heatmap asks for `view='joint'`.
+- **Tab persistence.** `has_reins` on the build response greys out the Reins
+  pill when there is no cession, instead of opening a pane that says "No
+  reinsurance on this object" after you clicked it. The active tab is otherwise
+  left where it was.
+- **Button shape.** Everything takes `--bs-border-radius`, Bootstrap's own token,
+  so the exhibit toggles, the output tabs and the hero cards cannot drift from
+  Build and Examples. The pill radius is gone.
+- **Banner.** The kicker centers under the title.
+- **Hero gallery** retries once and reports. The old single `.catch` covered both
+  the fetch and the rendering and swallowed either in silence. The empty-first-
+  load the author saw is **not reproduced**: the route answers 200 in ~2 s cold
+  and returns all eight, including fired concurrently with `/v1/examples` and
+  `/v1/meta` across four cold processes, and the service worker never touches
+  `/v1/*`. If it recurs the console now says which half failed.
+
 ## 1.0.0a26
 
 From `dev/done/plan-exhibit-punchups-3.md`. Author feedback after the first

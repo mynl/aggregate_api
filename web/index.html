@@ -205,8 +205,14 @@
                 <div id="pane-reins" class="pane"></div>
             </div>
 
-            <!-- Price: pentagon completion (+ distortion analysis for Portfolios) -->
+            <!-- Price: pentagon completion (+ distortion analysis for Portfolios).
+                 A reinsured object instead gets the gross / net / allowance
+                 table, with #price-basis choosing which basis the distortions
+                 are calibrated on. That row is always present and filled by
+                 main.js, so the form below it does not jump when you step from
+                 a reinsured example to a plain one. -->
             <div class="tab-pane fade" id="t-price">
+                <div class="exhibit-controls" id="price-basis"></div>
                 <div class="tab-tools price-form">
                     <label class="price-field">p
                         <input id="price-p" type="number" step="0.001" min="0" max="1" value="0.99" autocomplete="off"></label>

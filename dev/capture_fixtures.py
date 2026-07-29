@@ -47,7 +47,10 @@ FRAMES = {
     "sev": [("density", "density_df")],
     "distortion": [("curve", "density_df")],
     "pnl": [("density", "density_df?cols=loss,p_total,F,S")],
-    "bvagg": [("joint", "density_df"), ("stats", "stats_df")],
+    # `view=joint` is explicit: density_df answers a bivariate with its two
+    # marginals by default, which is what a table wants. The heatmap is the one
+    # consumer of the whole matrix.
+    "bvagg": [("joint", "density_df?view=joint"), ("stats", "stats_df")],
     "reins": [("reins", "reins_density_df")],
 }
 

@@ -190,12 +190,18 @@ def test_density_df_bins_to_display_grid(client):
     depends on the column count (the payload is budgeted in cells, not rows), and
     a test that pinned a literal would have to be edited every time the budget
     moved, which is exactly when it should be checking rather than agreeing.
+
+    Binning is now opt-in (``resolution='display'``): the default ships every
+    grid point, because binning an atomic density is what made the plots wrong.
     """
     oid = client.post(
         "/v1/objects",
         json={"decl": "agg Big 100 claims sev lognorm 100 cv 1.5 poisson", "log2": 16},
     ).json()["id"]
-    r = client.get(f"/v1/objects/{oid}/density_df", params={"cols": "loss,p_total,F"})
+    r = client.get(
+        f"/v1/objects/{oid}/density_df",
+        params={"cols": "loss,p_total,F", "resolution": "display"},
+    )
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["columns"] == ["loss", "p_total", "F"]
@@ -330,6 +336,69 @@ def test_reins_frames_present(client):
         assert len(body["rows"]) > 0
 
 
+def test_density_df_is_full_resolution_by_default(client):
+    """Every grid point, unbinned, and the atoms survive intact.
+
+    The reason binning had to go: a book written over layer limits is atomic, so
+    single ``bs``-wide buckets carry whole percentage points of probability. This
+    program puts a point mass at each limit; on the binned grid each merged with
+    31 neighbours and the plot drew a triangle where the truth is a spine.
+
+    Asserting on the atom rather than only the row count is what makes this test
+    about the defect: a row count would pass on a grid that still smeared them.
+
+    The program is the author's own, the one the fat spikes were reported on. It
+    builds at ``log2=16, bs=1`` and puts 12.9% of its mass in the single bucket
+    at 250, against a continuum of 0.07% per bucket either side.
+    """
+    decl = (
+        "agg ExposureRating2 [1000 2000 10000 500] premium at "
+        "[0.9 0.85 0.9 0.8] lr [250 500 1000 2000] xs 0 sev lognorm 120 cv 4 "
+        "occurrence ceded to 750 xs 750 mixed gamma 0.2"
+    )
+    oid = client.post("/v1/objects", json={"decl": decl}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/density_df", params={"cols": "loss,p_total"})
+    assert r.status_code == 200, r.text
+    rows = r.json()["rows"]
+    assert len(rows) == 2 ** 16
+
+    mass = {row[0]: row[1] for row in rows}
+    step = rows[1][0] - rows[0][0]
+    # Each layer limit is an atom standing orders of magnitude above the
+    # continuum on either side. Binning to 2**13 dropped that ratio to about 24;
+    # unbinned it is in the hundreds.
+    for at in (250.0, 500.0, 750.0):
+        atom = mass[at]
+        neighbours = max(mass[at - step], mass[at + step])
+        assert atom > 50 * neighbours, f"{at}: atom {atom} vs neighbour {neighbours}"
+
+
+def test_bivariate_density_returns_marginals(client):
+    """A bivariate answers density_df with its two marginals, not the joint.
+
+    The joint is a matrix of 2**16 cells or more: a picture, not a table. The
+    Overview heatmap asks for it explicitly with ``view='joint'``.
+    """
+    decl = (
+        "bivariate BV 25 claims agg A dfreq [0 1] [.5 .5] sev lognorm 50 cv 1.5 "
+        "agg B dfreq [0 1] [.5 .5] sev gamma 50 cv 1.0 poisson"
+    )
+    oid = client.post("/v1/objects", json={"decl": decl}).json()["id"]
+
+    marginal = client.get(f"/v1/objects/{oid}/density_df").json()
+    assert marginal["columns"] == ["unit", "loss", "p", "F", "S"]
+    units = {row[0] for row in marginal["rows"]}
+    assert units == {"A", "B"}
+    # Each marginal is a pmf over its own grid, so each sums to one on its own.
+    for unit in units:
+        total = sum(row[2] for row in marginal["rows"] if row[0] == unit)
+        assert total == pytest.approx(1.0, abs=1e-6)
+
+    joint = client.get(f"/v1/objects/{oid}/density_df", params={"view": "joint"}).json()
+    assert joint["columns"] != marginal["columns"]
+    assert len(joint["columns"]) > 5           # the axis-1 grid, as headers
+
+
 def test_reinsured_summary_reports_the_net_mean(client):
     """Under a cession the headline mean is the net one, matching ``summary_df``.
 
@@ -368,7 +437,9 @@ def test_reins_density_preview_is_binned(client):
     asserting against it here is what keeps the two in step.
     """
     oid = client.post("/v1/objects", json={"decl": _REINS, "log2": 16}).json()["id"]
-    r = client.get(f"/v1/objects/{oid}/reins_density_df")
+    r = client.get(
+        f"/v1/objects/{oid}/reins_density_df", params={"resolution": "display"}
+    )
     assert r.status_code == 200, r.text
     body = r.json()
     cols = body["columns"]
@@ -916,6 +987,96 @@ def test_price_portfolio_distortions(client):
     assert "LR" in body["distortions"]
     lr = body["distortions"]["LR"]
     assert "columns" in lr and len(lr["rows"]) >= 1
+
+
+def test_reins_price_gross_and_net(client):
+    """Calibrate on gross, price both bases, and difference them.
+
+    The three properties that make the table mean anything:
+
+    1. The calibrated basis hits its target exactly. That is what "calibrated"
+       means, and it is the only row where ROE is an input rather than a result.
+    2. The other basis is priced with the **same** distortion, so any difference
+       between them is attributable to the distribution rather than to two
+       separate fits. Its ROE is therefore free to differ, and generally does.
+    3. The difference row is the levels differenced with the ratios *recomputed*.
+       A difference of two loss ratios is not a loss ratio; the loss ratio of the
+       differenced levels is the rate the cession is being bought at, which is
+       the number this whole endpoint exists to produce.
+    """
+    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
+    r = client.post(
+        f"/v1/objects/{oid}/reins_price",
+        json={"p": 0.99, "coc": 0.15, "basis": "gross"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # An occurrence-only program has no distinct "net occ": it would repeat the
+    # net column under a third name.
+    assert body["bases"] == ["gross", "net"]
+    assert body["basis"] == "gross"
+    assert body["roe"] == pytest.approx(0.15)
+
+    cols = body["table"]["columns"]
+    rows = [dict(zip(cols, row)) for row in body["table"]["rows"]]
+    by = {(r_["distortion"], r_["basis"]): r_ for r_ in rows}
+    # Five distortions x (gross, net, difference).
+    assert len({r_["distortion"] for r_ in rows}) == 5
+    assert len(rows) == 15
+
+    for name in {r_["distortion"] for r_ in rows}:
+        gross = by[(name, "gross*")]
+        net = by[(name, "net")]
+        diff = by[(name, "gross less net")]
+        # 1. calibration hits the target on every family.
+        assert gross["ROE"] == pytest.approx(0.15, abs=5e-3), name
+        # 2. reinsurance strictly reduces both the loss and the premium.
+        assert net["L"] < gross["L"], name
+        assert net["P"] < gross["P"], name
+        # 3. the difference row is the levels differenced ...
+        assert diff["P"] == pytest.approx(gross["P"] - net["P"]), name
+        assert diff["L"] == pytest.approx(gross["L"] - net["L"]), name
+        # ... with LR recomputed on them, not differenced.
+        assert diff["LR"] == pytest.approx(diff["L"] / diff["P"]), name
+
+    assert body["distortion_df"] is not None
+    assert len(body["distortion_df"]["rows"]) == 5
+
+
+def test_reins_price_net_basis_matches_the_object(client):
+    """Calibrating on the ``net`` basis reproduces the object's own calibration.
+
+    ``p_agg_net`` *is* ``density_df.p_total`` for a reinsured object, so the
+    basis view and the object are the same distribution reached two ways. If the
+    view were mis-built (wrong grid, wrong normalization) this is where it would
+    show, and nowhere else would catch it.
+    """
+    from aggregate import build
+
+    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
+    r = client.post(
+        f"/v1/objects/{oid}/reins_price",
+        json={"p": 0.99, "coc": 0.15, "basis": "net"},
+    )
+    assert r.status_code == 200, r.text
+    cols = r.json()["table"]["columns"]
+    rows = [dict(zip(cols, row)) for row in r.json()["table"]["rows"]]
+    got = {r_["distortion"]: r_ for r_ in rows if r_["basis"] == "net*"}
+
+    direct = build(_REINS)
+    direct.calibrate_distortions(0.15, p=0.99)
+    for name, dist in direct.distortions.items():
+        quote = dist.price(direct.density_df["p_total"], a=direct.q(0.99))
+        assert got[name]["P"] == pytest.approx(float(quote.ask), rel=1e-9), name
+        assert got[name]["L"] == pytest.approx(float(quote.el), rel=1e-9), name
+
+
+def test_reins_price_rejects_a_plain_object(client):
+    """No cession, no basis to calibrate on: a clean 400, not a 500."""
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.post(f"/v1/objects/{oid}/reins_price", json={"p": 0.99, "coc": 0.15})
+    assert r.status_code == 400
+    assert "reinsurance" in r.json()["detail"]
 
 
 def test_pricing_at_ccoc_portfolio(client):

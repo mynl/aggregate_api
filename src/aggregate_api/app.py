@@ -28,6 +28,7 @@ from importlib.metadata import version as _pkg_version
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import Settings, get_settings
@@ -76,6 +77,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # OpenAPI -- it's noisy and we override the parse path
         # with our own ErrorReport response model.
     )
+
+    # Compress responses. A density payload is the whole point: the exhibits ask
+    # for every grid point (2**16 rows), which is 3.6 MB of JSON for one
+    # aggregate and 7 MB for a portfolio's per-unit frame. Those are floats
+    # rendered as decimal text, so they compress about 10 to 1: 0.35 MB and
+    # 1.3 MB on the wire, which is what an image costs.
+    #
+    # 1 kB minimum, so a health check or a one-row pentagon is not worth the
+    # round trip through zlib. Installed before CORS so the middleware stack
+    # unwinds with CORS headers on the outside, where a browser needs them even
+    # on a compressed response.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     install_cors(app, settings.cors_origins)
 

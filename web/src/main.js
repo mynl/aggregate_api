@@ -52,6 +52,7 @@ const state = {
     kind: null,
     name: null,
     mean: null,             // headline mean, for the exhibit's reference line
+    hasReins: false,        // gates the Reins tab and the Price basis selector
     log2: null,             // null = auto
     bs: null,               // null = auto
     loaded: new Set(),      // tab names whose data has been fetched
@@ -158,6 +159,7 @@ async function build() {
         // The exhibit draws a mean reference line; the build response already
         // carries it, so there is no reason to refetch a frame to find it.
         state.mean = res.mean;
+        state.hasReins = Boolean(res.has_reins);
         state.loaded = new Set();
         renderSummary(res);
         history.record(decl);
@@ -165,6 +167,7 @@ async function build() {
         loadActiveTab();
     } catch (err) {
         state.id = state.kind = state.name = state.mean = null;
+        state.hasReins = false;
         renderBuildFailure(err);
     } finally {
         buildBtn.disabled = false;
@@ -209,7 +212,8 @@ function fmtBs(bs) {
 function renderSummary(res) {
     const inner = $('summary-inner');
     empty(inner);
-    applyKindGating(res.kind);
+    applyKindGating(res.kind, res.has_reins);
+    renderPriceBasis();
     const kindLabel = KIND_LABEL[res.kind] || 'Aggregate';
     const bits = [
         el('span', { className: 'nm' }, res.name || '(anonymous)'),
@@ -322,13 +326,19 @@ const MORE_VIEWS = {
         label: 'Density',
         hint: 'binned to a power-of-two display grid; copy / save from the grid',
         load: async () => {
+            // `resolution: 'display'` here and nowhere else. The *plots* take
+            // every grid point, because a binned atom is a lie; a *table* of
+            // 65,536 rows is not a reading experience, and the CSV download is
+            // the exact export for anyone who wants the lot.
+            //
             // A distortion's density_df is the g-curve over s in [0,1]; a
-            // bivariate's is the joint matrix; a severity's is a sampled
-            // loss / pdf / F / S curve. None has the aggregate's columns, so
-            // pull the whole frame for those.
+            // bivariate's is its two component marginals; a severity's is a
+            // sampled loss / pdf / F / S curve. None has the aggregate's
+            // columns, so pull the whole frame for those.
+            const opts = { resolution: 'display' };
             const frame = WHOLE_DENSITY_KINDS.has(state.kind)
-                ? await api.density_df(state.id)
-                : await api.density_df(state.id, { cols: 'loss,p_total,F,S' });
+                ? await api.density_df(state.id, opts)
+                : await api.density_df(state.id, { ...opts, cols: 'loss,p_total,F,S' });
             // renderCap lifts CsvGrid's 2,000-row default so the whole display
             // grid shows without a "show all" prompt. 8,192 is the widest that
             // grid gets (see serializers.display_log2_for).
@@ -424,8 +434,22 @@ const NA_TABS_BY_KIND = {
 };
 const GATED_TABS = ['price', 'reins'];
 
-function applyKindGating(kind) {
+/**
+ * Grey out the tabs this object cannot answer, and land somewhere it can.
+ *
+ * Two inputs, not one: the kind, and whether the object carries a cession. An
+ * Aggregate with no reinsurance used to leave Reins enabled and open a pane
+ * reading "No reinsurance on this object", which is the tab telling you it was
+ * the wrong tab after you clicked it. `has_reins` rides along on the build
+ * response, so the pill can say so before you do.
+ *
+ * The active tab is left alone unless it just went dark. Stepping through
+ * examples on the Price tab should stay on Price, and the only reason to move is
+ * that there is nothing there any more.
+ */
+function applyKindGating(kind, hasReins = false) {
     const na = new Set(NA_TABS_BY_KIND[kind] || []);
+    if (!hasReins) na.add('reins');
     for (const tab of GATED_TABS) {
         const btn = document.querySelector(`.out-tabs [data-tab="${tab}"]`);
         if (!btn) continue;
@@ -715,6 +739,8 @@ async function loadReinsExhibit() {
     empty(host);
     try {
         await loadStyle();
+        // Full resolution: this is a plot, and a ceded distribution is more
+        // atomic than a gross one, not less.
         const frame = await api.reinsFrame(state.id, 'reins_density_df');
         reinsChart = mountReinsExhibit(host, frame);
     } catch { /* the exhibit is a bonus; the frames carry the numbers */ }
@@ -724,8 +750,11 @@ async function loadReinsExhibit() {
 async function loadReinsFrame() {
     if (!state.id) return;
     try {
-        const frame = await api.reinsFrame(state.id, state.reinsWhich);
-        replacePaneGrid('pane-reins', frame, GRID_FULL);
+        // The table takes the binned grid; only the exhibit above wants the lot.
+        const params = state.reinsWhich === 'reins_density_df'
+            ? { resolution: 'display' } : {};
+        const frame = await api.reinsFrame(state.id, state.reinsWhich, params);
+        replacePaneGrid('pane-reins', frame, { ...GRID_FULL, renderCap: 8192 });
     } catch (err) {
         replacePane('pane-reins', errorNode(err));
     }
@@ -794,6 +823,97 @@ function renderPrice(payload) {
     }
 }
 
+// ---- Reinsurance-aware pricing ----
+// Which basis the distortion set is calibrated on. Sticky per browser, and only
+// offered when the object carries a cession.
+const PRICE_BASES = [
+    ['gross', 'Gross', 'Calibrate on the gross book; price the net with the same set'],
+    ['net occ', 'Net occ', 'Calibrate net of the occurrence program'],
+    ['net', 'Net', 'Calibrate on the net book; price the gross with the same set'],
+];
+let priceBasis = (() => {
+    try { return localStorage.getItem('aggapi.priceBasis') || 'gross'; }
+    catch { return 'gross'; }
+})();
+
+/**
+ * The basis selector, shown above the Price form when there is reinsurance.
+ *
+ * Not a hidden row that appears and disappears: the container is always in the
+ * markup and this fills or empties it, so the form does not jump when you step
+ * from a reinsured example to a plain one.
+ */
+function renderPriceBasis() {
+    const host = $('price-basis');
+    if (!host) return;
+    empty(host);
+    if (!state.hasReins) return;
+    host.appendChild(el('span', { className: 'exhibit-group-label' }, 'calibrate on'));
+    const btns = PRICE_BASES.map(([value, label, title]) => {
+        const b = el('button', {
+            type: 'button', title,
+            className: `exhibit-toggle${value === priceBasis ? ' active' : ''}`,
+        }, label);
+        b.addEventListener('click', () => {
+            priceBasis = value;
+            try { localStorage.setItem('aggapi.priceBasis', value); }
+            catch { /* private mode */ }
+            for (const x of btns) x.classList.toggle('active', x === b);
+        });
+        return b;
+    });
+    host.append(...btns);
+}
+
+// Column formats for the gross / net / allowance table: money grouped, ratios
+// as percents, PQ to 3dp. Column 0 is the distortion, column 1 the basis.
+const REINS_PRICE_FMT = {
+    a: ',d', L: ',d', M: ',d', P: ',d', Q: ',d',
+    LR: '.1%', PQ: '.3f', ROE: '.1%',
+};
+
+/**
+ * Render the reinsurance pricing table.
+ *
+ * One row per (distortion, basis) plus a difference row per non-calibrated
+ * basis. The difference is the point: it is the premium the cession costs, and
+ * its `LR` is the loss ratio the reinsurance is being bought at.
+ */
+function renderReinsPrice(payload) {
+    const paneId = 'pane-price';
+    const root = el('div', { className: 'price-result' });
+    replacePane(paneId, root);
+
+    root.appendChild(el('div', { className: 'price-section-title' },
+        `Gross and net by distortion, calibrated on ${payload.basis}`));
+    root.appendChild(el('div', { className: 'exhibit-caption mb-2' },
+        `Distortions fitted to the ${payload.basis} basis at p = ${payload.p} `
+        + `(a = ${fmt(payload.a)}, CoC ${(payload.roe * 100).toFixed(1)}%), then `
+        + 'applied unchanged to the others. The starred row is the calibrated '
+        + 'one. A "less" row is the difference: the implied allowance for '
+        + 'reinsurance in the rate, and its LR is the loss ratio the cover is '
+        + 'being bought at.'));
+    const host = el('div', { className: 'grid-host' });
+    root.appendChild(host);
+    const frame = payload.table;
+    mountGrid(paneId, host, frame, {
+        ...GRID_FULL,
+        formats: (frame.columns || []).map((c) => REINS_PRICE_FMT[c] || null),
+        maxRows: 30,
+    });
+
+    if (payload.distortion_df) {
+        root.appendChild(el('div', { className: 'price-section-title mt-3' },
+            'Distortion parameters'));
+        const dhost = el('div', { className: 'grid-host' });
+        root.appendChild(dhost);
+        mountGrid(paneId, dhost, payload.distortion_df, GRID_FULL);
+    }
+    for (const w of payload.warnings || []) {
+        root.appendChild(el('div', { className: 'text-muted small fst-italic mt-1' }, `⚠ ${w}`));
+    }
+}
+
 const priceBtn = $('price-btn');
 priceBtn?.addEventListener('click', async () => {
     if (!state.id) return;
@@ -806,7 +926,11 @@ priceBtn?.addEventListener('click', async () => {
     priceBtn.disabled = true;
     priceBtn.textContent = 'Pricing…';
     try {
-        renderPrice(await api.price(state.id, body));
+        if (state.hasReins) {
+            renderReinsPrice(await api.reinsPrice(state.id, { ...body, basis: priceBasis }));
+        } else {
+            renderPrice(await api.price(state.id, body));
+        }
     } catch (err) {
         replacePane('pane-price', errorNode(err));
     } finally {
@@ -909,9 +1033,36 @@ loadExamples().then((data) => {
 
 // Hero gallery: the entries tagged `role:hero` in library.agg. The set grows
 // over time, so never assume a fixed count; a random handful shows each load.
-api.heroes().then((data) => {
-    mountHeroes(pickRandom(data.items || [], 4));
-}).catch(() => { /* no gallery; the page still works */ });
+//
+// Retried once, and it reports. The author saw an empty hero row on a first page
+// load that populated on the next, and the old code could not tell us why: one
+// `.catch` covered both the fetch and the rendering, and it swallowed whatever
+// it caught in silence. A cold server takes ~2 s to answer this route (it loads
+// the whole recipe library on the first call), which is the sort of window a
+// single transient failure hides in, so a second attempt is worth more than a
+// diagnosis. The two failure modes are now separated: a fetch that fails twice
+// says so, and a render that throws is not mistaken for one.
+async function loadHeroes(attempt = 1) {
+    let data;
+    try {
+        data = await api.heroes();
+    } catch (err) {
+        if (attempt === 1) {
+            await new Promise((r) => setTimeout(r, 750));
+            return loadHeroes(2);
+        }
+        console.warn('[aLL] hero gallery unavailable:', err);
+        return;
+    }
+    const items = pickRandom(data.items || [], 4);
+    if (!items.length) {
+        console.warn('[aLL] hero gallery empty: no entries tagged role:hero');
+        return;
+    }
+    mountHeroes(items);
+}
+
+loadHeroes();
 
 // ----------------------------------------------------------------------
 // Hero gallery -- clickable showcase cards above the editor
