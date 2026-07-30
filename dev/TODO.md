@@ -207,10 +207,44 @@ one version bump each.
       whether the library is the problem or the chart designs are. Worth
       separating before any swap, because most of the a26 to a28 fixes were
       design errors (wrong rectangle measured, wrong default orientation,
-      binned data) rather than anything ECharts did. The realistic alternatives
-      are Plotly (bigger, more batteries) or back to server-rendered matplotlib
-      (which the author raised, and which would be large payloads but exactly
-      the house look).
+      binned data) rather than anything ECharts did. a29 adds one more to that
+      column: the reservation was aimed at the wrong rectangle for two kinds.
+      **Being settled by experiment**: the a30 Plotly spike puts both engines on
+      the same data behind a switch.
+
+- [ ] **Plotly evaluation spike** (a30, agreed after a29). `agg` and `port`
+      only, line graphs, no surfaces. Reuses the existing domain helpers
+      (`densityWindow`, `survivalRange`, `rightPairs`, `varAt`, `returnPeriod`)
+      so no chart decision is duplicated and the comparison is like for like.
+      Behind a dynamic import as `echarts-gl` already is, so an unflipped switch
+      costs the landing path nothing. Parity list matters or the comparison
+      answers nothing: steps-mid is `line.shape: 'hvh'`, loss on x in both
+      panels, the 1e-15 floor remembering that **Plotly log axis `range` is in
+      exponents**, the two anchors as `shapes` plus `annotations`, the twin axis
+      via `yaxis2.overlaying`, and one legend entry toggling both panels through
+      `legendgroup`.
+
+- [ ] **greater_tables alongside the current tables** (a31, agreed after a29).
+      The author's own package. The argument is not that it is prettier:
+      `serializers.py` flattens MultiIndex columns and resets the index into
+      data columns, and `port.summary_df` / `port.tail_df` both carry a two
+      level row index, so today a unit name is reprinted on all ten return
+      period rows where `sparsify=True` prints it once per block. Runs server
+      side on the real DataFrame through one new `frame/{which}.html` route
+      mirroring the existing `.csv` one. **`renderExhibit` stays and stays the
+      default**; GT is reached by a `?tables=gt` dev flag, no user facing
+      switch, so the two can be compared before either is deleted. Constraints
+      confirmed in the 7.2.0 source: pass `tikz=False` (it defaults to computing
+      LaTeX we discard) and `large_ok=True` (it *raises* above 50 rows, and a
+      six unit portfolio's `tail_df` is 70), never let a density frame near it,
+      and note the CSS is scoped to `#{df_id}` so injection is safe.
+
+- [ ] **The 3-D surface is sugar, not substance** (author's verdict after
+      seeing it, a29). "Quite impressive. Fast. But more sugar than substance."
+      It stays, since it is built and its chunk is lazy, so it costs the landing
+      path nothing. Do not invest further there. The verdict sharpens the
+      standing reminder above: the open question is what is worth plotting, not
+      what can be rendered.
 
 - [ ] **REMINDER for SM: better things to plot.** The author's note, verbatim:
       "this was a general comment that i need to work out better things to plot.

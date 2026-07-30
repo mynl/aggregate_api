@@ -41,7 +41,7 @@ import { el, empty } from '../utils/dom.js';
 import { fmt } from '../utils/format.js';
 import {
     echarts, baseOption, axisStyle, seriesColor, fade, lineWidth, houseStyle,
-    logMin, LOG_FLOOR,
+    logMin, LOG_FLOOR, loadStyle,
 } from './theme.js';
 import { loadSurface, surfaceGrid, surfaceOption } from './surface.js';
 
@@ -116,6 +116,17 @@ const PANEL_ASPECT = 4 / 3.25;
 // Bounds on the square plot area used by the single-panel exhibits.
 const SQUARE_MIN = 240;
 const SQUARE_MAX = 420;
+
+// Vertical chrome around a square plot area: the title strip above it, and the
+// axis plus legend below. One constant for all three square exhibits.
+//
+// Before a29 nobody wrote this down. The distortion and heatmap set no host
+// height at all and fell through a `grid.height + grid.top + 52` guess in the
+// mount, while the surface declared `side + 60`. Two formulas for the same
+// square, so flipping the 3-D toggle resized the box by 18 px on top of
+// everything else. Declaring it once also means `reservedHeight` can compute the
+// box before any data arrives and get the same answer the build will.
+const SQUARE_CHROME = PAD_TOP + 52;
 
 // The density is drawn as steps, always. `step: 'middle'` is matplotlib's
 // `drawstyle='steps-mid'`: the value holds across a bucket centered on its grid
@@ -513,14 +524,28 @@ export function panelGeometry(width, wide, twin = true) {
 export { PANEL_ASPECT };
 
 /**
- * The host height a two-panel exhibit will need at this width.
+ * The host height `kind` will need at this width, before any data has arrived.
  *
- * Called before the fetch so the space is already reserved. It assumes the twin
- * axis, which is the default view; being 52 px out on a non-default toggle is
- * invisible next to the jump this exists to prevent.
+ * Dispatches through the kind's own `layout`, which is the same function the
+ * build draws from, so the reserved box is the box the chart lands in rather
+ * than an estimate of it.
+ *
+ * Parameters
+ * ----------
+ * width : number
+ *     Host width in CSS pixels.
+ * kind : str, optional
+ *     A key of `EXHIBITS`. Anything else, including the reinsurance exhibit's
+ *     `'reins'`, falls back to the two-panel box, which is what those draw.
+ *
+ * Returns
+ * -------
+ * number
+ *     Host height in CSS pixels.
  */
-export function reservedHeight(width) {
-    return Math.round(panelGeometry(width, (width || 0) >= WIDE_PX, true).height);
+export function reservedHeight(width, kind) {
+    const layout = (kind && EXHIBITS[kind] && EXHIBITS[kind].layout) || twoPanelBox;
+    return layout(width).hostHeight;
 }
 
 /**
@@ -530,7 +555,7 @@ export function reservedHeight(width) {
  * toggle a unit in both panels at once.
  */
 function twoPanel({
-    loss, cdf, series, tail, wide, width, mean, zeroLine,
+    loss, cdf, series, tail, box, mean, zeroLine,
 }) {
     const solo = series.length === 1;
     const asRP = view.epMode === 'rp';
@@ -562,7 +587,10 @@ function twoPanel({
     if (rightRefs.length && right.length) right[0].markLine = refLine(rightRefs);
 
     const window = densityWindow(loss, cdf);
-    const { grids, height, footprint } = panelGeometry(width, wide, twin);
+    // The box was computed by the spec's `layout()` before the fetch and is
+    // handed in, not recomputed. `twin` above and the `view.rightLogY` the box
+    // was built from are the same flag, so the two agree by construction.
+    const { grids, hostHeight, footprint } = box;
     const [sLo, sHi] = survivalRange(series);
 
     // Loss on x in BOTH panels, always. The right panel is the same book seen
@@ -680,10 +708,10 @@ function twoPanel({
         },
         series: [...density, ...right],
     };
-    // Not ECharts keys: the mount reads `hostHeight` back so the geometry is
-    // computed once and in one place, and the smoke test reads `panelFootprint`
-    // to check the shape the layout was aiming for.
-    option.hostHeight = height;
+    // Not ECharts keys: carried through so the smoke test can read the shape the
+    // layout was aiming for, and can assert that what the build produced is the
+    // height that was reserved.
+    option.hostHeight = hostHeight;
     option.panelFootprint = footprint;
     return option;
 }
@@ -708,17 +736,65 @@ function squareLayout(width, { left = 56, rightPad = 28 } = {}) {
     return { side, left, top: PAD_TOP, bottom: 52 };
 }
 
+// ---- the layout box ----------------------------------------------------
+//
+// One number, computed once. Each exhibit declares a `layout(width)` returning
+// the geometry it will draw into, including the host height it needs. The mount
+// calls it **before** the fetch to reserve the space and hand the skeleton its
+// shape, then passes the same box into `build()`, which never recomputes.
+//
+// The bug this retires: `reservedHeight` used to take only a width and always
+// return the two-panel geometry, so a distortion reserved 347 px and rendered
+// 498, and a bivariate on a narrow screen reserved 730 and rendered 480. The
+// page jumped by 133 to 252 px on every one of those loads. Reservation and
+// build now cannot disagree, because there is only one of them.
+
+/** The two-panel box: four kinds plus the reinsurance exhibit. */
+function twoPanelBox(width) {
+    // `view.rightLogY` decides whether the tail panel carries its return-period
+    // twin, which changes the panel width and so the height. Reading it here
+    // rather than assuming it is what makes the reservation exact.
+    const g = panelGeometry(width, (width || 0) >= WIDE_PX, Boolean(view.rightLogY));
+    return { ...g, twoPanel: true, hostHeight: Math.round(g.height) };
+}
+
+/** The square box, for the exhibits with no loss axis to run left to right. */
+function squareBox(width, pads) {
+    const s = squareLayout(width, pads);
+    return { ...s, twoPanel: false, hostHeight: Math.round(s.side + SQUARE_CHROME) };
+}
+
+// The bivariate's pads, one set for both its renderers. The heatmap needs the
+// wider of the two (a colorbar on the right, a y-axis name gap on the left), so
+// they are its numbers and the surface draws at the same side.
+//
+// Deliberately NOT per renderer. Sizing the surface from its own narrower pads
+// gave it a larger `side` on a narrow screen, and since `surfaceReady` only
+// turns true once the lazy chunk has landed, the box was reserved as a heatmap
+// and rendered as a surface: 478 reserved, 498 drawn. A layout that depends on
+// async state cannot be reserved ahead of that state resolving, so this one
+// depends on none.
+const BVAGG_PADS = { left: 64, rightPad: 96 };
+
 // ---- per-kind exhibits ------------------------------------------------
 //
-// Each entry is {controls, fetch, build}. `fetch` gathers the frames; `build`
-// turns them into an ECharts option and is pure, so the node smoke test can
-// exercise it without a DOM. `controls` names the toggles the exhibit honors,
-// so a distortion never offers a log-y button that would do nothing.
+// Each entry is {layout, controls, fetch, build}. `layout` gives the geometry
+// and host height for a width, and is called before the fetch so the space can
+// be reserved and the skeleton drawn at the right shape. `fetch` gathers the
+// frames. `build` turns the box and the frames into an ECharts option and is
+// pure, so the node smoke test can exercise it without a DOM. `controls` names
+// the toggles the exhibit honors, so a distortion never offers a log-y button
+// that would do nothing.
+//
+// `build` takes its geometry from `opts.box`, the same object `layout` returned,
+// and never derives it again. That is the whole point: the reserved height and
+// the rendered height are one number.
 
 const TWO_PANEL_CONTROLS = ['logY', 'xFull', 'refLines', 'epMode', 'rightLogY'];
 
 const EXHIBITS = {
     agg: {
+        layout: twoPanelBox,
         controls: TWO_PANEL_CONTROLS,
         async fetch(id) {
             const [density, tail] = await Promise.all([
@@ -727,19 +803,20 @@ const EXHIBITS = {
             ]);
             return { density, tail };
         },
-        build({ density, tail }, { name, wide, width, mean }) {
+        build({ density, tail }, { name, box, mean }) {
             const loss = col(density, 'loss');
             const mass = col(density, 'p_total');
             const S = col(density, 'S');
             if (!loss || !mass || !S) return null;
             return twoPanel({
-                loss, cdf: col(density, 'F'), tail, wide, width, mean,
+                loss, cdf: col(density, 'F'), tail, box, mean,
                 series: [{ name: name || 'aggregate', mass, tailProb: S }],
             });
         },
     },
 
     port: {
+        layout: twoPanelBox,
         controls: TWO_PANEL_CONTROLS,
         async fetch(id) {
             const [units, tail] = await Promise.all([
@@ -748,7 +825,7 @@ const EXHIBITS = {
             ]);
             return { units, tail };
         },
-        build({ units, tail }, { wide, width, mean }) {
+        build({ units, tail }, { box, mean }) {
             const loss = col(units, 'loss');
             if (!loss) return null;
             // Units first, total last, so the total draws on top of them and
@@ -761,22 +838,23 @@ const EXHIBITS = {
             const totalS = col(units, 'S');
             if (total && totalS) series.push({ name: 'total', mass: total, tailProb: totalS });
             if (!series.length) return null;
-            return twoPanel({ loss, cdf: col(units, 'F'), tail, wide, width, mean, series });
+            return twoPanel({ loss, cdf: col(units, 'F'), tail, box, mean, series });
         },
     },
 
     sev: {
+        layout: twoPanelBox,
         controls: TWO_PANEL_CONTROLS,
         async fetch(id) {
             return { density: await api.density_df(id) };
         },
-        build({ density }, { name, wide, width, mean }) {
+        build({ density }, { name, box, mean }) {
             const loss = col(density, 'loss');
             const pdf = col(density, 'pdf');
             const S = col(density, 'S');
             if (!loss || !pdf || !S) return null;
             const option = twoPanel({
-                loss, cdf: col(density, 'F'), tail: null, wide, width, mean,
+                loss, cdf: col(density, 'F'), tail: null, box, mean,
                 series: [{ name: name || 'severity', mass: pdf, tailProb: S }],
             });
             // A severity is a density ordinate, not a mass, and its support is
@@ -789,11 +867,12 @@ const EXHIBITS = {
     },
 
     pnl: {
+        layout: twoPanelBox,
         controls: TWO_PANEL_CONTROLS,
         async fetch(id) {
             return { density: await api.density_df(id, { cols: 'loss,p_total,F,S' }) };
         },
-        build({ density }, { name, wide, width, mean }) {
+        build({ density }, { name, box, mean }) {
             const loss = col(density, 'loss');
             const mass = col(density, 'p_total');
             const F = col(density, 'F');
@@ -802,7 +881,7 @@ const EXHIBITS = {
             // the return period runs off F, not S: a 1-in-200 year is the
             // outcome only 1/200 of years fall below, not above.
             const option = twoPanel({
-                loss, cdf: F, tail: null, wide, width, mean, zeroLine: 0,
+                loss, cdf: F, tail: null, box, mean, zeroLine: 0,
                 series: [{ name: name || 'P&L', mass, tailProb: F }],
             });
             option.title[1].text = view.epMode === 'rp'
@@ -813,11 +892,12 @@ const EXHIBITS = {
     },
 
     distortion: {
+        layout: (width) => squareBox(width),
         controls: [],
         async fetch(id) {
             return { curve: await api.density_df(id) };
         },
-        build({ curve }, { width }) {
+        build({ curve }, { box }) {
             const x = col(curve, 'x');
             const g = col(curve, 'g');
             if (!x || !g) return null;
@@ -825,9 +905,10 @@ const EXHIBITS = {
             // Square, and both axes on [0, 1]: g(s) lives on the unit square and
             // the only thing anyone reads off it is concavity, which a stretched
             // aspect ratio misrepresents. This is `aspect='equal'`.
-            const { side, left, top, bottom } = squareLayout(width);
+            const { side, left, top, bottom, hostHeight } = box;
             return {
                 ...baseOption(),
+                hostHeight,
                 grid: { left, top, width: side, height: side },
                 title: [{ text: 'Distortion g(s)', left, top: 2,
                           textStyle: { fontSize: 12, fontWeight: 600 } }],
@@ -868,6 +949,9 @@ const EXHIBITS = {
     },
 
     bvagg: {
+        // Square either way, and the *same* square either way, so flipping the
+        // 3-D toggle changes what is drawn without moving anything on the page.
+        layout: (width) => squareBox(width, BVAGG_PADS),
         // The bivariate is the one kind whose exhibit is a 3-D surface, so it
         // gets its own controls: which renderer, and how the height is scaled.
         controls: ['surface3d', 'logZ'],
@@ -887,21 +971,19 @@ const EXHIBITS = {
             ]);
             return { joint, stats };
         },
-        build({ joint, stats }, { width }) {
+        build({ joint, stats }, { box }) {
             const [xName, yName] = axisNames(joint, stats);
+            const { side, left, top, hostHeight } = box;
             // 3-D when the renderer is loaded and asked for; the flat heatmap
             // otherwise, so a WebGL-less browser or a failed chunk still lands
             // on a picture rather than an empty pane.
             if (view.surface3d && surfaceReady) {
                 const grid = surfaceGrid(joint);
                 if (grid) {
-                    const { side } = squareLayout(width, { left: 20, rightPad: 90 });
                     const option = surfaceOption(grid, {
                         xName, yName, logZ: Boolean(view.logZ), side,
                     });
-                    // The mount reads this back for the host height; a surface is
-                    // square like the heatmap it replaces.
-                    option.hostHeight = side + 60;
+                    option.hostHeight = hostHeight;
                     return option;
                 }
             }
@@ -911,9 +993,9 @@ const EXHIBITS = {
             // Square for the same reason as the distortion: a joint density
             // stretched wide lies about where the mass sits. The right pad
             // leaves room for the colorbar.
-            const { side, left, top } = squareLayout(width, { left: 64, rightPad: 96 });
             return {
                 ...baseOption(),
+                hostHeight,
                 grid: { left, top, width: side, height: side },
                 title: [{ text: `Joint density: ${grid.xName} vs ${grid.yName}`,
                           left, top: 2,
@@ -1113,7 +1195,6 @@ export function mountReinsExhibit(container, frame) {
     const host = el('div', { className: 'exhibit-canvas' });
     container.appendChild(tools);
     container.appendChild(host);
-    host.style.height = `${reservedHeight(host.clientWidth || 0)}px`;
 
     const isWide = () => (host.clientWidth || 0) >= WIDE_PX;
 
@@ -1154,15 +1235,15 @@ export function mountReinsExhibit(container, frame) {
         let acc = 0;
         const cdf = series[0].mass.map((v) => (acc += (v || 0)));
         return twoPanel({
-            loss, cdf, series, tail: null,
-            wide: isWide(), width: host.clientWidth || 0,
+            loss, cdf, series, tail: null, box: twoPanelBox(host.clientWidth || 0),
         });
     }
 
     let option = buildOption();
     if (!option) { empty(container); return null; }
     renderTools();
-    host.style.height = `${chartHeight(option)}px`;
+    empty(host);
+    host.style.height = `${option.hostHeight}px`;
     const chart = echarts.init(host, null, { renderer: 'canvas' });
     chart.setOption(option);
     linkPanels(chart, option);
@@ -1171,7 +1252,7 @@ export function mountReinsExhibit(container, frame) {
         const next = buildOption();
         if (!next) return;
         option = next;
-        host.style.height = `${chartHeight(option)}px`;
+        host.style.height = `${option.hostHeight}px`;
         chart.setOption(option, true);
         chart.resize();
         linkPanels(chart, option);
@@ -1364,43 +1445,104 @@ function choiceGroup(label, options, selected, onPick) {
  *     A handle with `dispose()`, or null when this kind has nothing to draw or
  *     the frames it needs are unavailable.
  */
+// The words the skeleton puts above each panel. Presentational only: these
+// mirror the titles the builds set, and a drift here costs a moment of wrong
+// label rather than a wrong shape. Kept in one place instead of threaded through
+// six specs for that reason.
+const tailTitle = () => (view.epMode === 'rp' ? 'Return period' : 'Survival');
+const SKELETON_TITLES = {
+    agg: () => ['Density', tailTitle()],
+    port: () => ['Density', tailTitle()],
+    sev: () => ['Severity density', tailTitle()],
+    pnl: () => ['Density', view.epMode === 'rp'
+        ? 'Downside return period' : 'Downside probability'],
+    distortion: () => ['Distortion g(s)'],
+    bvagg: () => ['Joint density'],
+    reins: () => ['Density', tailTitle()],
+};
+
+/**
+ * Fill `host` with the exhibit's outline, at its final size, before the fetch.
+ *
+ * The panels are positioned at the exact grid geometry the chart will use and
+ * the titles sit where the chart will put its own, so the arriving chart lands
+ * on top of its own outline instead of replacing a differently shaped block. A
+ * reserved but empty box says nothing; this says a graph is coming, and where.
+ *
+ * Parameters
+ * ----------
+ * host : HTMLElement
+ *     The chart's mount point. Emptied, sized and given a positioning context.
+ * kind : str
+ *     A key of `EXHIBITS`, or `'reins'`.
+ * width : number
+ *     Host width in CSS pixels.
+ *
+ * Returns
+ * -------
+ * object
+ *     The layout box, so a caller that already needed it does not compute it
+ *     twice.
+ */
+export function showPlaceholder(host, kind, width) {
+    const spec = EXHIBITS[kind];
+    const box = (spec && spec.layout ? spec.layout : twoPanelBox)(width);
+    empty(host);
+    host.style.position = 'relative';
+    host.style.height = `${box.hostHeight}px`;
+
+    const titles = (SKELETON_TITLES[kind] || SKELETON_TITLES.agg)();
+    const panels = box.twoPanel
+        ? box.grids.map((g) => ({ ...g }))
+        : [{ left: box.left, top: box.top, width: box.side, height: box.side }];
+
+    const skin = el('div', { className: 'exhibit-skeleton' });
+    panels.forEach((p, i) => {
+        if (titles[i]) {
+            skin.appendChild(el('div', {
+                className: 'exhibit-skeleton-title',
+                style: `left:${p.left}px; top:${p.top - 24}px`,
+            }, titles[i]));
+        }
+        skin.appendChild(el('div', {
+            className: 'exhibit-skeleton-panel',
+            style: `left:${p.left}px; top:${p.top}px;`
+                 + `width:${p.width}px; height:${p.height}px`,
+        }, el('i', { className: 'bi bi-graph-up', 'aria-hidden': 'true' })));
+    });
+    host.appendChild(skin);
+    return box;
+}
+
 export async function mountExhibit(container, state) {
     const spec = EXHIBITS[state.kind];
     if (!spec) return null;
 
-    // Build the frame and reserve its height FIRST, before the fetch. A density
-    // payload is a couple of hundred kilobytes and takes a moment; a chart that
-    // sizes itself on arrival shoves everything below it down the page at the
-    // moment the reader has started reading. Reserving costs nothing and the
-    // number is exact, since the geometry is a function of the width.
+    // Draw the outline FIRST, at its final size, before anything is fetched. A
+    // density payload is a couple of hundred kilobytes and the style endpoint is
+    // its own round trip; a chart that sizes itself on arrival shoves everything
+    // below it down the page at the moment the reader has started reading. The
+    // number is exact rather than an estimate, because `spec.layout` is the same
+    // function the build takes its geometry from.
     empty(container);
     const controls = spec.controls || [];
     const tools = el('div');
     const host = el('div', { className: 'exhibit-canvas' });
     container.appendChild(tools);
     container.appendChild(host);
-    host.style.height = `${reservedHeight(host.clientWidth || 0)}px`;
+    showPlaceholder(host, state.kind, host.clientWidth || 0);
 
-    // The 3-D chunk, if this exhibit can use one, in parallel with the data.
-    const needs3d = controls.includes('surface3d') && view.surface3d;
-    let data;
-    try {
-        const [payload, ready] = await Promise.all([
-            spec.fetch(state.id),
-            needs3d ? loadSurface() : Promise.resolve(false),
-        ]);
-        data = payload;
-        if (ready) surfaceReady = true;
-    } catch {
-        empty(container);
-        return null;                     // a frame this kind lacks; not an error
-    }
-
-    const opts = () => ({
-        ...state,
-        wide: (host.clientWidth || 0) >= WIDE_PX,
-        width: host.clientWidth || 0,
-    });
+    // `box` comes from the spec's own layout, so what the build draws into is
+    // what was reserved. Recomputed per call because a resize changes it.
+    const opts = () => {
+        const width = host.clientWidth || 0;
+        return {
+            ...state,
+            wide: width >= WIDE_PX,
+            width,
+            box: spec.layout(width),
+        };
+    };
 
     // The control row splits across the two panels only when they sit side by
     // side, so it is re-rendered when the layout breakpoint moves.
@@ -1410,11 +1552,45 @@ export async function mountExhibit(container, state) {
         tools.appendChild(renderControls(controls, opts().wide, () => onToggle()));
     }
 
-    let option = spec.build(data, opts());
-    if (!option) { empty(container); return null; }
+    // Declared before the controls are wired, not beside the chart it guards: the
+    // buttons below can fire during the fetch, and a `let` declared further down
+    // would be in its temporal dead zone when `redraw` read it.
+    let ready = false;
+
+    // Drawn now, not after the data lands. The controls depend on the width and
+    // the spec, never on the payload, so rendering them up front means the strip
+    // above the chart is already the height it will keep. Rendering them late
+    // reserved the chart perfectly and then pushed it down by a button row
+    // anyway. `redraw` no-ops until there is something to draw, so a toggle
+    // pressed mid-fetch just records the view and is picked up on arrival.
     renderTools();
 
-    host.style.height = `${chartHeight(option)}px`;
+    // The 3-D chunk, if this exhibit can use one, and the house colors, both in
+    // parallel with the data. `loadStyle` lives here rather than at the call site
+    // so its round trip happens behind the skeleton too.
+    const needs3d = controls.includes('surface3d') && view.surface3d;
+    let data;
+    try {
+        const [payload, loaded] = await Promise.all([
+            spec.fetch(state.id),
+            needs3d ? loadSurface() : Promise.resolve(false),
+            loadStyle().catch(() => null),   // colors are a bonus, not a blocker
+        ]);
+        data = payload;
+        if (loaded) surfaceReady = true;
+    } catch {
+        empty(container);
+        return null;                     // a frame this kind lacks; not an error
+    }
+
+    let option = spec.build(data, opts());
+    if (!option) { empty(container); return null; }
+
+    // Same height the skeleton was already holding, so nothing moves. `empty`
+    // clears the skeleton: ECharts appends its canvas to this node and would
+    // otherwise draw over the outline rather than replace it.
+    empty(host);
+    host.style.height = `${option.hostHeight}px`;
     const chart = echarts.init(host, null, { renderer: 'canvas' });
     chart.setOption(option);
     linkPanels(chart, option);
@@ -1437,12 +1613,14 @@ export async function mountExhibit(container, state) {
     // migrate a `grid` option to a `grid3D` one in place.
     let is3d = Boolean(option.grid3D);
     let chartRef = chart;
+    ready = true;
     function redraw() {
+        if (!ready) return;
         const next = spec.build(data, opts());
         if (!next) return;
         option = next;
         const next3d = Boolean(option.grid3D);
-        host.style.height = `${chartHeight(option)}px`;
+        host.style.height = `${option.hostHeight}px`;
         if (next3d !== is3d) {
             is3d = next3d;
             try { chartRef.dispose(); } catch { /* already gone */ }
@@ -1477,21 +1655,6 @@ export async function mountExhibit(container, state) {
             try { chartRef.dispose(); } catch { /* already gone */ }
         },
     };
-}
-
-/**
- * Host height for an option.
- *
- * `twoPanel` computes it alongside the grid geometry and hands it over on
- * `hostHeight`, so the aspect calculation lives in exactly one place. A square
- * exhibit sizes to its own side.
- */
-function chartHeight(option) {
-    if (typeof option.hostHeight === 'number') return Math.round(option.hostHeight);
-    const grids = Array.isArray(option.grid) ? option.grid : [option.grid];
-    const g = grids[0] || {};
-    if (typeof g.height === 'number') return g.height + (g.top || 0) + 52;
-    return 300;
 }
 
 /**

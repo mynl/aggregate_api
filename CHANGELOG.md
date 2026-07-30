@@ -4,6 +4,71 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a29
+
+From `dev/done/plan-graph-placeholder.md`. The chart box stops moving, and it says
+a graph is coming instead of leaving a hole.
+
+### The reservation was for the wrong exhibit
+
+a28 reserved the chart's height before fetching, which was the right idea aimed at
+the wrong rectangle. `reservedHeight(width)` took **only a width** and always
+returned the two-panel geometry, but two of the six kinds do not use that layout:
+
+| kind | host 1000 (wide) | host 560 (narrow) |
+|---|---|---|
+| agg / port / sev / pnl | reserved 347, rendered 347 | reserved 730, rendered 730 |
+| distortion | reserved 347, rendered **498** | reserved 730, rendered **498** |
+| bvagg | reserved 347, rendered **498** | reserved 730, rendered **478** |
+
+So a distortion or a bivariate shoved the page down 133 to 151 px on a wide screen
+and snapped it up 232 to 252 px on a narrow one, every load.
+
+Each exhibit now declares a `layout(width)` returning the geometry **and** the host
+height. The mount calls it once before the fetch and hands the same box to
+`build()`, which never derives geometry again. Reservation and render cannot
+disagree, because there is only one of them. `chartHeight()` and its
+`grid.height + top + 52` guess are gone.
+
+Two related leaks closed with it. `reservedHeight` hardcoded the return-period twin
+axis, running about 21 px short whenever it was off; it reads `view.rightLogY` now.
+And the three square call sites disagreed, the surface declaring `side + 60` while
+the others fell through to `side + 78`, so flipping the 3-D toggle resized the box
+by 18 px. One `SQUARE_CHROME` constant, declared once.
+
+The bivariate's pads are no longer per renderer. Sizing the surface from its own
+narrower pads made `layout` depend on `surfaceReady`, which only turns true once
+the lazy chunk lands, so on a narrow screen the box was reserved as a heatmap and
+drawn as a surface. A layout that depends on async state cannot be reserved ahead
+of that state resolving.
+
+### The skeleton
+
+`showPlaceholder()` fills the reserved box with the exhibit's outline: panels at
+the exact grid geometry the chart will use, titles where the chart will put its
+own, a centered glyph, a dashed border and a slow shallow pulse (dropped under
+`prefers-reduced-motion`). The arriving chart lands on top of its own outline
+rather than replacing a differently shaped block. A reserved but empty box says
+nothing; this says a graph is coming, and where.
+
+### The control row was the other half of the jump
+
+Reserving the chart perfectly and then rendering the toggle row on arrival pushed
+everything down by a button row anyway. The controls depend on the width and the
+spec, never on the payload, so they are drawn up front. `redraw()` no-ops until
+there is something to draw, so a toggle pressed mid-fetch records the view and is
+picked up when the data lands.
+
+`loadStyle()` moved from the two call sites into the mounts, so its round trip also
+happens behind the skeleton, and `main.js` no longer juggles `minHeight` around a
+guess it should never have been making.
+
+### Verification
+
+`dev/smoke-exhibits.mjs` now asserts `reservedHeight(width, kind)` equals the built
+option's `hostHeight` for every kind at both breakpoints. That is the invariant a29
+is about, and nothing checked it before because nothing compared the two numbers.
+
 ## 1.0.0a28
 
 From `dev/done/plan-exhibit-punchups-5.md`. Third round of exhibit feedback: step

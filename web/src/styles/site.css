@@ -340,6 +340,33 @@ header .navbar { min-height: 56px; }
 .overview-plot { width: 100%; max-width: 1000px; margin: .2rem 0 1rem; }
 .exhibit-canvas { width: 100%; }
 
+/* ---- Exhibit skeleton ----
+   The reserved box, drawn rather than left blank. Panels sit at the exact grid
+   geometry the chart will use, so the arriving chart lands on top of its own
+   outline instead of replacing a differently shaped block. A blank reserved box
+   says nothing; this says a graph is coming, and where. */
+.exhibit-skeleton { position: absolute; inset: 0; pointer-events: none; }
+.exhibit-skeleton-panel {
+    position: absolute;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px dashed var(--grid); border-radius: var(--bs-border-radius, .375rem);
+    background: rgba(0, 0, 0, .015);
+    animation: exhibit-skeleton-pulse 1.9s ease-in-out infinite;
+}
+.exhibit-skeleton-panel .bi { font-size: 1.5rem; color: var(--grid); }
+.exhibit-skeleton-title {
+    position: absolute; font-size: 12px; font-weight: 600; color: var(--grid);
+}
+/* Slow, and shallow. A skeleton that flashes competes with the page for
+   attention, which is the opposite of the point. */
+@keyframes exhibit-skeleton-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: .55; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .exhibit-skeleton-panel { animation: none; }
+}
+
 /* ---- Exhibit toggle row (log y / survival / full x / reference lines) ----
    Sits where the program disclosure used to, directly above the chart. State is
    sticky per browser, so a chosen view survives a rebuild. */

@@ -51,7 +51,7 @@ if (BASE) {
         typeof input === 'string' && input.startsWith('/') ? BASE + input : input, init);
 }
 
-const { EXHIBITS, reinsSeries, PANEL_ASPECT } = await import(
+const { EXHIBITS, reinsSeries, PANEL_ASPECT, reservedHeight } = await import(
     pathToFileURL(path.join(here, '..', 'web', 'src', 'charts', 'exhibits.js')).href);
 const { surfaceGrid, surfaceOption } = await import(
     pathToFileURL(path.join(here, '..', 'web', 'src', 'charts', 'surface.js')).href);
@@ -167,11 +167,16 @@ for (const [kind, key] of CASES) {
     let broke = false;
     for (const layout of LAYOUTS) {
         const { data, build } = payload;
+        // What the mount reserves before the fetch, taken the same way the mount
+        // takes it. The build below is handed the box from the same `layout`, so
+        // the two heights must agree; see the check further down.
+        const reserved = reservedHeight(layout.width, kind);
         let option;
         try {
             option = spec.build(data, {
                 name: build.name, kind, mean: build.mean,
                 wide: layout.wide, width: layout.width,
+                box: spec.layout(layout.width),
             });
         } catch (err) {
             fail(`${key} (${layout.name}): ${err.message}`);
@@ -185,6 +190,18 @@ for (const [kind, key] of CASES) {
         const notes = [];
         if (!series.length) notes.push('no series');
 
+        // The invariant a29 exists to hold: the box reserved before the fetch is
+        // the box the chart lands in. Before a29 `reservedHeight` took only a
+        // width and always answered with the two-panel geometry, so a distortion
+        // reserved 347 and rendered 498 and a bivariate reserved 730 and
+        // rendered 480. The page jumped 133 to 252 px on every such load, and
+        // nothing here noticed, because nothing compared the two numbers.
+        if (!(option.hostHeight > 0)) notes.push('no host height');
+        else if (Math.round(option.hostHeight) !== Math.round(reserved)) {
+            notes.push(`reserved ${Math.round(reserved)} but rendered `
+                + `${Math.round(option.hostHeight)}`);
+        }
+
         let shape;
         if (grids.length >= 2) {
             const half = series.length / 2;
@@ -195,7 +212,6 @@ for (const [kind, key] of CASES) {
             if (typeof x.min === 'number' && typeof x.max === 'number' && !(x.max > x.min)) {
                 notes.push('density x window collapsed');
             }
-            if (!(option.hostHeight > 0)) notes.push('no host height');
             const got = checkAspect(grids, option.panelFootprint, notes);
             // Steps are unconditional now, so *every* density series carries
             // them. A value in the frame is the mass in one bucket, not a sample
@@ -213,7 +229,7 @@ for (const [kind, key] of CASES) {
             const g = grids[0] || {};
             if (g == null) notes.push('no grid');
             else if (g.width !== g.height) notes.push(`not square (${g.width}x${g.height})`);
-            shape = `square=${g.width}`;
+            shape = `square=${g.width} h=${Math.round(option.hostHeight)}`;
         }
 
         if (notes.length) { fail(`${key} (${layout.name}): ${notes.join('; ')}`); broke = true; break; }
@@ -306,9 +322,6 @@ if (fixtures && fixtures.bvagg) {
     }
 }
 
-// The discrete case exists to prove the step rendering fires, and the
-// continuous one to prove it does not. A smoke test that cannot tell them apart
-// would pass forever with the feature broken either way.
 console.log('');
 console.log(bad ? `${bad} problem(s)` : 'all exhibits built cleanly');
 process.exit(bad ? 1 : 0);

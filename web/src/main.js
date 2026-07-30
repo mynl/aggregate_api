@@ -23,7 +23,7 @@ import { api, ApiError } from './api.js';
 import { createEditor, emacsEnabledDefault } from './editor.js';
 import { mountExamples, mountPalette, loadExamples } from './examples.js';
 import { renderInfo, renderExhibit } from './renderers.js';
-import { mountExhibit, mountReinsExhibit, reservedHeight } from './charts/exhibits.js';
+import { mountExhibit, mountReinsExhibit, showPlaceholder } from './charts/exhibits.js';
 import { loadStyle } from './charts/theme.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
 import { renderError, renderRateLimit } from './error-pane.js';
@@ -634,16 +634,14 @@ async function loadOverview() {
     // a g-curve for a distortion, a joint heatmap for a bivariate.
     const host = el('div', { className: 'overview-plot' });
     pane.appendChild(host);
-    // Reserve the height now, not when the data lands. `loadStyle()` and the
-    // density fetch are both round trips, and a chart that sizes itself on
-    // arrival shoves the tables below it down the page at the moment the reader
-    // has started reading them.
-    host.style.minHeight = `${reservedHeight(host.clientWidth || 0)}px`;
+    // `mountExhibit` owns the box: it draws the skeleton at the exhibit's final
+    // size before fetching anything, and awaits `loadStyle()` behind it. Nothing
+    // to reserve from out here, which is the point. Reserving from the call site
+    // meant guessing the geometry, and the guess was the two-panel one for every
+    // kind, so a distortion or a bivariate reserved the wrong box entirely.
     try {
-        await loadStyle();               // colors, once per page load
         overviewChart = await mountExhibit(host, state);
     } catch { /* the exhibit is a bonus; the tables still carry the story */ }
-    host.style.minHeight = '';
     if (overviewChart) rendered = true;
     else pane.removeChild(host);
 
@@ -743,15 +741,24 @@ async function loadReinsExhibit() {
     if (!host) return;
     if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
     empty(host);
-    host.style.minHeight = `${reservedHeight(host.clientWidth || 0)}px`;
+    // Same skeleton as the Overview, in the shape this exhibit draws (two
+    // panels). `mountReinsExhibit` is synchronous and takes the frame already
+    // fetched, so unlike the Overview the box is reserved from here, and
+    // `loadStyle` still has to land before the build reads the colors.
+    showPlaceholder(host, 'reins', host.clientWidth || 0);
     try {
-        await loadStyle();
         // Full resolution: this is a plot, and a ceded distribution is more
         // atomic than a gross one, not less.
-        const frame = await api.reinsFrame(state.id, 'reins_density_df');
+        const [frame] = await Promise.all([
+            api.reinsFrame(state.id, 'reins_density_df'),
+            loadStyle().catch(() => null),
+        ]);
         reinsChart = mountReinsExhibit(host, frame);
     } catch { /* the exhibit is a bonus; the frames carry the numbers */ }
-    host.style.minHeight = '';
+    // `mountReinsExhibit` replaces the skeleton with its own tools row and
+    // canvas, each sized in themselves, so the height set on this node has to
+    // come back off or it would clamp them.
+    host.style.height = '';
     if (!reinsChart) empty(host);
 }
 
