@@ -22,10 +22,11 @@ import './styles/cm6.css';
 import { api, ApiError } from './api.js';
 import { createEditor, emacsEnabledDefault } from './editor.js';
 import { mountExamples, mountPalette, loadExamples } from './examples.js';
-import { renderInfo, renderExhibit } from './renderers.js';
+import { renderInfo } from './renderers.js';
 import { mountExhibit, mountReinsExhibit, showPlaceholder } from './charts/exhibits.js';
 import { loadStyle } from './charts/theme.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
+import { mountIrTable, staticOk, STATIC_MAX_ROWS } from './tables.js';
 import { renderError, renderRateLimit } from './error-pane.js';
 import * as history from './history.js';
 import { $, el, empty } from './utils/dom.js';
@@ -501,135 +502,160 @@ async function loadTab(name) {
 // is keyed on the grid registry; the chart is not, so we track it ourselves.
 let overviewChart = null;
 
-// Overview table view mode. The Overview is the landing demo ("demo-central"),
-// where the curated *static* exhibit -- lit 1-in-200 / 1-in-250 anchors, bold
-// Agg / total "what's my number" -- tells the story better than a bare grid, and
-// the frames are 3-11 rows so CsvGrid's sort / filter / search buys little. But
-// a returning power user often wants the interactive grid, so the exhibits carry
-// a Static | Interactive toggle. Static is the default; the choice is sticky per
-// browser. (CsvGrid has no row highlighting, so the two views are genuinely
-// different instruments, not just styling -- hence a toggle, not a restyle.)
-let overviewView = (() => {
-    try { return localStorage.getItem('aggapi.overviewView') || 'static'; }
-    catch { return 'static'; }
+// ----------------------------------------------------------------------
+// How tables render: one preference, page-wide
+// ----------------------------------------------------------------------
+//
+// Two genuinely different instruments, not two skins. The static view walks a
+// table document from the server: a sparsified row index, spanned MultiIndex
+// headers, the total row and the capital anchors carrying their own weight, and
+// resolved formats. It is the printed exhibit. The interactive view is CsvGrid:
+// sort, per-column filter, fzf search, copy and save. It is the instrument for
+// finding a number in a frame too big to read.
+//
+// The choice is one value for the whole page rather than per tab or per table,
+// which is the author's call and the right one: a per-table switch is a lot of
+// chrome for a preference nobody changes twice in a session. Sticky per browser,
+// static by default (the Overview is the landing demo).
+const TABLE_VIEW_KEY = 'aggapi.tableView';
+let _tableView = (() => {
+    try {
+        // `aggapi.overviewView` is the a26-a31 key, when the preference steered
+        // the Overview alone. Read it as the seed so a returning browser keeps
+        // the choice it already made.
+        return localStorage.getItem(TABLE_VIEW_KEY)
+            || localStorage.getItem('aggapi.overviewView') || 'static';
+    } catch { return 'static'; }
 })();
-function setOverviewView(mode) {
-    overviewView = mode;
-    try { localStorage.setItem('aggapi.overviewView', mode); } catch { /* private mode */ }
+
+// Listeners re-render whatever they own when the preference moves. Registered
+// rather than hard-wired because the control lives in the header dropdown, which
+// knows nothing about which tab is on screen.
+//
+// Each carries the node it speaks for, and a listener whose node has left the
+// page is dropped on the next change. Tabs re-render freely (every rebuild, every
+// sub-button), so without that this set would grow all session and re-render
+// panes that no longer exist.
+const tableViewListeners = new Set();
+function onTableViewChange(fn, node) { tableViewListeners.add({ fn, node }); }
+
+function setTableView(mode) {
+    if (mode === _tableView) return;
+    _tableView = mode;
+    try { localStorage.setItem(TABLE_VIEW_KEY, mode); } catch { /* private mode */ }
+    for (const entry of [...tableViewListeners]) {
+        if (entry.node && !entry.node.isConnected) {
+            tableViewListeners.delete(entry);
+            continue;
+        }
+        try { entry.fn(); } catch { /* one dead pane must not stop the others */ }
+    }
 }
 
-// The Static | Interactive control; `onChange` re-renders the exhibits.
+/**
+ * Mount one frame the way the preference asks.
+ *
+ * Falls back to the grid, with a line saying why, when the static view cannot
+ * answer: the frame is too long to read, the document did not arrive, or the
+ * walker failed to load. Never an empty pane, and never a control that silently
+ * does nothing.
+ *
+ * Parameters
+ * ----------
+ * paneId : str
+ *     Output pane, for teardown.
+ * host : HTMLElement
+ *     Mount point, already attached (CsvGrid measures against live layout).
+ * frame : object
+ *     `{columns, rows}` for the grid, and what the row-count gate reads.
+ * doc : object, optional
+ *     The table document for the static view.
+ * gridOpts : object, optional
+ *     CsvGrid options for the interactive view.
+ */
+function mountTable(paneId, host, frame, doc, gridOpts = GRID_FULL) {
+    const wantStatic = _tableView === 'static';
+    const asGrid = () => {
+        host.className = 'grid-host';
+        mountGrid(paneId, host, frame, gridOpts);
+    };
+    if (wantStatic && doc && staticOk(frame)) {
+        host.className = 'gt-host';
+        // Async, but the host is already in the DOM and holds its place, so the
+        // table lands without moving anything around it. A null handle means the
+        // walker could not be loaded at all, which is the grid's cue.
+        mountIrTable(paneId, host, doc).then((handle) => { if (!handle) asGrid(); });
+        return;
+    }
+    asGrid();
+    if (wantStatic && (frame?.rows?.length || 0) > STATIC_MAX_ROWS) {
+        // Static was asked for and refused. Say why rather than letting the
+        // control look broken.
+        host.after(el('div', { className: 'text-muted small fst-italic mt-1' },
+            `${frame.rows.length.toLocaleString()} rows is past the `
+            + `${STATIC_MAX_ROWS}-row static limit, so this one stays interactive. `
+            + 'Filter it here, or take the whole frame with the CSV download.'));
+    }
+}
+
+// The Static | Interactive control on the Overview, writing the page-wide
+// preference the header dropdown also writes.
+//
+// Both affordances exist on purpose. The dropdown is where a page-wide setting
+// belongs; this is on the landing tab, next to the tables it changes, which is
+// where anyone would first reach for it.
 //
 // Same pill shape as the chart's own toggles, in the code red rather than the
 // primary blue. They are the same kind of control (a sticky view switch) so they
 // should look like each other; they steer different halves of the tab, so a
 // glance should still tell them apart.
-function exhibitToggle(onChange) {
+function exhibitToggle() {
     const btns = [['static', 'Static'], ['interactive', 'Interactive']].map(([mode, label]) => {
         const b = el('button', {
             type: 'button',
             className: 'exhibit-toggle exhibit-toggle--table'
-                + (overviewView === mode ? ' active' : ''),
+                + (_tableView === mode ? ' active' : ''),
         }, label);
-        b.addEventListener('click', () => {
-            if (overviewView === mode) return;
-            setOverviewView(mode);
-            for (const x of btns) x.classList.toggle('active', x === b);
-            onChange();
-        });
+        b.addEventListener('click', () => setTableView(mode));
         return b;
     });
-    return el('div', { className: 'overview-view-toggle' },
+    const row = el('div', { className: 'overview-view-toggle' },
         el('span', { className: 'overview-view-label' }, 'Tables'), ...btns);
-}
-
-// ----------------------------------------------------------------------
-// Static table renderer (a31 evaluation)
-// ----------------------------------------------------------------------
-//
-// `greater_tables` renders server side, on the real DataFrame, and so keeps the
-// two things the JSON wire format throws away: a sparsified row index (a
-// portfolio's tail_df otherwise reprints the unit name on all ten of its
-// return-period rows) and spanned MultiIndex column headers.
-//
-// It is **alongside** `renderExhibit`, not instead of it, and there is
-// deliberately **no user-facing switch**: the default is exactly what shipped
-// before, and the comparison is made by flipping a dev flag. Nothing is deleted
-// until that comparison has been made.
-//
-//     ?tables=gt      turn it on  (sticky)
-//     ?tables=native  turn it off
-//
-const TABLES_KEY = 'aggapi.tablesEngine';
-const tablesEngine = (() => {
-    let mode = 'native';
-    try { mode = localStorage.getItem(TABLES_KEY) || 'native'; } catch { /* private */ }
-    const asked = new URLSearchParams(location.search).get('tables');
-    if (asked === 'gt' || asked === 'native') {
-        mode = asked;
-        try { localStorage.setItem(TABLES_KEY, mode); } catch { /* private */ }
-    }
-    return () => mode;
-})();
-
-/**
- * Inject a server-rendered table.
- *
- * `innerHTML` with a response body is normally a red flag. It is first-party
- * here in both directions: our own service rendered it, through our own
- * package, from a DataFrame we built. The blob carries its own `<style>`, scoped
- * to a content hash of the frame, so it cannot leak into the rest of the page.
- */
-function mountStaticTable(box, payload, opts = {}) {
-    if (opts.title) box.appendChild(el('h6', { className: 'exhibit-title' }, opts.title));
-    const host = el('div', { className: 'gt-host' });
-    host.innerHTML = payload.html;
-    box.appendChild(host);
-    if (opts.caption) box.appendChild(el('div', { className: 'exhibit-caption' }, opts.caption));
+    // Follow the preference however it was changed, so the pills stay honest
+    // when the dropdown is what moved it.
+    onTableViewChange(() => {
+        btns.forEach((b, i) => b.classList.toggle('active',
+            ['static', 'interactive'][i] === _tableView));
+    }, row);
+    return row;
 }
 
 // Render the summary_df + tail_df exhibits into `box` per the current view mode.
-// Interactive grids register under 'pane-overview', so clearGrids tears down the
-// previous mode's grids before each (re-)render.
-function renderOverviewExhibits(box, summary, tail, html = {}) {
+// Everything mounted registers under 'pane-overview', so clearGrids tears down
+// the previous mode before each (re-)render.
+function renderOverviewExhibits(box, summary, tail, ir = {}) {
     clearGrids('pane-overview');
     empty(box);
-    if (summary) renderOneExhibit(box, summary, {
-        gt: html.summary,
+    if (summary) renderOneExhibit(box, summary, ir.summary, {
         title: 'Summary',
         caption: 'Moments and key percentiles. CV blank for signed / near-break-even '
             + 'rows; Freq percentiles blank by design (PGF-only).',
-        emphasize: (r) => r.X === 'Agg' || r.unit === 'total',
     });
-    if (tail) renderOneExhibit(box, tail, {
-        gt: html.tail,
+    if (tail) renderOneExhibit(box, tail, ir.tail, {
         title: 'Tail risk',
         caption: '1-in-200 (Solvency II) and 1-in-250 (US) are the capital anchors. '
             + 'Exact from the FFT grid, not simulated.',
-        highlight: (r) => Number(r.T) === 200 || Number(r.T) === 250,
-        emphasize: (r) => r.unit === 'total',
     });
 }
 
-// One exhibit: the curated static table (with highlight / emphasis) or, in
-// interactive mode, a titled + captioned CsvGrid with the full chrome. The
-// highlight/emphasis predicates are ignored by the grid (CsvGrid has no row
-// styling), which is the whole reason both views exist.
-//
-// `opts.gt` is the server-rendered alternative, present only when the a31 dev
-// flag is on and the fetch succeeded. It stands in for the hand-built static
-// table, never for the grid: the two static renderers are what is being
-// compared, and the grid answers a different question.
-function renderOneExhibit(box, frame, opts) {
-    if (overviewView !== 'interactive') {
-        if (opts.gt) mountStaticTable(box, opts.gt, opts);
-        else box.appendChild(renderExhibit(frame, opts));
-        return;
-    }
+// One exhibit: the static table walked from its document, or the interactive
+// CsvGrid with the full chrome. Title and caption are the SPA's own either way,
+// so the two views differ in the table and in nothing else.
+function renderOneExhibit(box, frame, doc, opts) {
     if (opts.title) box.appendChild(el('h6', { className: 'exhibit-title' }, opts.title));
-    const host = el('div', { className: 'grid-host' });
+    const host = el('div');
     box.appendChild(host);
-    mountGrid('pane-overview', host, frame, GRID_FULL);
+    mountTable('pane-overview', host, frame, doc, GRID_FULL);
     if (opts.caption) box.appendChild(el('div', { className: 'exhibit-caption' }, opts.caption));
 }
 
@@ -699,27 +725,24 @@ async function loadOverview() {
     else pane.removeChild(host);
 
     // 3. Risk exhibits (summary_df + tail_df) with a Static | Interactive toggle.
-    // Fetch once; the toggle re-renders from the stashed frames (no refetch).
+    // Fetch once; flipping the view re-renders from the stashed pair, no refetch.
     const summary = await api.summary(state.id).catch(() => null);
     const tailFrame = await api.tail_df(state.id).catch(() => null);
-    // The server-rendered pair, only when the a31 flag asks for it. Fetched
-    // alongside rather than instead of the frames, so the toggle can still swap
-    // to the interactive grid without another round trip, and so a failure here
-    // falls back to the built-in static table rather than to nothing.
-    let html = {};
-    if (tablesEngine() === 'gt' && (summary || tailFrame)) {
-        const [s, t] = await Promise.all([
-            summary ? api.frameHtml(state.id, 'summary').catch(() => null) : null,
-            tailFrame ? api.frameHtml(state.id, 'tail_df').catch(() => null) : null,
-        ]);
-        html = { summary: s, tail: t };
-    }
+    // The table documents for the static view, fetched alongside the frames
+    // rather than instead of them. Both views are then instant in both
+    // directions, and a document that fails to arrive falls back to the grid
+    // rather than to nothing.
+    const [summaryDoc, tailDoc] = await Promise.all([
+        summary ? api.frameIr(state.id, 'summary').catch(() => null) : null,
+        tailFrame ? api.frameIr(state.id, 'tail_df').catch(() => null) : null,
+    ]);
+    const ir = { summary: summaryDoc, tail: tailDoc };
     if (summary || tailFrame) {
         const box = el('div', { className: 'overview-exhibits' });
-        pane.appendChild(exhibitToggle(
-            () => renderOverviewExhibits(box, summary, tailFrame, html)));
+        pane.appendChild(exhibitToggle());
         pane.appendChild(box);
-        renderOverviewExhibits(box, summary, tailFrame, html);
+        renderOverviewExhibits(box, summary, tailFrame, ir);
+        onTableViewChange(() => renderOverviewExhibits(box, summary, tailFrame, ir), box);
         rendered = true;
     }
 
@@ -1263,6 +1286,9 @@ $('about-bootstrap').textContent = __BOOTSTRAP_VERSION__;
 api.meta().then((meta) => {
     $('about-aggregate').textContent = meta.aggregate_version;
     $('about-api').textContent = meta.version;
+    // Not a build-time constant like the rest: the static-table walker is served
+    // from the installed Python package, so the server is what knows its version.
+    $('about-tables').textContent = meta.tables_version;
 }).catch(() => {
     $('about-api').textContent = '(api offline)';
 });

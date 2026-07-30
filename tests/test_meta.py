@@ -49,3 +49,52 @@ def test_meta_style_comes_from_aggregate(client):
         expected = [e.get("color") for e in cycle if e.get("color")]
         if expected:
             assert colors == expected
+
+
+# ----------------------------------------------------------------------
+# GET /v1/assets/{name}  -- the table-document walker
+# ----------------------------------------------------------------------
+
+
+def test_assets_serve_the_walker_from_the_package(client):
+    """The renderer ships with the package that emits the documents it renders.
+
+    Serving it from ``importlib.resources`` rather than bundling a copy is what
+    makes version skew between the two impossible: one install ships both, so
+    they move together or not at all. This asserts the wiring, and that the
+    module really is the walker rather than some other file that happened to be
+    readable.
+    """
+    r = client.get("/v1/assets/gt-render.esm.js")
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("text/javascript")
+    assert "renderTable" in r.text
+    assert "IR_VERSION_SUPPORTED" in r.text
+
+    r = client.get("/v1/assets/gt.css")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/css")
+    assert ".gt" in r.text
+
+
+def test_assets_revalidate_rather_than_cache_bust(client):
+    """ETag plus no-cache, so a `uv sync` is picked up on the next reload.
+
+    The alternative was a ``?v=`` the client computes, which needs the client to
+    learn the package version to ask for the right file. This needs it to know
+    nothing.
+    """
+    r = client.get("/v1/assets/gt.css")
+    etag = r.headers["etag"]
+    assert etag
+    assert r.headers["cache-control"] == "no-cache"
+
+    again = client.get("/v1/assets/gt.css", headers={"If-None-Match": etag})
+    assert again.status_code == 304
+    assert not again.content
+
+
+def test_assets_are_an_allow_list(client):
+    """Two files by name, so there is no path to reason about."""
+    assert client.get("/v1/assets/nope.js").status_code == 404
+    assert client.get("/v1/assets/config.py").status_code == 404

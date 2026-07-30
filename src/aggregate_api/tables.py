@@ -1,55 +1,48 @@
-"""Static table rendering through ``greater_tables``.
+"""Static tables as a semantic document, not as markup.
 
 The api's JSON wire format is lossy for presentation. ``serializers.py``
 flattens MultiIndex columns to dotted strings and resets the index into
 ordinary data columns, which is right for a grid and wrong for a printed
 exhibit: a portfolio's ``tail_df`` carries a two level row index, so the unit
-name is reprinted on all ten of its return-period rows. ``greater_tables``
-sparsifies that to once per block, and it can only do so where the real
-DataFrame still exists, which is here.
+name would be reprinted on all ten of its return-period rows.
 
-This module renders alongside the client's own static tables rather than
-replacing them; see ``dev/done/plan-greater-tables.md``. Nothing routes here
-unless the caller asks.
+So the static path does not go through that wire format at all. It hands the
+real DataFrame to ``greatest_tables``, which returns a **table document**: an
+``ir_version`` 1 JSON structure carrying dtypes, resolved formats, hierarchy,
+spans and flags, and carrying no widths and no CSS. The browser owns geometry.
+A walker shipped in the same package renders it, so the renderer and the
+document can never version skew.
 
 Notes
 -----
-Three constraints come from reading ``greater_tables`` 5.3.0 rather than from
-its documentation, and all three are load bearing:
+This replaces an evaluation path (``greater_tables`` 5.x) that returned an html
+blob and stamped row emphasis onto it with a positional BeautifulSoup pass. The
+emphasis now rides in the document as ``row_flags``, which is what deletes that
+pass rather than tidying it. See ``dev/plan-gt2-ir.md``.
 
-* ``tikz`` defaults to **True**, computing LaTeX output on every call that we
-  would immediately discard. Always pass ``tikz=False``.
-* ``GT`` **raises** above ``large_warning`` (50) rows unless ``large_ok=True``.
-  That is not a warning. A six unit portfolio's ``tail_df`` is 70 rows.
-* Its CSS is scoped to ``#{df_id}``, a content hash of the frame, with only
-  ``.greater-table`` global (flex centering plus ``overflow-x: auto``). That is
-  what makes the emitted blob safe to inject into a page that already has
-  styles of its own.
-
-Row emphasis is applied here, as a class on the ``<tr>``, rather than by putting
-markup in the cells. ``greater_tables`` does pass HTML in a cell through
-unescaped, but a numeric column carrying ``<b>1,234</b>`` fails the
-``cast_to_floats`` step, and that is what earns the number formatting and the
-right alignment. Marking the row keeps both.
+Row flags use the IR's own vocabulary (total / subtotal / emphasis / muted)
+rather than reproducing the old css class names, because the vocabulary happens
+to fit: a portfolio's ``total`` row is a total, a unit's ``Agg`` line is that
+unit's subtotal, and the capital anchors are the only rows left wanting plain
+emphasis. Styling those is the SPA's business, which is the separation the whole
+exercise is about.
 """
 
 from __future__ import annotations
 
-from typing import Any, Callable
+import json
+from typing import Any, Callable, Sequence
 
 import pandas as pd
-from bs4 import BeautifulSoup
-from greater_tables import GT
+from greatest_tables import TableSpec, build, canonical_json
 
-# Hard ceiling, well above any frame that belongs in a static exhibit and well
-# below anything that would hang a request. `reins_density_df` is 65,536 rows
-# and stays CsvGrid's job permanently; this is the guard that says so out loud
-# rather than letting someone discover it with a 60 second render.
+# Truncation ceiling, well above any frame that belongs in a static exhibit.
+# Unlike the 5.x path this does not refuse: ``build`` slices to the cap and
+# appends a note saying so, before doing any formatting work, so even a 65,536
+# row density frame is cheap to ask for. The SPA still routes big frames to the
+# grid, which is the honest answer for them, but a direct request degrades
+# rather than erroring.
 MAX_ROWS = 500
-
-#: Class names the SPA styles. Kept here because this module is what emits them.
-ROW_HIGHLIGHT = "grt-row-hi"
-ROW_EMPHASIS = "grt-row-em"
 
 
 def level_value(df: pd.DataFrame, row: int, name: str) -> Any:
@@ -86,127 +79,116 @@ def _is_total(df: pd.DataFrame, row: int) -> bool:
     return level_value(df, row, "unit") == "total"
 
 
-def _anchor_row(df: pd.DataFrame, row: int) -> bool:
+def _is_anchor(df: pd.DataFrame, row: int) -> bool:
     """A capital anchor: 1-in-200 (Solvency II) or 1-in-250 (US)."""
-    T = level_value(df, row, "T")
     try:
-        return int(T) in (200, 250)
+        return int(level_value(df, row, "T")) in (200, 250)
     except (TypeError, ValueError):
         return False
 
 
-#: Per-frame emphasis, mirroring what the SPA's own static tables mark.
-#: Frames absent from this map render unmarked, which is most of them.
-EMPHASIS: dict[str, dict[str, Callable[[pd.DataFrame, int], bool]]] = {
-    "summary": {
-        "emphasize": lambda df, i: (
-            level_value(df, i, "X") == "Agg" or _is_total(df, i)
-        ),
-    },
-    "tail_df": {
-        "highlight": _anchor_row,
-        "emphasize": _is_total,
-    },
+def _summary_flags(df: pd.DataFrame, row: int) -> list[str]:
+    """Total row, and each unit's aggregate line as that unit's subtotal."""
+    flags = []
+    if _is_total(df, row):
+        flags.append("total")
+    if level_value(df, row, "X") == "Agg":
+        flags.append("subtotal")
+    return flags
+
+
+def _tail_flags(df: pd.DataFrame, row: int) -> list[str]:
+    """Total row, and the two capital anchors, which are what gets read."""
+    flags = []
+    if _is_total(df, row):
+        flags.append("total")
+    if _is_anchor(df, row):
+        flags.append("emphasis")
+    return flags
+
+
+#: Per-frame row emphasis. Frames absent from this map build unflagged, which
+#: is most of them: a stats or validation frame has no line that carries more
+#: weight than its neighbors.
+ROW_FLAGS: dict[str, Callable[[pd.DataFrame, int], Sequence[str]]] = {
+    "summary": _summary_flags,
+    "tail_df": _tail_flags,
+    "reins_summary_df": _summary_flags,
 }
 
 
-def _mark_rows(
-    html: str,
-    df: pd.DataFrame,
-    highlight: Callable[[pd.DataFrame, int], bool] | None,
-    emphasize: Callable[[pd.DataFrame, int], bool] | None,
-) -> str:
-    """Add row classes to the emitted table.
-
-    ``greater_tables`` emits one ``<tr>`` per frame row inside ``<tbody>``, in
-    frame order, so the mapping is positional. Verified rather than assumed: a
-    portfolio ``tail_df`` of 30 rows emits 30 body rows.
-
-    Returns the html unchanged when neither predicate is given, which skips the
-    parse entirely for the frames that want no marking.
-    """
-    if highlight is None and emphasize is None:
-        return html
-    soup = BeautifulSoup(html, "html.parser")
-    body = soup.find("tbody")
-    if body is None:
-        return html
-    rows = body.find_all("tr", recursive=False)
-    if len(rows) != len(df):
-        # Shapes disagree, so positional marking would mark the wrong lines.
-        # A table with no emphasis beats a table with misplaced emphasis.
-        return html
-    for i, tr in enumerate(rows):
-        classes = []
-        if highlight is not None and highlight(df, i):
-            classes.append(ROW_HIGHLIGHT)
-        if emphasize is not None and emphasize(df, i):
-            classes.append(ROW_EMPHASIS)
-        if classes:
-            tr["class"] = [*tr.get("class", []), *classes]
-    return str(soup)
-
-
-def render_html(
-    df: pd.DataFrame,
-    *,
-    which: str | None = None,
-    caption: str = "",
-    max_rows: int = MAX_ROWS,
-    **overrides: Any,
-) -> str:
-    """Render a frame as a self-contained html blob, styles included.
+def frame_spec(df: pd.DataFrame, which: str | None = None) -> TableSpec:
+    """The build spec for one named frame.
 
     Parameters
     ----------
     df : pandas.DataFrame
-        The frame, with its index intact. Do **not** ``reset_index()`` first:
-        the row index is what gets sparsified, and flattening it into data
-        columns throws away the whole benefit.
+        The frame, needed here because the row-flag predicates read its index
+        rather than the row values ``TableSpec`` would otherwise hand them.
     which : str, optional
-        Frame name, used to look up row emphasis in ``EMPHASIS``. Unknown and
-        missing names render unmarked.
-    caption : str, optional
-        Caption above the table.
-    max_rows : int, optional
-        Refuse anything larger. See ``MAX_ROWS``.
-    **overrides
-        Passed to ``GT``, which merges them over its ``Configurator`` defaults.
+        Frame name, used to look up row emphasis in ``ROW_FLAGS``. Unknown and
+        missing names build unflagged.
 
     Returns
     -------
-    str
-        ``<div class='greater-table'>`` wrapping a scoped ``<style>`` and the
-        table. Safe to inject: every rule is scoped to the frame's content hash
-        except ``.greater-table`` itself.
+    TableSpec
+        Notes
+        -----
+        ``include_raw='data'`` carries the unrounded value beside the formatted
+        text on every numeric cell. That is what lets a copy or a CSV export off
+        the rendered table give real numbers instead of display strings, and it
+        is cheap: the frames that reach here are at most a few hundred rows.
+    """
+    flags = ROW_FLAGS.get(which or "")
+    return TableSpec(
+        include_raw="data",
+        max_rows=MAX_ROWS,
+        row_flags=(lambda pos, _row: flags(df, pos)) if flags else None,
+    )
+
+
+def frame_document(df: pd.DataFrame, which: str | None = None) -> tuple[bytes, str]:
+    """Render a frame as canonical table-document JSON.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        The frame, **with its index intact**. Do not ``reset_index()`` first:
+        the row index is what gets sparsified into stub rowspans, and flattening
+        it into data columns throws away the whole benefit.
+    which : str, optional
+        Frame name, for row emphasis. See ``ROW_FLAGS``.
+
+    Returns
+    -------
+    body : bytes
+        Deterministic UTF-8 JSON: the same frame and spec give byte identical
+        output, which is what makes the content hash usable as an ETag.
+    hash : str
+        The document's 12-hex content hash, returned alongside so a caller can
+        set an ETag without parsing the body back.
 
     Raises
     ------
     ValueError
-        If the frame is empty, wider than its column names can distinguish, or
-        longer than ``max_rows``.
+        If the frame is empty or carries duplicate column names.
     """
     if df is None or df.empty:
         raise ValueError("nothing to render: the frame is empty")
-    if len(df) > max_rows:
-        raise ValueError(
-            f"{len(df)} rows exceeds the {max_rows} row static-table limit; "
-            "large frames belong in the interactive grid"
-        )
     if not df.columns.is_unique:
-        # GT raises on this itself; saying so here names the frame instead of
-        # surfacing a library error the caller cannot place.
+        # Naming the frame here beats surfacing a library error the caller
+        # cannot place.
         raise ValueError("frame has duplicate column names")
+    doc = build(df, frame_spec(df, which))
+    return canonical_json(doc), doc.hash
 
-    gt = GT(
-        df,
-        caption=caption,
-        # See the module notes: both of these are required, not tuning.
-        tikz=False,
-        large_ok=True,
-        **overrides,
-    )
-    marks = EMPHASIS.get(which or "", {})
-    return _mark_rows(
-        gt.html, df, marks.get("highlight"), marks.get("emphasize")
-    )
+
+def frame_document_dict(df: pd.DataFrame, which: str | None = None) -> dict:
+    """``frame_document`` as a parsed object, for embedding in a JSON response.
+
+    The frame routes return the canonical bytes directly, because that is what
+    the ETag hashes. The POST pricing endpoints carry their documents *inside* a
+    Pydantic response, so those need the parsed form.
+    """
+    body, _hash = frame_document(df, which)
+    return json.loads(body)

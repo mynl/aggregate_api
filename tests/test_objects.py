@@ -1091,80 +1091,121 @@ def test_pricing_at_ccoc_portfolio(client):
 
 
 # ----------------------------------------------------------------------
-# GET /v1/objects/{id}/frame/{which}.html  (greater_tables, a31)
+# GET /v1/objects/{id}/frame/{which}?format=ir  (the table document)
 # ----------------------------------------------------------------------
 
 
-def test_frame_html_sparsifies_the_row_index(client):
-    """The whole argument for rendering server side, in one assertion.
+def test_frame_ir_sparsifies_the_row_index(client):
+    """The whole argument for building from the DataFrame, in one assertion.
 
     A portfolio's ``tail_df`` is indexed by ``(unit, T)``, so unit ``A`` owns ten
-    return-period rows. The JSON wire format resets that index into a data
-    column and the name is reprinted on every one of them; ``greater_tables``
-    prints it once per block. Anything that flattens the index before rendering
-    loses this, which is why the route reads the DataFrame and not the payload.
+    return-period rows. The JSON wire format resets that index into a data column
+    and the name is reprinted on every one of them; the document carries it once,
+    as a stub cell spanning its block. Anything that flattens the index before
+    building loses this, which is why the route reads the frame and not the
+    payload.
     """
     oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
-    r = client.get(f"/v1/objects/{oid}/frame/tail_df.html")
+    r = client.get(f"/v1/objects/{oid}/frame/tail_df?format=ir")
     assert r.status_code == 200, r.text
-    body = r.json()
-    html = body["html"]
+    doc = r.json()
 
-    assert body["which"] == "tail_df"
-    assert body["rows"] > 10                     # several units' worth of rows
-    assert html.count(">A<") == 1, "unit name repeated: the index was not sparsified"
+    assert doc["ir_version"] == 1
+    assert doc["n_stub_levels"] == 2              # (unit, T)
+    assert len(doc["body"]) > 10                  # several units' worth of rows
+
+    stubs = [row["cells"][0] for row in doc["body"]]
+    named = [c for c in stubs if isinstance(c, dict) and c.get("text") == "A"]
+    assert len(named) == 1, "unit name repeated: the index was not sparsified"
+    assert named[0]["rowspan"] == 10
 
 
-def test_frame_html_style_is_scoped_to_the_frame(client):
-    """Injectable: the styles cannot escape into the rest of the page.
+def test_frame_ir_flags_the_capital_anchors(client):
+    """Row emphasis rides in the document rather than being stamped onto markup.
 
-    ``greater_tables`` scopes every rule to ``#{df_id}``, a content hash of the
-    frame, leaving only ``.greater-table`` global. A bare ``table {`` or
-    ``td {`` in the blob would restyle the SPA's other tables the moment one was
-    injected.
+    This is what deleted the positional BeautifulSoup pass the 5.x path needed.
+    The flags are semantic (the total row is a ``total``, the 1-in-200 and
+    1-in-250 lines carry ``emphasis``), so the SPA decides how they look.
     """
     oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
-    html = client.get(f"/v1/objects/{oid}/frame/summary.html").json()["html"]
+    doc = client.get(f"/v1/objects/{oid}/frame/tail_df?format=ir").json()
 
-    start = html.index("<style>")
-    css = html[start:html.index("</style>", start)]
-    assert "#" in css
-    for selector in ("\n    table {", "\n    td {", "\n    th {", "\n    tr {"):
-        assert selector not in css, f"unscoped selector {selector.strip()!r}"
-
-
-def test_frame_html_marks_the_capital_anchors(client):
-    """Row emphasis survives the move to a server-rendered table.
-
-    The 1-in-200 / 1-in-250 lines and the portfolio total are the "what is my
-    number" cues on the Overview. They are classes on the ``<tr>``, not markup
-    in the cells: a numeric column carrying ``<b>...</b>`` would fail
-    ``cast_to_floats`` and lose its formatting and right alignment.
-    """
-    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
-    html = client.get(f"/v1/objects/{oid}/frame/tail_df.html").json()["html"]
-
+    flags = [row.get("flags") or [] for row in doc["body"]]
     # Two anchors per unit, and PF has A, B and total.
-    assert html.count("grt-row-hi") == 6
-    assert html.count("grt-row-em") == 10        # every row of the total unit
+    assert sum("emphasis" in f for f in flags) == 6
+    assert sum("total" in f for f in flags) == 10     # every row of the total unit
 
 
-def test_frame_html_refuses_a_density_frame(client):
-    """A 65,536 row density is the interactive grid's job, permanently.
+def test_frame_ir_carries_raw_values_beside_the_text(client):
+    """``include_raw='data'`` is what makes a copy off the static table useful.
 
-    Not a performance note: rendering it would take minutes and produce a
-    document no browser should be asked to lay out. The guard says so with a
-    422 rather than letting a caller find out.
+    Without it every numeric cell is a display string, so exporting from the
+    rendered table would round-trip 1,399.00 rather than the value.
     """
     oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
-    r = client.get(f"/v1/objects/{oid}/frame/density_df.html")
-    assert r.status_code == 422
-    assert "static-table limit" in r.json()["detail"]
+    doc = client.get(f"/v1/objects/{oid}/frame/tail_df?format=ir").json()
+
+    numeric = [c for row in doc["body"] for c in row["cells"]
+               if isinstance(c, dict) and "raw" in c]
+    assert numeric, "no cell carried a raw value"
+    assert any(isinstance(c["raw"], float) for c in numeric)
 
 
-def test_frame_html_rejects_an_unknown_frame(client):
+def test_frame_ir_is_deterministic_and_etagged(client):
+    """Same object, same bytes. That is what makes the content hash a real ETag.
+
+    ``canonical_json`` is the contract here, so the route must not re-serialize
+    through Pydantic on the way out.
+    """
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    first = client.get(f"/v1/objects/{oid}/frame/summary?format=ir")
+    second = client.get(f"/v1/objects/{oid}/frame/summary?format=ir")
+
+    assert first.content == second.content
+    etag = first.headers["etag"]
+    assert etag and etag == second.headers["etag"]
+
+    cached = client.get(f"/v1/objects/{oid}/frame/summary",
+                        headers={"If-None-Match": etag})
+    assert cached.status_code == 304
+    assert not cached.content
+
+
+def test_frame_ir_truncates_a_density_frame(client):
+    """A density frame degrades rather than failing, and says so.
+
+    The SPA sends anything this long to the interactive grid, which is the honest
+    instrument for it. A direct request still gets a readable answer: ``build``
+    slices before it formats anything, so this costs nothing even at 2**16 rows.
+    """
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    doc = client.get(f"/v1/objects/{oid}/frame/density_df?format=ir").json()
+
+    assert len(doc["body"]) == 500
+    assert any("Showing first 500" in note for note in doc.get("notes", []))
+
+
+def test_frame_ir_rejects_an_unknown_frame_and_format(client):
     """Same resolver as the .csv route, so the same 404 and the same hint."""
     oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    r = client.get(f"/v1/objects/{oid}/frame/not_a_frame.html")
+    r = client.get(f"/v1/objects/{oid}/frame/not_a_frame")
     assert r.status_code == 404
     assert "unknown frame" in r.json()["detail"]
+
+    r = client.get(f"/v1/objects/{oid}/frame/summary?format=html")
+    assert r.status_code == 422
+
+
+def test_frame_csv_still_wins_over_the_document_route(client):
+    """Route order is load bearing and this is the tripwire.
+
+    A path parameter matches a dot, so ``{which}`` on the document route would
+    happily swallow ``summary.csv``. Starlette matches in declaration order, so
+    the ``.csv`` route has to stay declared first. Move it and every download
+    silently starts returning JSON.
+    """
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/frame/summary.csv")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/csv")
+    assert "attachment" in r.headers["content-disposition"]

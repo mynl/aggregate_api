@@ -66,12 +66,15 @@ export const api = {
     unit_density_df: (id)           => _json('GET',  `/v1/objects/${id}/unit_density_df`),
     bs_window_df: (id)              => _json('GET',  `/v1/objects/${id}/bs_window_df`),
     /**
-     * A frame as a self-contained html table (greater_tables), styles included.
-     * The presentation counterpart to the frame endpoints above: it keeps the
-     * row index the JSON form flattens into data columns. See the a31 note in
-     * main.js for why it is behind a flag.
+     * A frame as a table document (the IR) for the static view.
+     *
+     * The presentation counterpart to the frame endpoints above. Built from the
+     * DataFrame, so it keeps the two things the JSON form throws away: the row
+     * index (sparsified into stub rowspans rather than reprinted per row) and
+     * spanned MultiIndex column headers. Rendered client side by the walker in
+     * `tables.js`.
      */
-    frameHtml:    (id, which)       => _json('GET',  `/v1/objects/${id}/frame/${which}.html`),
+    frameIr:      (id, which)       => _json('GET',  `/v1/objects/${id}/frame/${which}?format=ir`),
     kappa:        (id, p = {})      => _json('GET',  `/v1/objects/${id}/kappa?${qs(p)}`),
 
     // Reinsurance

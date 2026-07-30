@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aggregate_api"
-version = "1.0.0a31"
+version = "1.0.0a32"
 description = "aggregate Loss Library (aLL): FastAPI service and single-page web app for the aggregate actuarial library."
 readme = "README.md"
 authors = [
@@ -17,9 +17,8 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Financial and Insurance Industry",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Office/Business :: Financial",
     "Topic :: Scientific/Engineering :: Mathematics",
     "Framework :: FastAPI",
@@ -31,21 +30,22 @@ dependencies = [
     # below and dev/plan-0001-bootstrap-standalone.md for how the local
     # editable source is wired during co-development.
     "aggregate",
-    # Static table rendering (the author's own package). Plain PyPI, no
-    # [tool.uv.sources] override: the published 5.3.0 is byte identical to the
-    # local checkout at
-    # C:/Users/steve/Documents/CloudStation/TELOS/Python/greater_tables_project,
-    # so there is nothing to co-develop against and the repo stays installable
-    # anywhere. If that stops being true, add an editable source the way
-    # `aggregate` has one.
-    "greater-tables>=5.3",
+    # Static tables (the author's own package). The api asks it for a semantic
+    # table document (the IR), never for markup: the browser owns geometry.
+    # Unpublished, so it takes an editable source like `aggregate` does. The
+    # same install also ships the walker that renders that IR, which is what
+    # makes version skew between the two impossible. See dev/plan-gt2-ir.md.
+    "greatest-tables",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
     "pydantic-settings>=2.4",
 ]
 license = "BSD-3-Clause"
-requires-python = ">=3.11"
+# Was >=3.11 through a31. `greatest-tables` declares >=3.13 and that floor is
+# the binding one. Nothing in its source needs 3.13, so if 3.11 or 3.12 ever
+# matters here again, relax it there rather than pinning an old release here.
+requires-python = ">=3.13"
 
 [project.urls]
 "Source Code" = "https://github.com/mynl/aggregate_api"
@@ -68,9 +68,13 @@ aggregate-api = "aggregate_api.__main__:main"
 # internals that exist only in the local working tree. Point uv at that
 # tree as an editable install. Edit the path to match your checkout, then
 # `uv sync`. plan-0001 settles the canonical path for this machine.
+#
+# `greatest-tables` is unpublished for the same reason and is co-developed
+# alongside this repo, so it gets the same treatment.
 # ---------------------------------------------------------------------------
 [tool.uv.sources]
 aggregate = { path = "../aggregate_REFACTOR", editable = true }
+greatest-tables = { path = "c:/s/ai/greatest-tables", editable = true }
 
 [tool.setuptools]
 include-package-data = true

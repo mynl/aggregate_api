@@ -236,23 +236,27 @@ one version bump each.
       switch. Row emphasis preserved as a `<tr>` class. *(done; moved to
       `dev/done/`)*
 
-- [ ] **Compare the two static table renderers.** Same standing as the engine
-      comparison above, and same reason: nothing has been looked at. Build a
-      *portfolio* (the sparsified two level index is the whole argument and an
-      Aggregate does not show it), load with `?tables=gt`, and decide. If GT
-      wins, delete `renderExhibit` and the flag and take the Price tab next. If
-      it loses, `tables.py`, the route and the dependency come out.
+- [x] **Compare the two static table renderers** (→ 1.0.0a32). Settled by the
+      author: "the GT tables are a delight". The comparison ended by replacing
+      both sides, since `greatest_tables` (GT2) arrived with a semantic document
+      IR and a client-side walker, which is a better answer than either. The
+      hand-built `renderExhibit` and the 5.x html path are both gone.
 
-- [ ] **Price tab tables through GT** (only if GT wins). `PriceResponse`,
-      `ReinsPriceResponse` and `PricingResponse` carry *computed* frames from
-      POST endpoints, so `frame/{which}.html` cannot reach them. They need html
-      returned alongside the json so the Static / Interactive toggle stays
-      instant without a re-POST.
+- [x] **Upstream `greater_tables` nit** (closed by the same move). GT2 has no
+      import side effects at all, by design, so the `Pandas4Warning` and the
+      warnings-filter pollution are gone with the 5.x dependency.
 
-- [ ] **Upstream `greater_tables` nit**: importing it emits a `Pandas4Warning`,
-      `pd.set_option('future.no_silent_downcasting', True)` is deprecated
-      (`core.py:47` and `core_old.py:41`). Harmless, but it shows up in every
-      pytest run now. The author owns the package.
+- [ ] **Look at the static tables.** The walker has been verified end to end
+      against real documents in Node (sparsified stubs, flags, negative cells,
+      raw values in the CSV export), but nobody has *seen* one in the page. Build
+      a **portfolio**, since the two level row index is the whole argument and an
+      Aggregate does not show it.
+
+- [ ] **Report to the greatest-tables side**: its `requires-python = ">=3.13"`
+      forced this repo's floor up from 3.11. Nothing in its source appears to
+      need 3.13. Also worth confirming its shipped `assets/` are rebuilt from
+      `js/src/` whenever the walker changes, since aggregate_api serves whatever
+      the install carries.
 
 - [ ] **The 3-D surface is sugar, not substance** (author's verdict after
       seeing it, a29). "Quite impressive. Fast. But more sugar than substance."

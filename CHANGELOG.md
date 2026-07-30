@@ -4,6 +4,67 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a32
+
+From `dev/plan-gt2-ir.md`, Stage A, implementing the `greatest_tables` handoff
+spec in `dev/plan-gt2-ir-adoption.md`. The a31 evaluation of `greater_tables` 5.x
+concludes and its whole path is replaced.
+
+### The static table is a document now, not markup
+
+The server no longer renders html. It builds a **table document**: `ir_version` 1
+JSON carrying dtypes, resolved formats, hierarchy, spans, break depths and flags,
+and carrying no widths and no CSS. The browser owns geometry. A walker that ships
+inside the same `greatest_tables` install renders it.
+
+The point is not tidiness. Row emphasis used to be stamped onto emitted html by a
+positional BeautifulSoup pass, which is fragile in exactly the way that matters:
+it silently gave up whenever the row counts disagreed. Emphasis now rides in the
+document as `row_flags`, so there is nothing to stamp and nothing to get wrong.
+
+### New
+
+- **`GET /v1/objects/{oid}/frame/{which}?format=ir`**, replacing the a31
+  `.html` route and resolving the same `_CSV_FRAMES` names through the same
+  `_resolve_frame`. Returns `canonical_json` bytes with `ETag: <doc.hash>` and
+  honors `If-None-Match` with a 304. Built from the **DataFrame**, index intact.
+- **`GET /v1/assets/{name}`** serves the walker (`gt-render.esm.js`) and its
+  stylesheet out of `importlib.resources.files('greatest_tables')`. Serving it
+  from the package that emits the documents is what makes version skew between
+  the two impossible.
+- **`web/src/tables.js`**: lazy-loads the walker on the first static table a
+  session draws, and mounts documents into a pane.
+- `/v1/meta` gains `tables_version`, shown in the About panel. It is a front-end
+  version as much as a backend one, since one install serves both halves.
+
+### Changed
+
+- The Static / Interactive preference is now **page-wide** (`aggapi.tableView`),
+  seeded from the old `aggapi.overviewView` so a returning browser keeps its
+  choice. Reach is still the Overview in this version; a33 extends it.
+- Static falls back to the interactive grid, with a line saying why, when the
+  frame is past 500 rows or the walker cannot be loaded. Never an empty pane.
+- The pane teardown registry in `grid.js` is generic: anything with `destroy()`
+  registers, so the existing `clearGrids` sweep tears down IR tables too and no
+  call site had to learn about a second registry.
+- Row emphasis uses the IR's own vocabulary rather than reproducing css class
+  names. A portfolio's total row is a `total`, a unit's Agg line is that unit's
+  `subtotal`, and the capital anchors carry `emphasis`. The anchors keep the
+  `#fff7e6` wash they have had since the hand-built exhibit.
+
+### Removed
+
+- `greater-tables`, `tables.render_html`, the `/frame/{which}.html` route,
+  `HtmlFrameResponse`, `api.frameHtml`, the `?tables=gt` sticky dev flag,
+  `mountStaticTable`, `renderExhibit` and its `.exhibit-table` styles, and the
+  `beautifulsoup4` import that existed only for row emphasis.
+
+### Breaking
+
+- **`requires-python` is now `>=3.13`**, up from `>=3.11`. `greatest-tables`
+  declares that floor and it is the binding one. Nothing in its source needs
+  3.13, so relax it there if 3.11 or 3.12 ever matters here again.
+
 ## 1.0.0a31
 
 From `dev/done/plan-greater-tables.md`. A second static-table renderer, alongside

@@ -22,6 +22,9 @@ The /v1/objects/* family covers everything object-shaped:
 * ``GET    /v1/objects/{id}/reins_stats_df``    -- per-layer stats frame.
 * ``GET    /v1/objects/{id}/reins_density_df``  -- density preview frame.
 * ``GET    /v1/objects/{id}/frame/{which}.csv`` -- full-frame CSV download.
+* ``GET    /v1/objects/{id}/frame/{which}``     -- table document for the
+  static view (``?format=ir``), built from the DataFrame rather than the
+  flattened wire format.
 * ``GET    /v1/objects/{id}/plot``        -- SVG/PNG image (native .plot()).
 * ``POST   /v1/objects/{id}/pricing_at``  -- distortion / ccoc pricing.
 
@@ -83,7 +86,7 @@ from ..cache import CacheEntry, ObjectCache, canonicalize_decl, object_id
 from ..config import Settings, get_settings
 from ..plotting import render_plot
 from ..pricing import run_price_pentagon, run_pricing, run_reins_price
-from ..tables import render_html
+from ..tables import frame_document
 from ..serializers import (
     bin_density,
     bivariate_marginal_frame,
@@ -1432,30 +1435,46 @@ def get_frame_csv(
 # GET /v1/objects/{id}/plot
 # ----------------------------------------------------------------------
 
-@router.get("/objects/{oid}/frame/{which}.html", response_model=models.HtmlFrameResponse)
-def get_frame_html(
-    oid: str, which: str, entry: CacheEntry = Depends(_locked_entry)
-) -> dict:
-    """Return the named frame as a self-contained html table.
+# ----------------------------------------------------------------------
+# GET /v1/objects/{id}/frame/{which}?format=ir  -- the static-view document
+# ----------------------------------------------------------------------
+# Declared **after** the `.csv` route above and that ordering is load bearing:
+# a path parameter matches a dot, so `{which}` here would happily swallow
+# `summary.csv` and answer JSON to a download request. Starlette matches in
+# declaration order, so `.csv` wins as long as it stays first. A test pins it.
+
+@router.get("/objects/{oid}/frame/{which}")
+def get_frame_document(
+    oid: str,
+    which: str,
+    format: str = Query("ir", description="ir"),
+    request: Request = None,
+    entry: CacheEntry = Depends(_locked_entry),
+) -> Response:
+    """Return the named frame as a table document (the IR).
 
     The presentation counterpart to the ``.csv`` route above, resolving the same
-    ``_CSV_FRAMES`` names through the same ``_resolve_frame``. It renders through
-    ``greater_tables``, on the DataFrame rather than on the wire format, because
-    the two things worth having are exactly the two the JSON discards: a
-    sparsified row index (a portfolio's ``tail_df`` otherwise reprints the unit
-    name on all ten of its return-period rows) and spanned MultiIndex column
-    headers.
+    ``_CSV_FRAMES`` names through the same ``_resolve_frame``. It builds from the
+    **DataFrame**, not from the wire format, because the two things worth having
+    are exactly the two ``FrameResponse`` discards: a sparsified row index (a
+    portfolio's ``tail_df`` otherwise reprints the unit name on all ten of its
+    return-period rows) and spanned MultiIndex column headers.
 
     Notes
     -----
-    Deliberately not a `format=html` option on each existing frame route. Those
-    return `FrameResponse` and are consumed by the interactive grid; this returns
-    markup for the static view, and one route that already knows how to find any
-    frame by name is less surface than a flag on fifteen.
+    The body is ``canonical_json`` bytes rather than a Pydantic model, because
+    the document's own content hash is the ETag and re-serializing through
+    Pydantic would break the byte-for-byte determinism that makes the hash mean
+    anything.
 
-    Large frames are refused rather than rendered. See ``tables.MAX_ROWS``: a
-    density frame is 65,536 rows and belongs in the grid.
+    Large frames truncate rather than fail (``tables.MAX_ROWS``), and say so in
+    the document's notes. The SPA still sends anything over a few hundred rows to
+    the interactive grid, which is the honest instrument for them.
     """
+    if format != "ir":
+        raise HTTPException(
+            status_code=422, detail=f"unknown format {format!r}; expected 'ir'"
+        )
     attr = _CSV_FRAMES.get(which)
     if attr is None:
         raise HTTPException(
@@ -1468,10 +1487,21 @@ def get_frame_html(
             status_code=400, detail=f"{which} not available for {entry.kind!r}"
         )
     try:
-        html = render_html(df, which=which)
+        body, doc_hash = frame_document(df, which)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {"which": which, "rows": int(len(df)), "html": html}
+
+    # The document stamps its own hash; quote it per RFC 7232. Cached objects are
+    # immutable and the build is deterministic, so a repeat request on an
+    # unchanged object always revalidates rather than re-transferring.
+    etag = f'"{doc_hash}"'
+    if request is not None and request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={"ETag": etag, "Cache-Control": "no-cache"},
+    )
 
 
 @router.get("/objects/{oid}/plot")

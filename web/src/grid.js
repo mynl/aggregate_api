@@ -17,23 +17,44 @@
 import CsvGrid from 'csv-grid';
 import 'csv-grid/csv-grid.css';
 
-// paneId -> CsvGrid[]
+// paneId -> handles[], where a handle is anything with destroy(). CsvGrid
+// instances and IR tables (tables.js) both qualify and both live here.
+//
+// One registry rather than one per renderer, deliberately: `clearGrids` is
+// already called from every place a pane is rebuilt, so a second registry would
+// mean auditing those call sites again and getting one wrong. Anything mounted
+// into a pane registers here and is torn down by the same sweep.
 const registry = new Map();
 
 /**
- * Destroy and forget every CsvGrid mounted in `paneId`. A no-op when the pane
- * holds no grids, so it is safe to call before any render.
+ * Register a teardown handle against a pane.
+ *
+ * Parameters
+ * ----------
+ * paneId : str
+ *     The output pane the handle belongs to.
+ * handle : object
+ *     Anything exposing ``destroy()``.
+ */
+export function registerPaneTeardown(paneId, handle) {
+    if (!registry.has(paneId)) registry.set(paneId, []);
+    registry.get(paneId).push(handle);
+}
+
+/**
+ * Destroy and forget everything mounted in `paneId`. A no-op when the pane
+ * holds nothing, so it is safe to call before any render.
  */
 export function clearGrids(paneId) {
-    const grids = registry.get(paneId);
-    if (!grids) return;
-    for (const g of grids) {
-        try { g.destroy(); } catch { /* already torn down */ }
+    const handles = registry.get(paneId);
+    if (!handles) return;
+    for (const h of handles) {
+        try { h.destroy(); } catch { /* already torn down */ }
     }
     registry.delete(paneId);
 }
 
-/** Destroy every live grid across all panes (used on rebuild / clearPanes). */
+/** Destroy everything live across all panes (used on rebuild / clearPanes). */
 export function destroyAllGrids() {
     for (const paneId of [...registry.keys()]) clearGrids(paneId);
 }
@@ -78,8 +99,6 @@ export function mountGrid(paneId, host, frame, opts = {}) {
         expandButtons: columns.length > 10,
         ...opts,
     });
-    const grids = registry.get(paneId) || [];
-    grids.push(grid);
-    registry.set(paneId, grids);
+    registerPaneTeardown(paneId, grid);
     return grid;
 }

@@ -434,26 +434,23 @@ header .navbar { min-height: 56px; }
     color: var(--mut); background: #fff; border-color: var(--grid);
 }
 
-/* ---- greater_tables host (a31 evaluation) ----
-   The server sends a self-contained blob: a <style> scoped to a content hash of
-   the frame, plus the table. Only two things need saying from out here.
+/* ---- Static table host (the greatest_tables walker) ----
+   The walker ships its own stylesheet (gt.css, served from the package next to
+   the module itself) carrying the whole booktabs look: frame rules, a head rule,
+   partial rules at index breaks, the stub divider. Everything below is this
+   page's business rather than the table's.
 
-   First, GT centers its table in a full-width flex box, which is right for a
-   page of exhibits and wrong inside a pane where everything else is left
-   aligned. Second, its row emphasis classes are ours, applied in tables.py, so
-   they are styled here rather than by the package. */
-.gt-host { margin: .2rem 0 1rem; }
-.gt-host .greater-table { justify-content: flex-start; }
-/* Backgrounds go on the cells, not the row: `border-collapse: collapse` (which
-   GT sets, and which is what gives the table its rules) defeats a background on
-   the <tr> itself. */
-/* Same #fff7e6 as `.exhibit-row-hi` below, deliberately: the two static
-   renderers are being compared on structure, and a different shade of yellow
-   would be noise in that comparison. */
-.gt-host .grt-row-hi > td, .gt-host .grt-row-hi > th { background: #fff7e6; }
-.gt-host .grt-row-em > td, .gt-host .grt-row-em > th { font-weight: 600; }
+   Note the specificity: gt.css writes `.gt.gt td`, so a bare `.gt-host td` loses
+   to it. Match that weight or the rule is dead. */
+.gt-host { margin: .2rem 0 1rem; overflow-x: auto; }
+.gt-host .gt.gt table { font-size: .86rem; }
+.gt-host .gt.gt .gt-r { font-family: var(--mono); }
+/* The capital anchors. Backgrounds go on the cells, not the row, because
+   `border-collapse: collapse` defeats a background on the <tr> itself.
+   #fff7e6 is the shade these rows have carried since the hand-built exhibit. */
+.gt-host .gt.gt tr.gt-emph > td { background: #fff7e6; }
 
-/* ---- Overview table view toggle (Static | Interactive) ---- */
+/* ---- Table view toggle (Static | Interactive) ---- */
 .overview-view-toggle {
     display: flex; flex-wrap: wrap; align-items: center; gap: .35rem;
     margin: .1rem 0 .8rem;
@@ -463,15 +460,8 @@ header .navbar { min-height: 56px; }
     text-transform: uppercase; letter-spacing: .04em;
 }
 
-/* ---- Overview exhibit tables (hand-built, booktabs-style) ---- */
-.exhibit { margin: 0 0 1.4rem; }
+/* ---- Exhibit chrome (title + caption around either kind of table) ---- */
 .exhibit-title { font-size: .92rem; font-weight: 700; margin: 0 0 .4rem; }
-.exhibit-table { margin-bottom: .35rem; font-size: .86rem; width: auto; }
-.exhibit-table th, .exhibit-table td { padding: .25rem .7rem; }
-.exhibit-table th { border-bottom: 2px solid var(--rule); }
-.exhibit-table th.num, .exhibit-table td.num { text-align: right; font-family: var(--mono); }
-.exhibit-row-hi td { background: #fff7e6; }      /* 1-in-200 / 1-in-250 anchors */
-.exhibit-row-em td { font-weight: 700; }         /* Agg / total "what's my number" */
 .exhibit-caption { font-size: .72rem; color: var(--mut); max-width: 70ch; }
 
 /* ---- Error pane (parse-error report) ---- */
