@@ -212,17 +212,22 @@ one version bump each.
       **Being settled by experiment**: the a30 Plotly spike puts both engines on
       the same data behind a switch.
 
-- [ ] **Plotly evaluation spike** (a30, agreed after a29). `agg` and `port`
-      only, line graphs, no surfaces. Reuses the existing domain helpers
-      (`densityWindow`, `survivalRange`, `rightPairs`, `varAt`, `returnPeriod`)
-      so no chart decision is duplicated and the comparison is like for like.
-      Behind a dynamic import as `echarts-gl` already is, so an unflipped switch
-      costs the landing path nothing. Parity list matters or the comparison
-      answers nothing: steps-mid is `line.shape: 'hvh'`, loss on x in both
-      panels, the 1e-15 floor remembering that **Plotly log axis `range` is in
-      exponents**, the two anchors as `shapes` plus `annotations`, the twin axis
-      via `yaxis2.overlaying`, and one legend entry toggling both panels through
-      `legendgroup`.
+- [x] **Plotly evaluation spike** (→ 1.0.0a30). `agg` and `port`, behind a `draw`
+      switch in the exhibit control row. The work turned out to be `twoPanelData`,
+      the engine-neutral decision step both renderers now read, rather than the
+      Plotly code. `plotly.js-gl2d-dist-min` and **not** basic: basic registers
+      bar, pie and scatter only, and its SVG `scatter` would choke on the 2**16
+      points a27 ships. Parity asserted in the smoke test, including that Plotly
+      log ranges are in exponents. *(done; moved to `dev/done/`)*
+
+- [ ] **Look at the two engines side by side.** This is the whole point of a30
+      and nobody has done it: the Chrome extension has never connected in any
+      session, so no rendered chart from either library has been inspected. Build
+      an `agg` and a `port`, flip `draw`, and decide. If Plotly wins, lift
+      `twoPanelData` into a real IR with `to-echarts` / `to-plotly` adapters and
+      shrink the bundle with a custom build registering only `scatter` and
+      `scattergl`. If it loses, `engine.js` and `plotly-panels.js` come out and
+      the dependency with them; keep the `twoPanelData` split either way.
 
 - [ ] **greater_tables alongside the current tables** (a31, agreed after a29).
       The author's own package. The argument is not that it is prettier:

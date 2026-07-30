@@ -417,6 +417,23 @@ header .navbar { min-height: 56px; }
 }
 .exhibit-toggle--table.active:hover { color: #fff; }
 
+/* ---- Engine group (a30 spike) ----
+   Which library draws the exhibit, not what it draws, so it reads as a
+   different kind of control: muted rather than primary. It is temporary, and
+   comes out with `plotly-panels.js` if ECharts wins. */
+.exhibit-toggle--engine.active {
+    background: var(--mut); border-color: var(--mut);
+}
+.exhibit-toggle--engine:hover { color: var(--mut); border-color: var(--mut); }
+.exhibit-toggle--engine.active:hover { color: #fff; }
+/* Greyed out, never hidden: the reader learns the control exists and that this
+   kind is not covered, which a missing button cannot say. */
+.exhibit-toggle:disabled,
+.exhibit-toggle:disabled:hover {
+    opacity: .4; cursor: not-allowed;
+    color: var(--mut); background: #fff; border-color: var(--grid);
+}
+
 /* ---- Overview table view toggle (Static | Interactive) ---- */
 .overview-view-toggle {
     display: flex; flex-wrap: wrap; align-items: center; gap: .35rem;

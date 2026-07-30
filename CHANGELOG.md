@@ -4,6 +4,74 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a30
+
+From `dev/done/plan-plotly-spike.md`. A second renderer, so the question "is it
+the library or the charts" can be answered by looking rather than by arguing.
+
+### Why a spike and not a migration
+
+The author is not sold on ECharts (a28). The difficulty is that almost everything
+wrong from a26 to a29 was a design error on our side, not something ECharts did:
+the wrong rectangle measured, the wrong default orientation, binned data,
+conditional steps, labels over the title, a reservation aimed at the wrong layout.
+None of those are arguments about a library. So this ships both engines on the
+same data, behind a switch, and leaves the judgment to a look.
+
+### One set of decisions, two renderers
+
+The work that makes the comparison worth anything is not the Plotly code, it is
+`twoPanelData()`: which curves, over which x-window, on which scales, which
+verticals are marked and which way their labels open. That was interleaved with
+ECharts option construction; it is now a separate step both renderers read, so
+neither can quietly draw a different chart.
+
+Falling out of that: the four two-panel specs gained a `panelArgs` that does the
+column picking, `build` is `echartsBuild(panelArgs)`, and `sev` and `pnl` stopped
+patching titles onto a built option after the fact. Their wording (`pdf` rather
+than `density`, `Downside probability` rather than `Survival`) now lives in the
+shared bundle where both engines can read it. `anchorMarks()` returns neutral
+`{x, name, faint, align}` and `anchorLineStyle()` does the ECharts dressing.
+
+### The switch
+
+A `draw` group at the right of the exhibit control row, muted rather than primary
+because it changes what draws the chart, not what the chart shows. Sticky per
+browser. On `sev`, `pnl`, `distortion` and `bvagg` the Plotly button is **greyed
+out, not hidden**, per the house rule.
+
+`plotly.js-gl2d-dist-min` sits behind a dynamic import in its own chunk, 535 kB
+gzipped, verified absent from `index.html`, so nobody who leaves the default alone
+pays for it.
+
+### gl2d, not basic, and the smoke test now checks that
+
+The first cut used `plotly.js-basic-dist-min` (378 kB) with `scattergl` traces.
+That bundle registers **bar, pie and scatter only**, so it would have thrown
+"invalid trace type" in the browser and nowhere else. Its `scatter` is the SVG
+renderer, and since a27 every exhibit carries all 2**16 grid points, so a
+portfolio is half a dozen curves of 65,536 points. Asking SVG to draw that would
+make Plotly look bad for a reason that has nothing to do with how it draws.
+ECharts renders to canvas, so WebGL is the like-for-like choice.
+
+`dev/smoke-exhibits.mjs` now reads the registered trace list out of the shipped
+bundle and fails if a figure uses a type that is not in it.
+
+### Parity, asserted
+
+An unfair comparison answers nothing, so the properties a26 to a29 established are
+checked on the Plotly figure too: `line.shape: 'hvh'` (its centered step, the same
+shape as ECharts' `step: 'middle'`), loss on x in **both** panels, the same
+reserved height, the capital anchors present as shapes with labels opening away
+from their lines, and one legend entry per unit rather than two (Plotly toggles
+per trace, so the tail trace joins its density trace's `legendgroup` and stays out
+of the legend).
+
+The mapping most likely to break silently gets its own check: **Plotly log axes
+take `range` in exponents**, so handing one 1e-15 where it wants -15 collapses the
+axis while looking right in the source. The test round-trips `10 ** range[0]`
+against the survival range the shared bundle computed.
+
 ## 1.0.0a29
 
 From `dev/done/plan-graph-placeholder.md`. The chart box stops moving, and it says

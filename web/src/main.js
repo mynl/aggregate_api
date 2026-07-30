@@ -1192,6 +1192,7 @@ if (helpLoad) {
 $('about-grid').textContent = __CSV_GRID_VERSION__;
 $('about-echarts').textContent = __ECHARTS_VERSION__;
 $('about-echarts-gl').textContent = __ECHARTS_GL_VERSION__;
+$('about-plotly').textContent = __PLOTLY_VERSION__;
 $('about-bootstrap').textContent = __BOOTSTRAP_VERSION__;
 api.meta().then((meta) => {
     $('about-aggregate').textContent = meta.aggregate_version;

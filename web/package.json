@@ -27,6 +27,7 @@
     "codemirror": "^6.0.1",
     "csv-grid": "github:mynl/CSV_Viewer#01a9773cfc6c7ac64d8a99133c23deba2c1f9263",
     "echarts": "^5.6.0",
-    "echarts-gl": "^2.1.0"
+    "echarts-gl": "^2.1.0",
+    "plotly.js-gl2d-dist-min": "^3.7.0"
   }
 }

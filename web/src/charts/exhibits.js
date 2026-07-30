@@ -44,6 +44,8 @@ import {
     logMin, LOG_FLOOR, loadStyle,
 } from './theme.js';
 import { loadSurface, surfaceGrid, surfaceOption } from './surface.js';
+import { ENGINES, PLOTLY_KINDS, engine, setEngine, plotlyCovers } from './engine.js';
+import { loadPlotly, plotlyLoaded, plotlyFigure, mountPlotly } from './plotly-panels.js';
 
 // Set once `loadSurface()` has resolved. Read synchronously inside a `build()`,
 // which must stay pure, so the async part happens in the mount and this is the
@@ -228,6 +230,46 @@ const CONTROL_GROUPS = [
     { key: 'right', controls: ['epMode', 'rightLogY'] },
 ];
 
+/**
+ * The engine group: which library draws this exhibit.
+ *
+ * Its own row-level group rather than an entry in `CONTROLS`, because it is not
+ * a view toggle. It changes nothing about *what* is plotted, only what draws it,
+ * so it sits apart from the buttons that change the chart's content.
+ *
+ * On a kind the Plotly path does not cover, the button is **disabled, not
+ * hidden**: the house rule is that a control greys out so the reader learns it
+ * exists and why it is unavailable here.
+ */
+function engineGroup(kind, onChange) {
+    const box = el('div', { className: 'exhibit-group exhibit-group-engine' });
+    box.appendChild(el('span', { className: 'exhibit-group-label' }, 'draw'));
+    for (const name of ENGINES) {
+        const covered = name === 'echarts' || plotlyCovers(kind);
+        box.appendChild(el('button', {
+            type: 'button',
+            className: `exhibit-toggle exhibit-toggle--engine${
+                engine() === name ? ' active' : ''}`,
+            disabled: covered ? null : '',
+            title: covered
+                ? `Draw the exhibit with ${name}`
+                : `The ${name} path covers ${[...PLOTLY_KINDS].join(' and ')} only`,
+            onClick: () => {
+                if (!covered) return;
+                setEngine(name);
+                // Repaint the pressed state here, the way `toggleButton` does.
+                // A redraw swaps the canvas without touching the control row, so
+                // nothing else would move the highlight.
+                for (const b of box.querySelectorAll('button')) {
+                    b.classList.toggle('active', b.textContent === engine());
+                }
+                onChange();
+            },
+        }, name));
+    }
+    return box;
+}
+
 // ---- frame helpers ----------------------------------------------------
 
 /** Build a name -> column-index lookup over a {columns, rows} frame. */
@@ -403,7 +445,7 @@ function returnPeriod(T) {
  * `tail_df` stays the source for the same reason as before: where it and the
  * plotted curve differ, the library is right.
  */
-function anchorLines(tail) {
+function anchorMarks(tail) {
     if (!tail || !tail.rows) return [];
     const at = indexer(tail);
     const iT = at('T');
@@ -423,20 +465,30 @@ function anchorLines(tail) {
     // Ordered by ANCHORS, not by frame order, so "first" and "second" mean the
     // same thing every time and the label sides stay put.
     return ANCHORS.filter((T) => found.has(T)).map((T, i) => ({
-        xAxis: found.get(T),
+        x: found.get(T),
         name: `1-in-${returnPeriod(T)}`,
+        faint: true,
+        // First anchor's text runs left of its line, second's runs right, so two
+        // labels near each other open in opposite directions.
+        align: i === 0 ? 'right' : 'left',
+    }));
+}
+
+/** One neutral mark, styled as an ECharts markLine entry. */
+function anchorLineStyle(m) {
+    return {
+        xAxis: m.x,
+        name: m.name,
         lineStyle: { color: '#6c757d', type: 'dashed', width: 1, opacity: 0.45 },
         label: {
             // Inside the plot at the top, not above it: `position: 'end'` put
             // the text over the panel's upper edge, where it collided with the
             // title. For a vertical markLine, "end" is the top.
             position: 'insideEndTop',
-            // First anchor's text runs left of its line, second's runs right, so
-            // two labels near each other open in opposite directions.
-            align: i === 0 ? 'right' : 'left',
-            padding: i === 0 ? [0, 5, 0, 0] : [0, 0, 0, 5],
+            align: m.align,
+            padding: m.align === 'right' ? [0, 5, 0, 0] : [0, 0, 0, 5],
         },
-    }));
+    };
 }
 
 /**
@@ -554,10 +606,26 @@ export function reservedHeight(width, kind) {
  * Series in the two panels share a `name`, which is what makes one legend entry
  * toggle a unit in both panels at once.
  */
-function twoPanel({
+/**
+ * Every decision the two-panel exhibit makes, before any renderer touches it.
+ *
+ * Which curves, over which x-window, on which scales, with which verticals
+ * marked and which way their labels open. All of it is a statement about the
+ * *data*, not about a charting library, so it lives here and both renderers read
+ * from it. That is what makes the a30 Plotly comparison worth anything: the two
+ * engines are handed identical decisions and differ only in how they draw them.
+ *
+ * Returns
+ * -------
+ * object
+ *     `series` as given, plus `solo`, `asRP`, `logRight`, `twin`, the density
+ *     `window`, the survival range `sLo`/`sHi`, and `densRefs` / `tailRefs`,
+ *     each a list of `{x, name, faint?, align?}` verticals.
+ */
+function twoPanelData({
     loss, cdf, series, tail, box, mean, zeroLine,
+    densityTitle, densityName, tailTitles, tailNames,
 }) {
-    const solo = series.length === 1;
     const asRP = view.epMode === 'rp';
     const logRight = Boolean(view.rightLogY);
     // The twin axis only lines up against a log primary: T = 1/p is log-linear
@@ -565,33 +633,67 @@ function twoPanel({
     // would be decoration that lies.
     const twin = logRight;
 
+    // Both panels are on the loss axis, so every reference is a vertical.
+    const densRefs = [];
+    const tailRefs = anchorMarks(tail);
+    if (zeroLine != null) densRefs.push({ x: zeroLine, name: 'break even' });
+    if (view.refLines) {
+        const anchorVaR = varAt(tail, REF_ANCHOR);
+        if (Number.isFinite(mean)) {
+            densRefs.push({ x: mean, name: 'mean' });
+            tailRefs.push({ x: mean, name: 'mean' });
+        }
+        if (Number.isFinite(anchorVaR)) {
+            densRefs.push({ x: anchorVaR, name: `1-in-${REF_ANCHOR}` });
+        }
+    }
+    const [sLo, sHi] = survivalRange(series);
+    // Labels resolved here, not patched onto a built option afterward. A
+    // severity is a density ordinate rather than a mass and a P&L's bad tail is
+    // its low end, so both rename the axes; doing that by mutating the ECharts
+    // option meant the wording lived in a place only one renderer could read.
+    // "Survival", not "EP curve": EP is a term of art in catastrophe modeling
+    // (OEP / AEP) and this is neither. It is S(x) = P(X > x).
+    const titles = tailTitles || ['Survival', 'Return period'];
+    const names = tailNames || ['S(x)', 'return period'];
+    return {
+        loss, series, box, mean,
+        solo: series.length === 1,
+        asRP, logRight, twin,
+        logY: Boolean(view.logY),
+        window: densityWindow(loss, cdf),
+        sLo, sHi, densRefs, tailRefs,
+        densityTitle: densityTitle || 'Density',
+        densityName: view.logY ? `log ${densityName || 'density'}`
+                               : (densityName || 'density'),
+        // The pair, because when the twin axis is on both readings are drawn:
+        // whichever is not primary sits on the right.
+        tailNames: names,
+        tailTitle: asRP ? titles[1] : titles[0],
+    };
+}
+
+function twoPanel(args) {
+    const {
+        loss, series, box, solo, asRP, logRight, twin, window, sLo, sHi,
+        densRefs, tailRefs, densityTitle, densityName, tailNames, tailTitle,
+    } = twoPanelData(args);
+
     const density = series.map((s, i) => densitySeries(s.name, loss, s.mass, i, solo));
     const right = series.map((s, i) => rightSeries(s.name, loss, s.tailProb, i));
 
     // Reference lines go on the first series of each panel, so they draw once.
-    // Both panels are on the loss axis, so every one of them is a vertical.
-    const dens = [];
-    const rightRefs = anchorLines(tail);
-    if (zeroLine != null) dens.push({ xAxis: zeroLine, name: 'break even' });
-    if (view.refLines) {
-        const anchorVaR = varAt(tail, REF_ANCHOR);
-        if (Number.isFinite(mean)) {
-            dens.push({ xAxis: mean, name: 'mean' });
-            rightRefs.push({ xAxis: mean, name: 'mean' });
-        }
-        if (Number.isFinite(anchorVaR)) {
-            dens.push({ xAxis: anchorVaR, name: `1-in-${REF_ANCHOR}` });
-        }
-    }
+    const dens = densRefs.map((r) => ({ xAxis: r.x, name: r.name }));
+    const rightRefs = tailRefs.map((r) => (r.faint
+        ? anchorLineStyle(r)
+        : { xAxis: r.x, name: r.name }));
     if (dens.length) density[0].markLine = refLine(dens);
     if (rightRefs.length && right.length) right[0].markLine = refLine(rightRefs);
 
-    const window = densityWindow(loss, cdf);
     // The box was computed by the spec's `layout()` before the fetch and is
     // handed in, not recomputed. `twin` above and the `view.rightLogY` the box
     // was built from are the same flag, so the two agree by construction.
     const { grids, hostHeight, footprint } = box;
-    const [sLo, sHi] = survivalRange(series);
 
     // Loss on x in BOTH panels, always. The right panel is the same book seen
     // through its tail rather than a transposed picture of it, so the two read
@@ -608,7 +710,7 @@ function twoPanel({
     // period. Same curve, two readings, and whichever is not primary is the
     // twin on the right, so both are always legible.
     const survivalAxis = (extra = {}) => axisStyle({
-        gridIndex: 1, name: 'S(x)',
+        gridIndex: 1, name: tailNames[0],
         ...(logRight ? { type: 'log', logBase: 10, min: sLo, max: sHi }
                      : { type: 'value', min: 0, max: sHi }),
         axisLabel: { fontSize: 10, color: '#6c757d',
@@ -616,7 +718,7 @@ function twoPanel({
         ...extra,
     });
     const returnAxis = (extra = {}) => axisStyle({
-        gridIndex: 1, name: 'return period', nameGap: 34,
+        gridIndex: 1, name: tailNames[1], nameGap: 34,
         ...(logRight ? { type: 'log', logBase: 10, min: 1 / sHi, max: 1 / sLo }
                      : { type: 'value', min: 1 / sHi, max: 1 / sLo }),
         axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
@@ -628,7 +730,7 @@ function twoPanel({
     const yAxes = [
         axisStyle({
             gridIndex: 0, type: view.logY ? 'log' : 'value',
-            name: view.logY ? 'log density' : 'density', scale: true,
+            name: densityName, scale: true,
             ...(view.logY ? { min: logMin() } : {}),
             axisLabel: { fontSize: 10, color: '#6c757d',
                          formatter: (v) => (v ? v.toExponential(0) : '0') },
@@ -650,13 +752,9 @@ function twoPanel({
         ...baseOption(),
         grid: grids,
         title: [
-            { text: 'Density', left: grids[0].left, top: grids[0].top - 24,
+            { text: densityTitle, left: grids[0].left, top: grids[0].top - 24,
               textStyle: { fontSize: 12, fontWeight: 600 } },
-            // "Survival", not "EP curve": EP is a term of art in catastrophe
-            // modeling (OEP / AEP, occurrence and aggregate exceedance
-            // probability) and this is neither. It is S(x) = P(X > x).
-            { text: asRP ? 'Return period' : 'Survival',
-              left: grids[1].left, top: grids[1].top - 24,
+            { text: tailTitle, left: grids[1].left, top: grids[1].top - 24,
               textStyle: { fontSize: 12, fontWeight: 600 } },
         ],
         legend: { ...baseOption().legend, show: !solo, data: series.map((s) => s.name) },
@@ -792,6 +890,78 @@ const BVAGG_PADS = { left: 64, rightPad: 96 };
 
 const TWO_PANEL_CONTROLS = ['logY', 'xFull', 'refLines', 'epMode', 'rightLogY'];
 
+// ---- two-panel argument builders --------------------------------------
+//
+// Column picking, one function per kind, kept out of `build` so both renderers
+// can call it. Each returns the argument object `twoPanelData` reads, or null
+// when the frame lacks what the exhibit needs. Nothing here is engine-specific,
+// which is the point: the ECharts and Plotly paths diverge only after this step.
+
+function aggPanelArgs({ density, tail }, { name, box, mean }) {
+    const loss = col(density, 'loss');
+    const mass = col(density, 'p_total');
+    const S = col(density, 'S');
+    if (!loss || !mass || !S) return null;
+    return {
+        loss, cdf: col(density, 'F'), tail, box, mean,
+        series: [{ name: name || 'aggregate', mass, tailProb: S }],
+    };
+}
+
+function portPanelArgs({ units, tail }, { box, mean }) {
+    const loss = col(units, 'loss');
+    if (!loss) return null;
+    // Units first, total last, so the total draws on top of them and takes the
+    // anchor markers.
+    const names = suffixes(units, 'p_').filter((n) => n !== 'total');
+    const series = names.map((n) => ({
+        name: n, mass: col(units, `p_${n}`), tailProb: col(units, `S_${n}`),
+    })).filter((s) => s.mass && s.tailProb);
+    const total = col(units, 'p_total');
+    const totalS = col(units, 'S');
+    if (total && totalS) series.push({ name: 'total', mass: total, tailProb: totalS });
+    if (!series.length) return null;
+    return { loss, cdf: col(units, 'F'), tail, box, mean, series };
+}
+
+function sevPanelArgs({ density }, { name, box, mean }) {
+    const loss = col(density, 'loss');
+    const pdf = col(density, 'pdf');
+    const S = col(density, 'S');
+    if (!loss || !pdf || !S) return null;
+    return {
+        loss, cdf: col(density, 'F'), tail: null, box, mean,
+        series: [{ name: name || 'severity', mass: pdf, tailProb: S }],
+        // A severity is a density ordinate, not a mass, and its support is
+        // routinely unbounded. Say so rather than letting the reader assume the
+        // aggregate's semantics.
+        densityTitle: 'Severity density',
+        densityName: 'pdf',
+    };
+}
+
+function pnlPanelArgs({ density }, { name, box, mean }) {
+    const loss = col(density, 'loss');
+    const mass = col(density, 'p_total');
+    const F = col(density, 'F');
+    if (!loss || !mass || !F) return null;
+    // A P&L outcome axis is signed and the bad tail is the LOW end, so the
+    // return period runs off F, not S: a 1-in-200 year is the outcome only
+    // 1/200 of years fall below, not above.
+    return {
+        loss, cdf: F, tail: null, box, mean, zeroLine: 0,
+        series: [{ name: name || 'P&L', mass, tailProb: F }],
+        tailTitles: ['Downside probability', 'Downside return period'],
+        tailNames: ['F(x)', 'return period'],
+    };
+}
+
+/** Wrap an argument builder as an ECharts `build`. */
+const echartsBuild = (panelArgs) => (data, opts) => {
+    const args = panelArgs(data, opts);
+    return args && twoPanel(args);
+};
+
 const EXHIBITS = {
     agg: {
         layout: twoPanelBox,
@@ -803,16 +973,8 @@ const EXHIBITS = {
             ]);
             return { density, tail };
         },
-        build({ density, tail }, { name, box, mean }) {
-            const loss = col(density, 'loss');
-            const mass = col(density, 'p_total');
-            const S = col(density, 'S');
-            if (!loss || !mass || !S) return null;
-            return twoPanel({
-                loss, cdf: col(density, 'F'), tail, box, mean,
-                series: [{ name: name || 'aggregate', mass, tailProb: S }],
-            });
-        },
+        panelArgs: aggPanelArgs,
+        build: echartsBuild(aggPanelArgs),
     },
 
     port: {
@@ -825,21 +987,8 @@ const EXHIBITS = {
             ]);
             return { units, tail };
         },
-        build({ units, tail }, { box, mean }) {
-            const loss = col(units, 'loss');
-            if (!loss) return null;
-            // Units first, total last, so the total draws on top of them and
-            // takes the anchor markers.
-            const names = suffixes(units, 'p_').filter((n) => n !== 'total');
-            const series = names.map((n) => ({
-                name: n, mass: col(units, `p_${n}`), tailProb: col(units, `S_${n}`),
-            })).filter((s) => s.mass && s.tailProb);
-            const total = col(units, 'p_total');
-            const totalS = col(units, 'S');
-            if (total && totalS) series.push({ name: 'total', mass: total, tailProb: totalS });
-            if (!series.length) return null;
-            return twoPanel({ loss, cdf: col(units, 'F'), tail, box, mean, series });
-        },
+        panelArgs: portPanelArgs,
+        build: echartsBuild(portPanelArgs),
     },
 
     sev: {
@@ -848,22 +997,8 @@ const EXHIBITS = {
         async fetch(id) {
             return { density: await api.density_df(id) };
         },
-        build({ density }, { name, box, mean }) {
-            const loss = col(density, 'loss');
-            const pdf = col(density, 'pdf');
-            const S = col(density, 'S');
-            if (!loss || !pdf || !S) return null;
-            const option = twoPanel({
-                loss, cdf: col(density, 'F'), tail: null, box, mean,
-                series: [{ name: name || 'severity', mass: pdf, tailProb: S }],
-            });
-            // A severity is a density ordinate, not a mass, and its support is
-            // routinely unbounded. Say so on the axis rather than letting the
-            // reader assume the aggregate's semantics.
-            option.yAxis[0].name = view.logY ? 'log pdf' : 'pdf';
-            option.title[0].text = 'Severity density';
-            return option;
-        },
+        panelArgs: sevPanelArgs,
+        build: echartsBuild(sevPanelArgs),
     },
 
     pnl: {
@@ -872,23 +1007,8 @@ const EXHIBITS = {
         async fetch(id) {
             return { density: await api.density_df(id, { cols: 'loss,p_total,F,S' }) };
         },
-        build({ density }, { name, box, mean }) {
-            const loss = col(density, 'loss');
-            const mass = col(density, 'p_total');
-            const F = col(density, 'F');
-            if (!loss || !mass || !F) return null;
-            // A P&L outcome axis is signed and the bad tail is the LOW end, so
-            // the return period runs off F, not S: a 1-in-200 year is the
-            // outcome only 1/200 of years fall below, not above.
-            const option = twoPanel({
-                loss, cdf: F, tail: null, box, mean, zeroLine: 0,
-                series: [{ name: name || 'P&L', mass, tailProb: F }],
-            });
-            option.title[1].text = view.epMode === 'rp'
-                ? 'Downside return period' : 'Downside probability';
-            option.yAxis[1].name = view.epMode === 'rp' ? 'return period' : 'F(x)';
-            return option;
-        },
+        panelArgs: pnlPanelArgs,
+        build: echartsBuild(pnlPanelArgs),
     },
 
     distortion: {
@@ -1042,6 +1162,10 @@ const EXHIBITS = {
 // The registry, exported for the node smoke test in dev/. `build()` is pure, so
 // a test can assemble every kind's option and inspect it without a DOM.
 export { EXHIBITS };
+
+// The engine-neutral bundle, exported for the Plotly path and for the smoke
+// test, which checks that both renderers are handed the same decisions.
+export { twoPanelData };
 
 // ---- reinsurance exhibit ----------------------------------------------
 //
@@ -1380,7 +1504,7 @@ function toggleButton(key, onChange) {
  *     Side-by-side layout, which is when the split is worth making.
  * onChange : function
  */
-function renderControls(names, wide, onChange) {
+function renderControls(names, wide, onChange, kind) {
     const honored = new Set(names);
     const row = el('div', {
         className: `exhibit-controls${wide ? ' exhibit-controls-split' : ''}`,
@@ -1393,6 +1517,7 @@ function renderControls(names, wide, onChange) {
         for (const key of g.controls) box.appendChild(toggleButton(key, onChange));
         row.appendChild(box);
     }
+    if (kind) row.appendChild(engineGroup(kind, onChange));
     return row;
 }
 
@@ -1548,8 +1673,8 @@ export async function mountExhibit(container, state) {
     // side, so it is re-rendered when the layout breakpoint moves.
     function renderTools() {
         empty(tools);
-        if (!controls.length) return;
-        tools.appendChild(renderControls(controls, opts().wide, () => onToggle()));
+        tools.appendChild(
+            renderControls(controls, opts().wide, () => onToggle(), state.kind));
     }
 
     // Declared before the controls are wired, not beside the chart it guards: the
@@ -1583,57 +1708,73 @@ export async function mountExhibit(container, state) {
         return null;                     // a frame this kind lacks; not an error
     }
 
-    let option = spec.build(data, opts());
-    if (!option) { empty(container); return null; }
+    // Which library draws it. Plotly only where the spike covers the kind and
+    // only once its bundle is actually here; anything else stays on ECharts,
+    // which is also the fallback when the chunk fails to load.
+    const wantsPlotly = () => engine() === 'plotly' && plotlyCovers(state.kind)
+        && Boolean(spec.panelArgs);
+    if (wantsPlotly()) await loadPlotly();
 
-    // Same height the skeleton was already holding, so nothing moves. `empty`
-    // clears the skeleton: ECharts appends its canvas to this node and would
-    // otherwise draw over the outline rather than replace it.
-    empty(host);
-    host.style.height = `${option.hostHeight}px`;
-    const chart = echarts.init(host, null, { renderer: 'canvas' });
-    chart.setOption(option);
-    linkPanels(chart, option);
+    // The live renderer: `{engine, update(), dispose()}`. Swapping engines is a
+    // teardown and a rebuild, never an update, since neither library can adopt
+    // the other's DOM.
+    let renderer = null;
 
-    // Turning the 3-D view on for the first time has to fetch the renderer, so a
-    // toggle is not always a synchronous redraw. Mounting with it already off is
-    // the case that gets here: `loadSurface()` was skipped, and without this the
-    // button would appear to do nothing.
+    async function draw() {
+        const usePlotly = wantsPlotly() && plotlyLoaded();
+        const want = usePlotly ? 'plotly' : 'echarts';
+        if (renderer && renderer.engine !== want) {
+            renderer.dispose();
+            renderer = null;
+        }
+        if (usePlotly) {
+            const args = spec.panelArgs(data, opts());
+            if (!args) return false;
+            const figure = plotlyFigure(twoPanelData(args));
+            host.style.height = `${figure.layout.height}px`;
+            if (renderer) { await renderer.update(figure); return true; }
+            // `empty` clears the skeleton: both libraries append into this node
+            // and would otherwise draw over the outline rather than replace it.
+            empty(host);
+            const handle = await mountPlotly(host, figure);
+            renderer = { engine: 'plotly', ...handle };
+            return true;
+        }
+        const next = spec.build(data, opts());
+        if (!next) return false;
+        // Same height the skeleton was already holding, so nothing moves.
+        host.style.height = `${next.hostHeight}px`;
+        if (!renderer) {
+            empty(host);
+            renderer = echartsRenderer(host, next);
+            return true;
+        }
+        renderer.update(next);
+        return true;
+    }
+
+    if (!await draw()) { empty(container); return null; }
+
+    // Turning the 3-D view on for the first time has to fetch the renderer, and
+    // so does the first flip to Plotly, so a toggle is not always a synchronous
+    // redraw. Mounting with either already off is the case that gets here.
     async function onToggle() {
         if (view.surface3d && controls.includes('surface3d') && !surfaceReady) {
             if (await loadSurface()) surfaceReady = true;
         }
+        if (wantsPlotly() && !plotlyLoaded()) await loadPlotly();
         redraw();
     }
 
-    // `notMerge` on every redraw: a toggle can change an axis *type*
-    // (value -> log) and swap which series carry markLines, and a merged
-    // setOption would leave the old ones behind. A 2-D to 3-D switch changes
-    // more than that, so the instance is disposed and rebuilt: ECharts cannot
-    // migrate a `grid` option to a `grid3D` one in place.
-    let is3d = Boolean(option.grid3D);
-    let chartRef = chart;
     ready = true;
     function redraw() {
         if (!ready) return;
-        const next = spec.build(data, opts());
-        if (!next) return;
-        option = next;
-        const next3d = Boolean(option.grid3D);
-        host.style.height = `${option.hostHeight}px`;
-        if (next3d !== is3d) {
-            is3d = next3d;
-            try { chartRef.dispose(); } catch { /* already gone */ }
-            chartRef = echarts.init(host, null, { renderer: 'canvas' });
-        }
-        chartRef.setOption(option, true);
-        chartRef.resize();
-        linkPanels(chartRef, option);
+        draw();
     }
 
-    // Rebuild on resize, always: every panel is now sized from the host width so
-    // it can hold the house aspect, which a bare `chart.resize()` (stretching
-    // the old geometry) would not do.
+    // Rebuild on resize, always: every panel is sized from the host width so it
+    // can hold the house aspect, which a bare `resize()` (stretching the old
+    // geometry) would not do.
     let lastWide = opts().wide;
     let lastWidth = opts().width;
     const ro = new ResizeObserver(() => {
@@ -1649,10 +1790,42 @@ export async function mountExhibit(container, state) {
 
     return {
         dispose() {
+            ready = false;
             try { ro.disconnect(); } catch { /* already gone */ }
-            // `chartRef`, not `chart`: a 2-D to 3-D switch replaces the instance,
-            // and disposing the original would leak the live one's canvas.
-            try { chartRef.dispose(); } catch { /* already gone */ }
+            if (renderer) renderer.dispose();
+        },
+    };
+}
+
+/**
+ * The ECharts lifecycle, as a renderer handle.
+ *
+ * `notMerge` on every update: a toggle can change an axis *type* (value to log)
+ * and swap which series carry markLines, and a merged `setOption` would leave
+ * the old ones behind. A 2-D to 3-D switch changes more than that, so the
+ * instance is disposed and rebuilt, because ECharts cannot migrate a `grid`
+ * option to a `grid3D` one in place.
+ */
+function echartsRenderer(host, option) {
+    let is3d = Boolean(option.grid3D);
+    let chart = echarts.init(host, null, { renderer: 'canvas' });
+    chart.setOption(option);
+    linkPanels(chart, option);
+    return {
+        engine: 'echarts',
+        update(next) {
+            const next3d = Boolean(next.grid3D);
+            if (next3d !== is3d) {
+                is3d = next3d;
+                try { chart.dispose(); } catch { /* already gone */ }
+                chart = echarts.init(host, null, { renderer: 'canvas' });
+            }
+            chart.setOption(next, true);
+            chart.resize();
+            linkPanels(chart, next);
+        },
+        dispose() {
+            try { chart.dispose(); } catch { /* already gone */ }
         },
     };
 }
