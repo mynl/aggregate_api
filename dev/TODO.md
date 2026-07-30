@@ -229,20 +229,30 @@ one version bump each.
       `scattergl`. If it loses, `engine.js` and `plotly-panels.js` come out and
       the dependency with them; keep the `twoPanelData` split either way.
 
-- [ ] **greater_tables alongside the current tables** (a31, agreed after a29).
-      The author's own package. The argument is not that it is prettier:
-      `serializers.py` flattens MultiIndex columns and resets the index into
-      data columns, and `port.summary_df` / `port.tail_df` both carry a two
-      level row index, so today a unit name is reprinted on all ten return
-      period rows where `sparsify=True` prints it once per block. Runs server
-      side on the real DataFrame through one new `frame/{which}.html` route
-      mirroring the existing `.csv` one. **`renderExhibit` stays and stays the
-      default**; GT is reached by a `?tables=gt` dev flag, no user facing
-      switch, so the two can be compared before either is deleted. Constraints
-      confirmed in the 7.2.0 source: pass `tikz=False` (it defaults to computing
-      LaTeX we discard) and `large_ok=True` (it *raises* above 50 rows, and a
-      six unit portfolio's `tail_df` is 70), never let a density frame near it,
-      and note the CSS is scoped to `#{df_id}` so injection is safe.
+- [x] **greater_tables alongside the current tables** (→ 1.0.0a31). One new
+      `GET frame/{which}.html` route mirroring the `.csv` one, rendering server
+      side on the real DataFrame so the row index sparsifies. `renderExhibit`
+      stays and stays the default; GT is reached by `?tables=gt`, no user facing
+      switch. Row emphasis preserved as a `<tr>` class. *(done; moved to
+      `dev/done/`)*
+
+- [ ] **Compare the two static table renderers.** Same standing as the engine
+      comparison above, and same reason: nothing has been looked at. Build a
+      *portfolio* (the sparsified two level index is the whole argument and an
+      Aggregate does not show it), load with `?tables=gt`, and decide. If GT
+      wins, delete `renderExhibit` and the flag and take the Price tab next. If
+      it loses, `tables.py`, the route and the dependency come out.
+
+- [ ] **Price tab tables through GT** (only if GT wins). `PriceResponse`,
+      `ReinsPriceResponse` and `PricingResponse` carry *computed* frames from
+      POST endpoints, so `frame/{which}.html` cannot reach them. They need html
+      returned alongside the json so the Static / Interactive toggle stays
+      instant without a re-POST.
+
+- [ ] **Upstream `greater_tables` nit**: importing it emits a `Pandas4Warning`,
+      `pd.set_option('future.no_silent_downcasting', True)` is deprecated
+      (`core.py:47` and `core_old.py:41`). Harmless, but it shows up in every
+      pytest run now. The author owns the package.
 
 - [ ] **The 3-D surface is sugar, not substance** (author's verdict after
       seeing it, a29). "Quite impressive. Fast. But more sugar than substance."

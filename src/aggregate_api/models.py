@@ -156,6 +156,25 @@ class FrameResponse(BaseModel):
     rows: list[list[Any]]
 
 
+class HtmlFrameResponse(BaseModel):
+    """A frame rendered as a self-contained html table.
+
+    The presentation counterpart to ``FrameResponse``. ``html`` carries its own
+    ``<style>``, scoped to a content hash of the frame, so it can be injected
+    into a page that already has styles of its own.
+
+    ``rows`` is the source frame's row count, which the client cannot recover
+    from markup it does not parse, and which tells it whether the static view is
+    showing everything.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    which: str
+    rows: int
+    html: str
+
+
 # ======================================================================
 # Info -- raw multi-line string from Aggregate.info / Portfolio.info
 # ======================================================================

@@ -434,6 +434,25 @@ header .navbar { min-height: 56px; }
     color: var(--mut); background: #fff; border-color: var(--grid);
 }
 
+/* ---- greater_tables host (a31 evaluation) ----
+   The server sends a self-contained blob: a <style> scoped to a content hash of
+   the frame, plus the table. Only two things need saying from out here.
+
+   First, GT centers its table in a full-width flex box, which is right for a
+   page of exhibits and wrong inside a pane where everything else is left
+   aligned. Second, its row emphasis classes are ours, applied in tables.py, so
+   they are styled here rather than by the package. */
+.gt-host { margin: .2rem 0 1rem; }
+.gt-host .greater-table { justify-content: flex-start; }
+/* Backgrounds go on the cells, not the row: `border-collapse: collapse` (which
+   GT sets, and which is what gives the table its rules) defeats a background on
+   the <tr> itself. */
+/* Same #fff7e6 as `.exhibit-row-hi` below, deliberately: the two static
+   renderers are being compared on structure, and a different shade of yellow
+   would be noise in that comparison. */
+.gt-host .grt-row-hi > td, .gt-host .grt-row-hi > th { background: #fff7e6; }
+.gt-host .grt-row-em > td, .gt-host .grt-row-em > th { font-weight: 600; }
+
 /* ---- Overview table view toggle (Static | Interactive) ---- */
 .overview-view-toggle {
     display: flex; flex-wrap: wrap; align-items: center; gap: .35rem;

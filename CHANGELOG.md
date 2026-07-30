@@ -4,6 +4,64 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a31
+
+From `dev/done/plan-greater-tables.md`. A second static-table renderer, alongside
+the first, for the same reason a30 added a second chart renderer.
+
+### The argument is structure, not prettiness
+
+`serializers.py` flattens MultiIndex columns to dotted strings and resets the row
+index into ordinary data columns. That is right for a grid and lossy for a printed
+exhibit: `port.summary_df` and `port.tail_df` both carry a **two level row index**,
+so today a unit name is reprinted on all ten of its return-period rows.
+`greater_tables` sparsifies it to once per block, and it can only do that where
+the real DataFrame still exists, which is server side.
+
+### New
+
+- **`src/aggregate_api/tables.py`**, `render_html(df, *, which, caption)`.
+- **`GET /v1/objects/{oid}/frame/{which}.html`**, an exact mirror of the existing
+  `.csv` route, resolving the same `_CSV_FRAMES` names through the same
+  `_resolve_frame`. Returns `HtmlFrameResponse {which, rows, html}`.
+- `greater-tables>=5.3` as a dependency. **No `[tool.uv.sources]` override**: the
+  published 5.3.0 is byte identical to the local checkout, so there is nothing to
+  co-develop against and the repo stays installable anywhere.
+
+Three constraints, all read out of the source rather than its documentation, and
+all load bearing: `tikz` defaults to **True** and would compute LaTeX we discard
+on every request; `GT` **raises** above 50 rows rather than warning, and a six
+unit portfolio's `tail_df` is 70; its CSS is scoped to `#{df_id}`, a content hash
+of the frame, which is what makes the blob safe to inject. A density frame (65,536
+rows) is refused with a 422 and stays the grid's job permanently.
+
+### Row emphasis is preserved, not dropped
+
+The premise that it would be lost was wrong, as the author pointed out.
+`greater_tables` passes markup in a cell straight through: `core.py` emits
+`<td class="...">{c}</td>` with no escaping, and `clean_html_tex` only rewrites
+`$...$` into MathJax delimiters.
+
+The design still avoids cell markup. `cast_to_floats` is what earns the number
+formatting and the right alignment, so a numeric column carrying `<b>1,234</b>`
+would fail the float cast and drop to unformatted left-aligned strings. The
+1-in-200 highlight and the bold total are therefore classes on the `<tr>`, added
+by a short bs4 pass (already a `greater_tables` dependency) that maps frame rows
+to body rows positionally, verified rather than assumed.
+
+### Nothing is deleted, and there is no switch
+
+`renderExhibit` stays and stays the default. The server-rendered table is reached
+by a dev flag, `?tables=gt` (and `?tables=native` to go back), sticky per browser,
+with **no user-facing control**. The two can be compared on real frames before
+either is chosen. The highlight color is deliberately the same `#fff7e6` as the
+built-in table, so the comparison is about structure rather than about a different
+shade of yellow.
+
+Deferred: the Price tab. `PriceResponse`, `ReinsPriceResponse` and
+`PricingResponse` carry *computed* frames from POST endpoints, so the generic
+route cannot reach them.
+
 ## 1.0.0a30
 
 From `dev/done/plan-plotly-spike.md`. A second renderer, so the question "is it

@@ -83,6 +83,7 @@ from ..cache import CacheEntry, ObjectCache, canonicalize_decl, object_id
 from ..config import Settings, get_settings
 from ..plotting import render_plot
 from ..pricing import run_price_pentagon, run_pricing, run_reins_price
+from ..tables import render_html
 from ..serializers import (
     bin_density,
     bivariate_marginal_frame,
@@ -1430,6 +1431,48 @@ def get_frame_csv(
 # ----------------------------------------------------------------------
 # GET /v1/objects/{id}/plot
 # ----------------------------------------------------------------------
+
+@router.get("/objects/{oid}/frame/{which}.html", response_model=models.HtmlFrameResponse)
+def get_frame_html(
+    oid: str, which: str, entry: CacheEntry = Depends(_locked_entry)
+) -> dict:
+    """Return the named frame as a self-contained html table.
+
+    The presentation counterpart to the ``.csv`` route above, resolving the same
+    ``_CSV_FRAMES`` names through the same ``_resolve_frame``. It renders through
+    ``greater_tables``, on the DataFrame rather than on the wire format, because
+    the two things worth having are exactly the two the JSON discards: a
+    sparsified row index (a portfolio's ``tail_df`` otherwise reprints the unit
+    name on all ten of its return-period rows) and spanned MultiIndex column
+    headers.
+
+    Notes
+    -----
+    Deliberately not a `format=html` option on each existing frame route. Those
+    return `FrameResponse` and are consumed by the interactive grid; this returns
+    markup for the static view, and one route that already knows how to find any
+    frame by name is less surface than a flag on fifteen.
+
+    Large frames are refused rather than rendered. See ``tables.MAX_ROWS``: a
+    density frame is 65,536 rows and belongs in the grid.
+    """
+    attr = _CSV_FRAMES.get(which)
+    if attr is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"unknown frame {which!r}; expected one of {sorted(_CSV_FRAMES)}",
+        )
+    df = _resolve_frame(entry.obj, attr)
+    if df is None:
+        raise HTTPException(
+            status_code=400, detail=f"{which} not available for {entry.kind!r}"
+        )
+    try:
+        html = render_html(df, which=which)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"which": which, "rows": int(len(df)), "html": html}
+
 
 @router.get("/objects/{oid}/plot")
 def get_plot(

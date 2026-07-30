@@ -543,19 +543,66 @@ function exhibitToggle(onChange) {
         el('span', { className: 'overview-view-label' }, 'Tables'), ...btns);
 }
 
+// ----------------------------------------------------------------------
+// Static table renderer (a31 evaluation)
+// ----------------------------------------------------------------------
+//
+// `greater_tables` renders server side, on the real DataFrame, and so keeps the
+// two things the JSON wire format throws away: a sparsified row index (a
+// portfolio's tail_df otherwise reprints the unit name on all ten of its
+// return-period rows) and spanned MultiIndex column headers.
+//
+// It is **alongside** `renderExhibit`, not instead of it, and there is
+// deliberately **no user-facing switch**: the default is exactly what shipped
+// before, and the comparison is made by flipping a dev flag. Nothing is deleted
+// until that comparison has been made.
+//
+//     ?tables=gt      turn it on  (sticky)
+//     ?tables=native  turn it off
+//
+const TABLES_KEY = 'aggapi.tablesEngine';
+const tablesEngine = (() => {
+    let mode = 'native';
+    try { mode = localStorage.getItem(TABLES_KEY) || 'native'; } catch { /* private */ }
+    const asked = new URLSearchParams(location.search).get('tables');
+    if (asked === 'gt' || asked === 'native') {
+        mode = asked;
+        try { localStorage.setItem(TABLES_KEY, mode); } catch { /* private */ }
+    }
+    return () => mode;
+})();
+
+/**
+ * Inject a server-rendered table.
+ *
+ * `innerHTML` with a response body is normally a red flag. It is first-party
+ * here in both directions: our own service rendered it, through our own
+ * package, from a DataFrame we built. The blob carries its own `<style>`, scoped
+ * to a content hash of the frame, so it cannot leak into the rest of the page.
+ */
+function mountStaticTable(box, payload, opts = {}) {
+    if (opts.title) box.appendChild(el('h6', { className: 'exhibit-title' }, opts.title));
+    const host = el('div', { className: 'gt-host' });
+    host.innerHTML = payload.html;
+    box.appendChild(host);
+    if (opts.caption) box.appendChild(el('div', { className: 'exhibit-caption' }, opts.caption));
+}
+
 // Render the summary_df + tail_df exhibits into `box` per the current view mode.
 // Interactive grids register under 'pane-overview', so clearGrids tears down the
 // previous mode's grids before each (re-)render.
-function renderOverviewExhibits(box, summary, tail) {
+function renderOverviewExhibits(box, summary, tail, html = {}) {
     clearGrids('pane-overview');
     empty(box);
     if (summary) renderOneExhibit(box, summary, {
+        gt: html.summary,
         title: 'Summary',
         caption: 'Moments and key percentiles. CV blank for signed / near-break-even '
             + 'rows; Freq percentiles blank by design (PGF-only).',
         emphasize: (r) => r.X === 'Agg' || r.unit === 'total',
     });
     if (tail) renderOneExhibit(box, tail, {
+        gt: html.tail,
         title: 'Tail risk',
         caption: '1-in-200 (Solvency II) and 1-in-250 (US) are the capital anchors. '
             + 'Exact from the FFT grid, not simulated.',
@@ -568,9 +615,15 @@ function renderOverviewExhibits(box, summary, tail) {
 // interactive mode, a titled + captioned CsvGrid with the full chrome. The
 // highlight/emphasis predicates are ignored by the grid (CsvGrid has no row
 // styling), which is the whole reason both views exist.
+//
+// `opts.gt` is the server-rendered alternative, present only when the a31 dev
+// flag is on and the fetch succeeded. It stands in for the hand-built static
+// table, never for the grid: the two static renderers are what is being
+// compared, and the grid answers a different question.
 function renderOneExhibit(box, frame, opts) {
     if (overviewView !== 'interactive') {
-        box.appendChild(renderExhibit(frame, opts));
+        if (opts.gt) mountStaticTable(box, opts.gt, opts);
+        else box.appendChild(renderExhibit(frame, opts));
         return;
     }
     if (opts.title) box.appendChild(el('h6', { className: 'exhibit-title' }, opts.title));
@@ -649,11 +702,24 @@ async function loadOverview() {
     // Fetch once; the toggle re-renders from the stashed frames (no refetch).
     const summary = await api.summary(state.id).catch(() => null);
     const tailFrame = await api.tail_df(state.id).catch(() => null);
+    // The server-rendered pair, only when the a31 flag asks for it. Fetched
+    // alongside rather than instead of the frames, so the toggle can still swap
+    // to the interactive grid without another round trip, and so a failure here
+    // falls back to the built-in static table rather than to nothing.
+    let html = {};
+    if (tablesEngine() === 'gt' && (summary || tailFrame)) {
+        const [s, t] = await Promise.all([
+            summary ? api.frameHtml(state.id, 'summary').catch(() => null) : null,
+            tailFrame ? api.frameHtml(state.id, 'tail_df').catch(() => null) : null,
+        ]);
+        html = { summary: s, tail: t };
+    }
     if (summary || tailFrame) {
         const box = el('div', { className: 'overview-exhibits' });
-        pane.appendChild(exhibitToggle(() => renderOverviewExhibits(box, summary, tailFrame)));
+        pane.appendChild(exhibitToggle(
+            () => renderOverviewExhibits(box, summary, tailFrame, html)));
         pane.appendChild(box);
-        renderOverviewExhibits(box, summary, tailFrame);
+        renderOverviewExhibits(box, summary, tailFrame, html);
         rendered = true;
     }
 

@@ -65,6 +65,13 @@ export const api = {
     /** Portfolio only: per-unit p_<unit> / S_<unit> on the common grid. */
     unit_density_df: (id)           => _json('GET',  `/v1/objects/${id}/unit_density_df`),
     bs_window_df: (id)              => _json('GET',  `/v1/objects/${id}/bs_window_df`),
+    /**
+     * A frame as a self-contained html table (greater_tables), styles included.
+     * The presentation counterpart to the frame endpoints above: it keeps the
+     * row index the JSON form flattens into data columns. See the a31 note in
+     * main.js for why it is behind a flag.
+     */
+    frameHtml:    (id, which)       => _json('GET',  `/v1/objects/${id}/frame/${which}.html`),
     kappa:        (id, p = {})      => _json('GET',  `/v1/objects/${id}/kappa?${qs(p)}`),
 
     // Reinsurance

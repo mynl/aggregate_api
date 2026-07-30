@@ -1088,3 +1088,83 @@ def test_pricing_at_ccoc_portfolio(client):
     assert body["ccoc"] == 0.1
     assert body["a"] is not None
     assert len(body["rows"]) >= 1
+
+
+# ----------------------------------------------------------------------
+# GET /v1/objects/{id}/frame/{which}.html  (greater_tables, a31)
+# ----------------------------------------------------------------------
+
+
+def test_frame_html_sparsifies_the_row_index(client):
+    """The whole argument for rendering server side, in one assertion.
+
+    A portfolio's ``tail_df`` is indexed by ``(unit, T)``, so unit ``A`` owns ten
+    return-period rows. The JSON wire format resets that index into a data
+    column and the name is reprinted on every one of them; ``greater_tables``
+    prints it once per block. Anything that flattens the index before rendering
+    loses this, which is why the route reads the DataFrame and not the payload.
+    """
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/frame/tail_df.html")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    html = body["html"]
+
+    assert body["which"] == "tail_df"
+    assert body["rows"] > 10                     # several units' worth of rows
+    assert html.count(">A<") == 1, "unit name repeated: the index was not sparsified"
+
+
+def test_frame_html_style_is_scoped_to_the_frame(client):
+    """Injectable: the styles cannot escape into the rest of the page.
+
+    ``greater_tables`` scopes every rule to ``#{df_id}``, a content hash of the
+    frame, leaving only ``.greater-table`` global. A bare ``table {`` or
+    ``td {`` in the blob would restyle the SPA's other tables the moment one was
+    injected.
+    """
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    html = client.get(f"/v1/objects/{oid}/frame/summary.html").json()["html"]
+
+    start = html.index("<style>")
+    css = html[start:html.index("</style>", start)]
+    assert "#" in css
+    for selector in ("\n    table {", "\n    td {", "\n    th {", "\n    tr {"):
+        assert selector not in css, f"unscoped selector {selector.strip()!r}"
+
+
+def test_frame_html_marks_the_capital_anchors(client):
+    """Row emphasis survives the move to a server-rendered table.
+
+    The 1-in-200 / 1-in-250 lines and the portfolio total are the "what is my
+    number" cues on the Overview. They are classes on the ``<tr>``, not markup
+    in the cells: a numeric column carrying ``<b>...</b>`` would fail
+    ``cast_to_floats`` and lose its formatting and right alignment.
+    """
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    html = client.get(f"/v1/objects/{oid}/frame/tail_df.html").json()["html"]
+
+    # Two anchors per unit, and PF has A, B and total.
+    assert html.count("grt-row-hi") == 6
+    assert html.count("grt-row-em") == 10        # every row of the total unit
+
+
+def test_frame_html_refuses_a_density_frame(client):
+    """A 65,536 row density is the interactive grid's job, permanently.
+
+    Not a performance note: rendering it would take minutes and produce a
+    document no browser should be asked to lay out. The guard says so with a
+    422 rather than letting a caller find out.
+    """
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/frame/density_df.html")
+    assert r.status_code == 422
+    assert "static-table limit" in r.json()["detail"]
+
+
+def test_frame_html_rejects_an_unknown_frame(client):
+    """Same resolver as the .csv route, so the same 404 and the same hint."""
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/frame/not_a_frame.html")
+    assert r.status_code == 404
+    assert "unknown frame" in r.json()["detail"]
