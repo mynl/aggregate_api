@@ -246,11 +246,24 @@ one version bump each.
       import side effects at all, by design, so the `Pandas4Warning` and the
       warnings-filter pollution are gone with the 5.x dependency.
 
+- [x] **Table view everywhere, one switch** (→ 1.0.0a33). The header menu's
+      Tables section steers the whole page; the Overview keeps a second
+      affordance for the same value. Price frames travel with their documents,
+      since a POST computes them. Gated on row count, so density stays
+      interactive.
+
 - [ ] **Look at the static tables.** The walker has been verified end to end
       against real documents in Node (sparsified stubs, flags, negative cells,
       raw values in the CSV export), but nobody has *seen* one in the page. Build
       a **portfolio**, since the two level row index is the whole argument and an
-      Aggregate does not show it.
+      Aggregate does not show it. Then walk the tabs: More, Reins and Price all
+      render statically now and none of those have been looked at either.
+
+- [ ] **Math in tables and titles.** The walker emits `\(...\)` for page MathJax
+      unless a `katex` object is passed, and the SPA loads neither, so a `$...$`
+      cell would render as literal delimiters. Nothing sends one today. It is the
+      same decision as the chart titles in `dev/graphs.md`, so make it once for
+      both.
 
 - [ ] **Report to the greatest-tables side**: its `requires-python = ">=3.13"`
       forced this repo's floor up from 3.11. Nothing in its source appears to

@@ -989,6 +989,58 @@ def test_price_portfolio_distortions(client):
     assert "columns" in lr and len(lr["rows"]) >= 1
 
 
+def test_price_ir_is_opt_in_and_covers_every_frame(client):
+    """Computed frames carry their documents, because no route can fetch them.
+
+    ``frame/{which}`` resolves attributes off the cached object; these frames are
+    produced by this POST and exist nowhere else, so the static view can only get
+    them here. Opt-in, so the default response shape is unchanged.
+    """
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    plain = client.post(f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.1}).json()
+    assert plain["ir"] is None
+
+    body = client.post(f"/v1/objects/{oid}/price?ir=true",
+                       json={"p": 0.99, "coc": 0.1}).json()
+    ir = body["ir"]
+    assert ir is not None
+    # One document per frame the tab renders: the pentagon, the calibrated set,
+    # and each per-distortion stat slice.
+    assert set(ir) == {"pentagon", "distortion_df", "LR", "P", "PQ", "ROE"}
+    for name, doc in ir.items():
+        assert doc["ir_version"] == 1, name
+        assert doc["body"], name
+
+
+def test_price_ir_keeps_the_index_the_wire_format_flattens(client):
+    """The reason these are built before ``reset_index_safe``, not after.
+
+    ``analyze_distortions`` returns a frame indexed by distortion, which the JSON
+    payload resets into a data column. The document keeps it as a stub, which is
+    what earns the sparsified left edge in the static view.
+    """
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    body = client.post(f"/v1/objects/{oid}/price?ir=true",
+                       json={"p": 0.99, "coc": 0.1}).json()
+
+    assert body["ir"]["LR"]["n_stub_levels"] >= 1
+    # The flattened payload has it as an ordinary column, and that difference is
+    # the whole point of carrying both.
+    assert body["distortions"]["LR"]["columns"][0] not in ("", None)
+
+
+def test_reins_price_ir_carries_both_frames(client):
+    """Same treatment for the reinsurance pricing table and its parameters."""
+    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
+    r = client.post(f"/v1/objects/{oid}/reins_price?ir=true",
+                    json={"p": 0.99, "coc": 0.1, "basis": "gross"})
+    assert r.status_code == 200, r.text
+    ir = r.json()["ir"]
+    assert ir is not None
+    assert ir["table"]["ir_version"] == 1
+    assert len(ir["table"]["body"]) == len(r.json()["table"]["rows"])
+
+
 def test_reins_price_gross_and_net(client):
     """Calibrate on gross, price both bases, and difference them.
 

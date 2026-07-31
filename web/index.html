@@ -38,6 +38,19 @@
                                 aria-expanded="false" aria-label="menu" title="Menu">
                             <i class="bi bi-list"></i></button>
                         <ul class="dropdown-menu dropdown-menu-end">
+                            <!-- Tables: the page-wide static / interactive choice. It lives here
+                                 rather than on each tab because it is a preference, not a per-table
+                                 decision, and a switch on every table would be a lot of chrome for
+                                 something nobody changes twice in a session. The Overview carries a
+                                 second affordance for the same value, next to the tables it steers. -->
+                            <li><h6 class="dropdown-header">Tables</h6></li>
+                            <li><button type="button" class="dropdown-item table-view-item" data-table-view="static">
+                                <i class="bi bi-check2"></i><span>Static</span>
+                                <small class="text-muted">book-quality, printed</small></button></li>
+                            <li><button type="button" class="dropdown-item table-view-item" data-table-view="interactive">
+                                <i class="bi bi-check2"></i><span>Interactive</span>
+                                <small class="text-muted">sort, filter, search</small></button></li>
+                            <li><hr class="dropdown-divider"></li>
                             <li><button type="button" class="dropdown-item" data-bs-toggle="offcanvas" data-bs-target="#helpPanel">Help</button></li>
                             <li><button type="button" class="dropdown-item" id="dl-raw">Download models (raw)</button></li>
                             <li><button type="button" class="dropdown-item" id="dl-agg">Download models (.agg)</button></li>

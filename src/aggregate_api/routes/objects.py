@@ -1539,15 +1539,23 @@ def get_plot(
 def post_price(
     oid: str,
     req: models.PriceRequest,
+    ir: bool = Query(False, description="Also return table documents for the static view."),
     entry: CacheEntry = Depends(_locked_entry),
 ) -> dict:
     """Pricing-pentagon completion (+ distortion analysis for Portfolios).
 
     Fix the capital level with ``p`` and supply exactly one target (``coc``
     or ``lr``); see :func:`aggregate_api.pricing.run_price_pentagon`.
+
+    Notes
+    -----
+    These frames are *computed* here, so the generic ``frame/{which}`` document
+    route cannot reach them and ``?ir=true`` carries them in the response
+    instead. The SPA always asks, so flipping the table view after a pricing run
+    never costs a re-POST.
     """
     try:
-        return run_price_pentagon(entry.obj, p=req.p, coc=req.coc, lr=req.lr)
+        return run_price_pentagon(entry.obj, p=req.p, coc=req.coc, lr=req.lr, ir=ir)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -1556,6 +1564,7 @@ def post_price(
 def post_reins_price(
     oid: str,
     req: models.ReinsPriceRequest,
+    ir: bool = Query(False, description="Also return table documents for the static view."),
     entry: CacheEntry = Depends(_locked_entry),
 ) -> dict:
     """Price every reinsurance basis off one calibration.
@@ -1570,7 +1579,7 @@ def post_reins_price(
     """
     try:
         return run_reins_price(
-            entry.obj, p=req.p, coc=req.coc, lr=req.lr, basis=req.basis,
+            entry.obj, p=req.p, coc=req.coc, lr=req.lr, basis=req.basis, ir=ir,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

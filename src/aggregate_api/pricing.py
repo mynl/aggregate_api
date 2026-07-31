@@ -24,6 +24,22 @@ from __future__ import annotations
 from typing import Any
 
 
+def _document(df) -> dict | None:
+    """One frame as a table document, or None if it cannot be built.
+
+    Best effort on purpose. These documents are an enhancement to the static
+    view, so a frame that will not build (empty, duplicate column names) costs
+    that one table its static rendering and nothing else: the SPA falls back to
+    the interactive grid, which is where it would have been anyway.
+    """
+    from .tables import frame_document_dict
+
+    try:
+        return frame_document_dict(df)
+    except Exception:  # noqa: BLE001 -- a static table is never worth a 500
+        return None
+
+
 def run_pricing(
     obj: Any,
     *,
@@ -106,6 +122,7 @@ def run_price_pentagon(
     p: float,
     coc: float | None = None,
     lr: float | None = None,
+    ir: bool = False,
 ) -> dict:
     """Pricing-pentagon completion, plus distortion analysis for Portfolios.
 
@@ -117,13 +134,17 @@ def run_price_pentagon(
         VaR probability fixing the capital level.
     coc, lr : float | None
         Exactly one pricing target -- cost of capital (ROE) or loss ratio.
+    ir : bool
+        Also return a table document per frame, for the SPA's static view. Built
+        from the frames with their index intact, before ``reset_index_safe``
+        flattens them for the wire.
 
     Returns
     -------
     dict
         Matches :class:`PriceResponse`: ``kind``, the one-row ``pentagon``
-        frame, an optional ``distortions`` map (Portfolio only), and any
-        ``warnings``.
+        frame, an optional ``distortions`` map (Portfolio only), any
+        ``warnings``, and the optional ``ir`` map.
 
     Notes
     -----
@@ -151,7 +172,15 @@ def run_price_pentagon(
         "distortions": None,
         "warnings": [],
     }
+    # The static view's documents, built from the frames **before**
+    # `reset_index_safe` flattens them. These frames are computed here rather
+    # than living on the object, so the generic `frame/{which}` route cannot
+    # reach them and they have to travel with the response.
+    docs: dict = {}
+    if ir:
+        docs["pentagon"] = _document(pent)
     if not is_port:
+        out["ir"] = docs or None
         return out
 
     # Portfolio: calibrate to the pentagon's cost of capital at the same p,
@@ -171,6 +200,8 @@ def run_price_pentagon(
     dist_df = getattr(obj, "distortion_df", None)
     if dist_df is not None:
         out["distortion_df"] = frame_to_payload(reset_index_safe(dist_df))
+        if ir:
+            docs["distortion_df"] = _document(dist_df)
 
     with _warnings.catch_warnings(record=True) as caught:
         _warnings.simplefilter("always")
@@ -185,8 +216,11 @@ def run_price_pentagon(
         except KeyError:
             continue
         dist[stat] = frame_to_payload(reset_index_safe(sl))
+        if ir:
+            docs[stat] = _document(sl)
     out["distortions"] = dist
     out["warnings"] = warns
+    out["ir"] = docs or None
     return out
 
 
@@ -289,6 +323,7 @@ def run_reins_price(
     coc: float | None = None,
     lr: float | None = None,
     basis: str = "gross",
+    ir: bool = False,
 ) -> dict:
     """Price every reinsurance basis off one calibration, and show the spread.
 
@@ -397,6 +432,11 @@ def run_reins_price(
     import pandas as pd
 
     table = pd.DataFrame(rows)
+    docs: dict = {}
+    if ir:
+        docs["table"] = _document(table)
+        if cal.distortion_df is not None:
+            docs["distortion_df"] = _document(cal.distortion_df)
     return {
         "basis": basis,
         "bases": available,
@@ -407,6 +447,7 @@ def run_reins_price(
         "distortion_df": (frame_to_payload(cal.distortion_df.reset_index())
                           if cal.distortion_df is not None else None),
         "warnings": warnings,
+        "ir": docs or None,
     }
 
 

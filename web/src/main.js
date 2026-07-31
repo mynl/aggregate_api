@@ -315,13 +315,14 @@ const MORE_VIEWS = {
         label: 'Validation',
         hint: 'theoretical vs empirical moments; reads “not unreasonable” on a clean build',
         copy: true,
-        load: async () => replacePaneGrid('pane-more', await api.validation_df(state.id),
-            { columnFilters: false }),
+        load: async () => replacePaneTable('pane-more', await api.validation_df(state.id),
+            'validation_df', { columnFilters: false }),
     },
     stats: {
         label: 'Stats',
         hint: 'frequency / severity / aggregate moments; raw moment rows are dropped',
-        load: async () => replacePaneGrid('pane-more', await api.stats_df(state.id), GRID_FULL),
+        load: async () => replacePaneTable('pane-more', await api.stats_df(state.id),
+            'stats_df', GRID_FULL),
     },
     density: {
         label: 'Density',
@@ -343,13 +344,19 @@ const MORE_VIEWS = {
             // renderCap lifts CsvGrid's 2,000-row default so the whole display
             // grid shows without a "show all" prompt. 8,192 is the widest that
             // grid gets (see serializers.display_log2_for).
-            replacePaneGrid('pane-more', frame, { ...GRID_FULL, maxRows: 25, renderCap: 8192 });
+            //
+            // Interactive permanently: even binned to the display grid this is
+            // thousands of rows, and the filters are how you read a quantile off
+            // it. `replacePaneTable` says so out loud when static is selected.
+            await replacePaneTable('pane-more', frame, 'density_df',
+                { ...GRID_FULL, maxRows: 25, renderCap: 8192 });
         },
     },
     bswin: {
         label: 'bs window',
         hint: 'bucket / window estimator; the selected row is the chosen grid',
-        load: async () => replacePaneGrid('pane-more', await api.bs_window_df(state.id), GRID_FULL),
+        load: async () => replacePaneTable('pane-more', await api.bs_window_df(state.id),
+            'bs_window_df', GRID_FULL),
     },
     info: {
         label: 'Info (raw)',
@@ -532,25 +539,39 @@ let _tableView = (() => {
 // rather than hard-wired because the control lives in the header dropdown, which
 // knows nothing about which tab is on screen.
 //
-// Each carries the node it speaks for, and a listener whose node has left the
-// page is dropped on the next change. Tabs re-render freely (every rebuild, every
-// sub-button), so without that this set would grow all session and re-render
-// panes that no longer exist.
-const tableViewListeners = new Set();
-function onTableViewChange(fn, node) { tableViewListeners.add({ fn, node }); }
+// Keyed, usually by pane id, so re-registering replaces rather than piles up:
+// tabs re-render freely (every rebuild, every sub-button) and an accumulating
+// list would re-render panes that no longer exist. A listener also carries the
+// node it speaks for, and is dropped once that node leaves the page.
+const tableViewListeners = new Map();
+function onTableViewChange(key, fn, node) { tableViewListeners.set(key, { fn, node }); }
 
 function setTableView(mode) {
     if (mode === _tableView) return;
     _tableView = mode;
     try { localStorage.setItem(TABLE_VIEW_KEY, mode); } catch { /* private mode */ }
-    for (const entry of [...tableViewListeners]) {
+    syncTableViewMenu();
+    for (const [key, entry] of [...tableViewListeners]) {
         if (entry.node && !entry.node.isConnected) {
-            tableViewListeners.delete(entry);
+            tableViewListeners.delete(key);
             continue;
         }
         try { entry.fn(); } catch { /* one dead pane must not stop the others */ }
     }
 }
+
+// The header dropdown's Tables section: the page-wide affordance for the same
+// value. Its tick follows the preference however it moved, including from the
+// Overview's pill row.
+function syncTableViewMenu() {
+    for (const item of document.querySelectorAll('[data-table-view]')) {
+        item.classList.toggle('active', item.dataset.tableView === _tableView);
+    }
+}
+for (const item of document.querySelectorAll('[data-table-view]')) {
+    item.addEventListener('click', () => setTableView(item.dataset.tableView));
+}
+syncTableViewMenu();
 
 /**
  * Mount one frame the way the preference asks.
@@ -583,8 +604,12 @@ function mountTable(paneId, host, frame, doc, gridOpts = GRID_FULL) {
         host.className = 'gt-host';
         // Async, but the host is already in the DOM and holds its place, so the
         // table lands without moving anything around it. A null handle means the
-        // walker could not be loaded at all, which is the grid's cue.
-        mountIrTable(paneId, host, doc).then((handle) => { if (!handle) asGrid(); });
+        // walker could not be loaded at all, which is the grid's cue, unless the
+        // pane moved on while we waited: CsvGrid measures against live layout, so
+        // mounting one into a detached host would be worse than doing nothing.
+        mountIrTable(paneId, host, doc).then((handle) => {
+            if (!handle && host.isConnected) asGrid();
+        });
         return;
     }
     asGrid();
@@ -623,7 +648,7 @@ function exhibitToggle() {
         el('span', { className: 'overview-view-label' }, 'Tables'), ...btns);
     // Follow the preference however it was changed, so the pills stay honest
     // when the dropdown is what moved it.
-    onTableViewChange(() => {
+    onTableViewChange('overview-pills', () => {
         btns.forEach((b, i) => b.classList.toggle('active',
             ['static', 'interactive'][i] === _tableView));
     }, row);
@@ -742,7 +767,8 @@ async function loadOverview() {
         pane.appendChild(exhibitToggle());
         pane.appendChild(box);
         renderOverviewExhibits(box, summary, tailFrame, ir);
-        onTableViewChange(() => renderOverviewExhibits(box, summary, tailFrame, ir), box);
+        onTableViewChange('pane-overview',
+            () => renderOverviewExhibits(box, summary, tailFrame, ir), box);
         rendered = true;
     }
 
@@ -760,14 +786,44 @@ function replacePane(paneId, node) {
 }
 
 /**
- * Replace a pane's contents with a single CsvGrid for `frame`. The host is
- * attached (via replacePane) before the grid is constructed so CsvGrid can
- * measure column widths against the live layout.
+ * Replace a pane's contents with one table, rendered the way the preference asks.
+ *
+ * Parameters
+ * ----------
+ * paneId : str
+ *     Output pane. Also the listener key, so a re-render replaces the previous
+ *     registration instead of stacking another one.
+ * frame : object
+ *     `{columns, rows}` from the api.
+ * which : str or null
+ *     Frame name for the document fetch. Null for frames the generic route
+ *     cannot reach, which then stay interactive.
+ * opts : object, optional
+ *     CsvGrid options.
+ *
+ * Notes
+ * -----
+ * The document is fetched whenever the frame is short enough for it, not only
+ * when static is the current view, so flipping the preference afterwards costs
+ * no round trip. Frames past the limit skip the fetch entirely: they can only
+ * ever render as a grid, so asking for a document would be work thrown away.
  */
-function replacePaneGrid(paneId, frame, opts) {
-    const host = el('div', { className: 'grid-host' });
-    replacePane(paneId, host);
-    mountGrid(paneId, host, frame, opts);
+async function replacePaneTable(paneId, frame, which, opts = GRID_FULL) {
+    const doc = which && staticOk(frame)
+        ? await api.frameIr(state.id, which).catch(() => null)
+        : null;
+    const draw = () => {
+        const host = el('div');
+        replacePane(paneId, host);        // tears down the previous mode first
+        mountTable(paneId, host, frame, doc, opts);
+        // Re-register against the node just created, not against the pane. The
+        // pane outlives everything, so a listener keyed on it would survive a
+        // rebuild and redraw the *previous* object's frame on the next flip.
+        // This node is dropped by `clearPanes`, and a disconnected node is what
+        // prunes the listener.
+        onTableViewChange(paneId, draw, host);
+    };
+    draw();
 }
 
 function errorNode(err) {
@@ -858,7 +914,9 @@ async function loadReinsFrame() {
         const params = state.reinsWhich === 'reins_density_df'
             ? { resolution: 'display' } : {};
         const frame = await api.reinsFrame(state.id, state.reinsWhich, params);
-        replacePaneGrid('pane-reins', frame, { ...GRID_FULL, renderCap: 8192 });
+        // `state.reinsWhich` is already the frame name the document route wants.
+        await replacePaneTable('pane-reins', frame, state.reinsWhich,
+            { ...GRID_FULL, renderCap: 8192 });
     } catch (err) {
         replacePane('pane-reins', errorNode(err));
     }
@@ -898,33 +956,42 @@ function statFormats(frame, code) {
 // down together.
 function renderPrice(payload) {
     const paneId = 'pane-price';
-    const root = el('div', { className: 'price-result' });
-    replacePane(paneId, root);          // clears prior grids + attaches root
+    const ir = payload.ir || {};
+    const draw = () => {
+        const root = el('div', { className: 'price-result' });
+        replacePane(paneId, root);      // clears prior tables + attaches root
 
-    const section = (title, frame, opts, cls = 'price-section-title') => {
-        root.appendChild(el('div', { className: cls }, title));
-        const host = el('div', { className: 'grid-host' });
-        root.appendChild(host);
-        mountGrid(paneId, host, frame, opts);
-    };
+        const section = (title, frame, key, opts, cls = 'price-section-title') => {
+            root.appendChild(el('div', { className: cls }, title));
+            const host = el('div');
+            root.appendChild(host);
+            mountTable(paneId, host, frame, ir[key], opts);
+        };
 
-    section('Pricing pentagon', payload.pentagon, GRID_FULL);
-    if (payload.distortion_df) {
-        section('Calibrated distortions', payload.distortion_df, GRID_FULL,
-            'price-section-title mt-3');
-    }
-    for (const w of payload.warnings || []) {
-        root.appendChild(el('div', { className: 'text-muted small fst-italic mt-1' }, `⚠ ${w}`));
-    }
-    if (payload.distortions) {
-        for (const stat of ['LR', 'P', 'PQ', 'ROE']) {
-            const frame = payload.distortions[stat];
-            if (!frame) continue;
-            section(`${PRICE_TITLE[stat]} (${stat}) by distortion`, frame,
-                { ...GRID_FULL, formats: statFormats(frame, PRICE_FMT_CODE[stat]) },
-                'price-section-title mt-3');
+        section('Pricing pentagon', payload.pentagon, 'pentagon', GRID_FULL);
+        if (payload.distortion_df) {
+            section('Calibrated distortions', payload.distortion_df, 'distortion_df',
+                GRID_FULL, 'price-section-title mt-3');
         }
-    }
+        for (const w of payload.warnings || []) {
+            root.appendChild(el('div', { className: 'text-muted small fst-italic mt-1' }, `⚠ ${w}`));
+        }
+        if (payload.distortions) {
+            for (const stat of ['LR', 'P', 'PQ', 'ROE']) {
+                const frame = payload.distortions[stat];
+                if (!frame) continue;
+                // Column formats apply to the grid only. The static view's
+                // numbers are already resolved in the document, by the same
+                // engine that knows their dtypes.
+                section(`${PRICE_TITLE[stat]} (${stat}) by distortion`, frame, stat,
+                    { ...GRID_FULL, formats: statFormats(frame, PRICE_FMT_CODE[stat]) },
+                    'price-section-title mt-3');
+            }
+        }
+        // Against the root just built, not the pane: see `replacePaneTable`.
+        onTableViewChange(paneId, draw, root);
+    };
+    draw();
 }
 
 // ---- Reinsurance-aware pricing ----
@@ -985,37 +1052,43 @@ const REINS_PRICE_FMT = {
  */
 function renderReinsPrice(payload) {
     const paneId = 'pane-price';
-    const root = el('div', { className: 'price-result' });
-    replacePane(paneId, root);
+    const ir = payload.ir || {};
+    const draw = () => {
+        const root = el('div', { className: 'price-result' });
+        replacePane(paneId, root);
 
-    root.appendChild(el('div', { className: 'price-section-title' },
-        `Gross and net by distortion, calibrated on ${payload.basis}`));
-    root.appendChild(el('div', { className: 'exhibit-caption mb-2' },
-        `Distortions fitted to the ${payload.basis} basis at p = ${payload.p} `
-        + `(a = ${fmt(payload.a)}, CoC ${(payload.roe * 100).toFixed(1)}%), then `
-        + 'applied unchanged to the others. The starred row is the calibrated '
-        + 'one. A "less" row is the difference: the implied allowance for '
-        + 'reinsurance in the rate, and its LR is the loss ratio the cover is '
-        + 'being bought at.'));
-    const host = el('div', { className: 'grid-host' });
-    root.appendChild(host);
-    const frame = payload.table;
-    mountGrid(paneId, host, frame, {
-        ...GRID_FULL,
-        formats: (frame.columns || []).map((c) => REINS_PRICE_FMT[c] || null),
-        maxRows: 30,
-    });
+        root.appendChild(el('div', { className: 'price-section-title' },
+            `Gross and net by distortion, calibrated on ${payload.basis}`));
+        root.appendChild(el('div', { className: 'exhibit-caption mb-2' },
+            `Distortions fitted to the ${payload.basis} basis at p = ${payload.p} `
+            + `(a = ${fmt(payload.a)}, CoC ${(payload.roe * 100).toFixed(1)}%), then `
+            + 'applied unchanged to the others. The starred row is the calibrated '
+            + 'one. A "less" row is the difference: the implied allowance for '
+            + 'reinsurance in the rate, and its LR is the loss ratio the cover is '
+            + 'being bought at.'));
+        const host = el('div');
+        root.appendChild(host);
+        const frame = payload.table;
+        mountTable(paneId, host, frame, ir.table, {
+            ...GRID_FULL,
+            formats: (frame.columns || []).map((c) => REINS_PRICE_FMT[c] || null),
+            maxRows: 30,
+        });
 
-    if (payload.distortion_df) {
-        root.appendChild(el('div', { className: 'price-section-title mt-3' },
-            'Distortion parameters'));
-        const dhost = el('div', { className: 'grid-host' });
-        root.appendChild(dhost);
-        mountGrid(paneId, dhost, payload.distortion_df, GRID_FULL);
-    }
-    for (const w of payload.warnings || []) {
-        root.appendChild(el('div', { className: 'text-muted small fst-italic mt-1' }, `⚠ ${w}`));
-    }
+        if (payload.distortion_df) {
+            root.appendChild(el('div', { className: 'price-section-title mt-3' },
+                'Distortion parameters'));
+            const dhost = el('div');
+            root.appendChild(dhost);
+            mountTable(paneId, dhost, payload.distortion_df, ir.distortion_df, GRID_FULL);
+        }
+        for (const w of payload.warnings || []) {
+            root.appendChild(el('div', { className: 'text-muted small fst-italic mt-1' }, `⚠ ${w}`));
+        }
+        // Against the root just built, not the pane: see `replacePaneTable`.
+        onTableViewChange(paneId, draw, root);
+    };
+    draw();
 }
 
 const priceBtn = $('price-btn');

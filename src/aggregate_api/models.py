@@ -277,6 +277,16 @@ class PriceResponse(BaseModel):
     distortion_df: FrameResponse | None = None
     distortions: dict[str, FrameResponse] | None = None
     warnings: list[str] = []
+    # Flat rather than mirroring the nesting above: the client looks one up by
+    # name, and a two level map would buy nothing for four fixed stat keys.
+    ir: dict[str, Any] | None = Field(
+        None,
+        description=(
+            "Table documents for the static view, keyed 'pentagon', "
+            "'distortion_df', and one per stat (LR / P / PQ / ROE). Present "
+            "when the request asks with ?ir=true."
+        ),
+    )
 
 
 class ReinsPriceRequest(BaseModel):
@@ -317,6 +327,13 @@ class ReinsPriceResponse(BaseModel):
     table: FrameResponse
     distortion_df: FrameResponse | None = None
     warnings: list[str] = []
+    ir: dict[str, Any] | None = Field(
+        None,
+        description=(
+            "Table documents for the static view, keyed 'table' and "
+            "'distortion_df'. Present when the request asks with ?ir=true."
+        ),
+    )
 
 
 # ======================================================================

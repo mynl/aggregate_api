@@ -450,6 +450,16 @@ header .navbar { min-height: 56px; }
    #fff7e6 is the shade these rows have carried since the hand-built exhibit. */
 .gt-host .gt.gt tr.gt-emph > td { background: #fff7e6; }
 
+/* ---- Table view items in the header menu ----
+   A tick column that is always reserved, so the two rows do not shuffle
+   sideways as the choice moves between them. The hint sits to the right,
+   muted, because the difference between these two is worth one word each. */
+.table-view-item { display: flex; align-items: baseline; gap: .45rem; }
+.table-view-item .bi-check2 { visibility: hidden; width: 1em; flex: none; }
+.table-view-item.active .bi-check2 { visibility: visible; }
+.table-view-item.active { font-weight: 600; background: none; color: inherit; }
+.table-view-item small { margin-left: auto; font-size: .7rem; }
+
 /* ---- Table view toggle (Static | Interactive) ---- */
 .overview-view-toggle {
     display: flex; flex-wrap: wrap; align-items: center; gap: .35rem;

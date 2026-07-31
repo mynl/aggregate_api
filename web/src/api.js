@@ -82,9 +82,15 @@ export const api = {
     reinsFrame:   (id, which, p = {}) => _json('GET', `/v1/objects/${id}/${which}?${qs(p)}`),
 
     // Pricing
-    price:        (id, body)        => _json('POST', `/v1/objects/${id}/price`, body),
+    /**
+     * `?ir=true` always: the Price frames are computed by this POST, so the
+     * generic document route cannot reach them and they have to travel with the
+     * response. Asking up front is what keeps the table view instant in both
+     * directions instead of costing a re-POST on the flip.
+     */
+    price:        (id, body)        => _json('POST', `/v1/objects/${id}/price?ir=true`, body),
     /** Reinsured objects: calibrate on one basis, price them all. */
-    reinsPrice:   (id, body)        => _json('POST', `/v1/objects/${id}/reins_price`, body),
+    reinsPrice:   (id, body)        => _json('POST', `/v1/objects/${id}/reins_price?ir=true`, body),
     pricing_at:   (id, body)        => _json('POST', `/v1/objects/${id}/pricing_at`, body),
 
     // DecL editor support

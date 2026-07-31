@@ -1,5 +1,7 @@
 # plan-gt2-ir: the table document IR, and one global Static / Interactive switch
 
+Status: **done**. Stage A landed as `1.0.0a32`, Stage B as `1.0.0a33`.
+
 Implements `dev/plan-gt2-ir-adoption.md`, the handoff spec written from the
 greatest_tables side, plus the author's scoping on top of it:
 
@@ -122,14 +124,32 @@ switch after a pricing run never costs a re-POST.
 
 ## Verification
 
-`uv run pytest`, `ruff check src`, `node dev/smoke-exhibits.mjs`,
-`.\scripts\build-web.ps1`. New tests: the IR route returns `ir_version` 1 and a
-sparsified stub (a portfolio's unit named once, not once per return period); the
-ETag round trip 304s; two builds of one frame are byte identical; `.csv` still
-returns CSV with the new route declared; the asset routes serve the walker and
-its stylesheet with the right content types.
+105 pytest passing, `ruff check src` clean, 17 exhibit smoke checks clean, SPA
+build clean with the walker confirmed **absent** from the bundle (it is fetched
+from `/v1/assets` at runtime).
 
-Not verifiable from here, and the reason Stage A stands alone: how it looks.
+New tests: the IR route returns `ir_version` 1 and a sparsified stub (a
+portfolio's unit named once with `rowspan` 10, not once per return period); rows
+carry semantic flags; cells carry raw values beside their text; the ETag round
+trip 304s; two builds of one frame are byte identical; a density frame truncates
+with a note; `.csv` still returns CSV with the new route declared; the asset
+routes serve the walker and its stylesheet with the right content types and
+refuse anything else; the Price documents are opt-in and cover every frame the
+tab renders, with the index the wire format flattens still intact.
+
+Two checks beyond the suite, both worth repeating if this area moves:
+
+1. **The walker against real documents.** `linkedom` plus the shipped
+   `gt-render.esm.js`, fed the actual `summary` and `tail_df` documents from a
+   two unit portfolio. Confirms `rowspan="10"` stubs, `gt-total` / `gt-emph` /
+   `gt-subtotal` rows, `gt-neg` cells, the stub divider, partial rules at index
+   breaks, and `toCSV({values: true})` returning unrounded numbers.
+2. **A frame-by-kind sweep.** Every name in `_CSV_FRAMES` against agg, port,
+   reinsured agg, dice, sev and distortion. Every cell either builds a document
+   or returns a clean 400/404; nothing 500s.
+
+Still not verified, and the reason Stage A stood alone: **how it looks**. Nobody
+has seen one of these in the page.
 
 ## Left open
 
@@ -138,3 +158,5 @@ Not verifiable from here, and the reason Stage A stands alone: how it looks.
   `dev/graphs.md`, so make it once for both.
 - The walker never sorts or filters, by design. A table worth sorting is the
   grid's, which is what the row-count gate already says.
+- `requires-python` went from `>=3.11` to `>=3.13`, forced by
+  `greatest-tables`. Nothing in its source appears to need 3.13. Raise it there.

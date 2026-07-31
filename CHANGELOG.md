@@ -4,6 +4,49 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a33
+
+From `dev/plan-gt2-ir.md`, Stage B. a32 built the pipeline and pointed it at the
+Overview; this gives it the whole page and one place to steer it from.
+
+### One switch, in the header menu
+
+> The switch is at the tab level, not the table level, that's too complex. In
+> fact we should put it on the hamburger at the top to select one or the other.
+
+So the header dropdown gains a **Tables** section, Static or Interactive, ticked.
+It writes the same page-wide preference the Overview's pill row writes, and the
+two follow each other because there is only one value to read. Nothing else on
+the page grew a control.
+
+### Every table honors it
+
+Overview (summary, tail risk), More (validation, stats, bs window, density),
+Reins (per-layer summary, stats, density) and Price (pentagon, calibrated
+distortions, the four per-distortion slices, and the reinsurance pricing table
+with its parameters).
+
+The gate is the **row count, not a list of frame names**: past 500 rows a frame
+stops being a reading experience and stays interactive, which covers the density
+frames the author named and anything else that grows. When static is selected and
+a frame is over the line, the grid renders and one muted line says why, rather
+than the control appearing to do nothing.
+
+### New
+
+- `POST /v1/objects/{id}/price?ir=true` and `.../reins_price?ir=true` return an
+  `ir` map of table documents beside the frames. These frames are *computed* by
+  the POST, so the generic `frame/{which}` route cannot reach them. The SPA
+  always asks, so flipping the view after a pricing run never costs a re-POST.
+  Documents are built before `reset_index_safe` flattens the frames, which is
+  what keeps `analyze_distortions`'s distortion index as a stub.
+
+### Fixed
+
+- A view listener keyed on a pane would have survived `clearPanes` and redrawn
+  the *previous* object's frames on the next flip. Listeners now key on the node
+  they created, and a disconnected node prunes them.
+
 ## 1.0.0a32
 
 From `dev/plan-gt2-ir.md`, Stage A, implementing the `greatest_tables` handoff
