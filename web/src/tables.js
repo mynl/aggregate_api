@@ -5,7 +5,7 @@
 // CSS. This module loads the walker that turns one into DOM, and mounts it.
 //
 // The walker is served from `/v1/assets/`, out of the same installed
-// `greatest_tables` that emitted the document. That is the point of not
+// `greater_tables` that emitted the document. That is the point of not
 // bundling a copy: one install ships both halves, so the renderer and the
 // document cannot version skew. It is fetched lazily, on the first static table
 // the session draws, so a user who lives in the interactive grid never pays for

@@ -4,6 +4,101 @@ Pending work for `aggregate_api`, newest thinking at the bottom of each list.
 What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 `dev/done/`.
 
+## Next up: three things, and then we are in good shape
+
+The author's plan, set out 2026-07-31 (Friday), to finish over the weekend. Each
+becomes its own `dev/plan-*.md` and its own version bump.
+
+### a) One payload per table, and move the switch
+
+The idea: serve **only the IR** for everything except the longest tables, render
+either way from it, and the Static / Interactive switch becomes a client-side
+flip with no second fetch. Today every table fetches twice, a `FrameResponse` for
+csv-grid and a document for the walker.
+
+**The connector this leans on does not exist**, and checking that was the first
+job. `irToGridInput` appears four times in the greatest-tables repo, all of it
+prose: once under **Non-goals** in the handoff spec ("a later `irToGridInput`
+adapter covers that *if ever needed*") and three times in `dev/design.md`, where
+it sits in **[backlog]** behind every other work item. There is no code. Its own
+design notes also record that IR-as-csv-grid-input was considered and set aside:
+"the `cols[].values` obligation + flattening make it a poor fit".
+
+**We do not need it.** csv-grid takes `{columns, records}`, and turning a document
+into that shape is about 25 lines: names off `doc.columns[].name`, values off
+`doc.body[].cells` taking `raw` where present, expanding rowspans exactly the way
+the walker's own `renderSection` already does. Written and run against a
+portfolio's `tail_df`: 7 columns by 30 rows out, column names identical, every
+data value identical to the `FrameResponse`.
+
+**One real gap, and it is the upstream ask.** `include_raw='data'` covers data
+columns only: every stub column comes back `raw=False`, so index levels arrive as
+display strings. On `tail_df` that is exactly one column of seven. All five data
+columns match the `FrameResponse` to the float, `unit` round-trips because it was
+a string anyway, and `T` comes back `'2'` instead of `2` on all 30 rows. A string
+column sorts lexically in the grid, so 10 lands before 2 before 200. That is a
+defect, not a cosmetic difference.
+
+Ask the greatest-tables side for `raw` on stub columns (an `include_raw='all'`,
+or extend `'data'` to cover the stub). Small, specific, and the only thing
+standing between us and a single payload. Everything else already round-trips.
+
+**Know the cost before committing.** The document is bigger on the wire than the
+frame, because every cell becomes an object carrying both text and raw:
+
+| frame | rows | FrameResponse | IR | |
+|---|---|---|---|---|
+| summary | 7 | 778 B | 3,384 B | 4.35x |
+| tail_df | 30 | 2,400 B | 8,159 B | 3.40x |
+| validation_df | 9 | 1,364 B | 4,802 B | 3.52x |
+| stats_df | 17 | 1,725 B | 10,266 B | 5.95x |
+
+Small in absolute terms, and it replaces two round trips with one. But the ratio
+grows with column count, so the long tables keep the frame path and this stays
+"all but the longest", exactly as the author put it.
+
+**Where the switch goes is open.** It is in the header menu now (a33) and the
+author is "not sure where" it belongs. Worth settling only after (c), since what
+the switch steers depends on what ends up shown where. One thought to test: once
+a single payload feeds both, the flip is instant and cheap, which is an argument
+for putting it back *next to the table* rather than in a menu.
+
+**Done in a34**: synced to 1.9.0, which brought the rename back to
+`greater_tables` plus the 1.7.x spanner rules. The adapter arrived in 1.8.0 and
+is confirmed working against our real frames.
+
+**Deploy pin, when GT publishes.** The server currently installs
+`greater-tables` from an editable path that exists only on this machine. GT
+publishes as `greater-tables` **6.0**, and until the real 6.0.0 ships, plain
+`pip install greater-tables` resolves to the **old 5.3 generation**, which shares
+the import name and has none of `build`, `canonical_json` or `IR_VERSION`. pip
+ignores pre-releases unless pinned, so the deploy needs an explicit
+`greater-tables==6.0.0rc1` (or later) the moment one is on PyPI. Until then a vps
+deploy of the table path cannot work. `test_greater_tables_is_the_new_generation`
+is what catches a wrong install.
+
+### b) Consolidate the graphs on ECharts, and fix the options
+
+Drop the Plotly path. a30 answered the question it existed to ask ("not massive
+differences between the two"), so the second renderer and its 535 kB lazy chunk
+are now cost without a question to answer. Keep the `twoPanelData` split, which
+is what made the comparison possible and is good structure regardless.
+
+Then work the punch list in `dev/graphs.md`, which already has the ECharts
+mechanism for each item: zoom rescale (`filterMode`, and try
+`animationDurationUpdate: 0` first), double-click reset, the odd left tick,
+the uPlot-style static legend readout, and the horizontal y-to-x readout on the
+survival panel. **Confirm what "the odd left scale tick" meant** before touching
+it: the note records both readings and they need different options.
+
+### c) Fix what is shown where
+
+The one that decides whether the rest was worth doing, and the least specified.
+Feeds back into (a): the switch cannot find its home until the tabs settle.
+
+Still open from before and probably part of this: the Bounds tab has no content,
+and the standing REMINDER below about what is worth plotting.
+
 ## SM
 
 - [x] Bandwidth limited by caddy page with obscured url; special caddy install

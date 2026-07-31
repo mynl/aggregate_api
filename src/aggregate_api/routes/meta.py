@@ -12,7 +12,7 @@ Routes
 * ``GET /v1/meta/style``: the house plot style, read off
   ``aggregate.style``, so the SPA's interactive charts and the
   server-rendered matplotlib plots cannot drift apart.
-* ``GET /v1/assets/{name}``: the ``greatest_tables`` table-document
+* ``GET /v1/assets/{name}``: the ``greater_tables`` table-document
   walker and its stylesheet, served out of the installed package so
   the renderer cannot skew from the documents this process emits.
 
@@ -151,7 +151,7 @@ def meta(settings: Settings = Depends(get_settings)) -> dict:
     return {
         "version": _pkg_version("aggregate_api"),
         "aggregate_version": _pkg_version("aggregate"),
-        "tables_version": _pkg_version("greatest-tables"),
+        "tables_version": _pkg_version("greater-tables"),
         "log2_cap": settings.log2_cap,
         "log2_default": settings.log2_default,
         "build_timeout_s": settings.build_timeout_s,
@@ -164,7 +164,7 @@ def meta(settings: Settings = Depends(get_settings)) -> dict:
 # GET /v1/assets/{name}  -- the table-document walker, out of the package
 # ----------------------------------------------------------------------
 # The SPA renders static tables from the IR that `tables.py` emits, using a
-# walker that ships inside `greatest_tables` itself. Serving it from the
+# walker that ships inside `greater_tables` itself. Serving it from the
 # installed package rather than bundling a copy is what makes version skew
 # between the document and its renderer impossible: one install ships both, so
 # they move together or not at all.
@@ -181,18 +181,18 @@ _ASSETS = {
 @lru_cache(maxsize=None)
 def _asset(name: str) -> bytes:
     """Read one packaged asset. Cached: these are small and never change."""
-    return (files("greatest_tables") / "assets" / name).read_bytes()
+    return (files("greater_tables") / "assets" / name).read_bytes()
 
 
 @router.get("/assets/{name}")
 def asset(name: str, request: Request) -> Response:
-    """Serve a ``greatest_tables`` front-end asset.
+    """Serve a ``greater_tables`` front-end asset.
 
     Notes
     -----
     Revalidation rather than cache busting. The ETag is the package version, and
     ``no-cache`` asks the browser to check it every load, so a `uv sync` that
-    moves ``greatest_tables`` is picked up on the next reload with no ``?v=``
+    moves ``greater_tables`` is picked up on the next reload with no ``?v=``
     for the client to compute and no stale-asset window.
     """
     media_type = _ASSETS.get(name)
@@ -201,7 +201,7 @@ def asset(name: str, request: Request) -> Response:
             status_code=404,
             detail=f"unknown asset {name!r}; expected one of {sorted(_ASSETS)}",
         )
-    etag = f'"{_pkg_version("greatest-tables")}"'
+    etag = f'"{_pkg_version("greater-tables")}"'
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
     return Response(

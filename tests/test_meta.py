@@ -52,6 +52,42 @@ def test_meta_style_comes_from_aggregate(client):
 
 
 # ----------------------------------------------------------------------
+# The static-table engine: which generation is installed
+# ----------------------------------------------------------------------
+
+
+def test_greater_tables_is_the_new_generation():
+    """Guard the name collision that the rename created.
+
+    ``greater_tables`` is now two different packages: the PyPI 5.3 line, and the
+    rewrite this service depends on. They share an import name and cannot coexist
+    in one environment, and plain ``pip install greater-tables`` still resolves to
+    5.3 until 6.0.0 ships. A deploy that misses the ``[tool.uv.sources]`` entry
+    would install 5.3.
+
+    So importing it proves nothing: **both** generations export ``GT``. These
+    three symbols exist only in the rewrite, and they are the ones this service
+    actually uses.
+    """
+    import greater_tables as gt
+
+    assert hasattr(gt, "build")
+    assert hasattr(gt, "canonical_json")
+    assert gt.IR_VERSION == 1
+    # Not 5.x. The rewrite restarted its own numbering and publishes as 6.0.
+    assert int(gt.__version__.split(".")[0]) != 5
+
+
+def test_meta_reports_the_table_engine_version(client):
+    """The About panel's number, which is a front-end version as much as a
+    backend one: the same install serves the walker the SPA loads."""
+    from importlib.metadata import version
+
+    body = client.get("/v1/meta").json()
+    assert body["tables_version"] == version("greater-tables")
+
+
+# ----------------------------------------------------------------------
 # GET /v1/assets/{name}  -- the table-document walker
 # ----------------------------------------------------------------------
 

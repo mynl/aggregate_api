@@ -64,12 +64,12 @@ provides-extras = ["dev", "notebook", "numba", "massive", "viz"]
 
 [[package]]
 name = "aggregate-api"
-version = "1.0.0a33"
+version = "1.0.0a34"
 source = { editable = "." }
 dependencies = [
     { name = "aggregate" },
     { name = "fastapi" },
-    { name = "greatest-tables" },
+    { name = "greater-tables" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "uvicorn", extra = ["standard"] },
@@ -86,7 +86,7 @@ dev = [
 requires-dist = [
     { name = "aggregate", editable = "../aggregate_REFACTOR" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "greatest-tables", editable = "C:/s/ai/greatest-tables" },
+    { name = "greater-tables", editable = "C:/s/ai/greatest-tables" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-settings", specifier = ">=2.4" },
@@ -297,7 +297,7 @@ wheels = [
 ]
 
 [[package]]
-name = "greatest-tables"
+name = "greater-tables"
 source = { editable = "C:/s/ai/greatest-tables" }
 dependencies = [
     { name = "numpy" },
@@ -319,6 +319,7 @@ dev = [
     { name = "ipykernel", specifier = ">=7.3.0" },
     { name = "nbclient", specifier = ">=0.11.0" },
     { name = "nbformat", specifier = ">=5.10.4" },
+    { name = "pyarrow", specifier = ">=25.0.0" },
     { name = "pytest", specifier = ">=8.0" },
 ]
 

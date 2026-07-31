@@ -4,6 +4,38 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a34
+
+From `dev/plan-gt2-ir.md`, Stage A of the follow-on. The static-table engine
+renamed itself, so this lands the rename before anything is built on top of it.
+
+### The package is `greater_tables` again
+
+`greatest_tables` was a working name it carried for a day. It publishes as
+**`greater-tables` 6.0**, a major version of the existing package, so the import
+goes back to `from greater_tables import ...` and the dependency key with it. Its
+checkout folder stays `c:/s/ai/greatest-tables`, deliberately, so the
+`[tool.uv.sources]` path is unchanged.
+
+**This is not a revert to the PyPI 5.3 that a32 removed.** It is the same
+rewrite, under the name it will publish as. The two generations share an import
+name and cannot coexist in one environment, and plain `pip install
+greater-tables` still resolves to 5.3 until 6.0.0 ships, so a deploy that misses
+the source entry gets 5.3 and dies at import.
+
+Because importing proves nothing (both generations export `GT`), a test asserts
+the symbols that exist only in the rewrite: `build`, `canonical_json` and
+`IR_VERSION == 1`, plus a major version that is not 5.
+
+### Also
+
+- Engine moves 1.6.1 to **1.9.0**, which brings 1.7.x **spanner rules**: a
+  trimmed rule under each labeled column-group header, the booktabs `\cmidrule`
+  pattern, made full width in 1.7.1. Visible only on frames with multi-level
+  column headers.
+- `/v1/meta` `tables_version` and the About panel now read `greater-tables`, and
+  a test pins them to each other.
+
 ## 1.0.0a33
 
 From `dev/plan-gt2-ir.md`, Stage B. a32 built the pipeline and pointed it at the

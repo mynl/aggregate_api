@@ -434,7 +434,7 @@ header .navbar { min-height: 56px; }
     color: var(--mut); background: #fff; border-color: var(--grid);
 }
 
-/* ---- Static table host (the greatest_tables walker) ----
+/* ---- Static table host (the greater_tables walker) ----
    The walker ships its own stylesheet (gt.css, served from the package next to
    the module itself) carrying the whole booktabs look: frame rules, a head rule,
    partial rules at index breaks, the stub divider. Everything below is this

@@ -7,7 +7,7 @@ exhibit: a portfolio's ``tail_df`` carries a two level row index, so the unit
 name would be reprinted on all ten of its return-period rows.
 
 So the static path does not go through that wire format at all. It hands the
-real DataFrame to ``greatest_tables``, which returns a **table document**: an
+real DataFrame to ``greater_tables``, which returns a **table document**: an
 ``ir_version`` 1 JSON structure carrying dtypes, resolved formats, hierarchy,
 spans and flags, and carrying no widths and no CSS. The browser owns geometry.
 A walker shipped in the same package renders it, so the renderer and the
@@ -34,7 +34,7 @@ import json
 from typing import Any, Callable, Sequence
 
 import pandas as pd
-from greatest_tables import TableSpec, build, canonical_json
+from greater_tables import TableSpec, build, canonical_json
 
 # Truncation ceiling, well above any frame that belongs in a static exhibit.
 # Unlike the 5.x path this does not refuse: ``build`` slices to the cap and

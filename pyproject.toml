@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aggregate_api"
-version = "1.0.0a33"
+version = "1.0.0a34"
 description = "aggregate Loss Library (aLL): FastAPI service and single-page web app for the aggregate actuarial library."
 readme = "README.md"
 authors = [
@@ -31,18 +31,25 @@ dependencies = [
     # editable source is wired during co-development.
     "aggregate",
     # Static tables (the author's own package). The api asks it for a semantic
-    # table document (the IR), never for markup: the browser owns geometry.
-    # Unpublished, so it takes an editable source like `aggregate` does. The
+    # table document (the IR), never for markup: the browser owns geometry. The
     # same install also ships the walker that renders that IR, which is what
     # makes version skew between the two impossible. See dev/plan-gt2-ir.md.
-    "greatest-tables",
+    #
+    # This is the *new* generation (1.9.0, briefly named `greatest-tables`),
+    # which is unpublished and so takes an editable source like `aggregate`
+    # does. The name collides with the old PyPI `greater-tables` 5.3, the
+    # previous generation of the same package, and the two cannot coexist in one
+    # environment. Plain `pip install greater-tables` still resolves to 5.3
+    # until 6.0.0 ships, so a deploy without the source below gets 5.3 and dies
+    # at import: 5.3 has no `build`, `canonical_json` or `IR_VERSION`.
+    "greater-tables",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
     "pydantic-settings>=2.4",
 ]
 license = "BSD-3-Clause"
-# Was >=3.11 through a31. `greatest-tables` declares >=3.13 and that floor is
+# Was >=3.11 through a31. `greater-tables` declares >=3.13 and that floor is
 # the binding one. Nothing in its source needs 3.13, so if 3.11 or 3.12 ever
 # matters here again, relax it there rather than pinning an old release here.
 requires-python = ">=3.13"
@@ -69,12 +76,14 @@ aggregate-api = "aggregate_api.__main__:main"
 # tree as an editable install. Edit the path to match your checkout, then
 # `uv sync`. plan-0001 settles the canonical path for this machine.
 #
-# `greatest-tables` is unpublished for the same reason and is co-developed
-# alongside this repo, so it gets the same treatment.
+# `greater-tables` is unpublished for the same reason and is co-developed
+# alongside this repo, so it gets the same treatment. Its checkout folder is
+# still named `greatest-tables` after the working name it carried for a day;
+# that is deliberate and the path below is correct as written.
 # ---------------------------------------------------------------------------
 [tool.uv.sources]
 aggregate = { path = "../aggregate_REFACTOR", editable = true }
-greatest-tables = { path = "c:/s/ai/greatest-tables", editable = true }
+greater-tables = { path = "c:/s/ai/greatest-tables", editable = true }
 
 [tool.setuptools]
 include-package-data = true
