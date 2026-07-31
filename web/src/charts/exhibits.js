@@ -44,8 +44,6 @@ import {
     logMin, LOG_FLOOR, loadStyle,
 } from './theme.js';
 import { loadSurface, surfaceGrid, surfaceOption } from './surface.js';
-import { ENGINES, PLOTLY_KINDS, engine, setEngine, plotlyCovers } from './engine.js';
-import { loadPlotly, plotlyLoaded, plotlyFigure, mountPlotly } from './plotly-panels.js';
 
 // Set once `loadSurface()` has resolved. Read synchronously inside a `build()`,
 // which must stay pure, so the async part happens in the mount and this is the
@@ -229,46 +227,6 @@ const CONTROL_GROUPS = [
     { key: 'both', controls: ['refLines', 'surface3d', 'logZ'] },
     { key: 'right', controls: ['epMode', 'rightLogY'] },
 ];
-
-/**
- * The engine group: which library draws this exhibit.
- *
- * Its own row-level group rather than an entry in `CONTROLS`, because it is not
- * a view toggle. It changes nothing about *what* is plotted, only what draws it,
- * so it sits apart from the buttons that change the chart's content.
- *
- * On a kind the Plotly path does not cover, the button is **disabled, not
- * hidden**: the house rule is that a control greys out so the reader learns it
- * exists and why it is unavailable here.
- */
-function engineGroup(kind, onChange) {
-    const box = el('div', { className: 'exhibit-group exhibit-group-engine' });
-    box.appendChild(el('span', { className: 'exhibit-group-label' }, 'draw'));
-    for (const name of ENGINES) {
-        const covered = name === 'echarts' || plotlyCovers(kind);
-        box.appendChild(el('button', {
-            type: 'button',
-            className: `exhibit-toggle exhibit-toggle--engine${
-                engine() === name ? ' active' : ''}`,
-            disabled: covered ? null : '',
-            title: covered
-                ? `Draw the exhibit with ${name}`
-                : `The ${name} path covers ${[...PLOTLY_KINDS].join(' and ')} only`,
-            onClick: () => {
-                if (!covered) return;
-                setEngine(name);
-                // Repaint the pressed state here, the way `toggleButton` does.
-                // A redraw swaps the canvas without touching the control row, so
-                // nothing else would move the highlight.
-                for (const b of box.querySelectorAll('button')) {
-                    b.classList.toggle('active', b.textContent === engine());
-                }
-                onChange();
-            },
-        }, name));
-    }
-    return box;
-}
 
 // ---- frame helpers ----------------------------------------------------
 
@@ -611,9 +569,10 @@ export function reservedHeight(width, kind) {
  *
  * Which curves, over which x-window, on which scales, with which verticals
  * marked and which way their labels open. All of it is a statement about the
- * *data*, not about a charting library, so it lives here and both renderers read
- * from it. That is what makes the a30 Plotly comparison worth anything: the two
- * engines are handed identical decisions and differ only in how they draw them.
+ * *data*, not about a charting library, so it lives here rather than inside an
+ * ECharts option literal. That split is what made the a30 renderer comparison
+ * possible; it earns its keep either way, because these are the decisions worth
+ * reading and reviewing on their own.
  *
  * Returns
  * -------
@@ -892,10 +851,9 @@ const TWO_PANEL_CONTROLS = ['logY', 'xFull', 'refLines', 'epMode', 'rightLogY'];
 
 // ---- two-panel argument builders --------------------------------------
 //
-// Column picking, one function per kind, kept out of `build` so both renderers
-// can call it. Each returns the argument object `twoPanelData` reads, or null
-// when the frame lacks what the exhibit needs. Nothing here is engine-specific,
-// which is the point: the ECharts and Plotly paths diverge only after this step.
+// Column picking, one function per kind, kept out of `build` so the smoke test
+// can call it without a DOM. Each returns the argument object `twoPanelData`
+// reads, or null when the frame lacks what the exhibit needs.
 
 function aggPanelArgs({ density, tail }, { name, box, mean }) {
     const loss = col(density, 'loss');
@@ -1163,8 +1121,8 @@ const EXHIBITS = {
 // a test can assemble every kind's option and inspect it without a DOM.
 export { EXHIBITS };
 
-// The engine-neutral bundle, exported for the Plotly path and for the smoke
-// test, which checks that both renderers are handed the same decisions.
+// The chart decisions, separated from the ECharts option they end up in and
+// exported for the smoke test, which reads them directly.
 export { twoPanelData };
 
 // ---- reinsurance exhibit ----------------------------------------------
@@ -1504,7 +1462,7 @@ function toggleButton(key, onChange) {
  *     Side-by-side layout, which is when the split is worth making.
  * onChange : function
  */
-function renderControls(names, wide, onChange, kind) {
+function renderControls(names, wide, onChange) {
     const honored = new Set(names);
     const row = el('div', {
         className: `exhibit-controls${wide ? ' exhibit-controls-split' : ''}`,
@@ -1517,7 +1475,6 @@ function renderControls(names, wide, onChange, kind) {
         for (const key of g.controls) box.appendChild(toggleButton(key, onChange));
         row.appendChild(box);
     }
-    if (kind) row.appendChild(engineGroup(kind, onChange));
     return row;
 }
 
@@ -1674,7 +1631,7 @@ export async function mountExhibit(container, state) {
     function renderTools() {
         empty(tools);
         tools.appendChild(
-            renderControls(controls, opts().wide, () => onToggle(), state.kind));
+            renderControls(controls, opts().wide, () => onToggle()));
     }
 
     // Declared before the controls are wired, not beside the chart it guards: the
@@ -1708,43 +1665,17 @@ export async function mountExhibit(container, state) {
         return null;                     // a frame this kind lacks; not an error
     }
 
-    // Which library draws it. Plotly only where the spike covers the kind and
-    // only once its bundle is actually here; anything else stays on ECharts,
-    // which is also the fallback when the chunk fails to load.
-    const wantsPlotly = () => engine() === 'plotly' && plotlyCovers(state.kind)
-        && Boolean(spec.panelArgs);
-    if (wantsPlotly()) await loadPlotly();
-
-    // The live renderer: `{engine, update(), dispose()}`. Swapping engines is a
-    // teardown and a rebuild, never an update, since neither library can adopt
-    // the other's DOM.
+    // The live renderer: `{update(), dispose()}`.
     let renderer = null;
 
-    async function draw() {
-        const usePlotly = wantsPlotly() && plotlyLoaded();
-        const want = usePlotly ? 'plotly' : 'echarts';
-        if (renderer && renderer.engine !== want) {
-            renderer.dispose();
-            renderer = null;
-        }
-        if (usePlotly) {
-            const args = spec.panelArgs(data, opts());
-            if (!args) return false;
-            const figure = plotlyFigure(twoPanelData(args));
-            host.style.height = `${figure.layout.height}px`;
-            if (renderer) { await renderer.update(figure); return true; }
-            // `empty` clears the skeleton: both libraries append into this node
-            // and would otherwise draw over the outline rather than replace it.
-            empty(host);
-            const handle = await mountPlotly(host, figure);
-            renderer = { engine: 'plotly', ...handle };
-            return true;
-        }
+    function draw() {
         const next = spec.build(data, opts());
         if (!next) return false;
         // Same height the skeleton was already holding, so nothing moves.
         host.style.height = `${next.hostHeight}px`;
         if (!renderer) {
+            // `empty` clears the skeleton, which the chart would otherwise draw
+            // over rather than replace.
             empty(host);
             renderer = echartsRenderer(host, next);
             return true;
@@ -1753,16 +1684,14 @@ export async function mountExhibit(container, state) {
         return true;
     }
 
-    if (!await draw()) { empty(container); return null; }
+    if (!draw()) { empty(container); return null; }
 
-    // Turning the 3-D view on for the first time has to fetch the renderer, and
-    // so does the first flip to Plotly, so a toggle is not always a synchronous
-    // redraw. Mounting with either already off is the case that gets here.
+    // Turning the 3-D view on for the first time has to fetch its renderer, so a
+    // toggle is not always a synchronous redraw.
     async function onToggle() {
         if (view.surface3d && controls.includes('surface3d') && !surfaceReady) {
             if (await loadSurface()) surfaceReady = true;
         }
-        if (wantsPlotly() && !plotlyLoaded()) await loadPlotly();
         redraw();
     }
 

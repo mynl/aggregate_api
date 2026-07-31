@@ -374,14 +374,40 @@ that actually holds.
 
 The Examples dropdown is fetched at runtime from `GET /v1/examples` (parsed from
 an `.agg` file), so it's **not** baked into the SPA bundle — change the file,
-restart the api, refresh the browser. Source precedence:
+restart the api, refresh the browser. Source precedence: `--library` /
 `AGGAPI_EXAMPLES_FILE` (a curated file anywhere on disk) → bundled
-`aggregate/agg/spa_examples.agg`. Format: a `# A. Title` contents block plus
-`agg A.Name …` item lines (optional trailing `note{…}`).
+`aggregate/agg/library.agg`.
+
+**A short library is the fast way to review.** The flag is the one to reach for:
+
 ```powershell
-$env:AGGAPI_EXAMPLES_FILE = "T:\tmp\silly-examples.agg" 
-uv run aggregate-api --port 8001
+uv run aggregate-api --port 8001 --library T:\tmp\short.agg
 ```
+
+It resolves the path, checks it, and **exits if it is wrong**. The env var
+warns and silently falls back to the full library instead, which is right for a
+stale setting on a server and wrong for something typed on purpose. Both end up
+in the same place; the flag just refuses to lie about it.
+
+```powershell
+$env:AGGAPI_EXAMPLES_FILE = "T:\tmp\short.agg"     # same thing, no path check
+```
+
+**Format** is `library.agg`'s own, so copy an entry out of it rather than
+inventing one. Names are descriptive and globally unique; the old `A.` / `B.`
+filing prefixes are gone and `tags{}` does the grouping. A program can span
+lines, and the trailer follows it indented:
+
+```
+agg TinyDice dfreq [1] dsev [1:6]
+  note{One fair die.}
+  tags{topic:discrete role:hero}
+```
+
+`topic:` drives the dropdown's groups, `role:hero` puts an entry in the landing
+gallery. An entry with no `topic:` lands in an "other" group; one that fails to
+resolve is skipped with a warning rather than blanking the menu, so check the
+server log if something you expected is missing.
 
 ### VPS refresh: `uv.lock` blocks `git pull`
 

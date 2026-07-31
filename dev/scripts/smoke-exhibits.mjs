@@ -61,12 +61,6 @@ const { EXHIBITS, reinsSeries, PANEL_ASPECT, reservedHeight, twoPanelData } =
         pathToFileURL(path.join(root, 'web', 'src', 'charts', 'exhibits.js')).href);
 const { surfaceGrid, surfaceOption } = await import(
     pathToFileURL(path.join(root, 'web', 'src', 'charts', 'surface.js')).href);
-// `plotlyFigure` is pure like the rest and needs no Plotly bundle: the library
-// itself is only reached through a dynamic import inside `loadPlotly`.
-const { plotlyFigure } = await import(
-    pathToFileURL(path.join(root, 'web', 'src', 'charts', 'plotly-panels.js')).href);
-const { PLOTLY_KINDS } = await import(
-    pathToFileURL(path.join(root, 'web', 'src', 'charts', 'engine.js')).href);
 
 // Panels are checked against the target aspect because the shape is the one
 // property of a rendered chart that is fully determined by the option object,
@@ -291,123 +285,6 @@ if (fixtures && fixtures.reins) {
     const sub = reinsSeries(frame, 'agg', ['gross']);
     if (sub.length !== 1 || sub[0].name !== 'subject') {
         fail('reins: `gross` does not select `subject` on the aggregate stage');
-    }
-}
-
-// ---- Plotly parity ----------------------------------------------------
-//
-// The point of the a30 spike is to judge two libraries drawing the *same*
-// chart. An unfair comparison answers nothing, so the properties that took
-// a26 to a29 to get right are asserted on the Plotly figure too: steps-mid,
-// loss on x in both panels, the reserved height, the capital anchors, and one
-// legend entry per unit rather than two.
-
-// Which trace types the pinned Plotly bundle actually registers, read out of
-// the shipped file. The partial bundles are not interchangeable and the failure
-// is invisible until runtime: `plotly.js-basic-dist-min` carries bar, pie and
-// scatter only, so the `scattergl` these traces need would have thrown "invalid
-// trace type" in the browser and nowhere else. Null when node_modules is absent.
-function registeredTraces() {
-    const dir = path.join(root, 'web', 'node_modules');
-    for (const pkg of ['plotly.js-gl2d-dist-min', 'plotly.js-basic-dist-min']) {
-        const base = path.join(dir, pkg);
-        if (!existsSync(base)) continue;
-        const main = JSON.parse(readFileSync(path.join(base, 'package.json'), 'utf8')).main;
-        const file = path.join(base, main);
-        if (!existsSync(file)) continue;
-        const src = readFileSync(file, 'utf8');
-        const found = new Set();
-        for (const m of src.matchAll(/moduleType:"trace",name:"([a-z0-9]+)"/g)) {
-            found.add(m[1]);
-        }
-        if (found.size) return { pkg, traces: found };
-    }
-    return null;
-}
-const bundle = registeredTraces();
-if (bundle) console.log(`plotly bundle ${bundle.pkg}: ${[...bundle.traces].sort().join(', ')}`);
-
-if (fixtures) {
-    for (const kind of PLOTLY_KINDS) {
-        const spec = EXHIBITS[kind];
-        const entry = fixtures[kind];
-        if (!spec || !entry) { fail(`plotly/${kind}: no fixture`); continue; }
-        for (const layout of LAYOUTS) {
-            const notes = [];
-            const args = spec.panelArgs(entry.frames, {
-                name: entry.build.name, kind, mean: entry.build.mean,
-                wide: layout.wide, width: layout.width,
-                box: spec.layout(layout.width),
-            });
-            if (!args) { fail(`plotly/${kind} (${layout.name}): no panel args`); continue; }
-            const d = twoPanelData(args);
-            const fig = plotlyFigure(d);
-            const traces = fig.data || [];
-            const half = traces.length / 2;
-
-            // Same box as ECharts, so flipping engines does not move the page.
-            const reserved = reservedHeight(layout.width, kind);
-            if (Math.round(fig.layout.height) !== Math.round(reserved)) {
-                notes.push(`height ${fig.layout.height} not ${reserved}`);
-            }
-            // Steps-mid. `hvh` is Plotly's centered step, the same shape as
-            // ECharts' `step: 'middle'`.
-            const flat = traces.slice(0, half)
-                .filter((t) => (t.line || {}).shape !== 'hvh').map((t) => t.name);
-            if (flat.length) notes.push(`not stepped: ${flat.join(', ')}`);
-            // Loss on x in BOTH panels, never a transpose.
-            for (const ax of ['xaxis', 'xaxis2']) {
-                if (((fig.layout[ax] || {}).title || {}).text !== 'loss') {
-                    notes.push(`${ax} is not loss`);
-                }
-            }
-            // A log axis in Plotly takes its range in EXPONENTS. Handing it the
-            // raw 1e-15 where it wants -15 collapses the axis silently, and it
-            // is the one mapping here that looks right in code and wrong on
-            // screen. Round-trip it against the survival range the shared
-            // bundle computed.
-            const y2 = fig.layout.yaxis2 || {};
-            if (y2.type === 'log') {
-                const want = d.asRP ? 1 / d.sHi : d.sLo;
-                const got = 10 ** y2.range[0];
-                if (!(Math.abs(got - want) <= 1e-9 * Math.max(want, 1e-30))) {
-                    notes.push(`log range not in exponents: 10**${y2.range[0]} `
-                        + `is ${got.toExponential(1)}, wanted ${want.toExponential(1)}`);
-                }
-            }
-            // The capital anchors, as shapes with their labels.
-            const marks = (fig.layout.shapes || []).length;
-            if (marks !== d.densRefs.length + d.tailRefs.length) {
-                notes.push(`${marks} shapes for `
-                    + `${d.densRefs.length + d.tailRefs.length} refs`);
-            }
-            // One legend entry per unit. Plotly toggles per trace, so the tail
-            // trace must join its density trace's group and stay out of the
-            // legend, or a portfolio shows every unit twice and hiding one
-            // leaves its tail curve behind.
-            const shown = traces.filter((t) => t.showlegend).length;
-            const expected = d.solo ? 0 : d.series.length;
-            if (shown !== expected) {
-                notes.push(`${shown} legend entries for ${d.series.length} series`);
-            }
-            const ungrouped = traces.filter((t) => !t.legendgroup).length;
-            if (ungrouped) notes.push(`${ungrouped} traces without a legendgroup`);
-            // Every trace type must exist in the bundle we ship.
-            if (bundle) {
-                const missing = [...new Set(traces.map((t) => t.type))]
-                    .filter((t) => !bundle.traces.has(t));
-                if (missing.length) {
-                    notes.push(`${bundle.pkg} does not register ${missing.join(', ')}`);
-                }
-            }
-
-            if (notes.length) fail(`plotly/${kind} (${layout.name}): ${notes.join('; ')}`);
-            else {
-                console.log(`OK   ${`plotly/${kind}`.padEnd(11)} ${layout.name} `
-                    + `h=${Math.round(fig.layout.height)} traces=${traces.length} `
-                    + `marks=${marks}`);
-            }
-        }
     }
 }
 

@@ -32,7 +32,6 @@ export default defineConfig({
         __CSV_GRID_VERSION__: JSON.stringify(pkgVersion('csv-grid')),
         __ECHARTS_VERSION__: JSON.stringify(pkgVersion('echarts')),
         __ECHARTS_GL_VERSION__: JSON.stringify(pkgVersion('echarts-gl')),
-        __PLOTLY_VERSION__: JSON.stringify(pkgVersion('plotly.js-gl2d-dist-min')),
         __BOOTSTRAP_VERSION__: JSON.stringify(pkgVersion('bootstrap')),
     },
     build: {
@@ -68,13 +67,12 @@ export default defineConfig({
                 },
             },
         },
-        // Raised for the two lazy vendor chunks: `echarts-gl` at 602 kB, serving
-        // one object kind, and `plotly.js-gl2d-dist-min` at 1,557 kB, which is a
-        // prebuilt bundle and so not reducible from here. Both sit behind a
-        // dynamic import that nothing on the landing path reaches, and both are
-        // verified absent from `index.html`. The warning is about the critical
-        // path, and neither chunk is on it. Every eager chunk stays well under.
-        chunkSizeWarningLimit: 1600,
+        // Raised for one lazy vendor chunk: `echarts-gl` at 602 kB, serving a
+        // single object kind. It sits behind a dynamic import that nothing on the
+        // landing path reaches, and is verified absent from `index.html`. The
+        // warning is about the critical path and this chunk is not on it. Every
+        // eager chunk stays well under.
+        chunkSizeWarningLimit: 700,
     },
     server: {
         port: 5173,

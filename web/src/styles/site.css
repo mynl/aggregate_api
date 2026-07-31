@@ -234,12 +234,6 @@ header .navbar { min-height: 56px; }
 .agg-ratelimit-msg   { font-size: .85rem; color: #374151; }
 .agg-ratelimit-sub   { margin-top: .45rem; }
 
-/* ---- Subhead (the one-line pitch under the header) ---- */
-.subhead {
-    margin: .35rem .1rem .8rem; font-size: 1.02rem; color: #374151;
-    max-width: 60ch; line-height: 1.4;
-}
-
 /* ---- Hero gallery (group A showcase cards) ---- */
 .hero-row { display: flex; flex-wrap: wrap; gap: .6rem; margin: 0 .1rem 1rem; }
 .hero-card {
@@ -406,26 +400,6 @@ header .navbar { min-height: 56px; }
 .exhibit-toggle.active {
     color: #fff; background: var(--primary); border-color: var(--primary);
 }
-/* Same control, different subject: these switch the *tables* below, not the
-   chart above. Same shape so they read as one family of controls, a distinct
-   color so a glance tells you which half of the tab you are steering. */
-.exhibit-toggle--table.active {
-    background: var(--code, #6f42c1); border-color: var(--code, #6f42c1);
-}
-.exhibit-toggle--table:hover {
-    color: var(--code, #6f42c1); border-color: var(--code, #6f42c1);
-}
-.exhibit-toggle--table.active:hover { color: #fff; }
-
-/* ---- Engine group (a30 spike) ----
-   Which library draws the exhibit, not what it draws, so it reads as a
-   different kind of control: muted rather than primary. It is temporary, and
-   comes out with `plotly-panels.js` if ECharts wins. */
-.exhibit-toggle--engine.active {
-    background: var(--mut); border-color: var(--mut);
-}
-.exhibit-toggle--engine:hover { color: var(--mut); border-color: var(--mut); }
-.exhibit-toggle--engine.active:hover { color: #fff; }
 /* Greyed out, never hidden: the reader learns the control exists and that this
    kind is not covered, which a missing button cannot say. */
 .exhibit-toggle:disabled,
@@ -459,16 +433,6 @@ header .navbar { min-height: 56px; }
 .table-view-item.active .bi-check2 { visibility: visible; }
 .table-view-item.active { font-weight: 600; background: none; color: inherit; }
 .table-view-item small { margin-left: auto; font-size: .7rem; }
-
-/* ---- Table view toggle (Static | Interactive) ---- */
-.overview-view-toggle {
-    display: flex; flex-wrap: wrap; align-items: center; gap: .35rem;
-    margin: .1rem 0 .8rem;
-}
-.overview-view-label {
-    font-size: .68rem; color: var(--mut); margin-right: .2rem;
-    text-transform: uppercase; letter-spacing: .04em;
-}
 
 /* ---- Exhibit chrome (title + caption around either kind of table) ---- */
 .exhibit-title { font-size: .92rem; font-weight: 700; margin: 0 0 .4rem; }

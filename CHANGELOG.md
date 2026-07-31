@@ -4,6 +4,53 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a36
+
+From `dev/done/plan-tidy-and-library.md`. A batch of four: consolidate on
+ECharts, load an alternate example library, and drop two bits of chrome.
+
+### ECharts only
+
+a30 shipped Plotly to answer one question, and a30 answered it: "not massive
+differences between the two". A second renderer with no question behind it is a
+535 kB lazy chunk and a second code path, so it comes out.
+
+Gone: `charts/engine.js`, `charts/plotly-panels.js`, the `draw` control on the
+exhibit row, the `plotly.js-gl2d-dist-min` dependency, the `__PLOTLY_VERSION__`
+define and its chunk entry, the About panel row, and the parity block in the
+smoke test. The bundle drops the 1,599 kB chunk entirely, and
+`chunkSizeWarningLimit` comes back from 1600 to 700 now that `echarts-gl` is the
+only lazy vendor chunk left.
+
+**`twoPanelData` stays.** It is the split that made the comparison possible, and
+it earns its keep regardless: chart decisions are worth reading on their own
+rather than interleaved with an ECharts option literal.
+
+### `--library PATH`
+
+Points the Examples dropdown at an alternate `.agg` instead of `aggregate`'s
+shipped `library.agg`, so a short library makes a review pass quick. The default
+is unchanged.
+
+The plumbing already existed as `AGGAPI_EXAMPLES_FILE`; the flag sets that in the
+environment before uvicorn starts, which is what survives `--reload` (the app is
+built in a child process and would never see a value poked into this process's
+cached `Settings`).
+
+**It fails rather than falling back.** The env var warns and drops back to the
+full library when the path is wrong, which is right for a stale setting on a
+server and wrong for a flag typed on purpose: silently loading everything is the
+exact outcome someone passing `--library` is avoiding. The flag resolves the
+path, checks it, and exits naming what it could not read.
+
+### Removed chrome
+
+- The subhead ("Describe an insurance book and get its full loss distribution,
+  tail risk, and price.") and its `.subhead` style.
+- The Overview's Static / Interactive pill row. a33 put the same preference in
+  the header menu, and one preference with two controls on one screen reads as
+  two settings. The menu still re-renders the tab, so nothing else moves.
+
 ## 1.0.0a35
 
 From `dev/plan-gt2-ir.md`, Stage B of the follow-on. Every table is switchable,

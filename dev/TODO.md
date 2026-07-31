@@ -40,12 +40,10 @@ Left over from this work:
 
 ### b) Consolidate the graphs on ECharts, and fix the options
 
-Drop the Plotly path. a30 answered the question it existed to ask ("not massive
-differences between the two"), so the second renderer and its 535 kB lazy chunk
-are now cost without a question to answer. Keep the `twoPanelData` split, which
-is what made the comparison possible and is good structure regardless.
+**Half done (a36).** The Plotly path is out: `engine.js`, `plotly-panels.js`,
+the `draw` control, the dependency and the 535 kB chunk. `twoPanelData` stayed.
 
-Then work the punch list in `dev/graphs.md`, which already has the ECharts
+What remains is the punch list in `dev/graphs.md`, which already has the ECharts
 mechanism for each item: zoom rescale (`filterMode`, and try
 `animationDurationUpdate: 0` first), double-click reset, the odd left tick,
 the uPlot-style static legend readout, and the horizontal y-to-x readout on the
@@ -56,6 +54,14 @@ it: the note records both readings and they need different options.
 
 The one that decides whether the rest was worth doing, and the least specified.
 Feeds back into (a): the switch cannot find its home until the tabs settle.
+
+Reviewing this is what `--library` (a36) is for: point the server at a short
+`.agg` and the dropdown and hero gallery narrow to it, so a pass over the tabs
+is not a walk through 186 recipes.
+
+```
+uv run aggregate-api --port 8001 --library T:\tmp\short.agg
+```
 
 Still open from before and probably part of this: the Bounds tab has no content,
 and the standing REMINDER below about what is worth plotting.

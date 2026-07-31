@@ -635,37 +635,6 @@ function mountTable(paneId, host, source, gridOpts = GRID_FULL) {
     mountIrTable(paneId, host, doc).then((handle) => { if (!handle) toGrid(); });
 }
 
-// The Static | Interactive control on the Overview, writing the page-wide
-// preference the header dropdown also writes.
-//
-// Both affordances exist on purpose. The dropdown is where a page-wide setting
-// belongs; this is on the landing tab, next to the tables it changes, which is
-// where anyone would first reach for it.
-//
-// Same pill shape as the chart's own toggles, in the code red rather than the
-// primary blue. They are the same kind of control (a sticky view switch) so they
-// should look like each other; they steer different halves of the tab, so a
-// glance should still tell them apart.
-function exhibitToggle() {
-    const btns = [['static', 'Static'], ['interactive', 'Interactive']].map(([mode, label]) => {
-        const b = el('button', {
-            type: 'button',
-            className: 'exhibit-toggle exhibit-toggle--table'
-                + (_tableView === mode ? ' active' : ''),
-        }, label);
-        b.addEventListener('click', () => setTableView(mode));
-        return b;
-    });
-    const row = el('div', { className: 'overview-view-toggle' },
-        el('span', { className: 'overview-view-label' }, 'Tables'), ...btns);
-    // Follow the preference however it was changed, so the pills stay honest
-    // when the dropdown is what moved it.
-    onTableViewChange('overview-pills', () => {
-        btns.forEach((b, i) => b.classList.toggle('active',
-            ['static', 'interactive'][i] === _tableView));
-    }, row);
-    return row;
-}
 
 // Render the summary_df + tail_df exhibits into `box` per the current view mode.
 // Everything mounted registers under 'pane-overview', so clearGrids tears down
@@ -772,7 +741,6 @@ async function loadOverview() {
     const ir = { summary: summaryDoc, tail: tailDoc };
     if (summaryDoc || tailDoc) {
         const box = el('div', { className: 'overview-exhibits' });
-        pane.appendChild(exhibitToggle());
         pane.appendChild(box);
         renderOverviewExhibits(box, ir);
         onTableViewChange('pane-overview', () => renderOverviewExhibits(box, ir), box);
@@ -1356,7 +1324,6 @@ if (helpLoad) {
 $('about-grid').textContent = __CSV_GRID_VERSION__;
 $('about-echarts').textContent = __ECHARTS_VERSION__;
 $('about-echarts-gl').textContent = __ECHARTS_GL_VERSION__;
-$('about-plotly').textContent = __PLOTLY_VERSION__;
 $('about-bootstrap').textContent = __BOOTSTRAP_VERSION__;
 api.meta().then((meta) => {
     $('about-aggregate').textContent = meta.aggregate_version;
