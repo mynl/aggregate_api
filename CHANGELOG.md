@@ -51,9 +51,9 @@ views render from that. The strings are the same ones the SPA carried.
   whole document. Three Price frames carry one. Reported upstream.
 - `api.reinsFrame` is now `api.frameOf`: it was always generic, and it is the
   bulk path for every frame too long to carry as a document.
-- Two harnesses kept rather than rewritten each time: `dev/check-frames.py`
+- Two harnesses kept rather than rewritten each time: `dev/scripts/check-frames.py`
   sweeps every frame across every kind and asserts both routes agree, and
-  `dev/check-adapter.py` proves a document is interchangeable with its
+  `dev/scripts/check-adapter.py` proves a document is interchangeable with its
   `FrameResponse` after csv-grid's own cell coercion.
 - Losing the walker now costs both views rather than one, so the pane says so
   instead of sitting empty.
@@ -136,7 +136,7 @@ than the control appearing to do nothing.
 ## 1.0.0a32
 
 From `dev/plan-gt2-ir.md`, Stage A, implementing the `greatest_tables` handoff
-spec in `dev/plan-gt2-ir-adoption.md`. The a31 evaluation of `greater_tables` 5.x
+spec in `dev/done/plan-gt2-ir-adoption.md`. The a31 evaluation of `greater_tables` 5.x
 concludes and its whole path is replaced.
 
 ### The static table is a document now, not markup

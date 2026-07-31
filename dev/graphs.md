@@ -1,7 +1,8 @@
 # Graph interaction notes
 
 Working notes from the a30 engine comparison, 2026-07-30. **Nothing here is
-implemented.** Picking this up becomes a `dev/plan-*.md` when we do.
+implemented.** Picking this up becomes a `dev/plan-*.md` when we do; it is item
+(b) at the top of `dev/TODO.md`.
 
 ## The a30 verdict
 
@@ -15,10 +16,14 @@ was not what was holding the exhibits back. It also means every item below is
 configure since it is already the default and already themed off
 `/v1/meta/style`.
 
-Open question deferred: whether to keep the Plotly path at all. It costs a 535 kB
-lazy chunk and a second code path. Keep it until the punch list below is done,
-because a second renderer is a useful control when judging whether a change is an
-improvement.
+**Settled since, by the author: consolidate on ECharts.** This note originally
+argued for keeping Plotly until the punch list was done, on the grounds that a
+second renderer is a useful control when judging whether a change is an
+improvement. The author's call is to drop it, and the argument for that is
+better: a30 already answered the only question Plotly existed to ask, so the
+535 kB lazy chunk and the second code path are now cost with no question behind
+them. Keep the `twoPanelData` split, which is what made the comparison possible
+and is good structure regardless.
 
 ## What the author liked, unprompted
 
@@ -130,29 +135,11 @@ No TeX. Three partial routes:
    with KaTeX gives actual math. Applies to axis names too, at the cost of
    positioning them ourselves.
 
-## Gotcha waiting in the greater_tables work
+### The math decision is one decision, for charts and tables both
 
-`greater_tables` already prepares for math: `clean_html_tex` rewrites `$...$`
-into `\(...\)` MathJax delimiters, and its own `save_html` boilerplate pulls
-MathJax from a CDN. **Our injected blob is only the `<style>` and the table**, so
-the SPA loads no MathJax and any `$...$` in a caption renders as literal `\(...\)`
-on the page.
-
-Decide before leaning on it: load KaTeX or MathJax once in the shell, or keep
-captions plain. This is the same decision as route 3 above, so make it once for
-both.
-
-## GT, when we come back to it
-
-The author's read: "the GT tables are a delight". Wants a static / dynamic toggle
-**everywhere**, except very large tables which are dynamic only, because the
-grid's filters are how you read quantiles off a big frame.
-
-That last part already matches the server: `tables.py` has a hard
-`MAX_ROWS = 500` and returns 422 above it, so large frames already refuse to
-render statically. The toggle just needs to not offer static where the server
-would refuse, which the `rows` field on `HtmlFrameResponse` is there to support.
-
-Still open, from `dev/TODO.md`: the Price tab's computed frames cannot go through
-`frame/{which}.html` because they come from POST endpoints, so they need html
-returned alongside the json.
+Route 3 needs KaTeX or MathJax in the shell, and so does the other half of the
+page: the table walker emits `\(...\)` for page MathJax unless a `katex` object
+is passed to `renderTable`, and the SPA loads neither. Nothing sends a `$...$`
+cell today, so nothing is broken; the moment anything does, both halves want the
+same answer. Load one library once in the shell, or keep both plain. Do not
+decide it twice.

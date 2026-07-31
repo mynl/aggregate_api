@@ -165,6 +165,22 @@ uv sync --extra dev
 (`../aggregate_REFACTOR` must exist next to the repo — `pyproject.toml` pins the
 `aggregate` editable source to that relative path.)
 
+> **`greater-tables` blocks a VPS deploy right now (a34).** The static-table
+> engine is pinned to a **Windows path** (`c:/s/ai/greatest-tables`) that does
+> not exist on the VPS, so `uv sync` cannot resolve it there. Worse, the obvious
+> fix is a trap: PyPI's `greater-tables` **5.3 is the previous generation** and
+> shares the `greater_tables` import name, so installing it resolves without
+> error and then the app dies at import (5.3 has no `build`, `canonical_json` or
+> `IR_VERSION`). It publishes as **6.0**; pin that explicitly when it lands,
+> since pip ignores pre-releases unless asked:
+>
+> ```bash
+> uv add "greater-tables==6.0.0rc1"     # or later; do NOT take plain 5.3
+> ```
+>
+> `uv run pytest tests/test_meta.py -k generation` asserts the right one is
+> installed. Until 6.0 is on PyPI, the table path cannot deploy.
+
 **2. Build the SPA bundle.** The built bundle (`static/index.html` + `assets/`)
 is **gitignored**, so a clone/pull does NOT bring it — without it, `/` returns
 `{"detail":"Not Found"}`. Build it on the VPS:
@@ -289,6 +305,70 @@ Caddy's `rate_limit` module (the "special caddy install").
   it (no longer an accident of prefix-stripping). External visitors get the SPA,
   not the interactive API explorer. `/docs` still works over the VPN
   (`http://10.8.0.1:19456/docs`).
+
+#### Building Caddy with the rate-limit module
+
+`rate_limit` is not in stock Caddy — it needs a custom build. That is what
+"the special caddy install" means. `scripts/setup-caddy-ratelimit.sh` does the
+whole thing: installs `xcaddy` via `go install` if needed, builds Caddy with
+`github.com/mholt/caddy-ratelimit`, checks `http.handlers.rate_limit` is present,
+validates the Caddyfile with the new binary, backs up the old one, stops the
+service, installs, restarts, and smoke-tests.
+
+```bash
+sudo apt install -y golang-go        # if Go is missing
+cd ~/hacking/aggregate_api
+bash ./scripts/setup-caddy-ratelimit.sh
+```
+
+Overrides:
+
+```bash
+CADDYFILE=/path/to/Caddyfile bash ./scripts/setup-caddy-ratelimit.sh
+CADDY_BIN=/usr/bin/caddy bash ./scripts/setup-caddy-ratelimit.sh
+SMOKE_URL=https://agg.mynl.com/v1/health bash ./scripts/setup-caddy-ratelimit.sh
+RUN_RATE_LIMIT_TEST=1 bash ./scripts/setup-caddy-ratelimit.sh
+```
+
+`RUN_RATE_LIMIT_TEST=1` deliberately sends enough requests to trigger a 429,
+which spends your own IP's minute bucket. Use it only when you can wait a minute.
+
+**An `apt upgrade` can overwrite the custom binary with stock Caddy**, silently
+removing the limiter. After any upgrade:
+
+```bash
+caddy list-modules | grep rate_limit          # gone? rerun the script
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+```
+
+#### Request body cap
+
+Caddy's `request_body { max_size 1MB }` returns a 413 above the cap, which keeps
+a giant POST from reaching the build path at all. Check it with:
+
+```bash
+python3 - <<'PY' | curl -sS -o /dev/null -w '%{http_code}\n' \
+  -X POST --data-binary @- https://agg.mynl.com/v1/objects
+print("x" * 1100000)
+PY
+```
+
+Expected: `413`.
+
+#### Discouraging indexing
+
+`X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex"` on the
+route, plus a `robots.txt` that disallows everything:
+
+```caddyfile
+handle /robots.txt {
+    header Content-Type text/plain
+    respond "User-agent: *\nDisallow: /\n" 200
+}
+```
+
+Neither stops a bot that ignores robots rules. The rate limiter is the guard
+that actually holds.
 
 ### Curated Examples list
 

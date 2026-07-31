@@ -34,7 +34,7 @@ Left over from this work:
   column gets no raw value and the adapter then throws on the whole document.
   Three Price frames carry one. We pass the explicit column list instead. Written
   up in `c:/s/ai/greatest-tables/dev/note-from-aggregate-api-include-raw.md`.
-- Two harnesses now live in `dev/`: `check-frames.py` (every frame, every kind,
+- Two harnesses in `dev/scripts/`: `check-frames.py` (every frame, every kind,
   both routes agree) and `check-adapter.py` (a document is interchangeable with
   its `FrameResponse`). Run both when `greater-tables` moves.
 
@@ -366,8 +366,8 @@ one version bump each.
       recurrence: check the browser console for `[aLL] hero gallery`.
 
 > **Server policy (2026-07-29).** The author starts and stops servers; the
-> tooling here must not. `dev/capture_fixtures.py` and `uv run pytest` both
-> drive the app in-process through `TestClient`, binding no port.
+> tooling here must not. `dev/scripts/capture_fixtures.py` and `uv run pytest`
+> both drive the app in-process through `TestClient`, binding no port.
 - [x] **plan-examples-find — fuzzy find + hero sparklines** (→ 1.0.0a24).
       Pinned search box in the dropdown and a Ctrl+K palette, both uFuzzy over
       name / kind / tags / note, flat ranked list while searching; hero cards

@@ -30,7 +30,7 @@ This package **depends on** `aggregate`; it does not vendor it. The api imports:
 `aggregate.parser_errors` is recent and lives only in the in-development
 `1.0.0a` line (not on PyPI). For co-development, install `aggregate` editable
 from its local checkout. See `[tool.uv.sources]` in `pyproject.toml` and
-`dev/plan-0001-bootstrap-standalone.md`. Do **not** copy library internals into
+`dev/done/plan-0001-bootstrap-standalone.md`. Do **not** copy library internals into
 this repo; depend on them and, if something is missing or awkward to import,
 raise it as an upstream change in `aggregate`.
 
