@@ -4,6 +4,60 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a35
+
+From `dev/plan-gt2-ir.md`, Stage B of the follow-on. Every table is switchable,
+and one fetch feeds both renderers.
+
+### One document per table, not a document and a frame
+
+GT 1.8.0 shipped `irToGridInput(doc)`, which flattens a table document into
+CsvGrid's input. So the SPA now fetches **one** `?format=ir` per table and
+renders either way from it: the walker draws it, or the adapter derives the
+grid's `{columns, records}` from the same bytes. The paired fetch is gone, the
+flip costs no round trip, and the two views cannot disagree about a number
+because there is only one number.
+
+Bulk frames are untouched: the densities go `FrameResponse` straight to CsvGrid
+and never become a document. A document the server truncated is not rendered
+either; the SPA sees the note, refetches the whole frame and hands it to the
+grid, so nothing shows 500 of 4,096 rows without saying so.
+
+### Fixed: two views of one button showed two different tables
+
+`stats_df` and `reins_stats_df` drop their raw `ex1` / `ex2` / `ex3` moment rows.
+That step lived in the JSON route alone, so a portfolio's More > Stats showed
+**26 rows static and 17 interactive**, and the `.csv` download exported 26. Three
+paths resolved "the frame called X" independently and drifted.
+
+`_CSV_FRAMES` is now a map of name to **callable**, and the CSV and document
+routes both go through one `_named_frame`. All three agree at 17 rows, which
+changes the CSV download. A test asserts row-count parity for every frame across
+four object kinds, which is the invariant that was silently broken rather than
+the one instance of it.
+
+### Formats are declared server side
+
+`PRICE_FMT_CODE`, `REINS_PRICE_FMT` and `statFormats` are gone from `main.js`.
+A loss ratio is a float, so nothing in the dtype says it reads as a percent;
+`tables.FORMATS` says so once, the engine resolves it into the document, and both
+views render from that. The strings are the same ones the SPA carried.
+
+### Also
+
+- `include_raw` is the **explicit column list**, not the `'data'` shorthand the
+  handoff spec names. `'data'` covers numeric, date and bool columns only, so a
+  string data column gets no raw value and `irToGridInput` then throws on the
+  whole document. Three Price frames carry one. Reported upstream.
+- `api.reinsFrame` is now `api.frameOf`: it was always generic, and it is the
+  bulk path for every frame too long to carry as a document.
+- Two harnesses kept rather than rewritten each time: `dev/check-frames.py`
+  sweeps every frame across every kind and asserts both routes agree, and
+  `dev/check-adapter.py` proves a document is interchangeable with its
+  `FrameResponse` after csv-grid's own cell coercion.
+- Losing the walker now costs both views rather than one, so the pane says so
+  instead of sitting empty.
+
 ## 1.0.0a34
 
 From `dev/plan-gt2-ir.md`, Stage A of the follow-on. The static-table engine

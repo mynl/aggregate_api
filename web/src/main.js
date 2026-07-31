@@ -26,7 +26,7 @@ import { renderInfo } from './renderers.js';
 import { mountExhibit, mountReinsExhibit, showPlaceholder } from './charts/exhibits.js';
 import { loadStyle } from './charts/theme.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
-import { mountIrTable, staticOk, STATIC_MAX_ROWS } from './tables.js';
+import { mountIrTable, irToGrid, docTruncated } from './tables.js';
 import { renderError, renderRateLimit } from './error-pane.js';
 import * as history from './history.js';
 import { $, el, empty } from './utils/dom.js';
@@ -315,14 +315,13 @@ const MORE_VIEWS = {
         label: 'Validation',
         hint: 'theoretical vs empirical moments; reads “not unreasonable” on a clean build',
         copy: true,
-        load: async () => replacePaneTable('pane-more', await api.validation_df(state.id),
-            'validation_df', { columnFilters: false }),
+        load: async () => replacePaneTable('pane-more', 'validation_df',
+            { columnFilters: false }),
     },
     stats: {
         label: 'Stats',
         hint: 'frequency / severity / aggregate moments; raw moment rows are dropped',
-        load: async () => replacePaneTable('pane-more', await api.stats_df(state.id),
-            'stats_df', GRID_FULL),
+        load: async () => replacePaneTable('pane-more', 'stats_df', GRID_FULL),
     },
     density: {
         label: 'Density',
@@ -338,25 +337,24 @@ const MORE_VIEWS = {
             // sampled loss / pdf / F / S curve. None has the aggregate's
             // columns, so pull the whole frame for those.
             const opts = { resolution: 'display' };
-            const frame = WHOLE_DENSITY_KINDS.has(state.kind)
-                ? await api.density_df(state.id, opts)
-                : await api.density_df(state.id, { ...opts, cols: 'loss,p_total,F,S' });
             // renderCap lifts CsvGrid's 2,000-row default so the whole display
             // grid shows without a "show all" prompt. 8,192 is the widest that
             // grid gets (see serializers.display_log2_for).
             //
-            // Interactive permanently: even binned to the display grid this is
-            // thousands of rows, and the filters are how you read a quantile off
-            // it. `replacePaneTable` says so out loud when static is selected.
-            await replacePaneTable('pane-more', frame, 'density_df',
-                { ...GRID_FULL, maxRows: 25, renderCap: 8192 });
+            // The bulk path, permanently: even binned to the display grid this
+            // is thousands of rows, so it never becomes a document. The filters
+            // are how you read a quantile off it, which is the grid's whole job.
+            await replacePaneTable('pane-more', 'density_df',
+                { ...GRID_FULL, maxRows: 25, renderCap: 8192 },
+                () => (WHOLE_DENSITY_KINDS.has(state.kind)
+                    ? api.density_df(state.id, opts)
+                    : api.density_df(state.id, { ...opts, cols: 'loss,p_total,F,S' })));
         },
     },
     bswin: {
         label: 'bs window',
         hint: 'bucket / window estimator; the selected row is the chosen grid',
-        load: async () => replacePaneTable('pane-more', await api.bs_window_df(state.id),
-            'bs_window_df', GRID_FULL),
+        load: async () => replacePaneTable('pane-more', 'bs_window_df', GRID_FULL),
     },
     info: {
         label: 'Info (raw)',
@@ -574,12 +572,7 @@ for (const item of document.querySelectorAll('[data-table-view]')) {
 syncTableViewMenu();
 
 /**
- * Mount one frame the way the preference asks.
- *
- * Falls back to the grid, with a line saying why, when the static view cannot
- * answer: the frame is too long to read, the document did not arrive, or the
- * walker failed to load. Never an empty pane, and never a control that silently
- * does nothing.
+ * Mount one table the way the preference asks, from a single source.
  *
  * Parameters
  * ----------
@@ -587,40 +580,59 @@ syncTableViewMenu();
  *     Output pane, for teardown.
  * host : HTMLElement
  *     Mount point, already attached (CsvGrid measures against live layout).
- * frame : object
- *     `{columns, rows}` for the grid, and what the row-count gate reads.
- * doc : object, optional
- *     The table document for the static view.
+ * source : object
+ *     Either `{doc}`, a table document that feeds **both** views, or `{frame}`,
+ *     a plain `{columns, rows}` that can only be a grid. Bulk frames (the
+ *     densities) are the second kind and never go near a document.
  * gridOpts : object, optional
  *     CsvGrid options for the interactive view.
+ *
+ * Notes
+ * -----
+ * One document per table, not a document and a frame. `irToGridInput` derives
+ * the grid's input from the same bytes the walker draws, so the two views cannot
+ * disagree about a number, and flipping the switch costs no round trip.
+ *
+ * Both renderers now live in the walker module, so failing to load it costs both
+ * views rather than one. That is a broken server rather than a degraded one, and
+ * it says so in the pane instead of leaving an empty box.
  */
-function mountTable(paneId, host, frame, doc, gridOpts = GRID_FULL) {
+function mountTable(paneId, host, source, gridOpts = GRID_FULL) {
+    const { doc, frame } = source || {};
     const wantStatic = _tableView === 'static';
-    const asGrid = () => {
+
+    const asGrid = (f, opts) => {
+        if (!host.isConnected) return;   // the pane moved on while we waited
         host.className = 'grid-host';
-        mountGrid(paneId, host, frame, gridOpts);
+        mountGrid(paneId, host, f, opts);
     };
-    if (wantStatic && doc && staticOk(frame)) {
-        host.className = 'gt-host';
-        // Async, but the host is already in the DOM and holds its place, so the
-        // table lands without moving anything around it. A null handle means the
-        // walker could not be loaded at all, which is the grid's cue, unless the
-        // pane moved on while we waited: CsvGrid measures against live layout, so
-        // mounting one into a detached host would be worse than doing nothing.
-        mountIrTable(paneId, host, doc).then((handle) => {
-            if (!handle && host.isConnected) asGrid();
-        });
+    const unavailable = () => {
+        if (!host.isConnected) return;
+        host.className = '';
+        empty(host);
+        host.appendChild(el('div', { className: 'text-muted small fst-italic' },
+            'Table renderer unavailable. The CSV download still has the data.'));
+    };
+
+    if (!doc) {                          // bulk path, unchanged
+        asGrid(frame, gridOpts);
         return;
     }
-    asGrid();
-    if (wantStatic && (frame?.rows?.length || 0) > STATIC_MAX_ROWS) {
-        // Static was asked for and refused. Say why rather than letting the
-        // control look broken.
-        host.after(el('div', { className: 'text-muted small fst-italic mt-1' },
-            `${frame.rows.length.toLocaleString()} rows is past the `
-            + `${STATIC_MAX_ROWS}-row static limit, so this one stays interactive. `
-            + 'Filter it here, or take the whole frame with the CSV download.'));
+    // The adapter's formats and align come out of the document, so the grid
+    // renders the same numbers the walker would. Caller options still win, since
+    // a call site may know something the frame does not carry.
+    const toGrid = () => irToGrid(doc).then(
+        (g) => (g ? asGrid(g.frame, { formats: g.formats, align: g.align, ...gridOpts })
+                  : unavailable()));
+
+    if (!wantStatic) {
+        toGrid();
+        return;
     }
+    host.className = 'gt-host';
+    // Async, but the host is already in the DOM and holds its place, so the
+    // table lands without moving anything around it.
+    mountIrTable(paneId, host, doc).then((handle) => { if (!handle) toGrid(); });
 }
 
 // The Static | Interactive control on the Overview, writing the page-wide
@@ -658,15 +670,15 @@ function exhibitToggle() {
 // Render the summary_df + tail_df exhibits into `box` per the current view mode.
 // Everything mounted registers under 'pane-overview', so clearGrids tears down
 // the previous mode before each (re-)render.
-function renderOverviewExhibits(box, summary, tail, ir = {}) {
+function renderOverviewExhibits(box, ir = {}) {
     clearGrids('pane-overview');
     empty(box);
-    if (summary) renderOneExhibit(box, summary, ir.summary, {
+    if (ir.summary) renderOneExhibit(box, ir.summary, {
         title: 'Summary',
         caption: 'Moments and key percentiles. CV blank for signed / near-break-even '
             + 'rows; Freq percentiles blank by design (PGF-only).',
     });
-    if (tail) renderOneExhibit(box, tail, ir.tail, {
+    if (ir.tail) renderOneExhibit(box, ir.tail, {
         title: 'Tail risk',
         caption: '1-in-200 (Solvency II) and 1-in-250 (US) are the capital anchors. '
             + 'Exact from the FFT grid, not simulated.',
@@ -674,13 +686,13 @@ function renderOverviewExhibits(box, summary, tail, ir = {}) {
 }
 
 // One exhibit: the static table walked from its document, or the interactive
-// CsvGrid with the full chrome. Title and caption are the SPA's own either way,
-// so the two views differ in the table and in nothing else.
-function renderOneExhibit(box, frame, doc, opts) {
+// CsvGrid derived from the same one. Title and caption are the SPA's own either
+// way, so the two views differ in the table and in nothing else.
+function renderOneExhibit(box, doc, opts) {
     if (opts.title) box.appendChild(el('h6', { className: 'exhibit-title' }, opts.title));
     const host = el('div');
     box.appendChild(host);
-    mountTable('pane-overview', host, frame, doc, GRID_FULL);
+    mountTable('pane-overview', host, { doc }, GRID_FULL);
     if (opts.caption) box.appendChild(el('div', { className: 'exhibit-caption' }, opts.caption));
 }
 
@@ -750,25 +762,20 @@ async function loadOverview() {
     else pane.removeChild(host);
 
     // 3. Risk exhibits (summary_df + tail_df) with a Static | Interactive toggle.
-    // Fetch once; flipping the view re-renders from the stashed pair, no refetch.
-    const summary = await api.summary(state.id).catch(() => null);
-    const tailFrame = await api.tail_df(state.id).catch(() => null);
-    // The table documents for the static view, fetched alongside the frames
-    // rather than instead of them. Both views are then instant in both
-    // directions, and a document that fails to arrive falls back to the grid
-    // rather than to nothing.
+    // One document each, feeding both views: the walker draws it, and
+    // `irToGridInput` derives the grid's input from the same bytes. So flipping
+    // the toggle costs no round trip and the two views cannot disagree.
     const [summaryDoc, tailDoc] = await Promise.all([
-        summary ? api.frameIr(state.id, 'summary').catch(() => null) : null,
-        tailFrame ? api.frameIr(state.id, 'tail_df').catch(() => null) : null,
+        api.frameIr(state.id, 'summary').catch(() => null),
+        api.frameIr(state.id, 'tail_df').catch(() => null),
     ]);
     const ir = { summary: summaryDoc, tail: tailDoc };
-    if (summary || tailFrame) {
+    if (summaryDoc || tailDoc) {
         const box = el('div', { className: 'overview-exhibits' });
         pane.appendChild(exhibitToggle());
         pane.appendChild(box);
-        renderOverviewExhibits(box, summary, tailFrame, ir);
-        onTableViewChange('pane-overview',
-            () => renderOverviewExhibits(box, summary, tailFrame, ir), box);
+        renderOverviewExhibits(box, ir);
+        onTableViewChange('pane-overview', () => renderOverviewExhibits(box, ir), box);
         rendered = true;
     }
 
@@ -793,29 +800,36 @@ function replacePane(paneId, node) {
  * paneId : str
  *     Output pane. Also the listener key, so a re-render replaces the previous
  *     registration instead of stacking another one.
- * frame : object
- *     `{columns, rows}` from the api.
- * which : str or null
- *     Frame name for the document fetch. Null for frames the generic route
- *     cannot reach, which then stay interactive.
+ * which : str
+ *     Frame name. One `?format=ir` fetch, which then feeds whichever view is on.
  * opts : object, optional
  *     CsvGrid options.
+ * bulk : function, optional
+ *     Fetches `{columns, rows}` for frames too long to document. Supplied by the
+ *     density views, which are permanently the grid's, and used as the fallback
+ *     when a document comes back truncated.
  *
  * Notes
  * -----
- * The document is fetched whenever the frame is short enough for it, not only
- * when static is the current view, so flipping the preference afterwards costs
- * no round trip. Frames past the limit skip the fetch entirely: they can only
- * ever render as a grid, so asking for a document would be work thrown away.
+ * A document that the server truncated is not shown. `max_rows` means a long
+ * frame comes back as its first 500 rows plus a note, which is right for a
+ * direct request and wrong to render silently, so this refetches the whole frame
+ * and hands it to the grid instead.
  */
-async function replacePaneTable(paneId, frame, which, opts = GRID_FULL) {
-    const doc = which && staticOk(frame)
-        ? await api.frameIr(state.id, which).catch(() => null)
-        : null;
+async function replacePaneTable(paneId, which, opts = GRID_FULL, bulk = null) {
+    let source = null;
+    if (!bulk) {
+        const doc = await api.frameIr(state.id, which).catch(() => null);
+        if (doc && !docTruncated(doc)) source = { doc };
+    }
+    if (!source) {
+        const fetchFrame = bulk || (() => api.frameOf(state.id, which));
+        source = { frame: await fetchFrame() };
+    }
     const draw = () => {
         const host = el('div');
         replacePane(paneId, host);        // tears down the previous mode first
-        mountTable(paneId, host, frame, doc, opts);
+        mountTable(paneId, host, source, opts);
         // Re-register against the node just created, not against the pane. The
         // pane outlives everything, so a listener keyed on it would survive a
         // rebuild and redraw the *previous* object's frame on the next flip.
@@ -895,7 +909,7 @@ async function loadReinsExhibit() {
         // Full resolution: this is a plot, and a ceded distribution is more
         // atomic than a gross one, not less.
         const [frame] = await Promise.all([
-            api.reinsFrame(state.id, 'reins_density_df'),
+            api.frameOf(state.id, 'reins_density_df'),
             loadStyle().catch(() => null),
         ]);
         reinsChart = mountReinsExhibit(host, frame);
@@ -910,13 +924,14 @@ async function loadReinsExhibit() {
 async function loadReinsFrame() {
     if (!state.id) return;
     try {
-        // The table takes the binned grid; only the exhibit above wants the lot.
-        const params = state.reinsWhich === 'reins_density_df'
-            ? { resolution: 'display' } : {};
-        const frame = await api.reinsFrame(state.id, state.reinsWhich, params);
-        // `state.reinsWhich` is already the frame name the document route wants.
-        await replacePaneTable('pane-reins', frame, state.reinsWhich,
-            { ...GRID_FULL, renderCap: 8192 });
+        // `state.reinsWhich` is already the frame name both routes want. The
+        // density is the bulk one: the table takes the binned grid, and only the
+        // exhibit above wants every point.
+        const bulk = state.reinsWhich === 'reins_density_df'
+            ? () => api.frameOf(state.id, state.reinsWhich, { resolution: 'display' })
+            : null;
+        await replacePaneTable('pane-reins', state.reinsWhich,
+            { ...GRID_FULL, renderCap: 8192 }, bulk);
     } catch (err) {
         replacePane('pane-reins', errorNode(err));
     }
@@ -936,24 +951,18 @@ document.querySelectorAll('[data-reins]').forEach((btn) => {
 // Price tab -- pentagon form (p + CoC/LR); Portfolios also get the
 // per-distortion LR/P/PQ/ROE slices from analyze_distortions.
 // ----------------------------------------------------------------------
-// CsvGrid per-column format codes for the distortion-stat slices, honoring the
-// spec the old renderer used: LR/ROE as percents, P thousands-grouped, PQ to
-// 3dp. Applied to every value column (column 0 is the distortion label).
-const PRICE_FMT_CODE = { LR: '.1%', P: ',d', PQ: '.3f', ROE: '.0%' };
+// Column formats are the server's business now, declared per frame in
+// `tables.FORMATS` and resolved into the document. Both views read them from
+// there, so a loss ratio is a percent in the static table and in the grid
+// without the two being told separately. `PRICE_FMT_CODE` and `statFormats`
+// lived here until a35.
 const PRICE_TITLE = {
     LR: 'Loss ratio', P: 'Premium', PQ: 'Premium / capital', ROE: 'Return on capital',
 };
 
-/** CsvGrid `formats`: auto-format the label column, force `code` on the rest. */
-function statFormats(frame, code) {
-    const n = (frame.columns || []).length;
-    return [null, ...Array(Math.max(n - 1, 0)).fill(code)];
-}
-
 // Render the Price payload straight into pane-price: pentagon + (Portfolios
-// only) calibrated distortions and the per-stat distortion slices. Each frame
-// is its own CsvGrid; all register under 'pane-price' so a rebuild tears them
-// down together.
+// only) calibrated distortions and the per-stat distortion slices. Everything
+// registers under 'pane-price' so a rebuild tears it down together.
 function renderPrice(payload) {
     const paneId = 'pane-price';
     const ir = payload.ir || {};
@@ -961,11 +970,13 @@ function renderPrice(payload) {
         const root = el('div', { className: 'price-result' });
         replacePane(paneId, root);      // clears prior tables + attaches root
 
+        // `frame` is the fallback: these come from a POST, so if the document
+        // could not be built the plain payload is still there to show.
         const section = (title, frame, key, opts, cls = 'price-section-title') => {
             root.appendChild(el('div', { className: cls }, title));
             const host = el('div');
             root.appendChild(host);
-            mountTable(paneId, host, frame, ir[key], opts);
+            mountTable(paneId, host, ir[key] ? { doc: ir[key] } : { frame }, opts);
         };
 
         section('Pricing pentagon', payload.pentagon, 'pentagon', GRID_FULL);
@@ -980,12 +991,8 @@ function renderPrice(payload) {
             for (const stat of ['LR', 'P', 'PQ', 'ROE']) {
                 const frame = payload.distortions[stat];
                 if (!frame) continue;
-                // Column formats apply to the grid only. The static view's
-                // numbers are already resolved in the document, by the same
-                // engine that knows their dtypes.
                 section(`${PRICE_TITLE[stat]} (${stat}) by distortion`, frame, stat,
-                    { ...GRID_FULL, formats: statFormats(frame, PRICE_FMT_CODE[stat]) },
-                    'price-section-title mt-3');
+                    GRID_FULL, 'price-section-title mt-3');
             }
         }
         // Against the root just built, not the pane: see `replacePaneTable`.
@@ -1036,13 +1043,6 @@ function renderPriceBasis() {
     host.append(...btns);
 }
 
-// Column formats for the gross / net / allowance table: money grouped, ratios
-// as percents, PQ to 3dp. Column 0 is the distortion, column 1 the basis.
-const REINS_PRICE_FMT = {
-    a: ',d', L: ',d', M: ',d', P: ',d', Q: ',d',
-    LR: '.1%', PQ: '.3f', ROE: '.1%',
-};
-
 /**
  * Render the reinsurance pricing table.
  *
@@ -1068,19 +1068,21 @@ function renderReinsPrice(payload) {
             + 'being bought at.'));
         const host = el('div');
         root.appendChild(host);
-        const frame = payload.table;
-        mountTable(paneId, host, frame, ir.table, {
-            ...GRID_FULL,
-            formats: (frame.columns || []).map((c) => REINS_PRICE_FMT[c] || null),
-            maxRows: 30,
-        });
+        // Money grouped, ratios as percents, PQ to 3dp: declared server side in
+        // `tables.FORMATS['reins_price']` and resolved into the document, so
+        // both views read one answer.
+        mountTable(paneId, host,
+            ir.table ? { doc: ir.table } : { frame: payload.table },
+            { ...GRID_FULL, maxRows: 30 });
 
         if (payload.distortion_df) {
             root.appendChild(el('div', { className: 'price-section-title mt-3' },
                 'Distortion parameters'));
             const dhost = el('div');
             root.appendChild(dhost);
-            mountTable(paneId, dhost, payload.distortion_df, ir.distortion_df, GRID_FULL);
+            mountTable(paneId, dhost,
+                ir.distortion_df ? { doc: ir.distortion_df } : { frame: payload.distortion_df },
+                GRID_FULL);
         }
         for (const w of payload.warnings || []) {
             root.appendChild(el('div', { className: 'text-muted small fst-italic mt-1' }, `⚠ ${w}`));

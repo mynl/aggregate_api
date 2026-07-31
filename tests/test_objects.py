@@ -1261,3 +1261,94 @@ def test_frame_csv_still_wins_over_the_document_route(client):
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
     assert "attachment" in r.headers["content-disposition"]
+
+
+# ----------------------------------------------------------------------
+# One resolver: the document, the CSV and the screen agree
+# ----------------------------------------------------------------------
+# The JSON routes, the `.csv` download and `?format=ir` all answer "the frame
+# called X". Until a35 they resolved it independently, and two of them drifted:
+# `stats_df` and `reins_stats_df` drop their raw `ex*` moment rows on the JSON
+# route only, so More > Stats showed 26 rows statically and 17 interactively.
+# These are the tripwires for that whole class of bug, not just that instance.
+
+# Which JSON route answers each `_CSV_FRAMES` name. The two densities are
+# excluded: they are paginated previews by design, so a row-count match is not
+# the invariant there.
+_FRAME_ROUTES = {
+    "summary": "summary",
+    "tail_df": "tail_df",
+    "validation_df": "validation_df",
+    "stats_df": "stats_df",
+    "bs_window_df": "bs_window_df",
+    "reins_summary_df": "reins_summary_df",
+    "reins_stats_df": "reins_stats_df",
+}
+
+
+@pytest.mark.parametrize("decl", [_DICE, _PORT, _REINS])
+def test_document_and_json_routes_agree_on_every_frame(client, decl):
+    """Same name, same rows, whichever route asks.
+
+    Parametrized over the kinds because the divergence was shape dependent: a
+    frame that an object does not carry 400s on both routes, which is agreement
+    too, and only the frames it does carry can drift.
+    """
+    oid = client.post("/v1/objects", json={"decl": decl}).json()["id"]
+    for which, route in _FRAME_ROUTES.items():
+        frame = client.get(f"/v1/objects/{oid}/{route}")
+        doc = client.get(f"/v1/objects/{oid}/frame/{which}?format=ir")
+        if frame.status_code != 200:
+            assert doc.status_code != 200, (
+                f"{which}: the document route answered where the JSON one did not"
+            )
+            continue
+        assert doc.status_code == 200, f"{which}: {doc.text}"
+        assert len(doc.json()["body"]) == len(frame.json()["rows"]), (
+            f"{which}: document has {len(doc.json()['body'])} rows, "
+            f"JSON has {len(frame.json()['rows'])}"
+        )
+
+
+def test_raw_moment_rows_are_dropped_on_every_path(client):
+    """The specific drift, pinned.
+
+    ``stats_df`` carries ``ex1`` / ``ex2`` / ``ex3`` raw moments that nothing
+    on screen wants. Dropping them used to happen in the JSON route alone, so the
+    static table and the CSV download both carried nine rows the interactive
+    table did not.
+    """
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+
+    rows = client.get(f"/v1/objects/{oid}/stats_df").json()["rows"]
+    doc = client.get(f"/v1/objects/{oid}/frame/stats_df?format=ir").json()
+    csv_text = client.get(f"/v1/objects/{oid}/frame/stats_df.csv").text
+
+    assert len(doc["body"]) == len(rows)
+    assert "ex1" not in csv_text
+    texts = [c.get("text") if isinstance(c, dict) else c
+             for row in doc["body"] for c in row["cells"]]
+    assert "ex1" not in texts
+
+
+def test_price_documents_carry_the_declared_formats(client):
+    """Percents are a server-side declaration, so both views resolve one answer.
+
+    A loss ratio is a float and nothing in the dtype says it reads as a percent.
+    ``tables.FORMATS`` says so once, in the document, and ``irToGridInput`` maps
+    it into the grid's format language, which is what retired the SPA's three
+    hand-written maps.
+    """
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    ir = client.post(f"/v1/objects/{oid}/price?ir=true",
+                     json={"p": 0.99, "coc": 0.1}).json()["ir"]
+
+    pent = {"/".join(c["name"]): c.get("format") for c in ir["pentagon"]["columns"]}
+    assert pent["LR"]["kind"] == "pct"
+    assert pent["ROE"]["kind"] == "pct"
+
+    # A per-distortion slice's columns are units, so the whole slice takes the
+    # statistic's format rather than a per-name one.
+    for col in ir["LR"]["columns"]:
+        if (col.get("role") or "data") == "data":
+            assert col["format"]["kind"] == "pct", col["name"]

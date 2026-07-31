@@ -364,17 +364,21 @@ def _drop_raw_moments(df):
 
     Parameters
     ----------
-    df : pandas.DataFrame
+    df : pandas.DataFrame or None
         ``stats_df`` / ``reins_stats_df``, whose rows carry a 2-level
         ``(group, statistic)`` MultiIndex (the ``meta`` group has its own
-        labels and no ``ex*``, so it's untouched).
+        labels and no ``ex*``, so it's untouched). None passes through, because
+        this composes inside ``_CSV_FRAMES`` resolvers and "the object has no
+        such frame" is an ordinary answer there, reported as a 400 further up.
 
     Returns
     -------
-    pandas.DataFrame
+    pandas.DataFrame or None
         The frame with the raw-moment rows removed. Filters on the
         *innermost* index level, so it works for a flat index too.
     """
+    if df is None:
+        return None
     stat = df.index.get_level_values(-1)
     return df[~stat.isin(_RAW_MOMENTS)]
 
@@ -1379,31 +1383,54 @@ def get_reins_density_df(
 
 
 # ----------------------------------------------------------------------
-# GET /v1/objects/{id}/frame/{which}.csv  -- full-frame download
+# The named frames, and the one place that resolves them
 # ----------------------------------------------------------------------
-# Maps a download name to the attribute that yields its DataFrame. The
-# on-screen tables are previews; this route always returns the complete
-# frame as CSV for "save the real data" workflows.
+# Maps a frame name to a callable that yields its DataFrame **with the index
+# intact**. Every by-name consumer goes through here: the CSV download and the
+# table-document route.
+#
+# Callables rather than attribute names, and that is the point. Some frames are
+# not simply an attribute: ``stats_df`` and ``reins_stats_df`` drop their raw
+# ``ex1`` / ``ex2`` / ``ex3`` moment rows before anyone sees them, and when that
+# step lived only in the JSON route the other two paths quietly disagreed with
+# it. A portfolio's More > Stats showed 26 rows statically and 17 interactively,
+# from the same button, because two paths resolved "the frame called stats_df"
+# independently. One resolver makes that class of drift impossible rather than
+# fixing this instance of it.
+#
+# The JSON routes above still apply their own steps; they are the same steps.
 _CSV_FRAMES = {
-    "summary": "summary_df",
-    "tail_df": "tail_df",
-    "validation_df": "validation_df",
-    "stats_df": "stats_df",
-    "density_df": "density_df",
-    "bs_window_df": "_bs_window_df",
-    "reins_summary_df": "reins_summary_df",
-    "reins_stats_df": "reins_stats_df",
-    "reins_density_df": "reins_density_df",
+    "summary": lambda o: _resolve_frame(o, "summary_df"),
+    # ``tail_df`` is a method on agg / port; ``_resolve_frame`` calls it.
+    "tail_df": lambda o: _resolve_frame(o, "tail_df"),
+    "validation_df": lambda o: _resolve_frame(o, "validation_df"),
+    "stats_df": lambda o: _drop_raw_moments(_resolve_frame(o, "stats_df")),
+    "density_df": lambda o: _resolve_frame(o, "density_df"),
+    "bs_window_df": lambda o: _resolve_frame(o, "_bs_window_df"),
+    "reins_summary_df": lambda o: _resolve_frame(o, "reins_summary_df"),
+    "reins_stats_df": lambda o: _drop_raw_moments(_resolve_frame(o, "reins_stats_df")),
+    "reins_density_df": lambda o: _resolve_frame(o, "reins_density_df"),
 }
 
 
-@router.get("/objects/{oid}/frame/{which}.csv")
-def get_frame_csv(
-    oid: str, which: str, entry: CacheEntry = Depends(_locked_entry)
-) -> Response:
-    """Return the full named frame as a CSV download."""
-    attr = _CSV_FRAMES.get(which)
-    if attr is None:
+def _named_frame(entry: CacheEntry, which: str):
+    """Resolve a frame by name, or raise the right HTTP error.
+
+    Parameters
+    ----------
+    entry : CacheEntry
+        The cached object and its kind.
+    which : str
+        A key of ``_CSV_FRAMES``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The frame, index intact. Flattening belongs to the caller, and only on
+        the wire formats that need it.
+    """
+    resolve = _CSV_FRAMES.get(which)
+    if resolve is None:
         raise HTTPException(
             status_code=404,
             detail=f"unknown frame {which!r}; expected one of {sorted(_CSV_FRAMES)}",
@@ -1412,15 +1439,34 @@ def get_frame_csv(
         # A PnL's density_df is a dict of GridDistributions, not a frame; export
         # the grand-result density instead (the full, unbinned shape the Density
         # tab previews). All the PnL's other frames are real DataFrames and flow
-        # through the generic path below.
+        # through the generic path.
         df = pnl_density_frame(entry.obj)
     else:
-        # ``tail_df`` is a method on agg / port; ``_resolve_frame`` calls it.
-        df = _resolve_frame(entry.obj, attr)
+        df = resolve(entry.obj)
     if df is None:
         raise HTTPException(
             status_code=400, detail=f"{which} not available for {entry.kind!r}"
         )
+    return df
+
+
+# ----------------------------------------------------------------------
+# GET /v1/objects/{id}/frame/{which}.csv  -- full-frame download
+# ----------------------------------------------------------------------
+
+@router.get("/objects/{oid}/frame/{which}.csv")
+def get_frame_csv(
+    oid: str, which: str, entry: CacheEntry = Depends(_locked_entry)
+) -> Response:
+    """Return the full named frame as a CSV download.
+
+    Notes
+    -----
+    Exactly what the on-screen table shows, which has not always been true: the
+    raw-moment rows were dropped for the screen and exported here. See
+    ``_CSV_FRAMES``.
+    """
+    df = _named_frame(entry, which)
     csv_text = reset_index_safe(df).to_csv(index=False)
     return Response(
         content=csv_text,
@@ -1475,17 +1521,7 @@ def get_frame_document(
         raise HTTPException(
             status_code=422, detail=f"unknown format {format!r}; expected 'ir'"
         )
-    attr = _CSV_FRAMES.get(which)
-    if attr is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"unknown frame {which!r}; expected one of {sorted(_CSV_FRAMES)}",
-        )
-    df = _resolve_frame(entry.obj, attr)
-    if df is None:
-        raise HTTPException(
-            status_code=400, detail=f"{which} not available for {entry.kind!r}"
-        )
+    df = _named_frame(entry, which)
     try:
         body, doc_hash = frame_document(df, which)
     except ValueError as exc:

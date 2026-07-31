@@ -19,20 +19,16 @@ import { registerPaneTeardown } from './grid.js';
 
 const ASSET_BASE = '/v1/assets';
 
-/** Row ceiling for the static view. Mirrors `tables.MAX_ROWS` on the server. */
-export const STATIC_MAX_ROWS = 500;
-
 /**
- * Whether a frame is small enough to read as a static table.
+ * Whether a document is the whole frame rather than the first `MAX_ROWS` of it.
  *
- * Gated on the row count rather than on a list of frame names: the density
- * frames are what motivated it, but anything that grows past a few hundred rows
- * stops being a reading experience and starts being data to filter, which is
- * the grid's job. One rule, nothing to keep in sync.
+ * The server truncates instead of failing, and says so in the document's notes.
+ * That is the right behavior for a direct request and the wrong thing to render
+ * silently, so callers use this to fall back to fetching the full frame and
+ * handing it to the grid. Nothing shows 500 of 900 rows without saying so.
  */
-export function staticOk(frame) {
-    const n = frame && frame.rows ? frame.rows.length : 0;
-    return n > 0 && n <= STATIC_MAX_ROWS;
+export function docTruncated(doc) {
+    return Boolean(doc && (doc.notes || []).some((n) => /^Showing first /.test(n)));
 }
 
 let walkerPromise = null;
@@ -99,4 +95,42 @@ export async function mountIrTable(paneId, host, doc) {
     const handle = walker.renderTable(doc, { mount: host, allowHtml: true });
     registerPaneTeardown(paneId, handle);
     return handle;
+}
+
+/**
+ * Turn a table document into CsvGrid's input, so one fetch feeds both views.
+ *
+ * `irToGridInput` ships in the same package as the walker. It un-sparsifies the
+ * stub (values repeat down their rowspan), joins multi-level names with ' / ',
+ * emits the **raw** values rather than the formatted text, and maps the IR's
+ * resolved formats into the grid's own format-spec language. So the grid sorts
+ * and filters on real numbers, and the two views cannot disagree about what a
+ * cell says: they are reading the same bytes.
+ *
+ * Hierarchy, row flags and foot rows are dropped, by design. None of them
+ * survives a sort, which is what the interactive view is for.
+ *
+ * Returns
+ * -------
+ * Promise<object|null>
+ *     `{frame: {columns, rows}, formats, align}`, or null if the module could
+ *     not be loaded, which is the caller's cue to fetch the plain frame.
+ */
+export async function irToGrid(doc) {
+    try {
+        const walker = await loadWalker();
+        // `irToGridInput` throws rather than degrading: on a wrong `ir_version`,
+        // and on any data column built without a raw value. Both are our bug to
+        // fix rather than the reader's to look at, so this reports null and the
+        // caller shows what it can.
+        const g = walker.irToGridInput(doc);
+        return {
+            frame: { columns: g.columns, rows: g.records },
+            formats: g.formats,
+            align: g.align,
+        };
+    } catch (err) {
+        console.error('[tables] could not derive grid input from the document', err);
+        return null;
+    }
 }

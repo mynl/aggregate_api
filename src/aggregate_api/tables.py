@@ -116,8 +116,38 @@ ROW_FLAGS: dict[str, Callable[[pd.DataFrame, int], Sequence[str]]] = {
     "reins_summary_df": _summary_flags,
 }
 
+#: Per-frame column formats, for the columns whose dtype does not say enough.
+#:
+#: A loss ratio and a return on capital are both just floats, so the engine has
+#: no way to know they should read as percents. These say so once, in the
+#: document, and **both** views then render from the same resolved format: the
+#: walker draws it, and ``irToGridInput`` maps it into the grid's own format-spec
+#: language. The strings are the same ones the SPA used to carry in three
+#: hand-written maps, which is what this replaces.
+#:
+#: A value is either a mapping of column name to spec, or a single spec that
+#: applies to **every** column. The second form is for the per-distortion slices,
+#: whose columns are unit names rather than statistics: the whole slice is one
+#: statistic, so one format covers it.
+FORMATS: dict[str, dict[str, object] | str] = {
+    # The pricing pentagon, whose columns are the statistics themselves.
+    "price": {"LR": ".1%", "ROE": ".0%", "P": ",d", "PQ": ".3f"},
+    # Gross / ceded / net by distortion, plus the difference rows.
+    "reins_price": {
+        "a": ",d", "L": ",d", "M": ",d", "P": ",d", "Q": ",d",
+        "LR": ".1%", "PQ": ".3f", "ROE": ".1%",
+    },
+    # One per-distortion slice each, columns being units.
+    "stat_LR": ".1%",
+    "stat_P": ",d",
+    "stat_PQ": ".3f",
+    "stat_ROE": ".0%",
+}
 
-def frame_spec(df: pd.DataFrame, which: str | None = None) -> TableSpec:
+
+def frame_spec(
+    df: pd.DataFrame, which: str | None = None, formats: str | None = None
+) -> TableSpec:
     """The build spec for one named frame.
 
     Parameters
@@ -128,26 +158,52 @@ def frame_spec(df: pd.DataFrame, which: str | None = None) -> TableSpec:
     which : str, optional
         Frame name, used to look up row emphasis in ``ROW_FLAGS``. Unknown and
         missing names build unflagged.
+    formats : str, optional
+        Key into ``FORMATS``. Separate from ``which`` because several frames
+        share one format set: the four per-distortion slices are all priced the
+        same way.
 
     Returns
     -------
     TableSpec
         Notes
         -----
-        ``include_raw='data'`` carries the unrounded value beside the formatted
-        text on every numeric cell. That is what lets a copy or a CSV export off
-        the rendered table give real numbers instead of display strings, and it
-        is cheap: the frames that reach here are at most a few hundred rows.
+        ``include_raw`` carries the unrounded value beside the formatted text,
+        which is what lets the interactive grid sort and filter on real numbers.
+        ``irToGridInput`` refuses a document built without it.
+
+        It is the **explicit column list**, not the ``'data'`` shorthand the
+        handoff spec names, and the difference is load bearing: ``'data'`` means
+        numeric, date and bool columns only, so a string data column gets no raw
+        value and the adapter then throws on the whole document. Three of the
+        Price tab's frames carry one (``distortion``, ``param_name``). Naming
+        every column is what makes the two features compose. Reported upstream;
+        see ``dev/TODO.md``.
+
+        Columns absent from a ``FORMATS`` entry are left to the engine, which
+        infers from the dtype. Only the ones whose meaning outruns their dtype
+        need naming.
     """
     flags = ROW_FLAGS.get(which or "")
+    chosen = FORMATS.get(formats or "")
+    if isinstance(chosen, str):
+        columns = {c: chosen for c in df.columns}
+    else:
+        # Filter to what the frame actually has: an Aggregate's pentagon carries
+        # fewer columns than a Portfolio's, and naming an absent one is not an
+        # error worth raising.
+        columns = {k: v for k, v in (chosen or {}).items() if k in df.columns}
     return TableSpec(
-        include_raw="data",
+        include_raw=list(df.columns),
         max_rows=MAX_ROWS,
         row_flags=(lambda pos, _row: flags(df, pos)) if flags else None,
+        formats=columns,
     )
 
 
-def frame_document(df: pd.DataFrame, which: str | None = None) -> tuple[bytes, str]:
+def frame_document(
+    df: pd.DataFrame, which: str | None = None, formats: str | None = None
+) -> tuple[bytes, str]:
     """Render a frame as canonical table-document JSON.
 
     Parameters
@@ -158,6 +214,8 @@ def frame_document(df: pd.DataFrame, which: str | None = None) -> tuple[bytes, s
         it into data columns throws away the whole benefit.
     which : str, optional
         Frame name, for row emphasis. See ``ROW_FLAGS``.
+    formats : str, optional
+        Format-set key. See ``FORMATS``.
 
     Returns
     -------
@@ -179,16 +237,18 @@ def frame_document(df: pd.DataFrame, which: str | None = None) -> tuple[bytes, s
         # Naming the frame here beats surfacing a library error the caller
         # cannot place.
         raise ValueError("frame has duplicate column names")
-    doc = build(df, frame_spec(df, which))
+    doc = build(df, frame_spec(df, which, formats))
     return canonical_json(doc), doc.hash
 
 
-def frame_document_dict(df: pd.DataFrame, which: str | None = None) -> dict:
+def frame_document_dict(
+    df: pd.DataFrame, which: str | None = None, formats: str | None = None
+) -> dict:
     """``frame_document`` as a parsed object, for embedding in a JSON response.
 
     The frame routes return the canonical bytes directly, because that is what
     the ETag hashes. The POST pricing endpoints carry their documents *inside* a
     Pydantic response, so those need the parsed form.
     """
-    body, _hash = frame_document(df, which)
+    body, _hash = frame_document(df, which, formats)
     return json.loads(body)

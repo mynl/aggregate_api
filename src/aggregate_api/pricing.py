@@ -24,18 +24,29 @@ from __future__ import annotations
 from typing import Any
 
 
-def _document(df) -> dict | None:
+def _document(df, formats: str = "price") -> dict | None:
     """One frame as a table document, or None if it cannot be built.
 
-    Best effort on purpose. These documents are an enhancement to the static
-    view, so a frame that will not build (empty, duplicate column names) costs
-    that one table its static rendering and nothing else: the SPA falls back to
-    the interactive grid, which is where it would have been anyway.
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        The frame, index intact.
+    formats : str
+        Format-set key, see ``tables.FORMATS``. Loss ratios and returns on
+        capital are floats, so nothing in the dtype says they read as percents;
+        naming the set here is what makes both views agree on that.
+
+    Notes
+    -----
+    Best effort on purpose. These documents feed the SPA's table views, so a
+    frame that will not build (empty, duplicate column names) costs that one
+    table its document and nothing else: the SPA falls back to the plain frame,
+    which is where it would have been anyway. Never worth a 500.
     """
     from .tables import frame_document_dict
 
     try:
-        return frame_document_dict(df)
+        return frame_document_dict(df, formats=formats)
     except Exception:  # noqa: BLE001 -- a static table is never worth a 500
         return None
 
@@ -217,7 +228,9 @@ def run_price_pentagon(
             continue
         dist[stat] = frame_to_payload(reset_index_safe(sl))
         if ir:
-            docs[stat] = _document(sl)
+            # Columns here are units, not statistics, and the whole slice is one
+            # statistic, so the format is that stat's applied across.
+            docs[stat] = _document(sl, f"stat_{stat}")
     out["distortions"] = dist
     out["warnings"] = warns
     out["ir"] = docs or None
@@ -434,7 +447,7 @@ def run_reins_price(
     table = pd.DataFrame(rows)
     docs: dict = {}
     if ir:
-        docs["table"] = _document(table)
+        docs["table"] = _document(table, "reins_price")
         if cal.distortion_df is not None:
             docs["distortion_df"] = _document(cal.distortion_df)
     return {

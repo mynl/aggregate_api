@@ -54,17 +54,19 @@ export const api = {
     manifest:     (id)              => _json('GET',  `/v1/objects/${id}`),
     drop:         (id)              => _json('DELETE', `/v1/objects/${id}`),
 
-    // Per-button data
+    // Per-button data.
+    //
+    // The *tables* no longer come through here: they take one `frameIr` fetch
+    // and render either way off it (see `tables.js`). What is left reaching for
+    // a `FrameResponse` is the charts, which want numeric arrays rather than a
+    // document, plus the bulk densities via `frameOf`.
     info:         (id)              => _json('GET',  `/v1/objects/${id}/info`),
     meta_of:      (id)              => _json('GET',  `/v1/objects/${id}/meta`),
-    summary:      (id)              => _json('GET',  `/v1/objects/${id}/summary`),
     tail_df:      (id)              => _json('GET',  `/v1/objects/${id}/tail_df`),
-    validation_df:(id)              => _json('GET',  `/v1/objects/${id}/validation_df`),
     stats_df:     (id)              => _json('GET',  `/v1/objects/${id}/stats_df`),
     density_df:   (id, p = {})      => _json('GET',  `/v1/objects/${id}/density_df?${qs(p)}`),
     /** Portfolio only: per-unit p_<unit> / S_<unit> on the common grid. */
     unit_density_df: (id)           => _json('GET',  `/v1/objects/${id}/unit_density_df`),
-    bs_window_df: (id)              => _json('GET',  `/v1/objects/${id}/bs_window_df`),
     /**
      * A frame as a table document (the IR) for the static view.
      *
@@ -79,7 +81,15 @@ export const api = {
 
     // Reinsurance
     reinsDescription: (id)          => _json('GET',  `/v1/objects/${id}/reins_description`),
-    reinsFrame:   (id, which, p = {}) => _json('GET', `/v1/objects/${id}/${which}?${qs(p)}`),
+    /**
+     * Any named frame as a `FrameResponse`, by its route name.
+     *
+     * Generic despite where it started: the reinsurance frames were the first
+     * caller, but every per-frame route answers the same shape at the same
+     * place. This is the **bulk** path, for frames too long to carry as a
+     * document (the densities), and the fallback when one comes back truncated.
+     */
+    frameOf:      (id, which, p = {}) => _json('GET', `/v1/objects/${id}/${which}?${qs(p)}`),
 
     // Pricing
     /**
