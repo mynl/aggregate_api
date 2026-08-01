@@ -75,11 +75,12 @@ const editor = createEditor($('editor-host'), {
 editor.setText('agg Dice dfreq [3] dsev [1:6]\n');
 editor.focus();
 
-// Reset the history cursor whenever the user types something new so
-// arrow-up resumes from the latest entry on the next press.
+// Reset the history cursor whenever the user types something new, so Ctrl-↑
+// resumes from the latest entry on the next press.
 editor.view.dom.addEventListener('keydown', (ev) => {
-    // Plain ↑/↓ drive history navigation (see editor.js) -- don't reset the
-    // cursor on them or sequential history walking breaks.
+    // Arrows are movement, not typing. Ctrl-↑/↓ is the history walk itself and
+    // must not reset what it is walking; a plain ↑/↓ moves the caret, which is
+    // no reason to abandon a walk in progress either.
     if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') return;
     if (!ev.ctrlKey && !ev.metaKey) history.resetCursor();
 });
@@ -1129,11 +1130,13 @@ function flash(btn, text) {
 }
 
 // ----------------------------------------------------------------------
-// Examples dropdown + (undisclosed) Alt-↑/↓ ring navigation
+// Examples dropdown + Ctrl+Shift-↑/↓ ring navigation
 // ----------------------------------------------------------------------
 // A flat ring of every example decl, seeded from the same /v1/examples
 // payload (cached server-side). Independent of build history; navigated by
-// Alt-↑/↓ for quick inspection of the whole library. Not surfaced in the UI.
+// Ctrl+Shift-↑/↓ for quick inspection of the whole library, and documented in
+// the feedback line and the Help panel since a37. It was an undisclosed Alt-
+// binding before that, which is a working feature nobody could find.
 const exampleRing = { decls: [], cursor: -1 };
 
 // Load a program into the editor. A library example arrives as `Recipe.decl`,
@@ -1164,9 +1167,9 @@ mountExamples($('examples-menu'), pickExample);
 // with focus in the editor.
 mountPalette(pickExample);
 
-// The Alt-↑/↓ ring walks every example in the library, flattened out of the
-// grouped payload. An entry tagged in two topics appears in two groups, so
-// dedupe on the decl to keep the ring a genuine cycle.
+// The ring walks every example in the library, flattened out of the grouped
+// payload. An entry tagged in two topics appears in two groups, so dedupe on the
+// decl to keep the ring a genuine cycle.
 loadExamples().then((data) => {
     const seen = new Set();
     for (const cat of data.categories || []) {
@@ -1176,10 +1179,20 @@ loadExamples().then((data) => {
             exampleRing.decls.push(item.decl);
         }
     }
-}).catch(() => { /* dropdown still works; Alt-nav just stays empty */ });
+}).catch(() => { /* dropdown still works; the ring just stays empty */ });
 
-// Hero gallery: the entries tagged `role:hero` in library.agg. The set grows
-// over time, so never assume a fixed count; a random handful shows each load.
+// ----------------------------------------------------------------------
+// The landing build
+// ----------------------------------------------------------------------
+// One of the entries tagged `role:hero` in library.agg, picked at random and
+// built, so a visitor arrives on a populated page rather than an empty one and
+// gets a different book each visit. The set grows over time, so never assume a
+// fixed count.
+//
+// a37 took away the card gallery this fed, not the build. The cards are to come
+// back inside the Examples dropdown, where a showcase is findable rather than
+// occupying the top of the page; `pickRandom` and the sparkline endpoint are
+// what that work will want, so the endpoint stays on the server.
 //
 // Retried once, and it reports. The author saw an empty hero row on a first page
 // load that populated on the next, and the old code could not tell us why: one
@@ -1187,8 +1200,8 @@ loadExamples().then((data) => {
 // it caught in silence. A cold server takes ~2 s to answer this route (it loads
 // the whole recipe library on the first call), which is the sort of window a
 // single transient failure hides in, so a second attempt is worth more than a
-// diagnosis. The two failure modes are now separated: a fetch that fails twice
-// says so, and a render that throws is not mistaken for one.
+// diagnosis. The two failure modes stay separated: a fetch that fails twice says
+// so, and a build that throws is not mistaken for one.
 async function loadHeroes(attempt = 1) {
     let data;
     try {
@@ -1198,87 +1211,22 @@ async function loadHeroes(attempt = 1) {
             await new Promise((r) => setTimeout(r, 750));
             return loadHeroes(2);
         }
-        console.warn('[aLL] hero gallery unavailable:', err);
+        console.warn('[aLL] landing example unavailable:', err);
         return;
     }
-    const items = pickRandom(data.items || [], 4);
-    if (!items.length) {
-        console.warn('[aLL] hero gallery empty: no entries tagged role:hero');
+    const [item] = pickRandom(data.items || [], 1);
+    if (!item) {
+        console.warn('[aLL] no landing example: no entries tagged role:hero');
         return;
     }
-    mountHeroes(items);
+    loadExample(item.decl);
+    build();
 }
 
 loadHeroes();
 
-// ----------------------------------------------------------------------
-// Hero gallery -- clickable showcase cards above the editor
-// ----------------------------------------------------------------------
-// Cards mount immediately on their placeholder gradient, then upgrade to a
-// real density silhouette when the sparkline payload lands. That order is
-// deliberate: the sparkline endpoint *builds every hero*, one of which carries
-// hints{log2=16}, so a card that waited for it would leave the landing page
-// blank for seconds. Nothing on the landing path may block on that request.
-function mountHeroes(items) {
-    const row = $('hero-row');
-    if (!row) return;
-    empty(row);
-    if (!items.length) { row.classList.add('d-none'); return; }
-    row.classList.remove('d-none');
-
-    const thumbs = new Map();
-    items.forEach((item, i) => {
-        const thumb = el('span', {
-            className: 'hero-thumb',
-            style: `background:${gradientFor(item.name)}`,
-        });
-        thumbs.set(item.name, thumb);
-        row.appendChild(el('button', {
-            className: 'hero-card', type: 'button', title: item.note || '',
-            onClick: () => { loadExample(item.decl); build(); },
-        }, thumb, el('span', { className: 'hero-name' }, item.name)));
-        // Auto-build the first card so the visitor lands on a populated page.
-        if (i === 0) { loadExample(item.decl); build(); }
-    });
-
-    api.heroSparklines().then((data) => {
-        for (const [name, values] of Object.entries(data.sparklines || {})) {
-            const thumb = thumbs.get(name);
-            if (thumb && values.length) upgradeThumb(thumb, values);
-        }
-    }).catch(() => { /* placeholders stay; a thumbnail is not worth an error */ });
-}
-
-/** Replace a card's gradient with an SVG silhouette of its density. */
-function upgradeThumb(thumb, values) {
-    const W = 100;
-    const H = 40;
-    const step = W / Math.max(values.length - 1, 1);
-    // Values are peak-normalized in [0, 1]; invert for SVG's y-down axis and
-    // leave a 2px margin so the peak is not clipped by the viewBox edge.
-    const pts = values.map((v, i) => `${(i * step).toFixed(2)},${(H - 2 - v * (H - 4)).toFixed(2)}`);
-    const area = `0,${H} ${pts.join(' ')} ${W},${H}`;
-    thumb.style.background = '';
-    thumb.classList.add('hero-thumb-spark');
-    // Built as markup rather than through el(): SVG needs createElementNS, and
-    // this is a fixed shape with no user content in it.
-    thumb.innerHTML =
-        `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">`
-        + `<polygon points="${area}"/><polyline points="${pts.join(' ')}"/></svg>`;
-}
-
-// The placeholder thumbnail: a gradient seeded by the name hash. Shown until
-// the sparkline arrives, and permanently for a hero whose build failed.
-function gradientFor(name) {
-    let h = 0;
-    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-    const a = h % 360;
-    const b = (a + 40 + (h >> 8) % 80) % 360;
-    return `linear-gradient(135deg, hsl(${a} 70% 62%), hsl(${b} 65% 45%))`;
-}
-
 // Fisher-Yates partial shuffle -> first n. Math.random is fine here (purely
-// cosmetic which-heroes-show choice; not reproducibility-sensitive).
+// cosmetic which-example-shows choice; not reproducibility-sensitive).
 function pickRandom(arr, n) {
     const a = arr.slice();
     for (let i = a.length - 1; i > 0; i--) {

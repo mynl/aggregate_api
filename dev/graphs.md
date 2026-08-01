@@ -35,6 +35,12 @@ Worth recording so it does not get changed by accident.
 
 ## Punch list
 
+Items 1 to 4 are open. **Item 5 landed in a37**, along with three things that
+were not on this list and only showed up once someone looked at a rendered chart:
+`full x` widening one panel of two, the return period capped at 1e5, and
+densities drawing as pyramids because ECharts culls sub-pixel segments without
+advancing its pen. See `dev/done/plan-a37-quick-hits.md`.
+
 ### 1. Zoom rescales the y axis and that is disorienting
 
 `dataZoom.filterMode`. Currently `'filter'`, which drops out-of-window points
@@ -98,6 +104,21 @@ mostly empty.
 Prefer the second.
 
 ### 5. Horizontal readout: read a y, get the x
+
+**Done in a37.** The reasoning below held; the mechanism needed one correction,
+recorded here because the wrong version looks right and costs an afternoon.
+
+`axisPointer.axis: 'y'` is indeed the lever, but it is **not** settable per axis
+and the obvious per-axis knob is a decoy. `axisPointer.triggerTooltip` exists,
+reads exactly like the switch for this, and is inert under
+`axisPointer.type: 'cross'`: ECharts supplies the flag from the tooltip pass, so
+the axis's own value is never consulted (`modelHelper.js`,
+`saveTooltipAxisInfo`, the `if (triggerTooltip == null)` guard). What makes the
+two panels differ is that **each grid is its own coordinate system** and ECharts
+reads `tooltip` off the coordinate system's model before the global one, so the
+declaration goes on the grid: `grid[1].tooltip.axisPointer.axis = 'y'`. Snapping
+then comes for free, because a base axis carrying `triggerTooltip` has `snap`
+forced on even though it is a value axis.
 
 **This differs per panel and that is not an inconsistency.**
 

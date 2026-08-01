@@ -88,6 +88,53 @@ function checkAspect(grids, footprint, notes) {
     return got;
 }
 
+/**
+ * True when a series has no gap before its last real point.
+ *
+ * Mirrors `gapFree` in exhibits.js, because the property being asserted is
+ * exactly the one that decides whether the series may carry ECharts' `minmax`
+ * sampler: that sampler seeds each frame's min and max from the frame's first
+ * point and every comparison against NaN is false, so a frame opening on a gap
+ * discards the rest of itself. Trailing gaps are fine, interior ones are not.
+ */
+function noInteriorGap(data) {
+    let last = (data || []).length - 1;
+    while (last >= 0 && data[last] == null) last--;
+    for (let i = 0; i < last; i++) { if (data[i] == null) return false; }
+    return true;
+}
+
+/**
+ * The a37 two-panel invariants, all three of which are silent when broken.
+ *
+ * 1. **One x window.** The panels are one instrument and a loss is at the same
+ *    place in both. This broke under `full x`, where the window went to
+ *    auto-fit and the tail panel then fitted a *shorter* run of data, because
+ *    `rightPairs` drops whole entries past the log floor.
+ * 2. **Which axis each panel answers.** Loss on the density, survival on the
+ *    tail, declared per grid.
+ * 3. **The sampler is on** wherever it is safe, which is what makes the density
+ *    render as steps rather than as leaning pyramids.
+ */
+function checkTwoPanel(option, notes) {
+    const [x0, x1] = option.xAxis;
+    if (typeof x0.min !== 'number' || typeof x0.max !== 'number') {
+        notes.push('density x window is not explicit');
+    } else if (x0.min !== x1.min || x0.max !== x1.max) {
+        notes.push(`panels on different x windows: [${x0.min}, ${x0.max}] `
+            + `vs [${x1.min}, ${x1.max}]`);
+    }
+    const readAxis = (option.grid || []).map(
+        (g) => g.tooltip && g.tooltip.axisPointer && g.tooltip.axisPointer.axis);
+    if (readAxis[0] !== 'x' || readAxis[1] !== 'y') {
+        notes.push(`read axes [${readAxis.join(', ')}], expected [x, y]`);
+    }
+    const unsampled = (option.series || [])
+        .filter((s) => noInteriorGap(s.data) && s.sampling !== 'minmax')
+        .map((s) => s.name);
+    if (unsampled.length) notes.push(`not sampled: ${unsampled.join(', ')}`);
+}
+
 // Each case names the exhibit to build and the fixture key holding its payloads.
 const CASES = [
     ['agg', 'agg'],
@@ -218,6 +265,7 @@ for (const [kind, key] of CASES) {
             if (typeof x.min === 'number' && typeof x.max === 'number' && !(x.max > x.min)) {
                 notes.push('density x window collapsed');
             }
+            checkTwoPanel(option, notes);
             const got = checkAspect(grids, option.panelFootprint, notes);
             // Steps are unconditional now, so *every* density series carries
             // them. A value in the frame is the mass in one bucket, not a sample
@@ -227,7 +275,12 @@ for (const [kind, key] of CASES) {
             const flat = density.filter((s) => s.step !== 'middle').map((s) => s.name);
             if (flat.length) notes.push(`not stepped: ${flat.join(', ')}`);
             shape = `${Math.round(grids[0].width)}x${Math.round(grids[0].height)}`
-                + (got ? ` fp=${got.toFixed(2)}` : '') + ` h=${Math.round(option.hostHeight)}`;
+                + (got ? ` fp=${got.toFixed(2)}` : '') + ` h=${Math.round(option.hostHeight)}`
+                // The tail floor, printed rather than asserted: `T_MAX` bounds
+                // it at 1e-9 but where it actually lands is the book's own
+                // minimum survival rounded down to a decade, so a number is
+                // worth more here than a bound.
+                + ` tail>=${Number(option.yAxis[1].min).toExponential(0)}`;
         } else {
             // A single-panel 2-D exhibit must be square: a stretched g(s)
             // misreads as a different curve, which is the whole reason it is
@@ -245,6 +298,47 @@ for (const [kind, key] of CASES) {
     }
     if (broke) continue;
     console.log(`OK   ${key.padEnd(11)} ${lines.join('  |  ')}`);
+}
+
+// The `full x` view, which is the one toggle that changes the axis *contract*
+// rather than the axis scale, and the one the a37 window fix was written for.
+//
+// `view` is read out of localStorage once, at import time, so exercising a
+// second view needs a second module instance. A query string on the specifier is
+// what gets one past the ESM cache.
+if (fixtures) {
+    const stored = JSON.stringify({ xFull: true });
+    globalThis.localStorage.getItem = (k) =>
+        (k === 'aggapi.exhibitView.v2' ? stored : null);
+    const url = pathToFileURL(
+        path.join(root, 'web', 'src', 'charts', 'exhibits.js')).href;
+    const full = await import(`${url}?view=xFull`);
+    globalThis.localStorage.getItem = () => null;
+
+    const checked = [];
+    for (const [kind, key] of CASES) {
+        const entry = fixtures[key];
+        const spec = full.EXHIBITS[kind];
+        if (!entry || !spec) continue;
+        let option;
+        try {
+            option = spec.build(entry.frames, {
+                name: entry.build.name, kind, mean: entry.build.mean,
+                wide: true, width: 1000, box: spec.layout(1000),
+            });
+        } catch (err) {
+            fail(`${key} (full x): ${err.message}`);
+            continue;
+        }
+        // Single-panel exhibits do not honor the toggle and have no second
+        // window to agree with.
+        if (!option || !Array.isArray(option.grid) || option.grid.length < 2) continue;
+        const notes = [];
+        checkTwoPanel(option, notes);
+        if (notes.length) fail(`${key} (full x): ${notes.join('; ')}`);
+        else checked.push(key);
+    }
+    if (checked.length) console.log(`OK   ${'full x'.padEnd(11)} ${checked.join(', ')}`);
 }
 
 // The Reins exhibit is keyed by tab rather than by object kind, so it is not in

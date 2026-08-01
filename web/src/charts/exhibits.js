@@ -67,11 +67,15 @@ const ANCHORS = [100, 250];
 // says it again.
 const REF_ANCHOR = 200;
 
-// The return-period window runs from an annual event out to 1-in-100,000. Past
-// that the survival function is FFT noise rather than tail, and plotting it
-// would invite reading precision that is not there.
+// The return-period window runs from an annual event out to 1-in-1 billion.
+//
+// It was 1-in-100,000 through a36, which cut the curve off while it still had
+// shape left to show. 1e9 is the author's number and it is well past any capital
+// anchor anyone reads, while staying clear of the depth where a survival built by
+// `1 - cumsum` is reporting its own arithmetic error rather than a tail.
+// `LOG_FLOOR` is the guard against that, and it is unchanged.
 const T_MIN = 1;
-const T_MAX = 1e5;
+const T_MAX = 1e9;
 
 // Side-by-side needs room for two readable axes; below this the panels stack.
 const WIDE_PX = 720;
@@ -188,7 +192,8 @@ const CONTROLS = {
     },
     xFull: {
         label: 'full x',
-        title: 'Show the whole grid, not just q(0.001) to q(0.999)',
+        title: 'Show the whole grid on both panels, not just q(0.001) to '
+            + 'q(0.999)',
     },
     refLines: {
         label: 'reference lines',
@@ -222,9 +227,13 @@ const CONTROLS = {
 // Which panel each control drives. Rendered in this order with a rule between
 // the groups, so a button sits over the panel it changes rather than in one
 // undifferentiated row where the reader has to try each to find out.
+// `xFull` sits in the middle group because it drives both panels: the two share
+// one x window by construction (see `densityWindow`), so the button that widens
+// it widens both. It sat over the density panel through a36, which said it was a
+// density control, and that was the wrong claim.
 const CONTROL_GROUPS = [
-    { key: 'left', controls: ['logY', 'xFull'] },
-    { key: 'both', controls: ['refLines', 'surface3d', 'logZ'] },
+    { key: 'left', controls: ['logY'] },
+    { key: 'both', controls: ['xFull', 'refLines', 'surface3d', 'logZ'] },
     { key: 'right', controls: ['epMode', 'rightLogY'] },
 ];
 
@@ -303,10 +312,10 @@ function rightPairs(loss, tailProb, mode) {
  * The survival-axis window, `[lo, 1]`, as whole decades.
  *
  * Fixing the axis at `[1/T_MAX, 1]` would be simpler but wastes the panel on a
- * light-tailed book: three dice have a minimum survival near 5e-3, so two and a
- * half decades would draw empty. Rounding the observed minimum down to a decade
- * keeps the gridlines on round numbers, which is what makes the return-period
- * twin legible.
+ * light-tailed book: three dice have a minimum survival near 5e-3, so with
+ * `T_MAX` at 1e9 more than six decades would draw empty. Rounding the observed
+ * minimum down to a decade keeps the gridlines on round numbers, which is what
+ * makes the return-period twin legible.
  */
 function survivalRange(series) {
     let lo = 1;
@@ -320,28 +329,94 @@ function survivalRange(series) {
 }
 
 /**
- * Crop the density x-axis to roughly q(0.001) to q(0.999), mirroring
- * `Aggregate._limits`.
+ * The x window **both** panels are drawn on: roughly q(0.001) to q(0.999),
+ * mirroring `Aggregate._limits`, or the whole grid under `full x`.
  *
  * A heavy tail otherwise squashes all the visible mass into a sliver at the
- * origin. Returns null (auto-fit) when there is no usable cdf, or when the
- * `full x` toggle is on, in which case the whole grid is deliberately shown.
+ * origin.
+ *
+ * Notes
+ * -----
+ * Always an explicit pair, never null-for-auto-fit. That is what fixes the
+ * `full x` bug: `null` left both axes on `dataMin` / `dataMax`, and the two
+ * panels do not hold the same data. `rightPairs` emits a whole `null` entry
+ * rather than `[x, null]` wherever the tail probability leaves the plotted
+ * range, ECharts drops null entries from an axis extent, and so the tail panel's
+ * `dataMax` was the last loss carrying a survival while the density panel's was
+ * the end of the grid. The two stopped sharing an axis at exactly the moment the
+ * reader pressed the button that says show me the whole thing.
+ *
+ * Returns null only when there is no window to compute at all (an empty or
+ * degenerate loss grid), which the caller treats as auto-fit for both panels
+ * alike.
  */
 function densityWindow(loss, cdf) {
-    if (view.xFull) return null;
-    if (!cdf || cdf.length !== loss.length || loss.length < 2) return null;
+    if (!loss || loss.length < 2) return null;
     const n = loss.length;
+    // No cdf is treated as `full x`: it is the same question (which slice of the
+    // grid) with the same answer available (all of it), so it takes the same
+    // path rather than a separate fallback.
+    const whole = view.xFull || !cdf || cdf.length !== n;
     let hi = loss[n - 1];
-    for (let i = 0; i < n; i++) { if (cdf[i] >= 0.999) { hi = loss[i]; break; } }
-    const signed = loss[0] < 0;
-    let lo = signed ? loss[0] : Math.min(0, loss[0]);
-    if (signed) {
-        for (let i = 0; i < n; i++) { if (cdf[i] >= 0.001) { lo = loss[i]; break; } }
+    let lo = loss[0];
+    if (!whole) {
+        for (let i = 0; i < n; i++) { if (cdf[i] >= 0.999) { hi = loss[i]; break; } }
+        const signed = lo < 0;
+        lo = signed ? loss[0] : Math.min(0, loss[0]);
+        if (signed) {
+            for (let i = 0; i < n; i++) { if (cdf[i] >= 0.001) { lo = loss[i]; break; } }
+        }
     }
     if (!(hi > lo)) return null;
+    // The same 2% either side in both modes, so pressing `full x` widens the
+    // window without also changing how the curve is inset in it.
     const pad = 0.02 * (hi - lo);
     return [lo - pad, hi + pad];
 }
+
+/**
+ * Whether ECharts' `minmax` sampler is safe on a value array.
+ *
+ * `minmaxDownSample` seeds a frame's running min and max from the frame's
+ * **first** point, and every comparison against NaN is false, so a frame whose
+ * first point is a gap keeps that gap as both its min and its max and the rest
+ * of the frame is discarded. Trailing gaps are harmless, since a frame wholly
+ * inside them should draw as a gap anyway. An *interior* gap is not: it would
+ * silently delete a frame's worth of real curve.
+ *
+ * So: gaps allowed at the end, nowhere else. The linear density has none at all,
+ * a survival's gaps are the trailing block past the log floor, and the log
+ * density of a discrete book is gaps all the way through, which is the one case
+ * this turns the sampler off for.
+ */
+function gapFree(values) {
+    let last = values.length - 1;
+    while (last >= 0 && values[last] == null) last--;
+    for (let i = 0; i < last; i++) { if (values[i] == null) return false; }
+    return true;
+}
+
+// Why every series below asks for `sampling: 'minmax'`.
+//
+// The density is drawn as steps and, at 2**16 grid points across a ~400 px
+// panel, it was not coming out as steps: the risers leaned. `step: 'middle'` is
+// applied correctly (`turnPointsIntoStep`, echarts/lib/chart/line/LineView.js),
+// and the damage is one layer down in `drawSegment` (.../line/poly.js), which
+// skips any segment under sqrt(0.5) px **and does not advance `prevX` when it
+// does**. So a point is emitted only once it is ~0.7 px from the last point
+// actually emitted. A bucket here is about 0.006 px wide, so every horizontal
+// move the step inserted is culled, the risers lose the base points that made
+// them vertical, and what survives is joined by a plain `lineTo`. A point mass
+// then draws as a rise and a fall over a couple of pixels: a little pyramid,
+// where the whole point of steps is a Haar function.
+//
+// `sampling: 'minmax'` reduces to the smallest and the largest value per device
+// pixel column before the path is built. The pair is at most one frame apart in
+// x and as far apart in y as the data goes, so the riser is drawn, and the peak
+// is preserved rather than averaged away, which matters because these peaks are
+// atoms. It also runs *after* the dataZoom filter, so zooming in drops the
+// visible count and the full grid comes back.
+const SAMPLING = 'minmax';
 
 /** One density line, filled under the curve when it is the only one. */
 function densitySeries(name, loss, mass, i, solo) {
@@ -357,6 +432,7 @@ function densitySeries(name, loss, mass, i, solo) {
         yAxisIndex: 0,
         step: 'middle',
         data: loss.map((x, k) => (y[k] == null ? null : [x, y[k]])),
+        sampling: gapFree(y) ? SAMPLING : undefined,
         showSymbol: false,
         connectNulls: false,
         lineStyle: { width: lineWidth(), color },
@@ -371,12 +447,14 @@ function densitySeries(name, loss, mass, i, solo) {
 /** One right-panel line. */
 function rightSeries(name, loss, tailProb, i) {
     const color = seriesColor(i);
+    const data = rightPairs(loss, tailProb, view.epMode);
     return {
         name,
         type: 'line',
         xAxisIndex: 1,
         yAxisIndex: 1,
-        data: rightPairs(loss, tailProb, view.epMode),
+        data,
+        sampling: gapFree(data) ? SAMPLING : undefined,
         showSymbol: false,
         connectNulls: false,
         lineStyle: { width: lineWidth(), color },
@@ -388,6 +466,31 @@ function rightSeries(name, loss, tailProb, i) {
 /** A return period as a reader says it: `1-in-200`, never `1-in-200.0000003`. */
 function returnPeriod(T) {
     return T >= 10 ? String(Math.round(T)) : T.toFixed(1);
+}
+
+// Suffixes for `compactPeriod`, largest first so the first match wins.
+const PERIOD_SCALES = [[1e9, 'B'], [1e6, 'M'], [1e3, 'k']];
+
+/**
+ * A return period short enough to sit on an axis: `250`, `10k`, `2.5M`, `1B`.
+ *
+ * `T_MAX` is 1e9, so the exact form is now up to ten digits and neither the axis
+ * labels nor the tooltip can carry it: `1-in-3184000000` is a number nobody
+ * reads. The log axis ticks land on decades, which is what makes a single
+ * suffixed digit lossless where it matters.
+ *
+ * `returnPeriod` stays exact and keeps its one job, naming the capital anchors,
+ * where 1-in-250 rounded to anything is the wrong number.
+ */
+function compactPeriod(T) {
+    if (!Number.isFinite(T)) return '';
+    for (const [scale, suffix] of PERIOD_SCALES) {
+        if (T >= scale) {
+            const v = T / scale;
+            return `${v >= 10 ? Math.round(v) : Number(v.toFixed(1))}${suffix}`;
+        }
+    }
+    return returnPeriod(T);
 }
 
 /**
@@ -632,6 +735,31 @@ function twoPanelData({
     };
 }
 
+/**
+ * Which axis each panel is read off, declared per grid.
+ *
+ * The density panel is read by loss, as any density is. The tail panel is read
+ * the other way round: pick a survival and get the loss. `S(x)` is monotone
+ * decreasing in loss and the return period monotone increasing, so "at
+ * S = 0.005, what loss?" has exactly one answer, that answer is the VaR, and it
+ * is the number the reader came for. Hunting along a curve for it is work the
+ * axis can do. The same gesture on a density is ill posed, because a horizontal
+ * line crosses it twice, so that panel keeps loss.
+ *
+ * Per **grid**, not per axis, and that distinction is the whole trick. Each grid
+ * is its own coordinate system and ECharts reads `tooltip` off the coordinate
+ * system's model before falling back to the global one, so two grids in one
+ * chart can be read two ways. The per-axis `axisPointer.triggerTooltip` looks
+ * like the obvious knob and is inert here: under `axisPointer.type: 'cross'`
+ * ECharts passes the flag in explicitly from the tooltip pass, so the axis's own
+ * value is never consulted (`modelHelper.js`, `saveTooltipAxisInfo`).
+ *
+ * Snapping comes for free: a base axis with `triggerTooltip` gets `snap` forced
+ * on even though it is a value axis, so the pointer lands on grid points rather
+ * than sliding between them and reporting a loss that is not in the book.
+ */
+const PANEL_READ_AXIS = ['x', 'y'];
+
 function twoPanel(args) {
     const {
         loss, series, box, solo, asRP, logRight, twin, window, sLo, sHi,
@@ -681,8 +809,7 @@ function twoPanel(args) {
         ...(logRight ? { type: 'log', logBase: 10, min: 1 / sHi, max: 1 / sLo }
                      : { type: 'value', min: 1 / sHi, max: 1 / sLo }),
         axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
-                     formatter: (v) => (v >= 1000 ? `${Math.round(v / 1000)}k`
-                                                  : returnPeriod(v)) },
+                     formatter: (v) => compactPeriod(v) },
         ...extra,
     });
 
@@ -700,16 +827,25 @@ function twoPanel(args) {
         // `inverse` on the return-period side puts 1-in-1 at the top against
         // S = 1, and both axes span the same whole decades, so T = 1/S holds
         // gridline for gridline rather than approximately.
-        yAxes.push(asRP
-            ? survivalAxis({ position: 'right', inverse: true,
-                             splitLine: { show: false } })
-            : returnAxis({ position: 'right', inverse: true,
-                           splitLine: { show: false } }));
+        //
+        // The twin never carries the pointer: it is the same reading as the
+        // primary, so a pointer on both would only make which one answered
+        // depend on which half of the panel the cursor was in. ECharts picks the
+        // grid's *first* y axis as its base, which is the primary, so this is
+        // already true and `show: false` says so.
+        const twinOpts = { axisPointer: { show: false }, position: 'right',
+                           inverse: true, splitLine: { show: false } };
+        yAxes.push(asRP ? survivalAxis(twinOpts) : returnAxis(twinOpts));
     }
 
     const option = {
         ...baseOption(),
-        grid: grids,
+        // Geometry from the box, plus the one thing that differs between the two
+        // panels: which axis the reader interrogates. See PANEL_READ_AXIS.
+        grid: grids.map((g, i) => ({
+            ...g,
+            tooltip: { axisPointer: { axis: PANEL_READ_AXIS[i] } },
+        })),
         title: [
             { text: densityTitle, left: grids[0].left, top: grids[0].top - 24,
               textStyle: { fontSize: 12, fontWeight: 600 } },
@@ -737,9 +873,10 @@ function twoPanel(args) {
         ],
         tooltip: {
             ...baseOption().tooltip,
-            // Cross, not a bare vertical: on the exceedance panel the y value
-            // *is* the answer, so a horizontal tracking line reading it off the
-            // axis is worth as much as the vertical one reading the loss.
+            // Cross, not a bare vertical: on the tail panel the y value *is* the
+            // answer, so a horizontal tracking line reading it off the axis is
+            // worth as much as the vertical one reading the loss. Which of the
+            // two the panel actually answers with is set per grid, above.
             axisPointer: {
                 type: 'cross',
                 lineStyle: { color: '#adb5bd', width: 1, type: 'dashed' },
@@ -782,8 +919,8 @@ function twoPanel(args) {
  */
 function tailText(value, asRP) {
     return asRP
-        ? `1-in-${returnPeriod(value)} (S = ${(1 / value).toExponential(2)})`
-        : `${value.toExponential(2)} (1-in-${returnPeriod(1 / value)})`;
+        ? `1-in-${compactPeriod(value)} (S = ${(1 / value).toExponential(2)})`
+        : `${value.toExponential(2)} (1-in-${compactPeriod(1 / value)})`;
 }
 
 /** Grid, title and host height for a square single-panel exhibit. */

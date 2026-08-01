@@ -69,10 +69,15 @@
          ============================================================ -->
     <main class="container-fluid px-3 px-md-4 py-3" style="max-width:1280px;">
 
-        <!-- Hero row: a few showcase examples (tagged role:hero in library.agg),
-             picked at random each load; one auto-builds so the page lands fully
-             populated. -->
-        <div id="hero-row" class="hero-row" aria-label="example gallery"></div>
+        <!-- The lede. PLACEHOLDER COPY: two lines saying what this is, to be
+             replaced. The hero cards that stood here through a36 are gone; one
+             hero is still picked at random and built on load, so the page still
+             lands populated, and the gallery is to resurface inside the Examples
+             dropdown. -->
+        <p class="lede">Every program here describes a book of insurance: how often
+           it loses, how much it loses when it does, and what sits on top of it.
+           Build one and the whole distribution comes back, from the mean to the
+           far tail.</p>
 
         <!-- Editor box (CM6 mounts into #editor-host) -->
         <div class="editor-wrap">
@@ -84,7 +89,7 @@
 
         <!-- Feedback line (folds away below sm, since phones have no Ctrl key) -->
         <div class="feedback d-none d-sm-flex">
-            <span class="fb-text">Ctrl+Enter build · Ctrl+Space complete · ↑↓ history</span>
+            <span class="fb-text">Ctrl+Enter build · Ctrl+Space complete · Ctrl+↑↓ history · Ctrl+Shift+↑↓ examples</span>
             <span class="fb-emacs">
                 emacs keys:
                 <span class="form-check form-switch">
@@ -268,8 +273,8 @@
                 <span><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span><span>build</span>
                 <span><kbd>Ctrl</kbd>+<kbd>K</kbd></span><span>search the example library</span>
                 <span><kbd>Ctrl</kbd>+<kbd>Space</kbd></span><span>autocomplete</span>
-                <span><kbd>↑</kbd> <kbd>↓</kbd></span><span>step through history</span>
-                <span><kbd>Alt</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span><span>step through examples</span>
+                <span><kbd>Ctrl</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span><span>step through history</span>
+                <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span><span>step through the example library (loads, does not build)</span>
                 <span><kbd>✕</kbd></span><span>clear the editor</span>
             </div>
 

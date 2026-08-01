@@ -190,6 +190,18 @@ header .navbar { min-height: 56px; }
 .grid-host { max-width: 100%; overflow-x: auto; }
 .price-result .grid-host { margin-bottom: .4rem; }
 
+/* ---- Table hosts share one box ----
+   The two renderers must occupy the same space, or flipping Static to
+   Interactive reflows the page under the reader: through a36 `.gt-host` carried
+   a margin and `.grid-host` carried none, so everything below a table jumped on
+   every flip. One rule, both hosts, and the switch becomes a change of table
+   and nothing else.
+
+   Tables also want more air than they had. It is spent above rather than below,
+   on `.exhibit-title`, so a caption stays tucked under the table it belongs to
+   instead of floating midway to the next one. */
+.gt-host, .grid-host { margin: .2rem 0 .6rem; }
+
 /* ---- Info pane ---- */
 .info {
     font-family: var(--mono); font-size: .68rem; line-height: 1.5; color: #374151;
@@ -234,33 +246,14 @@ header .navbar { min-height: 56px; }
 .agg-ratelimit-msg   { font-size: .85rem; color: #374151; }
 .agg-ratelimit-sub   { margin-top: .45rem; }
 
-/* ---- Hero gallery (group A showcase cards) ---- */
-.hero-row { display: flex; flex-wrap: wrap; gap: .6rem; margin: 0 .1rem 1rem; }
-.hero-card {
-    display: flex; flex-direction: column; align-items: stretch; gap: .35rem;
-    flex: 1 1 150px; max-width: 220px; min-width: 130px;
-    padding: 0; border: 1px solid var(--grid);
-    border-radius: var(--bs-border-radius, .375rem);
-    background: #fff; overflow: hidden; cursor: pointer; text-align: left;
-    transition: box-shadow .12s, transform .12s, border-color .12s;
+/* ---- The lede, above the editor ----
+   Where the hero cards were through a36. `78ch` is the measure that makes the
+   placeholder text land on two lines on a desktop, which is the size the strip
+   is meant to be: enough to say what this is, not enough to be read past. */
+.lede {
+    font-size: .95rem; line-height: 1.5; color: #374151;
+    max-width: 78ch; margin: 0 .1rem 1rem;
 }
-.hero-card:hover {
-    box-shadow: 0 4px 14px rgba(13,110,253,.16); transform: translateY(-2px);
-    border-color: var(--primary);
-}
-.hero-thumb { display: block; height: 64px; width: 100%; }
-.hero-name  {
-    font-family: var(--mono); font-size: .82rem; font-weight: 600;
-    color: #212529; padding: 0 .55rem .5rem; line-height: 1.2;
-}
-/* The density silhouette that replaces the placeholder gradient once the
-   sparkline payload lands. Shape only: no axes, no ticks, nothing to read a
-   number off, which is what a card thumbnail should promise. */
-.hero-thumb-spark { background: var(--soft); }
-.hero-thumb-spark svg { display: block; width: 100%; height: 100%; }
-.hero-thumb-spark polygon { fill: rgba(13,110,253,.16); }
-.hero-thumb-spark polyline { fill: none; stroke: var(--primary); stroke-width: 1.5;
-    vector-effect: non-scaling-stroke; }
 
 /* ---- Examples picker: dropdown search + Ctrl+K palette ---- */
 /* One list component, two surfaces. The dropdown is browsable, grouped by
@@ -416,7 +409,7 @@ header .navbar { min-height: 56px; }
 
    Note the specificity: gt.css writes `.gt.gt td`, so a bare `.gt-host td` loses
    to it. Match that weight or the rule is dead. */
-.gt-host { margin: .2rem 0 1rem; overflow-x: auto; }
+.gt-host { overflow-x: auto; }
 .gt-host .gt.gt table { font-size: .86rem; }
 .gt-host .gt.gt .gt-r { font-family: var(--mono); }
 /* The capital anchors. Backgrounds go on the cells, not the row, because
@@ -434,9 +427,15 @@ header .navbar { min-height: 56px; }
 .table-view-item.active { font-weight: 600; background: none; color: inherit; }
 .table-view-item small { margin-left: auto; font-size: .7rem; }
 
-/* ---- Exhibit chrome (title + caption around either kind of table) ---- */
-.exhibit-title { font-size: .92rem; font-weight: 700; margin: 0 0 .4rem; }
-.exhibit-caption { font-size: .72rem; color: var(--mut); max-width: 70ch; }
+/* ---- Exhibit chrome (title + caption around either kind of table) ----
+   The title carries the separation between stacked exhibits, so the gap belongs
+   to the table below it rather than sitting between a table and its own caption.
+   The first title needs none: the chart above it already brought its own. */
+.overview-exhibits { margin-top: .75rem; }
+.exhibit-title { font-size: .92rem; font-weight: 700; margin: 1.6rem 0 .5rem; }
+.exhibit-title:first-child { margin-top: 0; }
+.exhibit-caption { font-size: .72rem; color: var(--mut); max-width: 70ch;
+    margin: 0 0 .25rem; }
 
 /* ---- Error pane (parse-error report) ---- */
 .agg-error-pane   { border-left: 4px solid #d4a017; }

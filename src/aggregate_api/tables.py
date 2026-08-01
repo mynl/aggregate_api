@@ -197,7 +197,11 @@ def frame_spec(
         include_raw=list(df.columns),
         max_rows=MAX_ROWS,
         row_flags=(lambda pos, _row: flags(df, pos)) if flags else None,
-        formats=columns,
+        # ``formatters``, not ``formats``: the field was renamed somewhere in the
+        # ``greater_tables`` 1.9 to 6.0.0a4 run that the sibling checkout has
+        # moved through. Following the rename is all a37 does about that move;
+        # catching up with the rest of 6.0 is its own piece of work.
+        formatters=columns,
     )
 
 

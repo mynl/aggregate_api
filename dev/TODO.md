@@ -40,15 +40,27 @@ Left over from this work:
 
 ### b) Consolidate the graphs on ECharts, and fix the options
 
-**Half done (a36).** The Plotly path is out: `engine.js`, `plotly-panels.js`,
-the `draw` control, the dependency and the 535 kB chunk. `twoPanelData` stayed.
+**Most of the way (a36, a37).** a36 took the Plotly path out: `engine.js`,
+`plotly-panels.js`, the `draw` control, the dependency and the 535 kB chunk.
+`twoPanelData` stayed.
 
-What remains is the punch list in `dev/graphs.md`, which already has the ECharts
-mechanism for each item: zoom rescale (`filterMode`, and try
-`animationDurationUpdate: 0` first), double-click reset, the odd left tick,
-the uPlot-style static legend readout, and the horizontal y-to-x readout on the
-survival panel. **Confirm what "the odd left scale tick" meant** before touching
-it: the note records both readings and they need different options.
+a37 did item 5 of `dev/graphs.md`, the horizontal y-to-x readout, plus three
+things the first browser look turned up: `full x` widening only one panel, the
+return period capped at 1e5, and densities drawing as pyramids rather than steps.
+
+Left on the `dev/graphs.md` punch list:
+
+- **1. Zoom rescales the y axis.** Try `animationDurationUpdate: 0` before
+  touching `filterMode`; much of the disorientation is likely the tween.
+- **2. Double-click to reset the zoom.** `chart.getZr().on('dblclick')`, so it
+  catches blank canvas too, then a `dataZoom` action to 0..100.
+- **3. The odd tick on the left scale.** **Still needs the author to say which
+  reading was meant**: a stray end label and general thinning need different
+  options, and the note records both.
+- **4. The uPlot-style static legend readout.** The best idea on the list, and
+  a37's per-grid axis reading is the natural thing to build it on:
+  `chart.on('updateAxisPointer')` carries the axis value under the cursor, so the
+  legend strip can become the readout in ordinary page text.
 
 ### c) Fix what is shown where
 
@@ -248,13 +260,13 @@ one version bump each.
       and the Chrome extension has not been connected in any session so far.
       Check all six kinds, both breakpoints, and the five toggles.
 
-- [ ] **Watch the full-resolution render cost.** a27 ships 2**16 points per
-      series. ECharts draws that fine on canvas, but nothing has measured the
-      redraw on a toggle for a *portfolio* (one series per unit plus the total,
-      so 5 or 6 polylines of 65,536 points each). If a toggle feels sluggish,
-      the fix is `large: true` on the line series, which trades per-point hover
-      for a fast path, or a client-side crop to the visible window before
-      handing ECharts the data. Do not reintroduce server-side binning.
+- [x] **Watch the full-resolution render cost.** *(Closed by a37, and by an
+      answer better than either option recorded here. `sampling: 'minmax'`
+      reduces each series to the min and max per device pixel before the path is
+      built, so a portfolio hands ECharts a few hundred points rather than six
+      polylines of 65,536, and it re-expands on zoom because the sampler runs
+      after the dataZoom filter. It was adopted to fix the step rendering, not
+      the cost; the cost went with it. No server-side binning, as required.)*
 
 - [x] **Draw atoms as atoms.** Solved in a27 by dropping the binning entirely
       rather than by detecting atoms, which is not possible from the frame: a
@@ -327,11 +339,33 @@ one version bump each.
       same decision as the chart titles in `dev/graphs.md`, so make it once for
       both.
 
-- [ ] **Report to the greatest-tables side**: its `requires-python = ">=3.13"`
-      forced this repo's floor up from 3.11. Nothing in its source appears to
-      need 3.13. Also worth confirming its shipped `assets/` are rebuilt from
-      `js/src/` whenever the walker changes, since aggregate_api serves whatever
-      the install carries.
+- [x] **Report to the greater-tables side**: its `requires-python = ">=3.13"`
+      forced this repo's floor up from 3.11. *(Fixed upstream: 6.0.0a2 puts the
+      floor back to 3.11 and says it verified 3.11, 3.12 and 3.13. Acting on it
+      here is part of the catch-up below.)*
+
+- [ ] **Catch up with `greater-tables` 6.0.** The sibling checkout ran from 1.9.0
+      to **6.0.0a4** while this repo was elsewhere, and a37 followed exactly one
+      thing from it: `TableSpec.formats` became `formatters`, which had 13 tests
+      red on `main`. Both harnesses (`check-frames.py`, `check-adapter.py`) are
+      clean against 6.0.0a4, so nothing is broken; these are opportunities, not
+      breakage.
+      - **Put `requires-python` back to `>=3.11`.** a34 raised this repo's floor
+        to 3.13 solely because GT declared it, and 6.0.0a2 reverses that. The
+        classifiers go back too.
+      - **The deploy pin is now actionable.** GT is publishing on the 6.0
+        pre-release line, so the standing note below about pinning `6.0.0rc1`
+        has something to point at. Check what is actually on PyPI before
+        pinning; pip still ignores pre-releases unless the pin is explicit.
+      - **6.0.0a4 gives `ratio_cols` percent rendering again**, and adds house
+        format defaults (`float_format`, `int_format`, `ratio_format`,
+        `date_format`, `table_float_format`). `tables.py` currently spells out
+        its own per-column strings in `FORMATS`; some of that may now be a
+        default worth inheriting rather than restating.
+      - **The walker moved with it.** `/v1/assets/gt-render.esm.js` serves
+        whatever the install carries, so 1.10's docs pass and 1.11's "string
+        columns pass through as text" are already live in the browser and have
+        not been looked at.
 
 - [ ] **The 3-D surface is sugar, not substance** (author's verdict after
       seeing it, a29). "Quite impressive. Fast. But more sugar than substance."
@@ -380,6 +414,17 @@ one version bump each.
       upgrade from a placeholder gradient to a real density silhouette from a
       cached `heroes/sparklines` payload fetched after first paint.
       *(done; in `dev/`)*
+- [ ] **Put the hero gallery in the Examples dropdown.** a37 took the cards off
+      the top of the page, where the author did not want them, and left the
+      landing build: one `role:hero` entry is still picked at random and built,
+      so the page arrives populated. What is gone is the *showcase*, and it
+      should come back somewhere findable. `pickRandom` is still in `main.js` and
+      `/v1/examples/heroes/sparklines` is still on the server for it; the SPA
+      wrapper for the sparklines came out and is two lines to restore.
+
+- [ ] **Replace the lede.** `web/index.html` carries placeholder copy where the
+      hero row was, sized at two lines. The author's to write.
+
 - [ ] **Retire or repoint the hamburger's "Example source…" placeholder.**
       Shipped greyed-out in a17 for a source switcher that a159 made moot (the
       three shipped libraries are one). The live axis is

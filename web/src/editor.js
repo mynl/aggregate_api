@@ -7,7 +7,7 @@
 //   * line numbers, history, default keymap (incl. autocompletion shortcut)
 //   * autocomplete with our async source
 //   * a small theme that picks up the site's monospace font
-//   * Ctrl/Cmd-Enter -> build, Ctrl-↑/↓ -> history nav
+//   * Ctrl/Cmd-Enter -> build, Ctrl-↑/↓ -> history, Ctrl-Shift-↑/↓ -> examples
 //
 // `createEditor(host, callbacks)` returns an object with helpers the
 // rest of the SPA uses (getText / setText / focus / dispatch).
@@ -124,8 +124,12 @@ const editorTheme = EditorView.theme({
  *   onBuild()         -- Ctrl-Enter / Cmd-Enter
  *   onHistoryPrev()   -- Ctrl-ArrowUp / Cmd-ArrowUp
  *   onHistoryNext()   -- Ctrl-ArrowDown / Cmd-ArrowDown
- *   onExamplePrev()   -- Alt-ArrowUp   (undisclosed: step through examples)
- *   onExampleNext()   -- Alt-ArrowDown
+ *   onExamplePrev()   -- Ctrl-Shift-ArrowUp, step through the example library
+ *   onExampleNext()   -- Ctrl-Shift-ArrowDown
+ *
+ * Every one of these is documented in the feedback line under the editor and in
+ * the Help panel. The example nav used to be an undisclosed Alt- binding, which
+ * meant a working feature nobody could find.
  */
 export function createEditor(host, callbacks = {}) {
     const customKeymap = keymap.of([
@@ -133,6 +137,15 @@ export function createEditor(host, callbacks = {}) {
             key: 'Mod-Enter',
             run: () => { callbacks.onBuild?.(); return true; },
         },
+        // Ctrl-↑/↓: load the previous / next history entry, and nothing else.
+        // `return true` means the keystroke is consumed, so the cursor does not
+        // move: the buffer's whole contents are replaced and where the caret was
+        // in the old program says nothing about the new one.
+        //
+        // Plain ↑/↓ used to do this at the buffer edges, for a REPL feel. On a
+        // one line program, which is most of them, *every* press is at an edge,
+        // so pressing up to move the caret silently threw the program away. A
+        // modifier is the price of not doing that.
         {
             key: 'Mod-ArrowUp',
             run: () => { callbacks.onHistoryPrev?.(); return true; },
@@ -141,37 +154,15 @@ export function createEditor(host, callbacks = {}) {
             key: 'Mod-ArrowDown',
             run: () => { callbacks.onHistoryNext?.(); return true; },
         },
-        // Plain ↑/↓ navigate history at the buffer edges (REPL feel, matches
-        // the feedback-line hint); elsewhere they fall through to normal
-        // cursor movement by returning false.
+        // Ctrl-Shift-↑/↓: step through the example library. Loads into the
+        // editor and stops there, deliberately: walking a library of 186 recipes
+        // at one build each is not a thing to do by accident.
         {
-            key: 'ArrowUp',
-            run: (view) => {
-                const { head } = view.state.selection.main;
-                if (view.state.doc.lineAt(head).number === 1) {
-                    callbacks.onHistoryPrev?.(); return true;
-                }
-                return false;
-            },
-        },
-        {
-            key: 'ArrowDown',
-            run: (view) => {
-                const { head } = view.state.selection.main;
-                if (view.state.doc.lineAt(head).number === view.state.doc.lines) {
-                    callbacks.onHistoryNext?.(); return true;
-                }
-                return false;
-            },
-        },
-        // Alt-↑/↓: step through the example library (undisclosed power-user
-        // nav -- deliberately not shown in the feedback line).
-        {
-            key: 'Alt-ArrowUp',
+            key: 'Mod-Shift-ArrowUp',
             run: () => { callbacks.onExamplePrev?.(); return true; },
         },
         {
-            key: 'Alt-ArrowDown',
+            key: 'Mod-Shift-ArrowDown',
             run: () => { callbacks.onExampleNext?.(); return true; },
         },
         // Tab accepts a completion if the popup is open, otherwise inserts a tab.

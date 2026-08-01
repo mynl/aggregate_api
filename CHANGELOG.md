@@ -4,6 +4,82 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a37
+
+From `dev/done/plan-a37-quick-hits.md`. The first list written after actually
+looking at the exhibits in a browser rather than at the code. Frontend only, but
+for one keyword forced by the dependency.
+
+### The tail panel is read by picking a probability
+
+`S(x)` is monotone in loss, so "at S = 0.005, what loss?" has one answer and that
+answer is the VaR. Hovering the tail panel now snaps to the survival axis and
+reports the loss. The density panel is unchanged and still read by loss, because
+a horizontal line crosses a density twice and the lookup has no single answer
+there.
+
+Declared **per grid**, not per axis. `axisPointer.triggerTooltip` looks like the
+switch for this and is inert: under `type: 'cross'` ECharts supplies the flag
+from the tooltip pass and never consults the axis. Each grid is its own
+coordinate system, though, and its model carries a `tooltip`, which is what lets
+two panels in one chart be read two ways.
+
+### `full x` widens both panels
+
+It only ever widened one. The window went to auto-fit, and the two panels do not
+hold the same data: `rightPairs` drops whole entries past the log floor, so the
+tail panel fitted a shorter run and the panels stopped sharing an x axis at
+exactly the moment the reader asked to see everything. The window is now always
+an explicit pair, computed once and given to both. The button moved to the middle
+control group to match.
+
+### The tail runs to 1-in-1 billion
+
+`T_MAX` was 1e5, which cut the curve off while it still had shape to show. The
+guard against `1 - cumsum` arithmetic dust is unchanged. Axis labels and the
+tooltip gained a compact form, since neither could carry ten digits.
+
+### Densities draw as steps again
+
+They were drawing as little pyramids: the risers leaned. Not a `step` setting and
+not an ECharts limitation. `step: 'middle'` is applied correctly, and then
+`drawSegment` discards any segment under sqrt(0.5) px **without advancing its
+`prev` point**, so a point is emitted only once it is ~0.7 px from the last one
+emitted. A bucket here is ~0.006 px wide, so the step's horizontal moves were all
+culled and the risers lost the base points that made them vertical.
+
+`sampling: 'minmax'` reduces to the min and max per device pixel column before
+the path is built, so the riser is drawn and the peak survives rather than being
+averaged away, which matters because these peaks are atoms. Zoom still restores
+full resolution, since the sampler runs after the dataZoom filter. It is switched
+off per series where the data has an interior gap, because ECharts' sampler seeds
+each frame from the frame's first point and would discard a frame that opens on
+one.
+
+### Keys: history on Ctrl, examples on Ctrl+Shift
+
+Plain up and down are ordinary cursor movement again. They used to walk history
+at the buffer edges, and on a one line program every press is at an edge, so
+moving the caret silently threw the program away. History is Ctrl+↑/↓ and does
+not move the cursor; the example library is Ctrl+Shift+↑/↓ and loads without
+building. Both are now documented in the feedback line and the Help panel; the
+example nav was an undisclosed Alt- binding.
+
+### Chrome
+
+The hero cards are gone from the top of the page, replaced by a two line lede
+(placeholder copy). One hero is still picked at random and built on load, so the
+landing page still arrives populated on a different book each visit; the gallery
+is to resurface inside the Examples dropdown. Tables got more vertical space, and
+both table hosts now share one box, so flipping Static to Interactive no longer
+reflows the page under the reader.
+
+### Breaking, from the dependency
+
+`greater-tables` renamed `TableSpec.formats` to `formatters` somewhere in its
+1.9.0 to 6.0.0a4 run, which took 13 tests down. a37 follows the rename and
+nothing else of that move; catching up with the rest of 6.0 is in `dev/TODO.md`.
+
 ## 1.0.0a36
 
 From `dev/done/plan-tidy-and-library.md`. A batch of four: consolidate on
