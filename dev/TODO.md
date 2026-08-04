@@ -302,6 +302,12 @@ one version bump each.
       shrink the bundle with a custom build registering only `scatter` and
       `scattergl`. If it loses, `engine.js` and `plotly-panels.js` come out and
       the dependency with them; keep the `twoPanelData` split either way.
+      **Update (a38):** the real IR arrived, upstream rather than app side:
+      the library's chart IR (`dev/plan-chart-ir.md` there) with the surface
+      pilot at a38 (`/chart/{name}` route, `chartdoc-to-echarts.js`,
+      `surfaceGrid` deleted). The two-panel family migrates onto it chart by
+      chart as the library conversions land; `twoPanelData` remains the app
+      side seam until then.
 
 - [x] **greater_tables alongside the current tables** (→ 1.0.0a31). One new
       `GET frame/{which}.html` route mirroring the `.csv` one, rendering server

@@ -4,6 +4,53 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a38
+
+The app side of the chart-IR surface pilot (`dev/plan-chart-ir.md` in the
+library repo, `[Chart-Surface-Pilot]`; library side landed there as
+`1.0.0a199`). The bivariate 3-D surface is the first chart whose semantics
+live upstream: the app keeps a translator and its chrome, not a rebuild.
+
+### One chart-document route
+
+`GET /v1/objects/{oid}/chart/{name}`: the chart sibling of the
+frame-document route. Names resolve through
+`aggregate.charts.available_charts`, so a new library emitter appears here
+with zero endpoint changes; an unknown or unavailable name is a 404 carrying
+the capability set. The body is the document's `canonical_json` bytes and
+the stamped content hash is the ETag, same revalidation contract as the
+table documents. `api.chartDoc(id, name)` on the client.
+
+### `chartdoc-to-echarts.js`, the generic adapter
+
+One walker from ChartDoc vocabulary to an ECharts option, pure so the node
+smoke test exercises it offline. It realizes the 'surface' panel kind today
+(the xy family joins as its conversions land upstream) and merges a small
+per-chart override dict over the semantic skeleton: `surfaceOverrides` in
+`surface.js` carries exactly the renderer-specific chrome (colors, tooltip
+dressing, the visualMap ramp and placement, lighting, and the
+down-the-diagonal camera). The log-height toggle is honored only when the
+document declares `meta.z_log_ok`, because whether a log reading is
+meaningful is the emitter's call.
+
+### `surfaceGrid` deletes; the reduction lives upstream
+
+The mass-preserving block-sum to the display grid now happens inside the
+library emitter, which also ships both resolved component labels, so the
+`axisNames` stats_df hack is unnecessary on the surface path (the heatmap
+still uses it until its own conversion). The surface payload arrives display
+sized (128 per side) however fine the model grid is, which is dramatically
+lighter than the full joint frame the old path reduced client side. The
+joint frame is still fetched for the heatmap fallback; a WebGL-less browser,
+a failed chunk, or a failed document fetch all still land on a picture.
+
+`capture_fixtures.py` captures the chart document per bvagg fixture and
+`smoke-exhibits.mjs` assembles the surface through the adapter plus override
+(same mesh invariants as before, plus the document's own: display cells sum
+to the joint's mass, axis names resolved upstream). Server contract pinned
+in `tests/test_objects.py`: canonical bytes, quoted 12-hex ETag, 304 on
+If-None-Match, 404 with the capability set, byte determinism across GETs.
+
 ## 1.0.0a37
 
 From `dev/done/plan-a37-quick-hits.md`. The first list written after actually

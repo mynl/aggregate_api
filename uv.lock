@@ -12,10 +12,9 @@ resolution-markers = [
 
 [[package]]
 name = "aggregate"
-version = "1.0.0a186"
+version = "1.0.0a200"
 source = { editable = "../aggregate_REFACTOR" }
 dependencies = [
-    { name = "greater-tables" },
     { name = "ipython" },
     { name = "lark" },
     { name = "matplotlib" },
@@ -31,7 +30,6 @@ requires-dist = [
     { name = "bokeh", marker = "extra == 'viz'" },
     { name = "datashader", marker = "extra == 'viz'" },
     { name = "docutils", marker = "extra == 'dev'", specifier = ">=0.20,<0.22" },
-    { name = "greater-tables", editable = "C:/S/AI/greatest-tables" },
     { name = "holoviews", marker = "extra == 'viz'" },
     { name = "ipython" },
     { name = "ipython-autotime", marker = "extra == 'notebook'" },
@@ -66,7 +64,7 @@ provides-extras = ["dev", "notebook", "numba", "massive", "viz"]
 
 [[package]]
 name = "aggregate-api"
-version = "1.0.0a36"
+version = "1.0.0a38"
 source = { editable = "." }
 dependencies = [
     { name = "aggregate" },
@@ -300,7 +298,7 @@ wheels = [
 
 [[package]]
 name = "greater-tables"
-source = { editable = "C:/S/AI/greatest-tables" }
+source = { editable = "C:/s/ai/greatest-tables" }
 dependencies = [
     { name = "numpy" },
     { name = "pandas" },

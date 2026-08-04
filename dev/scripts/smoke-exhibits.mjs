@@ -59,8 +59,10 @@ if (BASE) {
 const { EXHIBITS, reinsSeries, PANEL_ASPECT, reservedHeight, twoPanelData } =
     await import(
         pathToFileURL(path.join(root, 'web', 'src', 'charts', 'exhibits.js')).href);
-const { surfaceGrid, surfaceOption } = await import(
+const { surfaceOverrides } = await import(
     pathToFileURL(path.join(root, 'web', 'src', 'charts', 'surface.js')).href);
+const { chartdocToEcharts } = await import(
+    pathToFileURL(path.join(root, 'web', 'src', 'charts', 'chartdoc-to-echarts.js')).href);
 
 // Panels are checked against the target aspect because the shape is the one
 // property of a rendered chart that is fully determined by the option object,
@@ -382,17 +384,31 @@ if (fixtures && fixtures.reins) {
     }
 }
 
-// The bivariate 3-D surface. `surfaceOption` is pure like the rest, so it can be
-// assembled here without WebGL or echarts-gl; what cannot be checked offline is
-// whether it *renders*, only whether the mesh is well formed.
+// The bivariate 3-D surface, now assembled from the chart document (the
+// library's chart IR) by the generic adapter plus the surface override dict.
+// `chartdocToEcharts` is pure like the rest, so it can be exercised here
+// without WebGL or echarts-gl; what cannot be checked offline is whether it
+// *renders*, only whether the mesh is well formed.
 if (fixtures && fixtures.bvagg) {
-    const joint = fixtures.bvagg.frames.joint;
-    const grid = surfaceGrid(joint);
-    if (!grid) fail('surface: joint frame did not reduce to a grid');
-    else {
+    const doc = fixtures.bvagg.frames.surface_doc;
+    if (!doc) {
+        fail('surface: no surface_doc fixture; re-run capture_fixtures.py');
+    } else {
+        // The document's own invariants: mass-preserving reduction (the
+        // display cells sum to the joint's mass) and both axis names resolved
+        // upstream, which is what retired the stats_df axisNames hack here.
+        const z = doc.series[0].surface.z;
+        const mass = z.flat().reduce((a, v) => a + v, 0);
+        if (Math.abs(mass - 1) > 1e-6) fail(`surface doc: mass ${mass} != 1`);
+        const names = Object.fromEntries(doc.axes.map((a) => [a.id, a.label]));
+        if (names.x0 !== 'Wind' || names.x1 !== 'Flood') {
+            fail(`surface doc: axis names ${names.x0}/${names.x1}, expected Wind/Flood`);
+        }
         for (const logZ of [false, true]) {
-            const option = surfaceOption(grid, { xName: 'A', yName: 'B', logZ });
-            const s = (option.series || [])[0] || {};
+            const option = chartdocToEcharts(doc, {
+                logZ, overrides: (ctx) => surfaceOverrides({ ...ctx, side: 420 }),
+            });
+            const s = ((option || {}).series || [])[0] || {};
             const notes = [];
             if (s.type !== 'surface') notes.push(`type ${s.type}`);
             // dataShape must match the vertex count exactly or echarts-gl reads
@@ -402,9 +418,10 @@ if (fixtures && fixtures.bvagg) {
                 notes.push(`dataShape ${nx}x${ny} != ${(s.data || []).length} vertices`);
             }
             if (!option.grid3D) notes.push('no grid3D');
+            if (s.shading !== 'lambert') notes.push('override chrome missing');
             // The mesh must be complete. A zero-mass cell rests on the log floor
-            // rather than being a hole: on this fixture 41% of the cells are
-            // exact zeros, and as holes the surface arrived moth-eaten.
+            // rather than being a hole: on this fixture a large share of the
+            // cells are exact zeros, and as holes the surface arrived moth-eaten.
             const holes = (s.data || []).filter((d) => !Number.isFinite(d[2])).length;
             if (holes) notes.push(`${holes} holes in the mesh`);
             // And it must have relief. A surface whose heights are all equal is

@@ -575,6 +575,63 @@ def test_bivariate_builds_and_reports(client):
     assert client.get(f"/v1/objects/{oid}/bs_window_df").status_code == 400
 
 
+def test_bivariate_chart_document(client):
+    """chart/joint_surface serves canonical ChartDoc bytes, hash as ETag.
+
+    The pilot of the chart-IR route (`dev/plan-chart-ir.md` in the library):
+    the emitter block-sums the joint to the display grid upstream, so the
+    payload is small, byte deterministic, and revalidates on If-None-Match.
+    """
+    r = client.post("/v1/objects", json={"decl": _BV})
+    assert r.status_code == 200, r.text
+    oid = r.json()["id"]
+    r1 = client.get(f"/v1/objects/{oid}/chart/joint_surface")
+    assert r1.status_code == 200, r1.text
+    doc = r1.json()
+    assert doc["ir_version"] == 1
+    assert doc["name"] == "joint_surface"
+    assert [p["kind"] for p in doc["panels"]] == ["surface"]
+    assert doc["meta"]["z_log_ok"] is True
+    # axes carry the resolved component names; the axisNames stats_df hack
+    # is not needed on this route.
+    labels = {a["id"]: a["label"] for a in doc["axes"]}
+    assert labels["x0"] == "A" and labels["x1"] == "B"
+    surf = doc["series"][0]["surface"]
+    assert len(surf["z"]) == len(surf["y"])
+    assert len(surf["z"][0]) == len(surf["x"])
+    # mass-preserving reduction: display cells sum to the joint's mass.
+    total = sum(v for row in surf["z"] for v in row)
+    assert abs(total - 1.0) < 1e-6
+    # ETag is the stamped document hash, quoted; a match revalidates.
+    etag = r1.headers["ETag"]
+    assert etag == f'"{doc["hash"]}"' and len(doc["hash"]) == 12
+    r2 = client.get(
+        f"/v1/objects/{oid}/chart/joint_surface",
+        headers={"If-None-Match": etag},
+    )
+    assert r2.status_code == 304
+    # byte determinism: a fresh GET returns identical bytes.
+    r3 = client.get(f"/v1/objects/{oid}/chart/joint_surface")
+    assert r3.content == r1.content
+    # unknown name -> 404 carrying the capability set.
+    r4 = client.get(f"/v1/objects/{oid}/chart/nope")
+    assert r4.status_code == 404
+    assert "joint_surface" in r4.json()["detail"]
+
+
+def test_chart_document_unavailable_kind(client):
+    """A kind with no registered chart 404s with an empty capability set."""
+    r = client.post(
+        "/v1/objects",
+        json={"decl": "agg CD.A 10 claims sev lognorm 50 cv 1 poisson"},
+    )
+    assert r.status_code == 200, r.text
+    oid = r.json()["id"]
+    r1 = client.get(f"/v1/objects/{oid}/chart/joint_surface")
+    assert r1.status_code == 404
+    assert "available: []" in r1.json()["detail"]
+
+
 # ----------------------------------------------------------------------
 # PnL (the pnl / xpnl P&L engine -> kind='pnl')
 # ----------------------------------------------------------------------

@@ -77,6 +77,15 @@ export const api = {
      * `tables.js`.
      */
     frameIr:      (id, which)       => _json('GET',  `/v1/objects/${id}/frame/${which}?format=ir`),
+    /**
+     * A chart as a chart document (the library's chart IR).
+     *
+     * The chart sibling of `frameIr`: the library emitter owns every semantic
+     * decision (series, axes, scales, marks, and any display reduction, which
+     * arrives already applied). The client only adapts the document to
+     * ECharts; see chartdoc-to-echarts.js.
+     */
+    chartDoc:     (id, name)        => _json('GET',  `/v1/objects/${id}/chart/${name}`),
     kappa:        (id, p = {})      => _json('GET',  `/v1/objects/${id}/kappa?${qs(p)}`),
 
     // Reinsurance

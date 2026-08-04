@@ -43,7 +43,8 @@ import {
     echarts, baseOption, axisStyle, seriesColor, fade, lineWidth, houseStyle,
     logMin, LOG_FLOOR, loadStyle,
 } from './theme.js';
-import { loadSurface, surfaceGrid, surfaceOption } from './surface.js';
+import { loadSurface, surfaceOverrides } from './surface.js';
+import { chartdocToEcharts } from './chartdoc-to-echarts.js';
 
 // Set once `loadSurface()` has resolved. Read synchronously inside a `build()`,
 // which must stay pure, so the async part happens in the mount and this is the
@@ -1179,25 +1180,32 @@ const EXHIBITS = {
             // stats_df carries both component names as its value columns. The
             // joint frame only names axis 0 (its first column); axis 1 arrives
             // as bare grid values for column headers, so its name is not
-            // recoverable from that payload alone.
-            const [joint, stats] = await Promise.all([
+            // recoverable from that payload alone. The chart document has
+            // neither problem: the library emitter ships both resolved labels
+            // and block-sums the display grid upstream, so the surface payload
+            // is display sized however fine the model grid is. The joint frame
+            // stays fetched for the heatmap, which converts in its own pass
+            // (dev/plan-chart-ir.md, conversion order).
+            const [joint, stats, surfaceDoc] = await Promise.all([
                 api.density_df(id, { view: 'joint' }),
                 api.stats_df(id).catch(() => null),
+                api.chartDoc(id, 'joint_surface').catch(() => null),
             ]);
-            return { joint, stats };
+            return { joint, stats, surfaceDoc };
         },
-        build({ joint, stats }, { box }) {
+        build({ joint, stats, surfaceDoc }, { box }) {
             const [xName, yName] = axisNames(joint, stats);
             const { side, left, top, hostHeight } = box;
-            // 3-D when the renderer is loaded and asked for; the flat heatmap
-            // otherwise, so a WebGL-less browser or a failed chunk still lands
-            // on a picture rather than an empty pane.
-            if (view.surface3d && surfaceReady) {
-                const grid = surfaceGrid(joint);
-                if (grid) {
-                    const option = surfaceOption(grid, {
-                        xName, yName, logZ: Boolean(view.logZ), side,
-                    });
+            // 3-D when the renderer is loaded, asked for, and the document
+            // arrived; the flat heatmap otherwise, so a WebGL-less browser, a
+            // failed chunk, or a failed fetch still lands on a picture rather
+            // than an empty pane.
+            if (view.surface3d && surfaceReady && surfaceDoc) {
+                const option = chartdocToEcharts(surfaceDoc, {
+                    logZ: Boolean(view.logZ),
+                    overrides: (ctx) => surfaceOverrides({ ...ctx, side }),
+                });
+                if (option) {
                     option.hostHeight = hostHeight;
                     return option;
                 }

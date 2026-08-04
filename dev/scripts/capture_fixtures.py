@@ -49,8 +49,10 @@ FRAMES = {
     "pnl": [("density", "density_df?cols=loss,p_total,F,S")],
     # `view=joint` is explicit: density_df answers a bivariate with its two
     # marginals by default, which is what a table wants. The heatmap is the one
-    # consumer of the whole matrix.
-    "bvagg": [("joint", "density_df?view=joint"), ("stats", "stats_df")],
+    # consumer of the whole matrix; the 3-D surface reads the chart document,
+    # whose display reduction happens upstream in the library emitter.
+    "bvagg": [("joint", "density_df?view=joint"), ("stats", "stats_df"),
+              ("surface_doc", "chart/joint_surface")],
     "reins": [("reins", "reins_density_df")],
 }
 

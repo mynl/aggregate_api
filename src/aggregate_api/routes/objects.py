@@ -77,6 +77,7 @@ from fastapi.responses import Response
 from lark.exceptions import UnexpectedInput, VisitError
 
 from aggregate import Distortion, Severity, build as _build_singleton
+from aggregate import charts as agg_charts
 from aggregate.constants import FIRST_CLASS_CLASSES, NEAR_FIRST_CLASS
 from aggregate.parser_errors import ErrorReport, format_error
 
@@ -1531,6 +1532,52 @@ def get_frame_document(
     # immutable and the build is deterministic, so a repeat request on an
     # unchanged object always revalidates rather than re-transferring.
     etag = f'"{doc_hash}"'
+    if request is not None and request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={"ETag": etag, "Cache-Control": "no-cache"},
+    )
+
+
+# ----------------------------------------------------------------------
+# GET /v1/objects/{id}/chart/{name} -- the chart-document route
+# ----------------------------------------------------------------------
+
+@router.get("/objects/{oid}/chart/{name}")
+def get_chart_document(
+    oid: str,
+    name: str,
+    request: Request = None,
+    entry: CacheEntry = Depends(_locked_entry),
+) -> Response:
+    """Return the named chart as a chart document (the chart IR).
+
+    The chart sibling of the frame-document route above. The library emitter
+    owns every semantic decision (which series, on which axes, at which
+    scales, and the mass-preserving display reduction that used to live in
+    ``surfaceGrid`` client side); this route only serializes and
+    revalidates. Names resolve through ``aggregate.charts.available_charts``,
+    so a new library emitter appears here with zero endpoint changes; an
+    unknown or unavailable name is a 404 carrying the capability set.
+
+    Notes
+    -----
+    The body is ``canonical_json`` bytes rather than a Pydantic model,
+    because the document's own content hash is the ETag and re-serializing
+    would break the byte determinism that makes the hash mean anything.
+    """
+    available = agg_charts.available_charts(entry.obj)
+    if name not in available:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no chart {name!r} for this object; available: {available}",
+        )
+    emitter, _predicate = agg_charts.CHARTS[name]
+    doc = agg_charts.stamp(emitter(entry.obj))
+    body = agg_charts.canonical_json(doc)
+    etag = f'"{doc.hash}"'
     if request is not None and request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
     return Response(
