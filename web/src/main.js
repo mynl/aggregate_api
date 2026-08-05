@@ -53,7 +53,15 @@ const state = {
     kind: null,
     name: null,
     mean: null,             // headline mean, for the exhibit's reference line
-    hasReins: false,        // gates the Reins tab and the Price basis selector
+    hasReins: false,        // the Price basis selector; the Reins tab reads `exhibits`
+    // What the object can answer, straight off the build response. The app
+    // holds no per-kind table of its own: a new library exhibit reaches the
+    // menu with no edit here, which is the whole point of the exhibit registry.
+    exhibits: new Set(),    // library exhibit names
+    charts: new Set(),      // library chart names
+    canPrice: false,        // app leaf: the pricing forms
+    canSharpen: false,      // app leaf: the Sharpen button (Stage 4)
+    hasPremium: false,      // app leaf: the PnL button's form (Stage 4)
     log2: null,             // null = auto
     bs: null,               // null = auto
     loaded: new Set(),      // tab names whose data has been fetched
@@ -162,6 +170,7 @@ async function build() {
         // carries it, so there is no reason to refetch a frame to find it.
         state.mean = res.mean;
         state.hasReins = Boolean(res.has_reins);
+        applyCapability(res.capability);
         state.loaded = new Set();
         renderSummary(res);
         history.record(decl);
@@ -170,11 +179,28 @@ async function build() {
     } catch (err) {
         state.id = state.kind = state.name = state.mean = null;
         state.hasReins = false;
+        applyCapability(null);
         renderBuildFailure(err);
     } finally {
         buildBtn.disabled = false;
         buildBtn.textContent = 'Build';
     }
+}
+
+/**
+ * Take the build response's capability block into module state.
+ *
+ * A failed build passes null, which clears everything: with no object there is
+ * nothing that can be answered, so every gated leaf greys out rather than
+ * keeping the last object's shape and lying about the one that did not build.
+ */
+function applyCapability(capability) {
+    const cap = capability || {};
+    state.exhibits = new Set((cap.exhibits || []).map((e) => e.name));
+    state.charts = new Set(cap.charts || []);
+    state.canPrice = Boolean(cap.can_price);
+    state.canSharpen = Boolean(cap.can_sharpen);
+    state.hasPremium = Boolean(cap.has_premium);
 }
 
 buildBtn.addEventListener('click', build);
@@ -214,7 +240,7 @@ function fmtBs(bs) {
 function renderSummary(res) {
     const inner = $('summary-inner');
     empty(inner);
-    applyKindGating(res.kind, res.has_reins);
+    applyCapabilityGating();
     renderPriceBasis();
     const kindLabel = KIND_LABEL[res.kind] || 'Aggregate';
     const bits = [
@@ -311,9 +337,15 @@ function showTab(name) {
 // The same shape as Reins, which is the point: a dropdown nested inside a pill
 // bar was the one control on the page that behaved differently from everything
 // around it.
+// `exhibit` names the library exhibit a view is a window onto, and is what
+// decides whether the view is live for the object in front of you. A view with
+// no `exhibit` is an app leaf: Density is a bulk frame with no exhibit behind
+// it, and Info is the object's own text, so both are available wherever the
+// object is.
 const MORE_VIEWS = {
     validation: {
         label: 'Validation',
+        exhibit: 'validation',
         hint: 'theoretical vs empirical moments; reads “not unreasonable” on a clean build',
         copy: true,
         load: async () => replacePaneTable('pane-more', 'validation_df',
@@ -321,6 +353,7 @@ const MORE_VIEWS = {
     },
     stats: {
         label: 'Stats',
+        exhibit: 'stats',
         hint: 'frequency / severity / aggregate moments; raw moment rows are dropped',
         load: async () => replacePaneTable('pane-more', 'stats_df', GRID_FULL),
     },
@@ -354,6 +387,7 @@ const MORE_VIEWS = {
     },
     bswin: {
         label: 'bs window',
+        exhibit: 'bs_window',
         hint: 'bucket / window estimator; the selected row is the chosen grid',
         load: async () => replacePaneTable('pane-more', 'bs_window_df', GRID_FULL),
     },
@@ -365,23 +399,28 @@ const MORE_VIEWS = {
     },
 };
 
-// Sub-views a kind cannot answer, greyed out rather than removed, same rule as
-// the tabs. A Severity carries no frames at all beyond its sampled density.
-const NA_MORE_BY_KIND = {
-    distortion: ['bswin'],
-    bvagg: ['bswin'],
-    pnl: ['bswin'],
-    sev: ['validation', 'stats', 'bswin'],
-};
+/**
+ * Is this More view live for the object in front of us?
+ *
+ * An exhibit-backed view answers when the library says the object serves that
+ * exhibit; an app leaf always answers. Nothing here knows about kinds, which is
+ * the point: this replaced a hand-written table saying which views each kind
+ * could not do, and that table had drifted (it greyed a bivariate's grid-sizing
+ * pane, which the object serves perfectly well).
+ */
+function moreViewAvailable(key) {
+    const view = MORE_VIEWS[key];
+    if (!view?.exhibit) return true;
+    return state.exhibits.has(view.exhibit);
+}
 
-/** Render the More sub-button row for the current kind. */
+/** Render the More sub-button row for the current object. */
 function renderMoreTools() {
     const tools = $('more-tools');
     if (!tools) return;
     empty(tools);
-    const na = new Set(NA_MORE_BY_KIND[state.kind] || []);
     for (const [key, view] of Object.entries(MORE_VIEWS)) {
-        const off = na.has(key);
+        const off = !moreViewAvailable(key);
         const btn = el('button', {
             type: 'button',
             className: `btn btn-outline-secondary${key === state.moreWhich ? ' active' : ''}`
@@ -413,9 +452,9 @@ async function loadMoreView() {
     if (!state.id) return;
     const view = MORE_VIEWS[state.moreWhich];
     if (!view) return;
-    // A disabled view can still be the sticky default from a previous kind;
+    // A disabled view can still be the sticky default from a previous object;
     // fall back rather than firing a request that will 400.
-    if ((NA_MORE_BY_KIND[state.kind] || []).includes(state.moreWhich)) {
+    if (!moreViewAvailable(state.moreWhich)) {
         state.moreWhich = 'info';
         renderMoreTools();
         return loadMoreView();
@@ -427,37 +466,41 @@ async function loadMoreView() {
     }
 }
 
-// Tabs that need something the object does not have. A Distortion, a
-// BivariateAggregate or a PnL has no pricing, reinsurance or bs window; a
-// Severity is a look-through onto a frozen scipy variable and has none of the
-// frames. Per the house rule we NEVER hide menu items (the menu set stays
-// stable), we grey them out so the user can see what does not apply. Bounds is
-// disabled for every kind until it is built.
-const NA_TABS_BY_KIND = {
-    distortion: ['price', 'reins'],
-    bvagg: ['price', 'reins'],
-    pnl: ['price', 'reins'],
-    sev: ['price', 'reins'],
+// What each gated tab needs from the object, and how it is asked. `exhibit`
+// reads the library's own capability list; `flag` reads a capability flag, for
+// the tabs that are app behavior rather than a library document. Per the house
+// rule we NEVER hide menu items (the menu set stays stable), we grey them out
+// so the user can see what does not apply. Bounds is disabled for every kind
+// until it is built.
+const GATED_TABS = {
+    price: { flag: 'canPrice' },
+    reins: { exhibit: 'reins' },
 };
-const GATED_TABS = ['price', 'reins'];
 
 /**
  * Grey out the tabs this object cannot answer, and land somewhere it can.
  *
- * Two inputs, not one: the kind, and whether the object carries a cession. An
- * Aggregate with no reinsurance used to leave Reins enabled and open a pane
- * reading "No reinsurance on this object", which is the tab telling you it was
- * the wrong tab after you clicked it. `has_reins` rides along on the build
- * response, so the pill can say so before you do.
+ * One input, not two: the capability block the build response carries. This
+ * used to be a kind plus a `has_reins` boolean read against a hand-written
+ * table of what each kind could not do, which was the same knowledge the
+ * library already held, written down a second time in JavaScript. Reins is now
+ * gated on the library serving a `reins` exhibit, which is registered behind
+ * exactly the cession test the old flag made, and Price on `can_price`, which
+ * the api reads off the object's own `price_pentagon` rather than off a list of
+ * kinds.
  *
  * The active tab is left alone unless it just went dark. Stepping through
  * examples on the Price tab should stay on Price, and the only reason to move is
  * that there is nothing there any more.
  */
-function applyKindGating(kind, hasReins = false) {
-    const na = new Set(NA_TABS_BY_KIND[kind] || []);
-    if (!hasReins) na.add('reins');
-    for (const tab of GATED_TABS) {
+function applyCapabilityGating() {
+    const na = new Set(
+        Object.entries(GATED_TABS)
+            .filter(([, need]) => (need.exhibit
+                ? !state.exhibits.has(need.exhibit)
+                : !state[need.flag]))
+            .map(([tab]) => tab));
+    for (const tab of Object.keys(GATED_TABS)) {
         const btn = document.querySelector(`.out-tabs [data-tab="${tab}"]`);
         if (!btn) continue;
         const off = na.has(tab);

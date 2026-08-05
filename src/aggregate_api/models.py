@@ -63,6 +63,43 @@ class BuildRequest(BaseModel):
     )
 
 
+class ExhibitCapability(BaseModel):
+    """One exhibit an object can serve, as the capability block reports it."""
+
+    model_config = _RESPONSE_CFG
+
+    name: str
+    title: str
+    # ``raw`` / ``insurer``; the two with a 1.0 implementation. An exhibit whose
+    # predicate fails is absent from the list rather than present with none.
+    perspectives: list[str] = []
+
+
+class Capability(BaseModel):
+    """What this object can answer, computed by the library, never declared.
+
+    Rides inline on the build response rather than answering a second request,
+    because the navigation has to paint immediately and a round trip per build
+    to learn the menu is a round trip too many. ``exhibits`` is the same payload
+    ``GET /v1/objects/{id}/exhibits`` serves, from the same helper.
+
+    Two facts are deliberately **not** here. ``kind`` and ``has_reins`` already
+    ride on the build response, and one field per fact is the point of the
+    block: the app's two hand-written per-kind tables died so that nothing says
+    the same thing twice.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    exhibits: list[ExhibitCapability] = []
+    charts: list[str] = []
+    # Flags for the leaves that are app behavior rather than a library
+    # document; each names its consumer in ``capability.py``.
+    has_premium: bool = False
+    can_sharpen: bool = False
+    can_price: bool = False
+
+
 class BuildResponse(BaseModel):
     """Slim response so the post-build page doesn't pay for unused data.
 
@@ -96,6 +133,9 @@ class BuildResponse(BaseModel):
     # gross / net basis selector. Cheap: read off the cession specs, never off
     # ``reins_summary_df``, which would materialize a frame on every build.
     has_reins: bool = False
+    # What this object can answer. The SPA paints its navigation from this and
+    # holds no per-kind table of its own.
+    capability: Capability = Field(default_factory=Capability)
 
 
 class ObjectSummary(BaseModel):

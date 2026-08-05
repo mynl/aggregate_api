@@ -4,6 +4,52 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a43
+
+The two hand-written per-kind tables in the SPA are gone, and the navigation
+greys from what the library says instead. Stage 2 of
+`dev/plan-loss-lab-navigation.md`.
+
+`NA_TABS_BY_KIND` and `NA_MORE_BY_KIND` said what each kind could not answer.
+The library already knew, through `available_exhibits` and `available_charts`,
+so the app was the one place left declaring capability a second time. The build
+response now carries a `capability` block and the app holds no per-kind table at
+all. A new library exhibit reaches the menu with no JavaScript edit, which is
+the whole point of the exhibit registry.
+
+New `capability.py`, and each flag on it names the consumer that cannot get its
+answer any other way. `has_premium` for the PnL form, `can_sharpen` for the
+Sharpen button, `can_price` for the pricing group. `can_sharpen` and `can_price`
+are read off the object's own `sharpen` and `price_pentagon` rather than off a
+list of kinds, so a future host needs no edit. `can_sharpen` also goes false
+once a program carries the library's namespaced `sharpen: ` verdict, since a
+second audit of a grid the probe just confirmed is a slow no-op; the note is
+`;`-separated and the author's own prose never matches the prefix.
+
+`is_tower` was in the plan's draft list and is not here: `economic_waterfall` is
+registered behind a tower predicate, so a single group P&L already drops it from
+the exhibit list, and a flag repeating that would be the second declaration this
+work exists to delete. `kind` and `has_reins` stay on the response and are not
+repeated inside the block for the same reason.
+
+**One bug, found by the derivation rather than by a user.** A
+`BivariateAggregate` carries the public `bs_window_df` and not the private
+`_bs_window_df` the frame route read alone, so the library served a `bs_window`
+exhibit while the route answered 400, and the hand table had greyed the pane out
+to match the symptom. Both routes now resolve private first and public second:
+an aggregate keeps the raw probe frame with its `W` and `coverage` columns,
+which are the pane's whole diagnostic value, and a bivariate gets the display
+view it does have. `test_bivariate_builds_and_reports` asserted the old 400 and
+now asserts the 200.
+
+Twenty new tests in `tests/test_capability.py`, run against one object of every
+kind the api builds. The load-bearing one transcribes both retired tables and
+asserts the derived answer agrees with them, since deleting them is only safe if
+it does; the bivariate row is the single exception and it is asserted
+separately. Two more check that every exhibit and every chart the block lists
+actually serves, because a leaf lit by the capability list and then refused by
+its own route is worse than a leaf that is greyed.
+
 ## 1.0.0a42
 
 The app is the **aggregate Loss Lab**. Stage 1 of

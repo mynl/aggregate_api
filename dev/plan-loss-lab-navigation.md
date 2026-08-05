@@ -184,16 +184,23 @@ default could land on a grid the build route would then refuse to rebuild, which
 is a derived program the app cannot honor. The call passes
 `log2_cap=settings.log2_cap`.
 
-## Stage 2: [Capability-Payload]
+## Stage 2: [Capability-Payload] (landed, 1.0.0a43)
 
 The build response grows a capability block, and the two JavaScript tables die.
 
 The block carries the exhibits this object can serve with their perspectives,
 straight off `available_exhibits`, the charts it can serve off
-`available_charts`, and the flags the app-only leaves need: `kind`, `has_reins`,
-`has_premium`, `can_sharpen`. Inline on the build response rather than a second
+`available_charts`, and the flags the app-only leaves need: `has_premium`,
+`can_sharpen`, `can_price`. Inline on the build response rather than a second
 request, because the nav has to paint immediately and a round trip per build to
 learn the menu is a round trip too many.
+
+**Two corrections found in execution.** `can_price` was missing from the draft's
+flag list, which named Pricing as an app leaf and then gave it nothing to read.
+It is derived like `can_sharpen`, off the object's own `price_pentagon`, which
+is the same test the pricing path makes before it raises, so no kind list
+survives anywhere. And `kind` and `has_reins` are not repeated inside the block:
+both already ride on the build response, and one field per fact is the point.
 
 `/objects/{oid}/exhibits` already exists and already reports exactly this for
 exhibits (`routes/objects.py:1603`), so this is that payload lifted into the
@@ -228,6 +235,16 @@ is the whole point of lighting them from the capability list. The names are
 introduced by its display name, the registry name follows it in parentheses.
 
 Deletes `NA_TABS_BY_KIND` and `NA_MORE_BY_KIND`.
+
+**What the derivation caught, which is the argument for doing it.** The hand
+table said a `BivariateAggregate` had no grid-sizing pane. The object serves one
+perfectly well; what was broken was this repo's frame route, which read only the
+private `_bs_window_df` that a bivariate does not carry, and the table had been
+written to match the 400 rather than the object. Both routes now read private
+first and public second, so the aggregate keeps the raw probe frame with its `W`
+and `coverage` diagnostics and the bivariate gets the display view it has. A
+leaf lit by the capability list has to be a leaf that serves, which is why
+Stage 2's tests walk every listed exhibit and chart and fetch it.
 
 ## Stage 3: [Navigation-Groups]
 

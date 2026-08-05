@@ -567,12 +567,17 @@ def test_bivariate_builds_and_reports(client):
     # Common reporting surface works.
     for which in ("info", "summary", "stats_df"):
         assert client.get(f"/v1/objects/{oid}/{which}").status_code == 200, which
-    # No pricing / reinsurance / bs-window -> clean 400 (not 500).
+    # No pricing / reinsurance -> clean 400 (not 500).
     assert client.post(
         f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.15}
     ).status_code == 400
     assert client.get(f"/v1/objects/{oid}/reins_summary_df").status_code == 400
-    assert client.get(f"/v1/objects/{oid}/bs_window_df").status_code == 400
+    # A grid-sizing frame it does have, and this used to 400. The route read
+    # only the private ``_bs_window_df``, which a bivariate does not carry,
+    # while the library serves the public ``bs_window_df`` as an exhibit; the
+    # capability payload (a42) put the disagreement on the record. See
+    # ``tests/test_capability.py``.
+    assert client.get(f"/v1/objects/{oid}/bs_window_df").status_code == 200
 
 
 def test_bivariate_chart_document(client):

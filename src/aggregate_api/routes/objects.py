@@ -86,6 +86,7 @@ from aggregate.parser_errors import ErrorReport, format_error
 from .. import models
 from ..audit import AuditLog
 from ..cache import CacheEntry, ObjectCache, canonicalize_decl, object_id
+from ..capability import capability_for
 from ..config import Settings, get_settings
 from ..plotting import render_plot
 from ..pricing import run_price_pentagon, run_pricing, run_reins_price
@@ -413,6 +414,25 @@ def _resolve_frame(obj: Any, name: str):
     return attr() if callable(attr) else attr
 
 
+def _bs_window_frame(obj: Any):
+    """The grid-sizing frame, private raw form preferred over the public view.
+
+    One resolution shared by the JSON route and the CSV download so the two
+    cannot answer differently. See :func:`get_bs_window_df` for why both
+    attributes are read.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    pandas.DataFrame or None
+    """
+    df = _resolve_frame(obj, "_bs_window_df")
+    return df if df is not None else _resolve_frame(obj, "bs_window_df")
+
+
 # ----------------------------------------------------------------------
 # POST /v1/objects
 # ----------------------------------------------------------------------
@@ -495,6 +515,10 @@ def post_object(
             "cached": True,
             "elapsed_ms": elapsed,
             **_summary_fields(cached_entry.obj),
+            # Computed on the hit path too, never cached alongside the entry:
+            # ``can_sharpen`` reads the object's own note, which a Sharpen can
+            # move under a live id, so a stored copy could go stale.
+            "capability": capability_for(cached_entry.obj),
         }
 
     # Cache miss -- fire the build, gated by the semaphore +
@@ -649,6 +673,7 @@ def post_object(
         "cached": False,
         "elapsed_ms": elapsed,
         **_summary_fields(obj),
+        "capability": capability_for(obj),
     }
 
 
@@ -1271,14 +1296,28 @@ def get_kappa(
 
 @router.get("/objects/{oid}/bs_window_df", response_model=models.FrameResponse)
 def get_bs_window_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
-    """Bucket/window estimator summary (``_bs_window_df``).
+    """Bucket/window estimator summary.
 
     A small per-method frame the library builds while choosing the grid
     (``bs`` / ``log2`` / ``x_min``); the ``selected`` row marks the method
-    actually used. Stored on the private ``_bs_window_df`` attribute, so a
-    getattr miss (e.g. on a Portfolio) yields a clean 400.
+    actually used.
+
+    Two attributes carry it and the route reads both, private first. The
+    private ``_bs_window_df`` is the raw probe frame, two columns wider (``W``
+    and ``coverage``), and those two are the pane's whole diagnostic value, so
+    where it exists it wins. The public ``bs_window_df`` is the library's
+    display view of the same rows, and it is what the ``bs_window`` exhibit
+    serves.
+
+    Reading only the private one is what this route used to do, and the
+    capability payload caught it: a ``BivariateAggregate`` carries the public
+    frame and not the private one, so the library reported the exhibit as
+    available while this route answered 400. A leaf lit by the capability list
+    has to be a leaf that serves, or the derivation is worth nothing. A kind
+    carrying neither (a P&L, a severity, a distortion) still gets the clean
+    400.
     """
-    df = _frame_attr(entry.obj, "_bs_window_df")
+    df = _bs_window_frame(entry.obj)
     if df is None:
         raise HTTPException(
             status_code=400, detail="bs window summary not available for this object"
@@ -1416,7 +1455,7 @@ _CSV_FRAMES = {
     "economic_df": lambda o: _resolve_frame(o, "economic_df"),
     "economic_ratios_df": lambda o: _resolve_frame(o, "economic_ratios_df"),
     "density_df": lambda o: _resolve_frame(o, "density_df"),
-    "bs_window_df": lambda o: _resolve_frame(o, "_bs_window_df"),
+    "bs_window_df": lambda o: _bs_window_frame(o),
     "reins_summary_df": lambda o: _resolve_frame(o, "reins_summary_df"),
     "reins_stats_df": lambda o: _drop_raw_moments(_resolve_frame(o, "reins_stats_df")),
     "reins_density_df": lambda o: _resolve_frame(o, "reins_density_df"),

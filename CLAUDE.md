@@ -82,6 +82,7 @@ the built SPA at `/` when present.
 | `config.py` | `Settings` (pydantic-settings, `AGGAPI_*` env vars) |
 | `cors.py` | CORS middleware install for split-origin deploys |
 | `cache.py` | in-memory LRU object cache keyed by hash of `(decl, log2, bs)` |
+| `capability.py` | what an object can answer, off `available_exhibits` / `available_charts` plus app-leaf flags; rides on the build response |
 | `audit.py` | SQLite audit log, one row per build attempt |
 | `completion.py` | DecL autocomplete over `aggregate.parser` |
 | `examples.py` | categorized example library from `test_suite.agg` |
