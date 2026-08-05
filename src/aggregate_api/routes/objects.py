@@ -1408,6 +1408,13 @@ _CSV_FRAMES = {
     "tail_df": lambda o: _resolve_frame(o, "tail_df"),
     "validation_df": lambda o: _resolve_frame(o, "validation_df"),
     "stats_df": lambda o: _drop_raw_moments(_resolve_frame(o, "stats_df")),
+    # The P&L accounting family (aggregate 1.0.0a204, [PnL-Economic-Frames]).
+    # ``economic_df`` is the ledger sheet that used to answer to ``stats_df``
+    # on a PnL; that name now delegates to the wrapped engine's moment store,
+    # so without these two entries the ledger would be unreachable until the
+    # economics tab lands. No raw-moment drop: neither is a moment store.
+    "economic_df": lambda o: _resolve_frame(o, "economic_df"),
+    "economic_ratios_df": lambda o: _resolve_frame(o, "economic_ratios_df"),
     "density_df": lambda o: _resolve_frame(o, "density_df"),
     "bs_window_df": lambda o: _resolve_frame(o, "_bs_window_df"),
     "reins_summary_df": lambda o: _resolve_frame(o, "reins_summary_df"),

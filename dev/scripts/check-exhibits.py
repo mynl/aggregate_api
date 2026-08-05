@@ -60,9 +60,15 @@ FRAME_ROUTE_BLOCKS = {
     "reins_summary_df": "reins_summary_df",
 }
 
-# The full exhibit vocabulary, in registry order, for the sweep grid.
-EXHIBITS = ["summary", "tail", "stats", "validation", "reins",
-            "pnl_ledger", "pnl_ratios", "dependency"]
+# The full exhibit vocabulary, in registry order, for the sweep grid. Read
+# from the library so a new exhibit joins the sweep with no edit here; the
+# literal is only a fallback for an older aggregate.
+try:
+    from aggregate.exhibits import EXHIBITS as _LIB_EXHIBITS
+    EXHIBITS = list(_LIB_EXHIBITS)
+except ImportError:  # pragma: no cover
+    EXHIBITS = ["summary", "tail", "stats", "validation", "reins",
+                "economic", "economic_ratios", "dependency"]
 
 
 def main() -> int:

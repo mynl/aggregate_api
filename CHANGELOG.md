@@ -4,6 +4,31 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a40
+
+Keeping step with `aggregate` `1.0.0a204` and `a205`
+(`[PnL-Economic-Frames]`, `[Exhibits-Package-Split]`). No new routes; this is
+the app catching the library's renames and staying honest about who owns the
+capability set.
+
+`_CSV_FRAMES` gains `economic_df` and `economic_ratios_df`. Upstream, a P&L's
+`stats_df` now delegates to its wrapped engine and means what it means
+everywhere else (the moment store of a book), while the ledger sheet that used
+to answer to that name became `economic_df`. Without these two entries the
+ledger would have been unreachable from the api until the economics tab lands.
+Visible in the sweep: `stats` on a P&L now reads 26 rows raw and 17 insurer,
+the ordinary raw-moment drop, where it used to be the ledger's 3.
+
+`check-exhibits.py` reads the exhibit list from `aggregate.exhibits.EXHIBITS`
+rather than a literal, so an exhibit landing upstream joins the sweep with no
+edit here. It picked up `bs_window` and `tail_behavior` on its own, and reports
+clean.
+
+`test_exhibits_capability_listing` no longer pins a literal list of exhibit
+names. The library owns the capability set; re-pinning on every upstream
+addition would test nothing but our own bookkeeping. It now asserts the route
+is a faithful passthrough over a floor of exhibits any aggregate must serve.
+
 ## 1.0.0a39
 
 The app side of the business exhibits surface, first slice
