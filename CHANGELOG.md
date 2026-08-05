@@ -4,6 +4,24 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a41
+
+Coverage, not capability. `aggregate` `1.0.0a206` and `a207` landed the
+economic insurer treatments and `economic_waterfall`, and both reached the api
+through the generic exhibit routes with no endpoint change, which is the whole
+point of that design. What was missing was a fixture to prove it.
+
+`check-exhibits.py` gains an `xpnl` case. The existing `pnl` fixture is a
+single group ledger, which correctly declines to serve `economic_waterfall`
+(one margin row, no walk to draw), so the flagship exhibit was showing as
+absent everywhere in the sweep and nothing exercised it app side. The walk
+fixture covers it: the waterfall now reports 6 rows across its two blocks, and
+`economic_ratios` shows 7 raw against 10 insurer, the extra block being the
+amounts-from-ratios split that keeps one unit per column.
+
+Still clean: every exhibit serves, revalidates, and agrees with the frame
+routes wherever the two overlap.
+
 ## 1.0.0a40
 
 Keeping step with `aggregate` `1.0.0a204` and `a205`

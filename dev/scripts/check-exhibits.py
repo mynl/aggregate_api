@@ -45,6 +45,13 @@ DECLS = {
         "pnl SWP 1000 prem less "
         "agg SWPL 1000 prem at 70% lr sev lognorm 100 cv 2 poisson"
     ),
+    # A walk, so the sweep reaches the tower-gated economic_waterfall; the
+    # plain pnl above has one margin row and correctly declines to serve it.
+    "xpnl": (
+        "xpnl SWX 1000 prem less "
+        "agg SWXL 1000 prem at 70% lr sev lognorm 100 cv 2 "
+        "occurrence ceded to 500 xs 500 deposit 100 poisson"
+    ),
     "dist": "distortion SWD dual 2",
 }
 
