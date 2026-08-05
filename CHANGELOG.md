@@ -4,6 +4,49 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a39
+
+The app side of the business exhibits surface, first slice
+(`dev/plan-exhibits.md` in the library repo, `[Exhibits-App-Endpoint]`;
+library phases landed there as `1.0.0a200`, `a201` and `a203`). Additive
+only: the two routes and the regression sweep. The menu-from-capability
+rewrite (`applyKindGating` reading the capability response, the migrated
+`ROW_FLAGS` / `FORMATS` / caption deletions) waits until the library's PnL
+insurer framing clears its author gate, so nothing is deleted here and the
+frame routes are untouched.
+
+### Two exhibit routes
+
+`GET /v1/objects/{oid}/exhibits`: a passthrough of
+`aggregate.exhibits.available_exhibits`, `{name, title, perspectives}` per
+served exhibit. The library owns the capability set, so a new library
+exhibit appears here with zero endpoint changes.
+
+`GET /v1/objects/{oid}/exhibit/{name}?perspective=raw|insurer`: the envelope
+`{name, title, perspective, meta, blocks, hash}` with TableDoc canonical
+dicts as blocks. Deterministic UTF-8 body; the exhibit hash (sha256 over the
+block document hashes) is the ETag under the same revalidation contract as
+the table and chart documents. Unknown or unavailable names are a 404
+carrying the capability set; unsupported perspectives (insured, reinsurer,
+or an unknown string) are a 400.
+
+### `check-exhibits.py`, the sweep
+
+`dev/scripts/check-exhibits.py`, the sibling of `check-frames.py`: sweeps
+every exhibit across every buildable kind, asserts the capability and
+envelope routes agree, that every envelope is byte deterministic, and that
+the INSURER blocks match the frame-document routes row for row where they
+cover the same frame (the frame routes already serve the app presentation:
+`_drop_raw_moments` on the two stats stores). Clean at capture: the stats
+26/17 and reins 35/26 drops line up exactly.
+
+Envelope contract tests join `tests/test_objects.py` (capability listing,
+reins gating, ETag / 304, byte determinism, 404 and 400 families). Left
+open, deliberately: extending `capture_fixtures.py` to the new envelopes.
+Its output file is already named `dev/fixtures/exhibits.json` for the chart
+panel fixtures, a vocabulary collision with the new table exhibits that the
+author should settle before the file grows a second meaning.
+
 ## 1.0.0a38
 
 The app side of the chart-IR surface pilot (`dev/plan-chart-ir.md` in the

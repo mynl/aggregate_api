@@ -1409,3 +1409,75 @@ def test_price_documents_carry_the_declared_formats(client):
     for col in ir["LR"]["columns"]:
         if (col.get("role") or "data") == "data":
             assert col["format"]["kind"] == "pct", col["name"]
+
+
+# ----------------------------------------------------------------------
+# Exhibits (library-owned business exhibits; [Exhibits-App-Endpoint])
+# ----------------------------------------------------------------------
+
+def test_exhibits_capability_listing(client):
+    """The capability route passes ``available_exhibits`` through untouched.
+
+    Names, titles and perspectives all come from the library registry; no
+    per kind tables in the route. A plain aggregate serves summary / tail /
+    stats / validation at raw plus insurer; no reins without a cession.
+    """
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/exhibits")
+    assert r.status_code == 200, r.text
+    items = r.json()["exhibits"]
+    names = [e["name"] for e in items]
+    assert names == ["summary", "tail", "stats", "validation"]
+    for e in items:
+        assert e["perspectives"] == ["raw", "insurer"]
+        assert e["title"]
+
+
+def test_exhibits_capability_reins_gated(client):
+    """The reins exhibit appears exactly when the object cedes."""
+    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
+    names = [e["name"] for e in
+             client.get(f"/v1/objects/{oid}/exhibits").json()["exhibits"]]
+    assert "reins" in names
+
+
+def test_exhibit_envelope_contract(client):
+    """Envelope shape, ETag revalidation, byte determinism, 404 and 400."""
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r1 = client.get(f"/v1/objects/{oid}/exhibit/summary?perspective=insurer")
+    assert r1.status_code == 200, r1.text
+    env = r1.json()
+    assert sorted(env) == ["blocks", "hash", "meta", "name", "perspective",
+                           "title"]
+    assert env["name"] == "summary" and env["perspective"] == "insurer"
+    assert env["meta"]["blocks"] == ["summary_df"]
+    # blocks are TableDoc canonical dicts (ir_version present, body rows)
+    doc = env["blocks"][0]
+    assert doc["ir_version"] == 1 and doc["body"]
+    # the insurer view carries the migrated caption knowledge
+    assert "blank by design" in doc["caption"]
+    # ETag is the exhibit hash (sha256 over block doc hashes), quoted
+    etag = r1.headers["ETag"]
+    assert etag == f'"{env["hash"]}"' and len(env["hash"]) == 12
+    r2 = client.get(
+        f"/v1/objects/{oid}/exhibit/summary?perspective=insurer",
+        headers={"If-None-Match": etag},
+    )
+    assert r2.status_code == 304
+    # byte determinism: a fresh GET returns identical bytes
+    r3 = client.get(f"/v1/objects/{oid}/exhibit/summary?perspective=insurer")
+    assert r3.content == r1.content
+    # raw and insurer are different documents
+    r4 = client.get(f"/v1/objects/{oid}/exhibit/summary")
+    assert r4.json()["hash"] != env["hash"]
+    # unknown name -> 404 carrying the capability set
+    r5 = client.get(f"/v1/objects/{oid}/exhibit/nope")
+    assert r5.status_code == 404
+    assert "summary" in r5.json()["detail"]
+    # unavailable name (no cession) -> the same 404 family
+    r6 = client.get(f"/v1/objects/{oid}/exhibit/reins")
+    assert r6.status_code == 404
+    # unsupported / unknown perspectives -> 400
+    for p in ("reinsurer", "insured", "bogus"):
+        r7 = client.get(f"/v1/objects/{oid}/exhibit/summary?perspective={p}")
+        assert r7.status_code == 400, p

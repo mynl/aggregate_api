@@ -36,7 +36,27 @@ Left over from this work:
   up in `c:/s/ai/greatest-tables/dev/note-from-aggregate-api-include-raw.md`.
 - Two harnesses in `dev/scripts/`: `check-frames.py` (every frame, every kind,
   both routes agree) and `check-adapter.py` (a document is interchangeable with
-  its `FrameResponse`). Run both when `greater-tables` moves.
+  its `FrameResponse`). Run both when `greater-tables` moves. A third joined at
+  a39: `check-exhibits.py` (every exhibit, every kind: capability and envelope
+  agree, byte determinism, insurer blocks match the frame routes row for row).
+
+### Exhibits endpoint, remaining slices (a39 landed the routes)
+
+The `[Exhibits-App-Endpoint]` phase of the library's `dev/plan-exhibits.md`
+landed its additive slice at a39: the capability and envelope routes plus
+`check-exhibits.py`. Still open, gated on the library's PnL insurer framing
+review: the menu-from-capability rewrite (`applyKindGating` and the
+hardcoded NA tables read the capability response; `has_reins` gating folds
+in; chips gray out, never hide; unknown-to-the-page exhibits list under
+More), deleting the migrated `ROW_FLAGS` / `FORMATS` entries and the
+`main.js` title and caption literals (pricing FORMATS stay), wiring
+`check-exhibits.py` into CI, and extending `capture_fixtures.py` to the
+envelopes (its output file is already named `dev/fixtures/exhibits.json`
+for the chart panel fixtures; settle that name collision first). The
+`[Exhibits-App-Cleanup]` decision (retire `_drop_raw_moments` by
+re-pointing the frame routes at exhibit raw and insurer, or keep the frame
+routes as the raw CSV path forever) is taken during the endpoint phase
+proper.
 
 ### b) Consolidate the graphs on ECharts, and fix the options
 

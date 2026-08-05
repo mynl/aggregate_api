@@ -61,6 +61,7 @@ return in milliseconds.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import threading
@@ -78,6 +79,7 @@ from lark.exceptions import UnexpectedInput, VisitError
 
 from aggregate import Distortion, Severity, build as _build_singleton
 from aggregate import charts as agg_charts
+from aggregate import exhibits as agg_exhibits
 from aggregate.constants import FIRST_CLASS_CLASSES, NEAR_FIRST_CLASS
 from aggregate.parser_errors import ErrorReport, format_error
 
@@ -1578,6 +1580,82 @@ def get_chart_document(
     doc = agg_charts.stamp(emitter(entry.obj))
     body = agg_charts.canonical_json(doc)
     etag = f'"{doc.hash}"'
+    if request is not None and request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={"ETag": etag, "Cache-Control": "no-cache"},
+    )
+
+
+# ----------------------------------------------------------------------
+# GET /v1/objects/{id}/exhibits and /exhibit/{name} -- business exhibits
+# ----------------------------------------------------------------------
+
+@router.get("/objects/{oid}/exhibits")
+def list_exhibits(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
+    """List the exhibits this object can serve, with their perspectives.
+
+    A passthrough of ``aggregate.exhibits.available_exhibits``: the library
+    owns the capability set (its registrations plus per object predicates),
+    so a new library exhibit appears here with zero endpoint changes. No per
+    kind tables in the route. The client grays out chips whose capability is
+    absent; it never hides them.
+    """
+    items = agg_exhibits.available_exhibits(entry.obj)
+    return {
+        "exhibits": [
+            {
+                "name": name,
+                "title": agg_exhibits.EXHIBITS[name][0].title,
+                "perspectives": [p.value for p in perspectives],
+            }
+            for name, perspectives in items
+        ]
+    }
+
+
+@router.get("/objects/{oid}/exhibit/{name}")
+def get_exhibit(
+    oid: str,
+    name: str,
+    perspective: str = Query("raw", description="raw|insurer"),
+    request: Request = None,
+    entry: CacheEntry = Depends(_locked_entry),
+) -> Response:
+    """Return the named exhibit envelope: TableDoc blocks plus metadata.
+
+    The exhibit sibling of the frame-document route. The library owns the
+    business translation per perspective (captions, row flags, drops,
+    relabeling); this route only serializes and revalidates. An unknown or
+    unavailable name is a 404 carrying the capability set; an unsupported
+    perspective is a 400 (the enum has four values; raw and insurer are
+    served at 1.0).
+
+    Notes
+    -----
+    The body is deterministic UTF-8 JSON (sorted keys, compact separators,
+    ``canonical_dict`` blocks), so the exhibit hash (sha256 over the block
+    document hashes) works as the ETag under the same revalidation contract
+    as the table and chart documents.
+    """
+    available = dict(agg_exhibits.available_exhibits(entry.obj))
+    if name not in available:
+        raise HTTPException(
+            status_code=404,
+            detail=(f"no exhibit {name!r} for this object; "
+                    f"available: {sorted(available)}"),
+        )
+    try:
+        exhibit = agg_exhibits.build_exhibit(entry.obj, name, perspective)
+    except (NotImplementedError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    body = json.dumps(
+        exhibit.to_payload(), sort_keys=True, separators=(",", ":"),
+        ensure_ascii=False, allow_nan=False,
+    ).encode("utf-8")
+    etag = f'"{exhibit.hash}"'
     if request is not None and request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
     return Response(
