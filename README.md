@@ -1,10 +1,10 @@
 # aggregate_api
 
-**aggregate Loss Library** (aLL): a FastAPI service and a single-page web app for
+**aggregate Loss Lab** (aLL): a FastAPI service and a single-page web app for
 the [`aggregate`](https://github.com/mynl/aggregate) actuarial library.
 *Description to distribution.*
 
-`aggregate_api` is the package; **aggregate Loss Library** is the app it serves.
+`aggregate_api` is the package; **aggregate Loss Lab** is the app it serves.
 It puts `build()` behind an HTTP/JSON api (DecL parsing, FFT-based compound
 distributions, plotting, and risk pricing) and ships a Bootstrap 5 and
 CodeMirror 6 DecL workbench that runs against it. A single `aggregate-api`

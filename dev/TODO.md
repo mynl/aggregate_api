@@ -98,6 +98,15 @@ uv run aggregate-api --port 8001 --library T:\tmp\short.agg
 Still open from before and probably part of this: the Bounds tab has no content,
 and the standing REMINDER below about what is worth plotting.
 
+- [ ] **plan-loss-lab-navigation — the answer to (c)**, and it absorbs the
+      Bounds item above. Seven stages, one version bump each: the Loss Lab
+      rename, the capability payload that kills `NA_TABS_BY_KIND` and
+      `NA_MORE_BY_KIND`, six nav groups with their own sub-tab rows, the
+      Sharpen / PnL / Reset action row, the reinsurance entry box, Bounds, and
+      the Narrative pane. Unparked 2026-08-05: the library dependency landed
+      upstream at a213 and a215. One upstream piece is still in flight, the
+      inline portfolio engine, and it gates one button for one kind.
+
 ## SM
 
 - [x] Bandwidth limited by caddy page with obscured url; special caddy install
@@ -169,6 +178,19 @@ and the standing REMINDER below about what is worth plotting.
 - [ ] Packaging (was "Plan E"): rebuild the SPA before `uv build` so the wheel
       ships the bundle; confirm `static/*` package-data works.
 - [ ] Auth / rate limiting if this is ever exposed beyond localhost.
+- [ ] **One Underwriter per session.** The api builds through the module
+      singleton (`from aggregate import build as _build_singleton`,
+      `routes/objects.py:80`), and every named declaration a build sees is
+      stored as a `Recipe` under `(kind, name)` with `source='session'`
+      (`aggregate/underwriter.py:1399`). So one shared store accumulates every
+      visitor's declarations for the life of the process: two users building
+      different `port ABC` collide, last writer wins, and the store grows
+      unbounded. Nothing in the app reads a user's stored recipe today, so the
+      collision is currently invisible rather than wrong, and the derived
+      programs of `plan-loss-lab-navigation` all emit self-contained text, so
+      they do not make it worse. Fix is an `Underwriter` per session (or a
+      namespaced store), which also gives the session download an honest scope.
+      Raised 2026-08-05 while reviewing that plan.
 - [ ] Expand the example library and DecL completion coverage.
 - [x] **Density full-frame via CsvGrid `{url}` + worker** (follow-up from
       plan-grid). *(Closed — superseded by the faithful power-of-two density
@@ -233,7 +255,7 @@ and the standing REMINDER below about what is worth plotting.
       was dropped — no clean upstream accessor). Note `sev` became a buildable
       kind in a19, so the object is now reachable from the playground.
 
-## aggregate Loss Library (aLL) work, staged
+## aggregate Loss Lab (aLL) work, staged
 
 The plan behind these is the harness plan of 2026-07-29; one `dev/plan-*.md` and
 one version bump each.

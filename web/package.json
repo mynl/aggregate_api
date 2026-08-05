@@ -2,7 +2,7 @@
   "name": "aggregate-web",
   "private": true,
   "version": "0.1.0",
-  "description": "aggregate Loss Library: single-page web UI for the aggregate FastAPI service.",
+  "description": "aggregate Loss Lab: single-page web UI for the aggregate FastAPI service.",
   "type": "module",
   "scripts": {
     "dev": "vite",

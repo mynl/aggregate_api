@@ -4,6 +4,27 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a42
+
+The app is the **aggregate Loss Lab**. Stage 1 of
+`dev/plan-loss-lab-navigation.md`, and prose only: no route, no behavior and no
+bytes on any payload change.
+
+Library was the wrong word twice over. It is what `aggregate` is, so the app
+borrowing it made the two harder to tell apart in a sentence, and it describes
+a place things are kept rather than a place work happens, which is the opposite
+of what the page is for. Lab says the page is where you try something.
+
+The short form **aLL** is unchanged, so nothing downstream of the acronym
+moves: the manifest `short_name`, the PWA install name and the `[aLL]` console
+prefix all stand. Lower-case `a`, for the reason the branding plan set at a20:
+`aggregate` is the package, `Aggregate` is the class.
+
+Renamed in the title, the meta description, the brand line, the logo `alt`, the
+Help and About leads, the web manifest, the service worker header, both
+package descriptions and `README.md`. Untouched: the historical `CHANGELOG.md`
+and `dev/done/` entries, which record what the app was called when they landed.
+
 ## 1.0.0a41
 
 Coverage, not capability. `aggregate` `1.0.0a206` and `a207` landed the
