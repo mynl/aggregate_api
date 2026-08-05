@@ -179,6 +179,54 @@ def can_price(obj: Any) -> bool:
     return hasattr(obj, "price_pentagon")
 
 
+def can_evaluate(obj: Any) -> bool:
+    """Can this object answer the acceptability panel?
+
+    Consumer: the Pricing group's Evaluate leaf. A separate flag from
+    :func:`can_price` and not a synonym for it: evaluation reaches a ``PnL``,
+    which has no ``price_pentagon`` and is the kind the panel says the most
+    about, since it evaluates every margin row of the ledger rather than one
+    position.
+
+    Read off ``evaluate`` for the same reason the others are read off their
+    methods: the object is the authority on what it can do.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    bool
+    """
+    return hasattr(obj, "evaluate")
+
+
+def needs_premium(obj: Any) -> bool:
+    """Must the Evaluate form ask for a premium before it can run?
+
+    Consumer: the Pricing group's Evaluate leaf, which otherwise shows a form
+    with nothing in it and posts straight into a 400.
+
+    Three conditions, and none of them is a kind test. The object can be
+    evaluated at all. It is the sort of thing that carries its own
+    consideration, which is what ``exp_premium`` being present means: a ``PnL``
+    has no such attribute, because its premium lives in its ledger and there is
+    nothing to ask for. And it does not actually carry one.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    bool
+    """
+    return (can_evaluate(obj)
+            and hasattr(obj, "exp_premium")
+            and not has_premium(obj))
+
+
 def capability_for(obj: Any) -> dict:
     """The whole capability block for one object.
 
@@ -190,8 +238,7 @@ def capability_for(obj: Any) -> dict:
     Returns
     -------
     dict
-        ``{"exhibits", "charts", "has_premium", "can_sharpen", "can_price"}``,
-        matching :class:`aggregate_api.models.Capability`.
+        The whole block, matching :class:`aggregate_api.models.Capability`.
     """
     return {
         "exhibits": exhibits_for(obj),
@@ -199,4 +246,6 @@ def capability_for(obj: Any) -> dict:
         "has_premium": has_premium(obj),
         "can_sharpen": can_sharpen(obj),
         "can_price": can_price(obj),
+        "can_evaluate": can_evaluate(obj),
+        "needs_premium": needs_premium(obj),
     }

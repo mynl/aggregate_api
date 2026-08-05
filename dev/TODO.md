@@ -39,6 +39,11 @@ Left over from this work:
   its `FrameResponse`). Run both when `greater-tables` moves. A third joined at
   a39: `check-exhibits.py` (every exhibit, every kind: capability and envelope
   agree, byte determinism, insurer blocks match the frame routes row for row).
+  A fourth at a44, and it is the app side rather than the server:
+  `capture-capability.py` writes one build response per kind to
+  `dev/fixtures/capability.json`, then `node dev/scripts/check-nav.mjs` runs the
+  real rules from `web/src/nav.js` over them and prints a leaf-by-kind grid.
+  Run it whenever a leaf, a gate or a library registration moves.
 
 ### Exhibits endpoint, remaining slices (a39 landed the routes)
 

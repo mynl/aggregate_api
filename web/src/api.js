@@ -78,6 +78,15 @@ export const api = {
      */
     frameIr:      (id, which)       => _json('GET',  `/v1/objects/${id}/frame/${which}?format=ir`),
     /**
+     * A library exhibit as its envelope: title, then one table document per
+     * block. The library owns the business translation per perspective
+     * (captions, row flags, drops, relabeling), so this is the path for an
+     * exhibit that has no plain frame route behind it, and the richer path for
+     * one that does.
+     */
+    exhibit:      (id, name, perspective = 'insurer') =>
+        _json('GET', `/v1/objects/${id}/exhibit/${name}?perspective=${perspective}`),
+    /**
      * A chart as a chart document (the library's chart IR).
      *
      * The chart sibling of `frameIr`: the library emitter owns every semantic
@@ -111,6 +120,11 @@ export const api = {
     /** Reinsured objects: calibrate on one basis, price them all. */
     reinsPrice:   (id, body)        => _json('POST', `/v1/objects/${id}/reins_price?ir=true`, body),
     pricing_at:   (id, body)        => _json('POST', `/v1/objects/${id}/pricing_at`, body),
+    /**
+     * The evaluation half of Pricing: the breakeven acceptability panel for a
+     * premium already set. `?ir=true` for the same reason `price` asks.
+     */
+    evaluate:     (id, body)        => _json('POST', `/v1/objects/${id}/evaluate?ir=true`, body),
 
     // DecL editor support
     complete:     (decl, cursor)    => _json('POST', '/v1/decl/complete', { decl, cursor }),

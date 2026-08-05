@@ -54,6 +54,11 @@
                             <li><button type="button" class="dropdown-item" data-bs-toggle="offcanvas" data-bs-target="#helpPanel">Help</button></li>
                             <li><button type="button" class="dropdown-item" id="dl-raw">Download models (raw)</button></li>
                             <li><button type="button" class="dropdown-item" id="dl-agg">Download models (.agg)</button></li>
+                            <!-- The object's native matplotlib figure. It left
+                                 the navigation when Overview grew its own Plot
+                                 leaf, but the route stays and the file is worth
+                                 having, so it sits with the other downloads. -->
+                            <li><button type="button" class="dropdown-item" data-plot-download>Download plot (.svg)</button></li>
                             <li><button type="button" class="dropdown-item" data-bs-toggle="offcanvas" data-bs-target="#aboutPanel">About</button></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item disabled" aria-disabled="true" tabindex="-1">Example source… (soon)</a></li>
@@ -156,91 +161,119 @@
         </div>
         <div class="summary-timing" id="summary-timing"></div>
 
-        <!-- Output tabs. More is a real tab whose pane carries a Reins-style
-             sub-button row, so the two work the same way; the dropdown-inside-
-             pills it replaces was the odd one out. Bounds ships greyed out:
-             the house rule is that the menu set never changes shape, so what
-             is coming is visible and plainly not ready.
+        <!-- Output navigation: six groups, each with its own sub-tab row.
+             The groups are editorial, a judgment about how insurance work
+             proceeds, and the app authors them. Which leaves are live inside
+             one is a fact about the object, so the library computes it and
+             main.js renders each row from the capability block. Nothing here
+             says what a kind can do.
 
-             Reins sits before Price because that is the order the work happens
-             in: you decide what you are keeping before you decide what to
-             charge for it. -->
+             Reinsurance sits before Pricing because that is the order the work
+             happens in: you decide what you are keeping before you decide what
+             to charge for it. Bounds ships with its leaves greyed: the house
+             rule is that the menu set never changes shape, so what is coming is
+             visible and plainly not ready. -->
         <ul class="nav nav-pills out-tabs" role="tablist">
-            <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#t-overview" data-tab="overview" type="button">Overview</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-plot"   data-tab="plot"   type="button">Plot</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-reins"  data-tab="reins"  type="button">Reins</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-price"  data-tab="price"  type="button">Price</button></li>
-            <li class="nav-item"><button class="nav-link disabled" disabled aria-disabled="true" data-bs-toggle="pill" data-bs-target="#t-bounds" data-tab="bounds" type="button" title="pricing bounds — coming">Bounds</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-more"   data-tab="more"   type="button">More</button></li>
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#t-overview"    data-tab="overview"    type="button">Overview</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-economics"   data-tab="economics"   type="button">Economics</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-reinsurance" data-tab="reinsurance" type="button">Reinsurance</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-pricing"     data-tab="pricing"     type="button">Pricing</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-bounds"      data-tab="bounds"      type="button">Bounds</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-more"        data-tab="more"        type="button">More</button></li>
         </ul>
 
         <div class="tab-content">
-            <!-- Overview, the landing tab: note + interactive plot + summary_df + tail_df -->
+            <!-- Overview: the landing group. The identity block sits above the
+                 sub-tab row because it names the object rather than any one
+                 leaf, so it stays put as you move between Plot, Summary and
+                 Tail. -->
             <div class="tab-pane fade show active" id="t-overview">
+                <div id="head-overview"></div>
+                <div class="sub-tabs" id="sub-overview"></div>
                 <div id="pane-overview" class="pane"></div>
             </div>
 
-            <!-- More: one pane, a Reins-style sub-button row selects the view.
-                 The hint line and the copy button are per view and rendered by
-                 main.js, since they differ for each. -->
-            <div class="tab-pane fade" id="t-more">
-                <div class="tab-tools" id="more-tools"></div>
-                <div id="pane-more" class="pane"></div>
+            <!-- Economics: a P&L's ledger, its ratios, and the margin walk. -->
+            <div class="tab-pane fade" id="t-economics">
+                <div class="sub-tabs" id="sub-economics"></div>
+                <div id="pane-economics" class="pane"></div>
             </div>
 
-            <!-- Bounds: greyed out in the tab bar, so this pane is unreachable
-                 for now. It exists so the tab has a target and the shape of
-                 what is coming is on record. -->
+            <!-- Reinsurance: the program description names the whole structure,
+                 so like the Overview identity block it sits above the row. -->
+            <div class="tab-pane fade" id="t-reinsurance">
+                <div class="sub-tabs" id="sub-reinsurance"></div>
+                <div class="reins-desc" id="reins-desc"></div>
+                <div id="pane-reinsurance" class="pane"></div>
+            </div>
+
+            <!-- Pricing: two modes, two leaves.
+
+                 Determine fixes capital with a probability or an asset level,
+                 takes one target, and completes the pentagon. A reinsured
+                 object also gets the gross / net / allowance table, with
+                 #price-basis choosing the calibration basis; that row is always
+                 present and filled by main.js, so the form does not jump when
+                 you step from a reinsured example to a plain one.
+
+                 Evaluate goes the other way: the premium is already set, and
+                 the panel reports the distortion in each family that values the
+                 margin flow at zero. The premium input appears only when the
+                 object carries none of its own, which the capability block
+                 says. -->
+            <div class="tab-pane fade" id="t-pricing">
+                <div class="sub-tabs" id="sub-pricing"></div>
+
+                <div id="leaf-determine">
+                    <div class="exhibit-controls" id="price-basis"></div>
+                    <div class="tab-tools price-form">
+                        <div class="btn-group btn-group-sm" role="group" aria-label="capital anchor">
+                            <input type="radio" class="btn-check" name="price-anchor" id="price-anc-p" value="p" checked>
+                            <label class="btn btn-outline-secondary" for="price-anc-p">p</label>
+                            <input type="radio" class="btn-check" name="price-anchor" id="price-anc-a" value="a">
+                            <label class="btn btn-outline-secondary" for="price-anc-a">assets</label>
+                        </div>
+                        <label class="price-field"><span id="price-anchor-label">p</span>
+                            <input id="price-anchor-val" type="number" step="0.001" min="0" max="1" value="0.99" autocomplete="off"></label>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="pricing target">
+                            <input type="radio" class="btn-check" name="price-target" id="price-tgt-coc" value="coc" checked>
+                            <label class="btn btn-outline-secondary" for="price-tgt-coc">CoC</label>
+                            <input type="radio" class="btn-check" name="price-target" id="price-tgt-lr" value="lr">
+                            <label class="btn btn-outline-secondary" for="price-tgt-lr">LR</label>
+                        </div>
+                        <label class="price-field"><span id="price-target-label">CoC</span>
+                            <input id="price-target-val" type="number" step="0.01" value="0.15" autocomplete="off"></label>
+                        <button id="price-btn" class="btn btn-primary btn-sm">Price</button>
+                    </div>
+                    <div id="pane-price" class="pane"></div>
+                </div>
+
+                <div id="leaf-evaluate" class="d-none">
+                    <div class="tab-tools price-form">
+                        <label class="price-field" id="evaluate-premium-field">premium
+                            <input id="evaluate-premium" type="number" step="1" min="0" autocomplete="off"></label>
+                        <button id="evaluate-btn" class="btn btn-primary btn-sm">Evaluate</button>
+                        <span class="text-muted ms-1" style="font-size:.7rem;">breakeven acceptability: the distortion that values the margin at zero</span>
+                    </div>
+                    <div id="pane-evaluate" class="pane"></div>
+                </div>
+            </div>
+
+            <!-- Bounds: three leaves against the three classes in bounds.py,
+                 all greyed until they are built. The pane exists so each leaf
+                 has a target and the shape of what is coming is on record. -->
             <div class="tab-pane fade" id="t-bounds">
+                <div class="sub-tabs" id="sub-bounds"></div>
                 <div id="pane-bounds" class="pane">
                     <div class="text-muted small">Pricing bounds are not wired up yet.</div>
                 </div>
             </div>
 
-            <!-- Plot -->
-            <div class="tab-pane fade" id="t-plot">
-                <div class="tab-tools">
-                    <button class="btn btn-outline-secondary" data-plot-download><i class="bi bi-download"></i> svg</button>
-                    <span class="text-muted ms-1" style="font-size:.7rem;">object's native plot</span>
-                </div>
-                <div id="pane-plot" class="pane"></div>
-            </div>
-
-            <!-- Reins: the description line, the gross / ceded / net exhibit,
-                 then the per-layer frames. -->
-            <div class="tab-pane fade" id="t-reins">
-                <div class="tab-tools">
-                    <button class="btn btn-outline-secondary active" data-reins="reins_summary_df">reins summary</button>
-                    <button class="btn btn-outline-secondary"        data-reins="reins_stats_df">reins stats</button>
-                    <button class="btn btn-outline-secondary"        data-reins="reins_density_df">reins density</button>
-                </div>
-                <div class="reins-desc" id="reins-desc"></div>
-                <div id="reins-plot" class="overview-plot"></div>
-                <div id="pane-reins" class="pane"></div>
-            </div>
-
-            <!-- Price: pentagon completion (+ distortion analysis for Portfolios).
-                 A reinsured object instead gets the gross / net / allowance
-                 table, with #price-basis choosing which basis the distortions
-                 are calibrated on. That row is always present and filled by
-                 main.js, so the form below it does not jump when you step from
-                 a reinsured example to a plain one. -->
-            <div class="tab-pane fade" id="t-price">
-                <div class="exhibit-controls" id="price-basis"></div>
-                <div class="tab-tools price-form">
-                    <label class="price-field">p
-                        <input id="price-p" type="number" step="0.001" min="0" max="1" value="0.99" autocomplete="off"></label>
-                    <div class="btn-group btn-group-sm" role="group" aria-label="pricing target">
-                        <input type="radio" class="btn-check" name="price-target" id="price-tgt-coc" value="coc" checked>
-                        <label class="btn btn-outline-secondary" for="price-tgt-coc">CoC</label>
-                        <input type="radio" class="btn-check" name="price-target" id="price-tgt-lr" value="lr">
-                        <label class="btn btn-outline-secondary" for="price-tgt-lr">LR</label>
-                    </div>
-                    <label class="price-field"><span id="price-target-label">CoC</span>
-                        <input id="price-target-val" type="number" step="0.01" value="0.15" autocomplete="off"></label>
-                    <button id="price-btn" class="btn btn-primary btn-sm">Price</button>
-                </div>
-                <div id="pane-price" class="pane"></div>
+            <!-- More: the specialist frames. The hint line and the copy button
+                 are per leaf and rendered by main.js, since they differ. -->
+            <div class="tab-pane fade" id="t-more">
+                <div class="sub-tabs" id="sub-more"></div>
+                <div id="pane-more" class="pane"></div>
             </div>
 
         </div>

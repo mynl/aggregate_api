@@ -4,6 +4,80 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a44
+
+Six groups, each with its own sub-tab row. Stage 3 of
+`dev/plan-loss-lab-navigation.md`, and the largest visible change since the
+Overview landed.
+
+Overview, Economics, Reinsurance, Pricing, Bounds, More. The skeleton is
+editorial, a judgment about how insurance work proceeds, and the app authors
+it. Which leaves are live inside one is a fact, so a42's capability block
+decides it and nothing in the app says what a kind can do.
+
+**Overview splits into three.** Plot is the two-panel exhibit lifted out of the
+landing pane, Summary is `summary_df`, Tail is `tail_df` and `tail_behavior_df`
+as two blocks in one pane. The identity block stays above the sub-tab row,
+since it names the object rather than any one leaf. The standalone Plot tab is
+retired and the matplotlib SVG leaves the navigation; the `/plot` route stays
+and its download moved to the hamburger, which is where the other downloads
+live.
+
+**Economics** is a P&L's group: Ledger, Ratios and the Waterfall, all served
+through the exhibit envelope rather than the frame routes, so each block
+arrives with the library's own caption and its insurer framing. The waterfall
+has no frame route at all and was unreachable from the app until now.
+
+**Reinsurance** keeps its three tables and gains a Plot leaf, which is the
+first leaf in the app to light from `available_charts` rather than from the
+exhibit list. `chart_reins` landed upstream at a210 behind the same cession
+predicate the tables use, so the whole group appears and disappears together.
+
+**Pricing** is two modes. Determine completes the pentagon and now takes either
+capital anchor: `a` joins `p` on `PriceRequest`, threading through
+`calibrate_distortions` and `analyze_distortions` so the calibration happens at
+exactly the level the pentagon was completed at. The library has taken either
+since the pentagon landed and the app only ever sent a probability, which is
+the wrong default for a group about programs written to an attachment.
+
+Evaluate is new: `POST /objects/{id}/evaluate` over the library's `evaluate`,
+the breakeven acceptability panel. One method, three shapes, and the api keeps
+them straight. An aggregate or a portfolio evaluates one position. A plain P&L
+evaluates its margin row. A tower evaluates **every margin row of its ledger**,
+so the panel reads as the gross deal, each layer as a position in its own
+right, and the running net after each purchase. Two new capability flags carry
+it: `can_evaluate`, which reaches a P&L where `can_price` does not, and
+`needs_premium`, which is what puts the premium input on screen. Neither is a
+kind test: a P&L has no `exp_premium` attribute at all, so "the sort of object
+that carries its own consideration, and does not" is a fact read off the
+object.
+
+**Bounds** ships with three greyed leaves named for the three classes in
+`bounds.py`, so the shape of what is coming is visible and plainly not ready.
+
+**More** is Validation, Stats, Density, Window, Dependency and Narrative. Window
+is the old "bs window"; Narrative absorbs "Info (raw)"; Dependency is new and
+lights only for a bivariate.
+
+The rules that decide all of this moved into `web/src/nav.js`, which is pure:
+the group and leaf table, and four functions over a capability payload. That is
+what makes `dev/scripts/check-nav.mjs` possible, a new harness running the real
+rules against real payloads captured by `dev/scripts/capture-capability.py`.
+It prints a leaf-by-kind grid and fails on any cell that disagrees with what
+the plan says should be there. Clean at a44, including the two stickiness rules:
+a tower keeps the Waterfall leaf across a rebuild and a plain P&L does not.
+
+Both strips scroll horizontally at narrow widths with a fade at each edge,
+rather than wrapping or collapsing. A navbar collapse would put a second
+hamburger in a header that already has one, and a dropdown hides which group
+you are in and adds a tap to every move. The fades are two pairs of gradients
+on `background-attachment: local`, so each appears only on the side with more to
+see: no scroll listener, no JavaScript.
+
+Not yet done, and neither is in Stage 3: the header's Perspective control (the
+exhibit fetches take insurer, which is the plan's default), and everything the
+action row needs, which is Stage 4.
+
 ## 1.0.0a43
 
 The two hand-written per-kind tables in the SPA are gone, and the navigation

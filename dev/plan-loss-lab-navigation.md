@@ -48,7 +48,7 @@ object under a cached id.
 | Overview | everything | Plot, Summary, Tail |
 | Economics | PnL | Ledger, Ratios, Waterfall |
 | Reinsurance | an aggregate carrying a cession, plus the entry box for one that does not | Summary, Stats, Density, Plot |
-| Pricing | aggregate, portfolio | Determine, Evaluate |
+| Pricing | Determine: aggregate, portfolio. Evaluate: those plus PnL | Determine, Evaluate |
 | Bounds | aggregate, portfolio | Bounds, PricingBounds, AllocationBounds |
 | More | everything | Validation, Stats, Density, Window, Dependency, Narrative |
 
@@ -246,9 +246,32 @@ and `coverage` diagnostics and the bivariate gets the display view it has. A
 leaf lit by the capability list has to be a leaf that serves, which is why
 Stage 2's tests walk every listed exhibit and chart and fetch it.
 
-## Stage 3: [Navigation-Groups]
+## Stage 3: [Navigation-Groups] (landed, 1.0.0a44)
 
 The six groups, their sub-tab rows, and the phone behavior.
+
+**Pricing's two leaves, settled by the author.** Determine sets `p` or `a` and a
+cost of capital and determines a premium. Evaluate goes the other way: the
+premium is already in the object, and `evaluate()` returns the distortions that
+value the margin flow at zero. Three shapes, one method: the distortions alone
+for an aggregate or a portfolio, the total net margin for a P&L, and an expanded
+set for a tower, which evaluates every margin row of its ledger. A portfolio or
+aggregate carrying no premium must be given one.
+
+That needed api surface this plan had not accounted for: a `POST /evaluate`
+route, the `a` anchor on `PriceRequest`, and two more capability flags.
+`can_evaluate` is not a synonym for `can_price`, since evaluation reaches a P&L
+and pricing does not. `needs_premium` decides whether the form shows a premium
+input, and is derived rather than a kind test: a P&L has no `exp_premium`
+attribute at all, so the flag reads "the sort of object that carries its own
+consideration, and does not carry one".
+
+**The rules moved out of `main.js`.** `web/src/nav.js` holds the group and leaf
+table plus four pure functions over a capability payload, and `main.js` supplies
+the loaders. That split is what lets `dev/scripts/check-nav.mjs` run the real
+rules against real payloads with no browser and no port, which is the Stage 3
+answer to the risk this plan records: a wrong gate greys a leaf that works, and
+nothing on screen tells the user which kind of dark it is.
 
 **Layout.** The group row is a horizontally scrollable pill strip with a soft
 fade at each edge so it reads as scrollable, not clipped. The sub-tab row

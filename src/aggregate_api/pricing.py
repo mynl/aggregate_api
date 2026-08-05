@@ -130,7 +130,8 @@ def run_pricing(
 def run_price_pentagon(
     obj: Any,
     *,
-    p: float,
+    p: float | None = None,
+    a: float | None = None,
     coc: float | None = None,
     lr: float | None = None,
     ir: bool = False,
@@ -141,8 +142,13 @@ def run_price_pentagon(
     ----------
     obj : Aggregate | Portfolio
         The live object (both expose ``price_pentagon``).
-    p : float
-        VaR probability fixing the capital level.
+    p : float, optional
+        VaR probability fixing the capital level; mutually exclusive with ``a``.
+    a : float, optional
+        Asset level fixing the capital, snapped to the grid by the library;
+        mutually exclusive with ``p``. The library has taken either anchor since
+        the pentagon landed, and the app now offers both: a reinsurance program
+        is written to an asset level far more often than to a probability.
     coc, lr : float | None
         Exactly one pricing target -- cost of capital (ROE) or loss ratio.
     ir : bool
@@ -170,11 +176,14 @@ def run_price_pentagon(
 
     if (coc is None) == (lr is None):
         raise ValueError("pass exactly one of coc (CoC/ROE) or lr (loss ratio)")
+    if (p is None) == (a is None):
+        raise ValueError("pass exactly one of p (VaR probability) or a (assets)")
     if not hasattr(obj, "price_pentagon"):
         raise ValueError("pricing requires an Aggregate or Portfolio")
 
     target = {"ROE": coc} if coc is not None else {"LR": lr}
-    pent = obj.price_pentagon(p=p, **target)
+    anchor = {"p": p} if p is not None else {"a": a}
+    pent = obj.price_pentagon(**anchor, **target)
     is_port = type(obj).__name__ == "Portfolio"
     out: dict = {
         "kind": "port" if is_port else "agg",
@@ -200,8 +209,11 @@ def run_price_pentagon(
 
     warns: list[str] = []
     roe = coc if coc is not None else _scalar(pent["ROE"].iloc[0])
+    # Both of these take either anchor, so the caller's choice threads all the
+    # way through and the calibration happens at exactly the capital level the
+    # pentagon was completed at.
     try:
-        obj.calibrate_distortions(roe, p=p)
+        obj.calibrate_distortions(roe, **anchor)
     except Exception as exc:  # noqa: BLE001 -- reported as a warning
         warns.append(f"calibrate_distortions: {exc}")
 
@@ -216,7 +228,7 @@ def run_price_pentagon(
 
     with _warnings.catch_warnings(record=True) as caught:
         _warnings.simplefilter("always")
-        ad = obj.analyze_distortions(p=p)
+        ad = obj.analyze_distortions(**anchor)
         warns.extend(str(w.message) for w in caught)
 
     pdf = ad.pricing_df
@@ -523,6 +535,83 @@ def _df_to_records(df, *, index_name: str | None = None) -> list[dict]:
             rec[str(col)] = _scalar(val)
         out.append(rec)
     return out
+
+
+def run_evaluate(
+    obj: Any,
+    *,
+    premium: float | None = None,
+    ir: bool = False,
+) -> dict:
+    """The breakeven acceptability panel: what stress this position survives.
+
+    The other half of the Pricing group. Determining a price asks what the
+    obligation is worth at a chosen capital level; evaluating one asks how much
+    stress the position you already hold survives. The library solves, per
+    distortion family, for the shape at which the risk-adjusted margin reaches
+    zero, and reports the family-agnostic Cherny and Madan index ``gini_p``.
+
+    Three shapes come back from one method, which is why this runner is thin.
+    An ``Aggregate`` or a ``Portfolio`` evaluates its own position, one block.
+    A ``PnL`` evaluates **every margin row of its ledger**, so a tower reads as
+    a story: the gross deal, each layer as a position in its own right, and the
+    running net after each purchase.
+
+    Parameters
+    ----------
+    obj : Aggregate | Portfolio | PnL
+        The live object; all three expose ``evaluate``.
+    premium : float, optional
+        The consideration to measure against. Only an ``Aggregate`` or a
+        ``Portfolio`` takes one, and only when its own exposure states none: a
+        position has to have a premium before it can be evaluated, and the
+        library raises rather than guessing. A ``PnL`` carries its premium in
+        the ledger, so passing one here is a 400 rather than a silent ignore.
+    ir : bool
+        Also return the table document for the SPA's static view, built from
+        the frame with its index intact.
+
+    Returns
+    -------
+    dict
+        Matches :class:`aggregate_api.models.EvaluateResponse`.
+
+    Notes
+    -----
+    ``DegenerateEvaluationWarning`` is not an error and is not swallowed. It
+    fires when no breakeven level exists, either because the premium does not
+    cover the expected loss (unacceptable at any stress) or because the position
+    cannot lose (acceptable at every stress). Both report ``NaN`` in the panel,
+    so the warning is what tells the reader which of the two they are looking
+    at, and it travels in ``warnings``.
+    """
+    import warnings as _warnings
+
+    from .serializers import frame_to_payload, reset_index_safe
+
+    if not hasattr(obj, "evaluate"):
+        raise ValueError(
+            "evaluation requires an Aggregate, a Portfolio or a P&L")
+
+    is_pnl = type(obj).__name__ == "PnL"
+    if is_pnl and premium is not None:
+        raise ValueError(
+            "a P&L carries its own premium in the ledger; drop the premium "
+            "argument and evaluate it as it stands")
+
+    warns: list[str] = []
+    with _warnings.catch_warnings(record=True) as caught:
+        _warnings.simplefilter("always")
+        panel = obj.evaluate() if is_pnl else obj.evaluate(premium)
+        warns.extend(str(w.message) for w in caught)
+
+    return {
+        "kind": "pnl" if is_pnl else ("port" if type(obj).__name__ == "Portfolio"
+                                      else "agg"),
+        "panel": frame_to_payload(reset_index_safe(panel)),
+        "warnings": warns,
+        "ir": {"panel": _document(panel, "price")} if ir else None,
+    }
 
 
 def _scalar(value):

@@ -28,6 +28,13 @@ import { loadStyle } from './charts/theme.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
 import { mountIrTable, irToGrid, docTruncated } from './tables.js';
 import { renderError, renderRateLimit } from './error-pane.js';
+import {
+    NAV_GROUPS,
+    leafOf,
+    leafAvailable as navLeafAvailable,
+    groupAvailable as navGroupAvailable,
+    activeLeaf as navActiveLeaf,
+} from './nav.js';
 import * as history from './history.js';
 import { $, el, empty } from './utils/dom.js';
 import { fmt } from './utils/format.js';
@@ -59,14 +66,19 @@ const state = {
     // menu with no edit here, which is the whole point of the exhibit registry.
     exhibits: new Set(),    // library exhibit names
     charts: new Set(),      // library chart names
-    canPrice: false,        // app leaf: the pricing forms
+    canPrice: false,        // app leaf: Pricing / Determine
+    canEvaluate: false,     // app leaf: Pricing / Evaluate
+    needsPremium: false,    // Evaluate's premium input, for a position with none
     canSharpen: false,      // app leaf: the Sharpen button (Stage 4)
     hasPremium: false,      // app leaf: the PnL button's form (Stage 4)
     log2: null,             // null = auto
     bs: null,               // null = auto
-    loaded: new Set(),      // tab names whose data has been fetched
-    reinsWhich: 'reins_summary_df',
-    moreWhich: 'validation',   // which sub-view the More tab is showing
+    // Each group remembers its own last leaf, so stepping away from Pricing and
+    // back returns you where you were rather than to its first leaf.
+    leaf: {},
+    // And which leaf's content each group's pane is actually showing, which is
+    // what decides whether entering a group has to redraw.
+    rendered: {},
 };
 
 // ----------------------------------------------------------------------
@@ -171,7 +183,6 @@ async function build() {
         state.mean = res.mean;
         state.hasReins = Boolean(res.has_reins);
         applyCapability(res.capability);
-        state.loaded = new Set();
         renderSummary(res);
         history.record(decl);
         clearPanes();
@@ -199,6 +210,8 @@ function applyCapability(capability) {
     state.exhibits = new Set((cap.exhibits || []).map((e) => e.name));
     state.charts = new Set(cap.charts || []);
     state.canPrice = Boolean(cap.can_price);
+    state.canEvaluate = Boolean(cap.can_evaluate);
+    state.needsPremium = Boolean(cap.needs_premium);
     state.canSharpen = Boolean(cap.can_sharpen);
     state.hasPremium = Boolean(cap.has_premium);
 }
@@ -308,19 +321,26 @@ window.addEventListener('resize', syncSummaryMore);
 // ----------------------------------------------------------------------
 // Tabs -- lazy load + cache per built object
 // ----------------------------------------------------------------------
-// One pane per top-level tab. There is no `summary` entry: summary_df is an
-// Overview exhibit, and showing it twice was the same table in two places.
+// Where a group's content goes, and where its errors land. Pricing is the one
+// group with two panes rather than one, because its two leaves are two forms
+// with two results rather than two views of the same payload.
 const PANE_OF = {
-    overview: 'pane-overview', plot: 'pane-plot', price: 'pane-price',
-    reins: 'pane-reins', bounds: 'pane-bounds', more: 'pane-more',
+    overview: 'pane-overview', economics: 'pane-economics',
+    reinsurance: 'pane-reinsurance', pricing: 'pane-price',
+    bounds: 'pane-bounds', more: 'pane-more',
 };
+const ALL_PANES = [...Object.values(PANE_OF), 'pane-evaluate'];
 
 function clearPanes() {
     destroyAllGrids();
-    for (const id of Object.values(PANE_OF)) empty($(id));
+    // Emptying the panes is exactly what makes nothing rendered, so the two
+    // move together rather than the caller being trusted to remember.
+    state.rendered = {};
+    for (const id of ALL_PANES) empty($(id));
     empty($('reins-desc'));
+    empty($('head-overview'));
     if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
-    empty($('reins-plot'));
+    if (overviewChart) { overviewChart.dispose(); overviewChart = null; }
 }
 
 function activeTabName() {
@@ -333,188 +353,180 @@ function showTab(name) {
     if (btn) bootstrap.Tab.getOrCreateInstance(btn).show();
 }
 
-// ---- More: one pane, a sub-button row selects the view ----
-// The same shape as Reins, which is the point: a dropdown nested inside a pill
-// bar was the one control on the page that behaved differently from everything
-// around it.
-// `exhibit` names the library exhibit a view is a window onto, and is what
-// decides whether the view is live for the object in front of you. A view with
-// no `exhibit` is an app leaf: Density is a bulk frame with no exhibit behind
-// it, and Info is the object's own text, so both are available wherever the
-// object is.
-const MORE_VIEWS = {
-    validation: {
-        label: 'Validation',
-        exhibit: 'validation',
-        hint: 'theoretical vs empirical moments; reads “not unreasonable” on a clean build',
-        copy: true,
-        load: async () => replacePaneTable('pane-more', 'validation_df',
-            { columnFilters: false }),
+// ----------------------------------------------------------------------
+// The navigation: six groups, each with its own sub-tab row
+// ----------------------------------------------------------------------
+//
+// The skeleton and the rules that decide what is live in it are in `nav.js`,
+// which is pure and therefore checkable without a browser
+// (`dev/scripts/check-nav.mjs`). What lives here is the other half: how each
+// leaf actually renders, keyed `group:leaf`. A leaf named in `nav.js` with no
+// loader here draws nothing, which is what the Bounds leaves do until they are
+// built.
+const LOADERS = {
+    'overview:plot': () => loadOverviewPlot(),
+    'overview:summary': () => loadOverviewFrames([['summary', 'summary']]),
+    // Two blocks in one pane: both answer the same question and neither is
+    // large enough to want a pane of its own.
+    'overview:tail': () => loadOverviewFrames([
+        ['tail_df', 'tail'], ['tail_behavior_df', 'tail_behavior']]),
+
+    'economics:ledger': () => loadExhibitLeaf('pane-economics', 'economic'),
+    'economics:ratios': () => loadExhibitLeaf('pane-economics', 'economic_ratios'),
+    'economics:waterfall': () => loadExhibitLeaf('pane-economics', 'economic_waterfall'),
+
+    'reinsurance:summary': () => loadReinsFrame('reins_summary_df'),
+    'reinsurance:stats': () => loadReinsFrame('reins_stats_df'),
+    'reinsurance:density': () => loadReinsFrame('reins_density_df'),
+    'reinsurance:plot': () => loadReinsPlot(),
+
+    'pricing:determine': () => showPricingLeaf('determine'),
+    'pricing:evaluate': () => showPricingLeaf('evaluate'),
+
+    'more:validation': () => replacePaneTable('pane-more', 'validation_df',
+        { columnFilters: false }),
+    'more:stats': () => replacePaneTable('pane-more', 'stats_df', GRID_FULL),
+    'more:density': () => {
+        // `resolution: 'display'` here and nowhere else. The *plots* take every
+        // grid point, because a binned atom is a lie; a *table* of 65,536 rows
+        // is not a reading experience, and the CSV download is the exact export
+        // for anyone who wants the lot.
+        //
+        // A distortion's density_df is the g-curve over s in [0,1]; a
+        // bivariate's is its two component marginals; a severity's is a sampled
+        // loss / pdf / F / S curve. None has the aggregate's columns, so pull
+        // the whole frame for those.
+        const opts = { resolution: 'display' };
+        // renderCap lifts CsvGrid's 2,000-row default so the whole display grid
+        // shows without a "show all" prompt. 8,192 is the widest that grid gets
+        // (see serializers.display_log2_for).
+        //
+        // The bulk path, permanently: even binned to the display grid this is
+        // thousands of rows, so it never becomes a document. The filters are how
+        // you read a quantile off it, which is the grid's whole job.
+        return replacePaneTable('pane-more', 'density_df',
+            { ...GRID_FULL, maxRows: 25, renderCap: 8192 },
+            () => (WHOLE_DENSITY_KINDS.has(state.kind)
+                ? api.density_df(state.id, opts)
+                : api.density_df(state.id, { ...opts, cols: 'loss,p_total,F,S' })));
     },
-    stats: {
-        label: 'Stats',
-        exhibit: 'stats',
-        hint: 'frequency / severity / aggregate moments; raw moment rows are dropped',
-        load: async () => replacePaneTable('pane-more', 'stats_df', GRID_FULL),
-    },
-    density: {
-        label: 'Density',
-        hint: 'binned to a power-of-two display grid; copy / save from the grid',
-        load: async () => {
-            // `resolution: 'display'` here and nowhere else. The *plots* take
-            // every grid point, because a binned atom is a lie; a *table* of
-            // 65,536 rows is not a reading experience, and the CSV download is
-            // the exact export for anyone who wants the lot.
-            //
-            // A distortion's density_df is the g-curve over s in [0,1]; a
-            // bivariate's is its two component marginals; a severity's is a
-            // sampled loss / pdf / F / S curve. None has the aggregate's
-            // columns, so pull the whole frame for those.
-            const opts = { resolution: 'display' };
-            // renderCap lifts CsvGrid's 2,000-row default so the whole display
-            // grid shows without a "show all" prompt. 8,192 is the widest that
-            // grid gets (see serializers.display_log2_for).
-            //
-            // The bulk path, permanently: even binned to the display grid this
-            // is thousands of rows, so it never becomes a document. The filters
-            // are how you read a quantile off it, which is the grid's whole job.
-            await replacePaneTable('pane-more', 'density_df',
-                { ...GRID_FULL, maxRows: 25, renderCap: 8192 },
-                () => (WHOLE_DENSITY_KINDS.has(state.kind)
-                    ? api.density_df(state.id, opts)
-                    : api.density_df(state.id, { ...opts, cols: 'loss,p_total,F,S' })));
-        },
-    },
-    bswin: {
-        label: 'bs window',
-        exhibit: 'bs_window',
-        hint: 'bucket / window estimator; the selected row is the chosen grid',
-        load: async () => replacePaneTable('pane-more', 'bs_window_df', GRID_FULL),
-    },
-    info: {
-        label: 'Info (raw)',
-        hint: 'the object’s own info block, verbatim',
-        copy: true,
-        load: async () => replacePane('pane-more', renderInfo(await api.info(state.id))),
-    },
+    'more:window': () => replacePaneTable('pane-more', 'bs_window_df', GRID_FULL),
+    'more:dependency': () => loadExhibitLeaf('pane-more', 'dependency'),
+    'more:narrative': async () => replacePane('pane-more',
+        renderInfo(await api.info(state.id))),
 };
 
-/**
- * Is this More view live for the object in front of us?
- *
- * An exhibit-backed view answers when the library says the object serves that
- * exhibit; an app leaf always answers. Nothing here knows about kinds, which is
- * the point: this replaced a hand-written table saying which views each kind
- * could not do, and that table had drifted (it greyed a bivariate's grid-sizing
- * pane, which the object serves perfectly well).
- */
-function moreViewAvailable(key) {
-    const view = MORE_VIEWS[key];
-    if (!view?.exhibit) return true;
-    return state.exhibits.has(view.exhibit);
+/** The capability shape the `nav.js` rules take, from module state. */
+function navCaps() {
+    return {
+        built: Boolean(state.id),
+        exhibits: state.exhibits,
+        charts: state.charts,
+        flags: state,
+    };
 }
 
-/** Render the More sub-button row for the current object. */
-function renderMoreTools() {
-    const tools = $('more-tools');
-    if (!tools) return;
-    empty(tools);
-    for (const [key, view] of Object.entries(MORE_VIEWS)) {
-        const off = !moreViewAvailable(key);
+function leafAvailable(group, key) { return navLeafAvailable(navCaps(), group, key); }
+function groupAvailable(group) { return navGroupAvailable(navCaps(), group); }
+function activeLeaf(group) {
+    return navActiveLeaf(navCaps(), state.leaf[group], group);
+}
+
+/** Render one group's sub-tab row, greying the leaves it cannot answer. */
+function renderSubTabs(group) {
+    const row = $(`sub-${group}`);
+    if (!row) return;
+    empty(row);
+    const current = activeLeaf(group);
+    for (const [key, leaf] of Object.entries(NAV_GROUPS[group].leaves)) {
+        const off = !leafAvailable(group, key);
         const btn = el('button', {
             type: 'button',
-            className: `btn btn-outline-secondary${key === state.moreWhich ? ' active' : ''}`
+            className: `btn btn-outline-secondary${key === current ? ' active' : ''}`
                 + (off ? ' disabled' : ''),
-            onClick: () => {
-                if (off) return;
-                state.moreWhich = key;
-                renderMoreTools();
-                loadMoreView();
-            },
-        }, view.label);
+            title: leaf.soon ? 'designed, not built yet' : '',
+        }, leaf.label);
         if (off) btn.setAttribute('disabled', '');
-        tools.appendChild(btn);
+        else btn.addEventListener('click', () => selectLeaf(group, key));
+        row.appendChild(btn);
     }
-    const view = MORE_VIEWS[state.moreWhich];
-    if (view?.copy) {
+    const leaf = leafOf(group, current);
+    if (leaf?.copy) {
+        const paneId = PANE_OF[group];
         const copyBtn = el('button', { className: 'btn btn-outline-secondary' }, 'copy');
-        copyBtn.addEventListener('click', () => copyPane('pane-more', copyBtn));
-        tools.appendChild(copyBtn);
+        copyBtn.addEventListener('click', () => copyPane(paneId, copyBtn));
+        row.appendChild(copyBtn);
     }
-    if (view?.hint) {
-        tools.appendChild(el('span', {
-            className: 'text-muted ms-1', style: 'font-size:.7rem;',
-        }, view.hint));
-    }
+    if (leaf?.hint) row.appendChild(el('span', { className: 'sub-hint' }, leaf.hint));
 }
 
-async function loadMoreView() {
-    if (!state.id) return;
-    const view = MORE_VIEWS[state.moreWhich];
-    if (!view) return;
-    // A disabled view can still be the sticky default from a previous object;
-    // fall back rather than firing a request that will 400.
-    if (!moreViewAvailable(state.moreWhich)) {
-        state.moreWhich = 'info';
-        renderMoreTools();
-        return loadMoreView();
-    }
-    try {
-        await view.load();
-    } catch (err) {
-        replacePane('pane-more', errorNode(err));
-    }
+/** Move a group to one of its leaves and load it. */
+function selectLeaf(group, key) {
+    state.leaf[group] = key;
+    renderSubTabs(group);
+    loadLeaf(group);
 }
-
-// What each gated tab needs from the object, and how it is asked. `exhibit`
-// reads the library's own capability list; `flag` reads a capability flag, for
-// the tabs that are app behavior rather than a library document. Per the house
-// rule we NEVER hide menu items (the menu set stays stable), we grey them out
-// so the user can see what does not apply. Bounds is disabled for every kind
-// until it is built.
-const GATED_TABS = {
-    price: { flag: 'canPrice' },
-    reins: { exhibit: 'reins' },
-};
 
 /**
- * Grey out the tabs this object cannot answer, and land somewhere it can.
+ * Load whichever leaf a group is currently on.
+ *
+ * The guard is "what is this pane already showing", not "what have we ever
+ * fetched". Leaves within a group share one pane, so a set of visited leaves
+ * would skip the re-render when you stepped back to an earlier one and leave
+ * the other leaf's table on screen under the newly active pill. Recording the
+ * rendered leaf per group is the same saving with none of that: re-entering a
+ * group costs nothing, and moving within one always redraws.
+ */
+async function loadLeaf(group) {
+    if (!state.id) return;
+    const key = activeLeaf(group);
+    const load = LOADERS[`${group}:${key}`];
+    if (!load || !leafAvailable(group, key)) return;
+    if (state.rendered[group] === key) return;
+    state.rendered[group] = key;
+    try {
+        await load();
+    } catch (err) {
+        delete state.rendered[group];    // allow a retry on the next activation
+        replacePane(PANE_OF[group], errorNode(err));
+    }
+}
+
+/**
+ * Grey out the groups this object cannot answer, redraw every sub-tab row, and
+ * land somewhere live.
  *
  * One input, not two: the capability block the build response carries. This
  * used to be a kind plus a `has_reins` boolean read against a hand-written
  * table of what each kind could not do, which was the same knowledge the
- * library already held, written down a second time in JavaScript. Reins is now
- * gated on the library serving a `reins` exhibit, which is registered behind
- * exactly the cession test the old flag made, and Price on `can_price`, which
- * the api reads off the object's own `price_pentagon` rather than off a list of
- * kinds.
+ * library already held, written down a second time in JavaScript.
  *
- * The active tab is left alone unless it just went dark. Stepping through
- * examples on the Price tab should stay on Price, and the only reason to move is
+ * A group greys when every one of its leaves is dark, which needs no rule of
+ * its own: Economics is a P&L's group because only a P&L serves the economic
+ * exhibits, and Reinsurance lights on the cession the `reins` exhibit is
+ * registered behind. Bounds greys for everything because all three of its
+ * leaves are still marked `soon`.
+ *
+ * The active group is left alone unless it just went dark. Stepping through
+ * examples on Pricing should stay on Pricing, and the only reason to move is
  * that there is nothing there any more.
  */
 function applyCapabilityGating() {
-    const na = new Set(
-        Object.entries(GATED_TABS)
-            .filter(([, need]) => (need.exhibit
-                ? !state.exhibits.has(need.exhibit)
-                : !state[need.flag]))
-            .map(([tab]) => tab));
-    for (const tab of Object.keys(GATED_TABS)) {
-        const btn = document.querySelector(`.out-tabs [data-tab="${tab}"]`);
+    let activeWentDark = false;
+    for (const group of Object.keys(NAV_GROUPS)) {
+        const btn = document.querySelector(`.out-tabs [data-tab="${group}"]`);
         if (!btn) continue;
-        const off = na.has(tab);
-        // Clear any legacy hide so the menu set is always complete, then grey
-        // out via Bootstrap's .disabled + the native attribute (self-styling,
-        // pointer-events: none, and Bootstrap's Tab plugin won't activate it).
-        btn.closest('li').classList.remove('d-none');
+        const off = !groupAvailable(group);
+        // Grey out via Bootstrap's .disabled plus the native attribute
+        // (self-styling, pointer-events: none, and Bootstrap's Tab plugin will
+        // not activate it).
         btn.classList.toggle('disabled', off);
         btn.toggleAttribute('disabled', off);
         btn.setAttribute('aria-disabled', off ? 'true' : 'false');
+        if (off && activeTabName() === group) activeWentDark = true;
+        renderSubTabs(group);
     }
-    // If the active tab was just disabled, fall back to the landing tab, which
-    // every kind can answer.
-    if (na.has(activeTabName())) showTab('overview');
+    if (activeWentDark) showTab('overview');
 }
 
 function loadActiveTab() { loadTab(activeTabName()); }
@@ -524,26 +536,18 @@ document.querySelectorAll('.out-tabs [data-tab]').forEach((btn) => {
     btn.addEventListener('shown.bs.tab', () => loadTab(btn.dataset.tab));
 });
 
-async function loadTab(name) {
-    if (!state.id) return;
-    if (state.loaded.has(name)) return;
-    state.loaded.add(name);
-    try {
-        if (name === 'overview') {
-            await loadOverview();
-        } else if (name === 'plot') {
-            const img = el('img', { src: api.plotUrl(state.id, { format: 'svg' }), alt: 'native plot' });
-            replacePane('pane-plot', img);
-        } else if (name === 'reins') {
-            await loadReins();
-        } else if (name === 'more') {
-            renderMoreTools();
-            await loadMoreView();
-        }
-    } catch (err) {
-        state.loaded.delete(name);   // allow a retry on the next activation
-        replacePane(PANE_OF[name] || 'pane-overview', errorNode(err));
-    }
+/**
+ * Activate a group: draw its row, then load the leaf it is on.
+ *
+ * The identity block is Overview's alone and is fetched once per build rather
+ * than per leaf, so moving between Plot, Summary and Tail costs nothing.
+ */
+async function loadTab(group) {
+    if (!state.id || !NAV_GROUPS[group]) return;
+    renderSubTabs(group);
+    if (group === 'overview') await loadOverviewHeader();
+    if (group === 'reinsurance') await loadReinsDescription();
+    await loadLeaf(group);
 }
 
 // The live ECharts exhibit on the Overview tab, disposed before each re-render
@@ -696,6 +700,11 @@ function renderOverviewExhibits(box, ir = {}) {
         caption: '1-in-200 (Solvency II) and 1-in-250 (US) are the capital anchors. '
             + 'Exact from the FFT grid, not simulated.',
     });
+    if (ir.tail_behavior) renderOneExhibit(box, ir.tail_behavior, {
+        title: 'Tail behavior',
+        caption: 'Support, the decay class on each side, and concentration. '
+            + 'Read from the spec, so it holds before any grid is chosen.',
+    });
 }
 
 // One exhibit: the static table walked from its document, or the interactive
@@ -743,58 +752,113 @@ function renderOverviewHeader(meta) {
     return head;
 }
 
-// ---- Overview tab: header block + exhibit + summary_df / tail_df ----
-// The landing tab. Each section is best-effort: a frame the object doesn't
-// carry just 400s and is skipped, so the tab degrades gracefully rather than
-// erroring.
-async function loadOverview() {
-    if (overviewChart) { overviewChart.dispose(); overviewChart = null; }
-    clearGrids('pane-overview');
-    const pane = $('pane-overview');
-    empty(pane);
-    let rendered = false;
+// ---- Overview: the landing group, three leaves ----
 
-    // 1. Header block: name / kind / tags / note / program, from the object.
+/**
+ * The identity block above the sub-tab row: name, kind, tags, note.
+ *
+ * Fetched once per build rather than once per leaf, because it names the object
+ * rather than any one view of it and stays put as you move between Plot,
+ * Summary and Tail.
+ */
+async function loadOverviewHeader() {
+    const host = $('head-overview');
+    if (!host || host.firstChild) return;
     const meta = await api.meta_of(state.id).catch(() => null);
     const head = renderOverviewHeader(meta);
-    if (head) { pane.appendChild(head); rendered = true; }
+    if (head) host.appendChild(head);
+}
 
-    // 2. The exhibit: two linked panels for anything with a loss distribution,
-    // a g-curve for a distortion, a joint heatmap for a bivariate.
+/**
+ * Overview / Plot: the two linked panels, a g-curve for a distortion, a joint
+ * heatmap for a bivariate.
+ *
+ * `mountExhibit` owns the box: it draws the skeleton at the exhibit's final size
+ * before fetching anything, and awaits `loadStyle()` behind it. Nothing to
+ * reserve from out here, which is the point. Reserving from the call site meant
+ * guessing the geometry, and the guess was the two-panel one for every kind, so
+ * a distortion or a bivariate reserved the wrong box entirely.
+ */
+async function loadOverviewPlot() {
+    if (overviewChart) { overviewChart.dispose(); overviewChart = null; }
+    const pane = $('pane-overview');
+    clearGrids('pane-overview');
+    empty(pane);
     const host = el('div', { className: 'overview-plot' });
     pane.appendChild(host);
-    // `mountExhibit` owns the box: it draws the skeleton at the exhibit's final
-    // size before fetching anything, and awaits `loadStyle()` behind it. Nothing
-    // to reserve from out here, which is the point. Reserving from the call site
-    // meant guessing the geometry, and the guess was the two-panel one for every
-    // kind, so a distortion or a bivariate reserved the wrong box entirely.
     try {
         overviewChart = await mountExhibit(host, state);
-    } catch { /* the exhibit is a bonus; the tables still carry the story */ }
-    if (overviewChart) rendered = true;
-    else pane.removeChild(host);
-
-    // 3. Risk exhibits (summary_df + tail_df) with a Static | Interactive toggle.
-    // One document each, feeding both views: the walker draws it, and
-    // `irToGridInput` derives the grid's input from the same bytes. So flipping
-    // the toggle costs no round trip and the two views cannot disagree.
-    const [summaryDoc, tailDoc] = await Promise.all([
-        api.frameIr(state.id, 'summary').catch(() => null),
-        api.frameIr(state.id, 'tail_df').catch(() => null),
-    ]);
-    const ir = { summary: summaryDoc, tail: tailDoc };
-    if (summaryDoc || tailDoc) {
-        const box = el('div', { className: 'overview-exhibits' });
-        pane.appendChild(box);
-        renderOverviewExhibits(box, ir);
-        onTableViewChange('pane-overview', () => renderOverviewExhibits(box, ir), box);
-        rendered = true;
-    }
-
-    if (!rendered) {
+    } catch { /* the exhibit is a bonus; the tables carry the story */ }
+    if (!overviewChart) {
+        pane.removeChild(host);
         pane.appendChild(el('div', { className: 'text-muted small' },
-            'No risk views for this object. See the other tabs.'));
+            'No chart for this object.'));
     }
+}
+
+/**
+ * Overview / Summary and Overview / Tail: one or more frame documents in a pane.
+ *
+ * One document each, feeding both table views: the walker draws it, and
+ * `irToGridInput` derives the grid's input from the same bytes. So flipping the
+ * preference costs no round trip and the two views cannot disagree about a
+ * number.
+ *
+ * @param {Array<[string, string]>} specs `[frame route name, exhibit key]` pairs.
+ */
+async function loadOverviewFrames(specs) {
+    if (overviewChart) { overviewChart.dispose(); overviewChart = null; }
+    const pane = $('pane-overview');
+    clearGrids('pane-overview');
+    empty(pane);
+    const docs = await Promise.all(
+        specs.map(([which]) => api.frameIr(state.id, which).catch(() => null)));
+    const ir = {};
+    specs.forEach(([, key], i) => { ir[key] = docs[i]; });
+    if (!docs.some(Boolean)) {
+        pane.appendChild(el('div', { className: 'text-muted small' },
+            'Not available for this object.'));
+        return;
+    }
+    const box = el('div', { className: 'overview-exhibits' });
+    pane.appendChild(box);
+    renderOverviewExhibits(box, ir);
+    onTableViewChange('pane-overview', () => renderOverviewExhibits(box, ir), box);
+}
+
+/**
+ * One library exhibit in a pane, as its envelope.
+ *
+ * The generic leaf loader for Economics and More's Dependency. It takes the
+ * exhibit route rather than the frame route for two reasons. Some of these
+ * exhibits have no frame behind them at all: `economic_waterfall` and
+ * `dependency` are built by the library and reachable only this way. And where
+ * both exist the envelope is the richer one, since the library owns the
+ * business translation and ships each block with its own caption.
+ *
+ * An exhibit is one or more blocks, each a table document, so a pane may hold
+ * several tables. `economic_ratios` is the reason: its insurer framing splits
+ * into pure-unit blocks rather than one frame with mixed measures.
+ */
+async function loadExhibitLeaf(paneId, name) {
+    const envelope = await api.exhibit(state.id, name);
+    const blocks = envelope.blocks || [];
+    const draw = () => {
+        const root = el('div', { className: 'overview-exhibits' });
+        replacePane(paneId, root);
+        if (!blocks.length) {
+            root.appendChild(el('div', { className: 'text-muted small' },
+                'Nothing to show for this object.'));
+            return;
+        }
+        for (const block of blocks) {
+            const host = el('div');
+            root.appendChild(host);
+            mountTable(paneId, host, { doc: block }, GRID_FULL);
+        }
+        onTableViewChange(paneId, draw, root);
+    };
+    draw();
 }
 
 function replacePane(paneId, node) {
@@ -880,42 +944,42 @@ function errorNode(err) {
 // the Overview one is.
 let reinsChart = null;
 
-async function loadReins() {
+/**
+ * The program description above the sub-tab row.
+ *
+ * Group-level like the Overview identity block: it names the whole structure
+ * rather than any one leaf, so it is fetched once per build and stays put.
+ */
+async function loadReinsDescription() {
     const descEl = $('reins-desc');
-    empty(descEl);
-    let info;
-    try {
-        info = await api.reinsDescription(state.id);
-    } catch (err) {
-        replacePane('pane-reins', errorNode(err));
-        return;
-    }
-    if (!info.available) {
-        replacePane('pane-reins', el('div', { className: 'text-muted small' },
-            'No reinsurance on this object.'));
-        return;
-    }
-    if (info.text) descEl.appendChild(el('span', { className: 'mono' }, info.text));
-    await Promise.all([loadReinsExhibit(), loadReinsFrame()]);
+    if (!descEl || descEl.firstChild) return;
+    const info = await api.reinsDescription(state.id).catch(() => null);
+    if (info?.text) descEl.appendChild(el('span', { className: 'mono' }, info.text));
 }
 
 /**
- * The gross / ceded / net exhibit, above the per-layer tables.
+ * Reinsurance / Plot: the gross, ceded and net exhibit.
  *
- * Reuses the Overview's two-panel instrument pointed at three views of one
- * book, so the same reading applies: the left panel is what the cession does to
- * the shape, the right is what it does to the tail, which is the question a
+ * The Overview's two-panel instrument pointed at three views of one book, so
+ * the same reading applies: the left panel is what the cession does to the
+ * shape, the right is what it does to the tail, which is the question a
  * reinsurance structure exists to answer.
+ *
+ * A chart leaf, so the pill lights from `available_charts`. The library
+ * registered `chart_reins` behind the same cession predicate, which makes this
+ * the first leaf in the app whose availability comes from the chart registry
+ * rather than the exhibit one.
  */
-async function loadReinsExhibit() {
-    const host = $('reins-plot');
-    if (!host) return;
+async function loadReinsPlot() {
     if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
-    empty(host);
-    // Same skeleton as the Overview, in the shape this exhibit draws (two
-    // panels). `mountReinsExhibit` is synchronous and takes the frame already
-    // fetched, so unlike the Overview the box is reserved from here, and
-    // `loadStyle` still has to land before the build reads the colors.
+    const pane = $('pane-reinsurance');
+    clearGrids('pane-reinsurance');
+    empty(pane);
+    const host = el('div', { className: 'overview-plot' });
+    pane.appendChild(host);
+    // `mountReinsExhibit` is synchronous and takes the frame already fetched, so
+    // unlike the Overview the box is reserved from here, and `loadStyle` still
+    // has to land before the build reads the colors.
     showPlaceholder(host, 'reins', host.clientWidth || 0);
     try {
         // Full resolution: this is a plot, and a ceded distribution is more
@@ -930,34 +994,41 @@ async function loadReinsExhibit() {
     // canvas, each sized in themselves, so the height set on this node has to
     // come back off or it would clamp them.
     host.style.height = '';
-    if (!reinsChart) empty(host);
-}
-
-async function loadReinsFrame() {
-    if (!state.id) return;
-    try {
-        // `state.reinsWhich` is already the frame name both routes want. The
-        // density is the bulk one: the table takes the binned grid, and only the
-        // exhibit above wants every point.
-        const bulk = state.reinsWhich === 'reins_density_df'
-            ? () => api.frameOf(state.id, state.reinsWhich, { resolution: 'display' })
-            : null;
-        await replacePaneTable('pane-reins', state.reinsWhich,
-            { ...GRID_FULL, renderCap: 8192 }, bulk);
-    } catch (err) {
-        replacePane('pane-reins', errorNode(err));
+    if (!reinsChart) {
+        empty(pane);
+        pane.appendChild(el('div', { className: 'text-muted small' },
+            'No reinsurance chart for this object.'));
     }
 }
 
-// Reins sub-buttons switch which frame is shown.
-document.querySelectorAll('[data-reins]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('[data-reins]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        state.reinsWhich = btn.dataset.reins;
-        if (state.id) loadReinsFrame();
-    });
-});
+/** Reinsurance / Summary, Stats and Density: one per-layer frame. */
+async function loadReinsFrame(which) {
+    if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
+    // The density is the bulk one: the table takes the binned grid, and only
+    // the plot leaf wants every point.
+    const bulk = which === 'reins_density_df'
+        ? () => api.frameOf(state.id, which, { resolution: 'display' })
+        : null;
+    await replacePaneTable('pane-reinsurance', which,
+        { ...GRID_FULL, renderCap: 8192 }, bulk);
+}
+
+/**
+ * Pricing / Determine and Pricing / Evaluate: show one form, hide the other.
+ *
+ * The one group whose leaves are two forms rather than two views of a payload,
+ * so both live in the markup and the leaf chooses. Neither runs on activation:
+ * pricing and evaluation are both work, and a leaf that computed on arrival
+ * would spend it every time you passed through.
+ */
+async function showPricingLeaf(which) {
+    $('leaf-determine').classList.toggle('d-none', which !== 'determine');
+    $('leaf-evaluate').classList.toggle('d-none', which !== 'evaluate');
+    // The premium input is for a position carrying no consideration of its own.
+    // A P&L keeps its premium in its ledger and never asks; an exposure that
+    // states one does not either.
+    $('evaluate-premium-field').classList.toggle('d-none', !state.needsPremium);
+}
 
 // ----------------------------------------------------------------------
 // Price tab -- pentagon form (p + CoC/LR); Portfolios also get the
@@ -1108,11 +1179,13 @@ function renderReinsPrice(payload) {
 const priceBtn = $('price-btn');
 priceBtn?.addEventListener('click', async () => {
     if (!state.id) return;
-    const p = parseFloat($('price-p').value);
+    const anchor = document.querySelector('input[name="price-anchor"]:checked')?.value || 'p';
+    const anchorVal = parseFloat($('price-anchor-val').value);
     const target = document.querySelector('input[name="price-target"]:checked')?.value || 'coc';
     const val = parseFloat($('price-target-val').value);
-    if (!Number.isFinite(p) || !Number.isFinite(val)) return;
-    const body = { p };
+    if (!Number.isFinite(anchorVal) || !Number.isFinite(val)) return;
+    const body = {};
+    body[anchor] = anchorVal;      // 'p' (a VaR probability) or 'a' (assets)
     body[target] = val;            // 'coc' or 'lr'
     priceBtn.disabled = true;
     priceBtn.textContent = 'Pricing…';
@@ -1130,6 +1203,22 @@ priceBtn?.addEventListener('click', async () => {
     }
 });
 
+// Anchor radio -> label, step and a sensible default. A probability lives in
+// (0, 1] and steps by a thousandth; an asset level is money and does neither,
+// so the input's constraints move with the choice rather than being left at the
+// probability's and silently rejecting every asset figure.
+document.querySelectorAll('input[name="price-anchor"]').forEach((radio) => {
+    radio.addEventListener('change', () => {
+        const input = $('price-anchor-val');
+        const isP = radio.value === 'p';
+        $('price-anchor-label').textContent = isP ? 'p' : 'assets';
+        input.step = isP ? '0.001' : '1';
+        if (isP) input.max = '1'; else input.removeAttribute('max');
+        input.value = isP ? '0.99' : '';
+        if (!isP) input.focus();
+    });
+});
+
 // Target radio -> label + a sensible default value.
 document.querySelectorAll('input[name="price-target"]').forEach((radio) => {
     radio.addEventListener('change', () => {
@@ -1137,6 +1226,65 @@ document.querySelectorAll('input[name="price-target"]').forEach((radio) => {
         $('price-target-label').textContent = isCoc ? 'CoC' : 'LR';
         $('price-target-val').value = isCoc ? '0.15' : '0.9';
     });
+});
+
+// ----------------------------------------------------------------------
+// Pricing / Evaluate: the breakeven acceptability panel
+// ----------------------------------------------------------------------
+/**
+ * Render the evaluation panel.
+ *
+ * One tidy frame whose reading depends on what was evaluated. An aggregate or a
+ * portfolio gives one block, a row per distortion family. A P&L gives one block
+ * per margin row of its ledger, which for a tower is the whole story: the gross
+ * deal, each layer as a position, and the running net after each purchase.
+ */
+function renderEvaluate(payload) {
+    const paneId = 'pane-evaluate';
+    const ir = payload.ir || {};
+    const draw = () => {
+        const root = el('div', { className: 'price-result' });
+        replacePane(paneId, root);
+        root.appendChild(el('div', { className: 'price-section-title' },
+            'Breakeven acceptability'));
+        root.appendChild(el('div', { className: 'exhibit-caption mb-2' },
+            'The distortion in each family whose risk-adjusted margin is zero: '
+            + 'the stress this position survives. `gini_p` is the '
+            + 'family-agnostic index, so it compares across families and, for a '
+            + 'walk, down the steps. A layer whose figure sits above the net row '
+            + 'over it is priced above the holder’s own acceptability.'));
+        const host = el('div');
+        root.appendChild(host);
+        mountTable(paneId, host,
+            ir.panel ? { doc: ir.panel } : { frame: payload.panel },
+            { ...GRID_FULL, maxRows: 30 });
+        for (const warning of payload.warnings || []) {
+            root.appendChild(el('div', { className: 'exhibit-caption mt-2' }, warning));
+        }
+        onTableViewChange(paneId, draw, root);
+    };
+    draw();
+}
+
+const evaluateBtn = $('evaluate-btn');
+evaluateBtn?.addEventListener('click', async () => {
+    if (!state.id) return;
+    const body = {};
+    if (state.needsPremium) {
+        const premium = parseFloat($('evaluate-premium').value);
+        if (!Number.isFinite(premium)) return;
+        body.premium = premium;
+    }
+    evaluateBtn.disabled = true;
+    evaluateBtn.textContent = 'Evaluating…';
+    try {
+        renderEvaluate(await api.evaluate(state.id, body));
+    } catch (err) {
+        replacePane('pane-evaluate', errorNode(err));
+    } finally {
+        evaluateBtn.disabled = false;
+        evaluateBtn.textContent = 'Evaluate';
+    }
 });
 
 // ----------------------------------------------------------------------

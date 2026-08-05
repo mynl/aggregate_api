@@ -144,12 +144,65 @@ header .navbar { min-height: 56px; }
 }
 .summary-timing:empty { display: none; }
 
-/* ---- Output tabs ---- */
+/* ---- Output tabs ----
+   One row, always, at every width. It scrolls horizontally rather than
+   wrapping or collapsing: a navbar collapse would put a second hamburger in a
+   header that already has one, and a dropdown hides which group you are in and
+   adds a tap to every move. One tap to any group is worth a small scroll on a
+   narrow phone.
+
+   The fade at each edge is what says "scrollable" rather than "clipped". It is
+   painted with a background-image pair rather than pseudo-elements so it can
+   ride on `background-attachment: local`: the two gradients pinned to the
+   scroll box stay put while the two pinned to the content scroll away, which
+   makes each fade appear only on the side with more to see. No JavaScript, no
+   scroll listener. */
+.out-tabs, .sub-tabs {
+    display: flex; flex-wrap: nowrap; width: 100%;
+    overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none;                 /* the fades are the affordance */
+    background-repeat: no-repeat;
+    background-attachment: local, local, scroll, scroll;
+}
+.out-tabs::-webkit-scrollbar, .sub-tabs::-webkit-scrollbar { display: none; }
+.out-tabs > .nav-item, .sub-tabs > * { flex: 0 0 auto; }
+
 .out-tabs {
-    display: flex; flex-wrap: wrap; gap: .2rem; width: 100%;
-    background: #f1f3f5; border: 1px solid #e9ecef; border-radius: .6rem; padding: .3rem;
+    gap: .2rem;
+    background-color: #f1f3f5;
+    background-image:
+        linear-gradient(to right, #f1f3f5, rgba(241, 243, 245, 0)),
+        linear-gradient(to left,  #f1f3f5, rgba(241, 243, 245, 0)),
+        linear-gradient(to right, rgba(0, 0, 0, .11), rgba(0, 0, 0, 0)),
+        linear-gradient(to left,  rgba(0, 0, 0, .11), rgba(0, 0, 0, 0));
+    background-position: left center, right center, left center, right center;
+    background-size: 1.6rem 100%, 1.6rem 100%, .7rem 100%, .7rem 100%;
+    border: 1px solid #e9ecef; border-radius: .6rem; padding: .3rem;
     margin-bottom: .8rem;
 }
+
+/* ---- Sub-tab row ----
+   The second level, one per group, rendered by main.js from the capability
+   block. Lighter than the group strip on purpose: it is a choice within a
+   place, not a change of place. */
+.sub-tabs {
+    gap: .35rem; align-items: center;
+    margin-bottom: .6rem; padding-bottom: .15rem;
+    background-color: #fff;
+    background-image:
+        linear-gradient(to right, #fff, rgba(255, 255, 255, 0)),
+        linear-gradient(to left,  #fff, rgba(255, 255, 255, 0)),
+        linear-gradient(to right, rgba(0, 0, 0, .09), rgba(0, 0, 0, 0)),
+        linear-gradient(to left,  rgba(0, 0, 0, .09), rgba(0, 0, 0, 0));
+    background-position: left center, right center, left center, right center;
+    background-size: 1.4rem 100%, 1.4rem 100%, .6rem 100%, .6rem 100%;
+}
+.sub-tabs:empty { display: none; }
+.sub-tabs .btn {
+    --bs-btn-padding-y: .12rem; --bs-btn-padding-x: .55rem;
+    --bs-btn-font-size: .74rem;
+}
+.sub-tabs .sub-hint { font-size: .7rem; color: var(--mut); white-space: nowrap; }
 .out-tabs .nav-link {
     padding: .25rem .9rem; font-size: .82rem; color: #495057;
     border-radius: var(--bs-border-radius, .375rem);
@@ -159,8 +212,9 @@ header .navbar { min-height: 56px; }
     box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
 }
 .out-tabs .nav-link:not(.active):hover { background: #e6e9ed; }
-/* Phones: tighten the pill padding so Info·Summary·Plot·Price·Reins·More
-   fits on one line instead of wrapping. */
+/* Phones: tighten the pill padding so as many groups as possible are reachable
+   without scrolling. The row scrolls when they still do not fit, which at six
+   spelled-out group names is the common case rather than the exception. */
 @media (max-width: 575.98px) {
     .out-tabs { gap: .15rem; padding: .25rem; }
     .out-tabs .nav-link { padding: .25rem .5rem; font-size: .78rem; }

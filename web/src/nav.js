@@ -1,0 +1,208 @@
+/**
+ * The navigation skeleton, and the rules that decide what is live in it.
+ *
+ * Split from `main.js` so the rules can be checked without a browser. Nothing
+ * here touches the DOM, fetches anything, or knows how a leaf renders: it is
+ * the shape of the menu plus four pure functions over a capability payload.
+ * `main.js` supplies the loaders, keyed `group:leaf`.
+ *
+ * The skeleton is editorial and the leaves are derived. Which groups exist,
+ * what they are called and what order they sit in is a judgment about how
+ * insurance work proceeds, so the app authors it. Whether a given leaf is live
+ * for the object in front of you is a fact, so the library computes it and this
+ * only asks.
+ *
+ * Three ways a leaf is gated, and which one it uses decides where a future leaf
+ * goes:
+ *
+ *   `exhibit`  a library exhibit; lights from `available_exhibits`, so a new
+ *              registration upstream reaches the menu with no edit here
+ *   `chart`    a library chart; lights from `available_charts`
+ *   `flag`     app behavior with no library document behind it, so a capability
+ *              flag says; each flag names its consumer in `capability.py`
+ *
+ * A leaf with none of the three is available wherever an object is: Density is
+ * a bulk frame with no exhibit, Narrative is the object's own text.
+ *
+ * `soon: true` greys a leaf that is designed but not built. Per the house rule
+ * nothing is hidden, so what is coming is visible and plainly not ready.
+ */
+
+export const NAV_GROUPS = {
+    overview: {
+        label: 'Overview',
+        leaves: {
+            plot: {
+                label: 'Plot',
+                hint: 'the distribution and its tail, linked on one cursor',
+            },
+            summary: {
+                label: 'Summary',
+                exhibit: 'summary',
+                hint: 'moments and key percentiles',
+            },
+            tail: {
+                label: 'Tail',
+                exhibit: 'tail',
+                hint: 'return periods, then how each tail behaves',
+            },
+        },
+    },
+    economics: {
+        label: 'Economics',
+        leaves: {
+            ledger: {
+                label: 'Ledger',
+                exhibit: 'economic',
+                hint: 'the P&L sheet, line by line',
+            },
+            ratios: {
+                label: 'Ratios',
+                exhibit: 'economic_ratios',
+                hint: 'the same sheet read as ratios',
+            },
+            waterfall: {
+                label: 'Waterfall',
+                exhibit: 'economic_waterfall',
+                hint: 'the margin walk, gross to net; a tower only',
+            },
+        },
+    },
+    reinsurance: {
+        label: 'Reinsurance',
+        leaves: {
+            summary: {
+                label: 'Summary',
+                exhibit: 'reins',
+                hint: 'the program layer by layer',
+            },
+            stats: {
+                label: 'Stats',
+                exhibit: 'reins',
+                hint: 'gross, ceded and net moments',
+            },
+            density: {
+                label: 'Density',
+                exhibit: 'reins',
+                hint: 'the three distributions on one grid',
+            },
+            plot: {
+                label: 'Plot',
+                chart: 'reins',
+                hint: 'what the cession does to the shape, and to the tail',
+            },
+        },
+    },
+    pricing: {
+        label: 'Pricing',
+        leaves: {
+            determine: { label: 'Determine', flag: 'canPrice' },
+            evaluate: { label: 'Evaluate', flag: 'canEvaluate' },
+        },
+    },
+    bounds: {
+        label: 'Bounds',
+        leaves: {
+            bounds: { label: 'Bounds', soon: true },
+            pricing: { label: 'PricingBounds', soon: true },
+            allocation: { label: 'AllocationBounds', soon: true },
+        },
+    },
+    more: {
+        label: 'More',
+        leaves: {
+            validation: {
+                label: 'Validation',
+                exhibit: 'validation',
+                hint: 'theoretical vs empirical moments; reads “not unreasonable” on a clean build',
+                copy: true,
+            },
+            stats: {
+                label: 'Stats',
+                exhibit: 'stats',
+                hint: 'frequency / severity / aggregate moments; raw moment rows are dropped',
+            },
+            density: {
+                label: 'Density',
+                hint: 'binned to a power-of-two display grid; copy / save from the grid',
+            },
+            window: {
+                label: 'Window',
+                exhibit: 'bs_window',
+                hint: 'bucket / window estimator; the selected row is the chosen grid',
+            },
+            dependency: {
+                label: 'Dependency',
+                exhibit: 'dependency',
+                hint: 'the copula and what it does to the joint; a bivariate only',
+            },
+            narrative: {
+                label: 'Narrative',
+                hint: 'the object’s own text, verbatim',
+                copy: true,
+            },
+        },
+    },
+};
+
+/** The leaf definition for a group, by key. */
+export function leafOf(group, key) {
+    return NAV_GROUPS[group]?.leaves?.[key];
+}
+
+/**
+ * Is this leaf live for the object described by `caps`?
+ *
+ * Nothing here knows about kinds, which is the point: this replaced two
+ * hand-written tables saying what each kind could not do, and one of them had
+ * drifted (it greyed a bivariate's grid-sizing pane, which the object serves
+ * perfectly well).
+ *
+ * @param {object} caps `{built, exhibits: Set, charts: Set, flags: object}`.
+ */
+export function leafAvailable(caps, group, key) {
+    const leaf = leafOf(group, key);
+    if (!leaf || leaf.soon) return false;
+    if (leaf.exhibit) return caps.exhibits.has(leaf.exhibit);
+    if (leaf.chart) return caps.charts.has(leaf.chart);
+    if (leaf.flag) return Boolean(caps.flags?.[leaf.flag]);
+    return Boolean(caps.built);
+}
+
+/** A group is live when any of its leaves is. */
+export function groupAvailable(caps, group) {
+    return Object.keys(NAV_GROUPS[group]?.leaves || {})
+        .some((key) => leafAvailable(caps, group, key));
+}
+
+/**
+ * The leaf a group should show: the one it was last left on, if it still
+ * answers, otherwise its first live one.
+ *
+ * Each group remembers its own, so stepping away from Pricing and back returns
+ * you where you were rather than to its first leaf. Falls back to the first
+ * leaf when nothing is live, so a greyed group still has a well-defined pill to
+ * draw as active rather than none.
+ */
+export function activeLeaf(caps, remembered, group) {
+    const keys = Object.keys(NAV_GROUPS[group]?.leaves || {});
+    if (remembered && leafAvailable(caps, group, remembered)) return remembered;
+    return keys.find((key) => leafAvailable(caps, group, key)) || keys[0];
+}
+
+/** Shape a build response's capability block into the form the rules take. */
+export function capsFromResponse(capability, built = true) {
+    const cap = capability || {};
+    return {
+        built: built && Boolean(capability),
+        exhibits: new Set((cap.exhibits || []).map((e) => e.name)),
+        charts: new Set(cap.charts || []),
+        flags: {
+            canPrice: Boolean(cap.can_price),
+            canEvaluate: Boolean(cap.can_evaluate),
+            canSharpen: Boolean(cap.can_sharpen),
+            hasPremium: Boolean(cap.has_premium),
+            needsPremium: Boolean(cap.needs_premium),
+        },
+    };
+}

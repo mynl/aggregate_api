@@ -89,7 +89,12 @@ from ..cache import CacheEntry, ObjectCache, canonicalize_decl, object_id
 from ..capability import capability_for
 from ..config import Settings, get_settings
 from ..plotting import render_plot
-from ..pricing import run_price_pentagon, run_pricing, run_reins_price
+from ..pricing import (
+    run_evaluate,
+    run_price_pentagon,
+    run_pricing,
+    run_reins_price,
+)
 from ..tables import frame_document
 from ..serializers import (
     bin_density,
@@ -1762,7 +1767,32 @@ def post_price(
     never costs a re-POST.
     """
     try:
-        return run_price_pentagon(entry.obj, p=req.p, coc=req.coc, lr=req.lr, ir=ir)
+        return run_price_pentagon(entry.obj, p=req.p, a=req.a, coc=req.coc,
+                                  lr=req.lr, ir=ir)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/objects/{oid}/evaluate", response_model=models.EvaluateResponse)
+def post_evaluate(
+    oid: str,
+    req: models.EvaluateRequest,
+    ir: bool = Query(False, description="Also return a table document for the static view."),
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """The breakeven acceptability panel for a position already held.
+
+    The evaluation half of the Pricing group. Where ``price`` asks what an
+    obligation is worth at a chosen capital level, this asks how much stress
+    the position survives: per distortion family, the shape at which the
+    risk-adjusted margin reaches zero, indexed by Cherny and Madan's
+    ``gini_p``.
+
+    See :func:`aggregate_api.pricing.run_evaluate` for the three shapes and
+    why the warnings travel with the frame instead of being swallowed.
+    """
+    try:
+        return run_evaluate(entry.obj, premium=req.premium, ir=ir)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

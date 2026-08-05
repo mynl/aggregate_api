@@ -98,6 +98,8 @@ class Capability(BaseModel):
     has_premium: bool = False
     can_sharpen: bool = False
     can_price: bool = False
+    can_evaluate: bool = False
+    needs_premium: bool = False
 
 
 class BuildResponse(BaseModel):
@@ -287,12 +289,21 @@ class PricingResponse(BaseModel):
 class PriceRequest(BaseModel):
     """Body for ``POST /v1/objects/{id}/price`` (pentagon pricing).
 
-    ``p`` fixes the capital level; supply **exactly one** pricing target --
-    ``coc`` (cost of capital / ROE) or ``lr`` (loss ratio). The server
-    enforces the exactly-one rule and returns 400 otherwise.
+    Exactly one of ``p`` (a VaR probability) or ``a`` (an asset level) fixes the
+    capital level, and exactly one pricing target follows: ``coc`` (cost of
+    capital / ROE) or ``lr`` (loss ratio). The server enforces both
+    exactly-one rules and returns 400 otherwise.
+
+    ``a`` joined at 1.0.0a44. The library's ``price_pentagon`` has taken either
+    anchor since it landed and the app only ever sent ``p``, which is the wrong
+    default for the case the Pricing group is really for: a program is written
+    to an attachment far more often than to a probability.
     """
 
-    p: float = Field(..., gt=0, le=1, description="VaR probability in (0, 1] fixing capital.")
+    p: float | None = Field(
+        None, gt=0, le=1, description="VaR probability in (0, 1] fixing capital.")
+    a: float | None = Field(
+        None, gt=0, description="Asset level fixing capital; snapped to the grid.")
     coc: float | None = Field(None, gt=0, description="Cost-of-capital (ROE) target.")
     lr: float | None = Field(None, gt=0, description="Loss-ratio target.")
 
@@ -325,6 +336,53 @@ class PriceResponse(BaseModel):
             "Table documents for the static view, keyed 'pentagon', "
             "'distortion_df', and one per stat (LR / P / PQ / ROE). Present "
             "when the request asks with ?ir=true."
+        ),
+    )
+
+
+class EvaluateRequest(BaseModel):
+    """Body for ``POST /v1/objects/{id}/evaluate`` (the acceptability panel).
+
+    Empty for a P&L, which carries its premium in its ledger, and for an
+    aggregate or portfolio whose exposure states one. ``premium`` is for the
+    remaining case: a position with no consideration of its own cannot be
+    evaluated, and the library raises rather than guessing, so the app asks.
+    """
+
+    premium: float | None = Field(
+        None,
+        gt=0,
+        description=(
+            "The consideration held against this position. Omit to use the "
+            "object's own; rejected for a P&L, whose ledger carries it."
+        ),
+    )
+
+
+class EvaluateResponse(BaseModel):
+    """``POST /v1/objects/{id}/evaluate`` result.
+
+    ``panel`` is the tidy breakeven frame: one row per (step, distortion), with
+    the shape the caller's kind implies. An aggregate or a portfolio evaluates
+    one position; a P&L evaluates every margin row of its ledger, so a tower
+    reads down the rows as the gross deal, each layer, and the running net.
+
+    ``warnings`` carries ``DegenerateEvaluationWarning`` verbatim rather than
+    swallowing it. A ``NaN`` in the panel means no breakeven level exists, and
+    the warning is what says whether that is because the premium does not cover
+    the expected loss or because the position cannot lose.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    kind: str
+    panel: FrameResponse
+    warnings: list[str] = []
+    ir: dict[str, Any] | None = Field(
+        None,
+        description=(
+            "Table document for the static view, keyed 'panel'. Present when "
+            "the request asks with ?ir=true."
         ),
     )
 
