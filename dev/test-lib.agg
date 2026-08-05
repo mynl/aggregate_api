@@ -1,0 +1,329 @@
+# test-lib.agg  --  shorter test library for aLL-api
+
+## Distortions
+distortion DualDistortion dual 2.5
+  note{Dual-power distortion; the second leaf for the minimum below.}
+  tags{topic:distortion};
+
+distortion PHDistortion ph 0.7
+  note{Proportional-hazard distortion (universally understood).}
+  tags{topic:distortion, role:intro, check:limiting-case}
+
+## Heroes
+agg GrossCatXOL as "Gross US Hurricane"
+  1.74 claims
+  sev lognorm 8.501 cv 14.624
+  poisson
+  note{ILW model on US Cat, amounts in billions.}
+  tags{topic:severity role:hero}
+  hints{bs=2;log2=16;normalize=False;};
+
+agg USXOLTower as "US Hurricane Reinsurance"
+  1.74 claims
+  sev lognorm 8.501 cv 14.624
+  occurrence net of
+      90% po 100 xs 100 deposit 4 and
+      95% po 200 xs 200 deposit 3.75 as "Occ re"
+  poisson
+  aggregate net of
+      50% po 20 xs 100 deposit 3 as "Agg re"
+  tags{role:hero, topic:reinsurance}
+  note{ILW model of US Cat. Amounts in billions. From St John's RMI3388 course. Industry estimates, as of 2019: 100 year PML USD132.5B and 250 year USD300.3B.}
+  hints{bs=2;log2=16;normalize=False;};
+
+pnl pnlUSHurr as "US Hurricane"
+  20 premium as "Gross Premium"
+  less agg.USXOLTower
+  tags{role:hero, topic:reinsurance}
+  note{ILW model of US Cat. Amounts in billions.}
+  hints{bs=2;log2=16;normalize=False;};
+
+xpnl xpnlUSHurr as "US Hurricane"
+  20 premium as "Gross Premium"
+  less agg.USXOLTower
+  tags{role:hero, topic:reinsurance}
+  note{ILW model of US Cat. Amounts in billions.}
+  hints{bs=2;log2=16;normalize=False;};
+
+agg ExposureRating
+  [1000 2000 10000 500] premium at [0.9 0.85 0.9 0.8] lr
+  [2500 5000 10000 20000] xs 0
+  sev lognorm 120 cv 12
+  occurrence ceded to
+    750 xs 750
+  mixed gamma 0.2
+  note{Exposure rating on a small portfolio with limits profile, amounts in 000s.}
+  tags{role:hero, topic:aggregate};
+
+agg LimitProfile
+  [10000 20000 5000] premium at [0.8 0.7 0.5] lr
+  [1000 2000 5000] xs 0
+  sev lognorm 50 cv 1.5
+  poisson
+  note{Premium x limit x loss-ratio profile -- implied claim counts computed per band.}
+  tags{role:hero, topic:aggregate, check:reconciliation}
+  ;
+
+agg TweedieBook
+  25 claims
+  sev gamma 1 cv 0.05
+  poisson
+  note{Tweedie - Poisson sum of gammas. Extreme case, severity has low CV.}
+  tags{role:hero, topic:aggregate};
+
+port TwoLineBook
+  note{Two-unit book: thin property + mixed-frequency casualty. Capital and price downstream.}
+  tags{role:hero, topic:portfolio}
+  agg Property
+    80 claims
+    500 xs 0
+    sev lognorm 50 cv 1.2
+    poisson
+  agg Casualty
+    20 claims
+    2000 xs 0
+    sev lognorm 250 cv 2
+    mixed gamma 0.4;
+
+## Aggregates
+agg BasicBook
+  250 claims
+  1000 xs 0
+  sev lognorm 100 cv 1.5
+  poisson
+  note{Plain Poisson / lognormal aggregate -- the workhorse compound distribution.}
+  tags{topic:aggregate, role:intro};
+
+agg BasicDfreq
+  dfreq [1 2 3]
+  dsev [1 2 10]
+  note{1, 2 or 3 claims using range notation, sev 1, 2, 10 all equally likely}
+  tags{topic:aggregate};
+
+agg PremiumMinusLoss
+  5000 claims
+  ssev 100 - lognorm 80 cv .2
+  poisson
+  note{High-frequency premium-minus-loss payoff -- near-Gaussian on a signed window.}
+  tags{topic:aggregate};
+
+agg TweedieCompound
+  tweedie 1 1.005 0.1
+  note{Tweedie by mean, power p, and dispersion (variance = dispersion * mean**p).}
+  tags{topic:aggregate};
+
+agg SignedPremiumMinusLoss
+  5 claims
+  ssev 100 - lognorm 80 cv .2
+  poisson
+  note{premium minus loss: constant - dist reflects the severity (sev mean 20)}
+  tags{topic:pnl};
+
+## Reinsurance
+agg AggregateStopLoss
+  100 claims
+  1000 xs 0
+  sev lognorm 100 cv 1.5
+  poisson
+  aggregate net of
+    5000 xs 30000
+  note{Aggregate stop-loss -- net of an annual 5000-xs-30000 layer.}
+  tags{topic:reinsurance};
+
+agg BasicXOL
+  15 claims
+  10000 xs 0
+  sev lognorm 1500 cv 1
+  occurrence net of
+    50% so 2500 xs 2500 and
+    90% so 5000 xs 5000
+  mixed gamma 0.25
+  note{Occurrence excess-of-loss program, net view.}
+  tags{topic:reinsurance};
+
+agg ReinsuranceLayered
+  1250 premium at 0.8 lr
+  1000 xs 0
+  sev lognorm 80 cv 1.675
+  occurrence ceded to
+    125 xs 0 and
+    50% so 125 xs 125 and
+    20% so 250 xs 250 and
+    5% so 500 xs 500
+  poisson
+  note{Layered occurrence reinsurance, ceded view.}
+  tags{topic:reinsurance};
+
+agg ReinsuranceOccurrenceWithAggLimit
+  5 claims
+  120 xs 0
+  sev 120 * uniform
+  occurrence ceded to
+    60 xs 60
+  poisson
+  aggregate net of
+    20 xs 180
+  note{occurrence plus aggregate}
+  tags{topic:reinsurance};
+
+
+## PnL, profit and loss with signed support
+
+
+## Portfolios
+port PIRTame
+  note{PIR Tame case study. For reinsurance see text.}
+  tags{topic:portfolio, role:paper}
+  hints{bs=1/64; log2=16; padding=1}
+  agg Tame.A
+    1 claim
+    sev gamma 50 cv 0.1
+    fixed
+  agg Tame.B
+    1 claim
+    sev gamma 50 cv 0.15
+    fixed;
+
+port PropertyCasualty
+  note{Portfolio of property and casualty risks, amounts in 000s.}
+  tags{role:hero, topic:portfolio}
+  agg Casualty
+    5000 premium at 0.9 lr
+    5000 xs 0
+    sev lognorm 200 cv 8
+    mixed gamma 0.45
+  agg Property
+    8000 premium at 0.85 lr
+    10000 xs 0
+    sev lognorm 250 cv 12
+    mixed gamma 0.15;
+
+port SignedPortfolioPair
+  tags{topic:portfolio, topic:pnl}
+  agg A
+    50 claims
+    ssev 10 * norm + 5
+    poisson
+  agg B
+    50 claims
+    ssev 10 * norm + -5
+    poisson;
+
+## Frequency
+agg BasicDSev
+  dfreq [1 2 3] [0.5 0.25 0.25]
+  dsev [1 2 10] [0.4 0.4 0.2]
+  note{1, 2 or 3 claims; severity 1, 2 or 10 each with specified probabilities }
+  tags{topic:frequency};
+
+agg BernoulliFrequency
+  .8 claims
+  dsev [1]
+  bernoulli
+  note{Bernoulli claim count}
+  tags{topic:frequency};
+
+agg BinomialFrequency
+  10 claims
+  dsev [1]
+  binomial 0.5
+  note{Bounded claim count -- binomial (here n = 20, p = 0.5).}
+  tags{topic:frequency};
+
+agg MixedGammaFrequency
+  100 claims
+  1000 xs 0
+  sev lognorm 100 cv 1.5
+  mixed gamma 0.4
+  note{Same severity, over-dispersed counts (gamma-mixed Poisson = negative binomial).}
+  tags{topic:frequency};
+
+agg ZMPoissonFrequency
+  4 claims
+  dsev [1]
+  poisson zm 0.5
+  note{Zero-modified Poisson -- inflate the no-claim probability to 0.5. The 4 is the UN-MODIFIED base mean; reweighting leaves E[N] = 2.0373. Append ! to pin E[N] = 4 instead.}
+  tags{topic:frequency};
+
+## Severity
+sev MixedExponentialSev [10 50 200] * expon wts [0.6 0.3 0.1]
+  note{Mixed exponential (ISO/Verisk style). Can't stand alone as a Sev -- fold it into an agg.}
+  tags{topic:severity};
+
+
+sev ParetoSev 1000 * pareto 1.8 + -1000
+  note{Single-parameter Pareto large-loss curve (scale 1000, shape 1.8), shifted to ground-up.}
+  tags{topic:severity};
+
+
+
+## Portfolios
+port BasicPortfolio
+  note{Two-unit portfolio.}
+  tags{topic:portfolio}
+  agg A
+    50 claims
+    1000 xs 0
+    sev lognorm 100 cv 1.2
+    mixed gamma 0.4
+  agg B
+    65 claims
+    2000 xs 0
+    sev lognorm 150 cv 1.6
+    mixed gamma 0.2;
+
+## Bivariate and dependent risks
+bivariate BivariateCatPair
+  25 claims
+  agg Wind
+    dfreq [0 1] [0.3 0.7]
+    sev lognorm 40 cv 0.65 splice [0] [250]
+  agg Flood
+    dfreq [0 1] [.2 .8]
+    sev lognorm 60 cv 0.95 splice [0] [300]
+  copula independent
+  mixed gamma 0.2
+  note{Common-shock bivariate (bv): Wind and Flood share frequency mixing.}
+  tags{topic:bivariate};
+
+bivariate BivariateClaytonMixed
+  25 claims
+  agg Wind
+    dfreq [1]
+    sev lognorm 40 cv 1.2
+  agg Flood
+    dfreq [1]
+    sev lognorm 60 cv 1.5
+  copula clayton 0.3
+  poisson
+  tags{topic:bivariate};
+
+netceded agg BivariateNetCeded
+  8 claims
+  sev 300 * beta 2 3
+  occurrence net of
+    1.1666666666666665% so 60 xs 40
+  poisson
+  tags{topic:bivariate, topic:reinsurance};
+
+grossnet agg BivariateNetCededPair
+  15 claims
+  10000 xs 0
+  sev lognorm 1500 cv 1
+  occurrence net of
+    50% so 2500 xs 2500 and
+    90% so 5000 xs 5000
+  mixed gamma 0.25
+  note{Gross / ceded / net joint view of a reinsured book.}
+  tags{topic:bivariate, topic:reinsurance};
+
+## Numerical approximations
+agg ApproximateGamma
+  5000 claims
+  sev lognorm 100 cv 2
+  poisson
+  approximate sgamma
+  note{Shifted-gamma moment approximation.}
+  tags{topic:numerics};
+
+
