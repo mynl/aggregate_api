@@ -1,4 +1,4 @@
-/* Service worker for the aggregate Loss Library PWA.
+/* Service worker for the aggregate Loss Lab PWA.
  *
  * Deliberately minimal. A build *requires* the backend (you cannot compute an
  * Aggregate offline), so this is NOT an offline-first app. The worker exists to

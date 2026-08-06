@@ -97,6 +97,7 @@ class Capability(BaseModel):
     # document; each names its consumer in ``capability.py``.
     has_premium: bool = False
     can_sharpen: bool = False
+    can_pnl: bool = False
     can_price: bool = False
     can_evaluate: bool = False
     needs_premium: bool = False
@@ -138,6 +139,49 @@ class BuildResponse(BaseModel):
     # What this object can answer. The SPA paints its navigation from this and
     # holds no per-kind table of its own.
     capability: Capability = Field(default_factory=Capability)
+
+
+class DerivedResponse(BuildResponse):
+    """A derivation's result: the program that made it, and the object.
+
+    The build manifest plus the DecL text that produced it, because every
+    derivation in this app is a program you can see. The text lands in the
+    editor, so you read what was built, you can edit it, and history, sharing
+    and rebuild all keep working. No hidden state, and no object mutated behind
+    a cached id.
+
+    ``id`` is the id an ordinary build of ``program`` would produce, so
+    rebuilding the text from the editor is a cache hit rather than a second
+    build.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    program: str = Field(..., description="The DecL that builds this object.")
+    description: str | None = Field(
+        None,
+        description=(
+            "What the derivation did, when it has something to say. Sharpen "
+            "fills it with the probe's verdict; the others leave it empty."
+        ),
+    )
+
+
+class PnlProgramRequest(BaseModel):
+    """Body for ``POST /v1/objects/{id}/pnl``.
+
+    Both ratios are conventions rather than facts, which is why the library
+    puts them in the signature where a caller reads them, and why they are
+    request fields here rather than server settings. ``loss_ratio`` sizes the
+    premium and is used **only** when the engine states none of its own.
+    """
+
+    loss_ratio: float = Field(
+        0.70, gt=0, le=1,
+        description="Sizes the premium as expected loss over this, when there is none to inherit.")
+    expense_ratio: float = Field(
+        0.25, ge=0, lt=1,
+        description="Gross expense as a fraction of premium; 0 omits the clause.")
 
 
 class ObjectSummary(BaseModel):

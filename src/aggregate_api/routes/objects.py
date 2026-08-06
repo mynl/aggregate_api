@@ -86,7 +86,7 @@ from aggregate.parser_errors import ErrorReport, format_error
 from .. import models
 from ..audit import AuditLog
 from ..cache import CacheEntry, ObjectCache, canonicalize_decl, object_id
-from ..capability import capability_for
+from ..capability import can_sharpen, capability_for
 from ..config import Settings, get_settings
 from ..plotting import render_plot
 from ..pricing import (
@@ -438,6 +438,40 @@ def _bs_window_frame(obj: Any):
     return df if df is not None else _resolve_frame(obj, "bs_window_df")
 
 
+def collapse_program(decl: str) -> str:
+    """One line of DecL from however the text arrived.
+
+    Collapse newlines, tabs and ``\\`` line-continuations to single spaces so a
+    program formatted across several indented lines builds without the ugly
+    continuation character. DecL treats a bare newline as a *program separator*,
+    but the same program on one line parses fine. Runs of whitespace are
+    replaced rather than deleted so tokens do not merge (``100\\nclaims`` to
+    ``100 claims``), and any ``\\`` goes first so existing continuation programs
+    fold in too.
+
+    Done up front on the build path so the hints scan, the cache key, the build
+    and any parse-error caret all see the same source. This is a single-object
+    playground (one program per build), so merging newline-separated programs is
+    not a regression, and ``#`` comments are not accepted in the input box, so
+    nothing gets swallowed.
+
+    Shared rather than inlined because the derivation routes have to reach the
+    **same cache key** an ordinary build of the same text would. The library
+    renders derived programs in its multi-line spread layout, so without this
+    the id would be computed over different bytes and rebuilding a derived
+    program from the editor would miss its own cache slot.
+
+    Parameters
+    ----------
+    decl : str
+
+    Returns
+    -------
+    str
+    """
+    return re.sub(r"\s+", " ", decl.replace("\\", " ")).strip()
+
+
 # ----------------------------------------------------------------------
 # POST /v1/objects
 # ----------------------------------------------------------------------
@@ -466,18 +500,7 @@ def post_object(
     ip = _client_ip(request)
     t0 = time.monotonic()
 
-    # Collapse newlines / tabs / `\` line-continuations to single spaces so a
-    # program formatted across several indented lines builds without the ugly
-    # `\` continuation. DecL treats a bare newline as a *program separator*, but
-    # the same program on one line parses fine. We replace (not delete) runs of
-    # whitespace so tokens don't merge (``100\nclaims`` → ``100 claims``), drop
-    # any `\` first to fold existing continuation programs in too, then strip.
-    # Done up front so the hints scan, cache key, build, and any parse-error
-    # caret all see the same collapsed source. This is a single-object
-    # playground (one program per build), so merging newline-separated programs
-    # is not a regression. ``#`` comments aren't accepted in the input box, so
-    # nothing gets swallowed.
-    req.decl = re.sub(r"\s+", " ", req.decl.replace("\\", " ")).strip()
+    req.decl = collapse_program(req.decl)
 
     # Cap check is cheap; do it before the cache lookup so an
     # over-cap request never reaches the build path. Enforce against the
@@ -1638,6 +1661,154 @@ def get_chart_document(
         media_type="application/json",
         headers={"ETag": etag, "Cache-Control": "no-cache"},
     )
+
+
+# ----------------------------------------------------------------------
+# The derivations: a program that reproduces an object you arrived at
+# ----------------------------------------------------------------------
+# Three buttons, one idea. Sharpening a grid and wrapping an object in a P&L
+# both produce a new object, and each returns the DecL that reproduces it, so
+# nothing is derived behind the user's back. The grammar knowledge lives in the
+# library (``aggregate/dev/done/plan-derived-programs.md``); these routes only
+# call it and file the result.
+
+def _manifest(oid: str, entry: CacheEntry) -> dict:
+    """The build manifest for an object already in the cache."""
+    return {
+        "id": oid,
+        "kind": entry.kind,
+        "name": entry.name,
+        "warnings": [],
+        "cached": False,
+        "elapsed_ms": 0,
+        **_summary_fields(entry.obj),
+        "capability": capability_for(entry.obj),
+    }
+
+
+@router.post("/objects/{oid}/sharpen", response_model=models.DerivedResponse)
+def post_sharpen(
+    oid: str,
+    settings: Settings = Depends(get_settings),
+    cache: ObjectCache = Depends(_get_cache),
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """Audit the grid, move to a better one, and say so in DecL.
+
+    ``update`` chooses a grid from the analytic moments before any FFT runs;
+    this audits that choice afterwards and takes the best cell that does not
+    cost more. The outcome is pinned onto the object's own ``program``, ``note``
+    and ``hints`` by the library, so ``build(program)`` reproduces the sharpened
+    object and the three records cannot disagree.
+
+    Notes
+    -----
+    **The cache entry moves with the object, and nothing is rebuilt.**
+    ``sharpen`` moves its object in place while the cache is keyed on a hash of
+    ``(decl, log2, bs)``, so left alone the cache would serve, under a key
+    asserting one grid, an object sitting on another. Rebuilding to avoid that
+    would throw away the probe, which is the expensive part and has already run.
+    So the object is re-filed instead: the old id is dropped and the same entry
+    goes back under the id its own ``sharpen_program`` hashes to, which is
+    exactly the id an ordinary build of that text would produce. Rebuilding the
+    derived program from the editor is then a cache hit.
+
+    The entry object itself is reused rather than replaced, so the lock that
+    guards reads of this object is the same one before and after the move.
+
+    **The api's own cap reaches the probe.** ``sharpen`` defaults to
+    ``log2_cap=20`` and ``AGGAPI_LOG2_CAP`` defaults to 18, so an unattended
+    probe could land on a grid the build route would then refuse, leaving the
+    user with a derived program the app cannot honor.
+    """
+    obj = entry.obj
+    if not hasattr(obj, "sharpen"):
+        raise HTTPException(
+            status_code=400,
+            detail="sharpening applies to an Aggregate or a Portfolio")
+    if not can_sharpen(obj):
+        raise HTTPException(
+            status_code=400,
+            detail=("this program already carries a sharpen verdict; a second "
+                    "audit of a confirmed grid is a slow no-op"))
+
+    # Same guards as a build, because a probe is several builds: it re-updates
+    # the object across a line search of neighboring cells.
+    with _build_semaphore:
+        future = _build_executor.submit(
+            lambda: obj.sharpen(log2_cap=settings.log2_cap))
+        try:
+            future.result(timeout=settings.build_timeout_s)
+        except FuturesTimeout:
+            raise HTTPException(
+                status_code=504,
+                detail=f"sharpen exceeded {settings.build_timeout_s}s")
+        except Exception as exc:  # noqa: BLE001 -- reported to the user
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    program = collapse_program(getattr(obj, "sharpen_program", "") or "")
+    if not program:
+        # The library declines to pin an object built programmatically, or one
+        # whose program cannot be re-parsed. The grid still moved, so this is
+        # not an error; there is simply no text to hand back.
+        raise HTTPException(
+            status_code=422,
+            detail="the probe ran but this object carries no program to pin")
+
+    new_oid = object_id(canonicalize_decl(program), 0, 0.0)
+    entry.decl, entry.log2, entry.bs = program, 0, 0.0
+    cache.delete(oid)
+    cache.put(new_oid, entry)
+    return {
+        "program": program,
+        "description": getattr(obj, "sharpen_description", None) or None,
+        **_manifest(new_oid, entry),
+    }
+
+
+@router.post("/objects/{oid}/pnl", response_model=models.DerivedResponse)
+def post_pnl(
+    oid: str,
+    req: models.PnlProgramRequest,
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    cache: ObjectCache = Depends(_get_cache),
+    audit: AuditLog = Depends(_get_audit),
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """Wrap this object in a P&L and return the program that does it.
+
+    ``pnl NAME_PnL <premium> less <engine> less <expense>``, with the object's
+    own body inlined as the engine, so the text is self-contained and builds
+    anywhere rather than only in the session that wrote it. The premium is
+    ``inherit premium`` when the exposure states one, and otherwise expected
+    loss over ``loss_ratio``.
+
+    Notes
+    -----
+    Unlike sharpening this mutates nothing, so there is no re-filing to do: the
+    derived text goes through the ordinary build path, which is
+    :func:`post_object` called directly rather than reimplemented. That is
+    deliberate. Every guard the build route carries (the log2 cap, the
+    semaphore, the wall-clock timeout, the audit row and the whole parse-error
+    surface) applies unchanged to a derived program, and a second
+    implementation would be a second place for them to drift.
+    """
+    obj = entry.obj
+    if not hasattr(obj, "pnl_program"):
+        raise HTTPException(
+            status_code=400,
+            detail="a P&L wraps an Aggregate or a Portfolio")
+    try:
+        program = obj.pnl_program(loss_ratio=req.loss_ratio,
+                                  expense_ratio=req.expense_ratio)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    program = collapse_program(program)
+    built = post_object(models.BuildRequest(decl=program), request,
+                        settings, cache, audit)
+    return {"program": program, "description": None, **built}
 
 
 # ----------------------------------------------------------------------

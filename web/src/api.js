@@ -126,6 +126,12 @@ export const api = {
      */
     evaluate:     (id, body)        => _json('POST', `/v1/objects/${id}/evaluate?ir=true`, body),
 
+    // The derivations. Each answers with the DecL that reproduces the object
+    // *and* the object, so the editor and the panes move together and the id
+    // is the one an ordinary build of that text would produce.
+    sharpen:      (id)              => _json('POST', `/v1/objects/${id}/sharpen`, {}),
+    pnl:          (id, body = {})   => _json('POST', `/v1/objects/${id}/pnl`, body),
+
     // DecL editor support
     complete:     (decl, cursor)    => _json('POST', '/v1/decl/complete', { decl, cursor }),
     lex:          (decl)            => _json('POST', '/v1/decl/lex', { decl }),

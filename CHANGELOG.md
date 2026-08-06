@@ -4,6 +4,69 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a45
+
+Sharpen, PnL and Reset join Build and Examples, and the log2 and bs dropdowns
+come out. Stage 4 of `dev/plan-loss-lab-navigation.md`.
+
+Both derivations answer with the DecL that reproduces the object **and** the
+object itself. The text lands in the editor, so you read what was built, you
+can edit it, and history, sharing and rebuild all keep working. The grammar
+knowledge stays in the library, where `sharpen_program` and `pnl_program`
+landed at a213 and a215; these routes only call it and file the result.
+
+**The cache entry moves with the object, and nothing is rebuilt.** `sharpen`
+moves its object in place while the cache is keyed on a hash of
+`(decl, log2, bs)`, so left alone the cache would serve, under a key asserting
+one grid, an object sitting on another. Rebuilding to avoid that would throw
+away the probe, which is the expensive part and has already run. So the entry
+is re-filed: the old id is dropped and the same entry goes back under the id
+its own `sharpen_program` hashes to, which is exactly the id an ordinary build
+of that text produces. Pressing Build on the derived program is then a cache
+hit rather than a second object. The entry object is reused rather than
+replaced, so the lock guarding reads of it is the same before and after.
+
+That id equality is why `collapse_program` is now a shared helper rather than
+four lines inside the build route. The library renders derived programs in its
+multi-line spread layout; without collapsing them exactly as the build route
+does, the id would be computed over different bytes and a derived program
+would miss its own cache slot.
+
+**The api's cap reaches the probe.** `sharpen` defaults to `log2_cap=20` and
+`AGGAPI_LOG2_CAP` defaults to 18, so an unattended probe could land on a grid
+the build route then refuses, leaving the user holding a program that will not
+build. The call passes `settings.log2_cap`, and a test rebuilds whatever the
+probe chose to prove it survives the cap check.
+
+`POST /objects/{id}/pnl` mutates nothing, so it needs no re-filing: it derives
+the text and calls `post_object` directly rather than reimplementing the build
+path, which keeps the log2 cap, the semaphore, the timeout, the audit row and
+the whole parse-error surface applying unchanged to a derived program. A
+portfolio's P&L is self-contained as of `aggregate` a216 `[Inline-Port-Engine]`,
+so the button lights for both kinds with no caveat and the text builds anywhere.
+
+Reset rebuilds from the base program text rather than restoring an id, because
+Sharpen consumes the object it audits. After a PnL the base is still cached and
+Reset is a hit; after a Sharpen it is a rebuild. Paying that only on the undo is
+the right way round, and the common path costs nothing.
+
+`can_pnl` joins the capability block, read off `pnl_program`. Deliberately not
+folded into `can_price` even though both are true for exactly an `Aggregate` and
+a `Portfolio` today: two different questions, and a shared flag would tie a
+future change in one to the other.
+
+**The knobs are gone.** log2 and bs were never used, and Sharpen writes the
+`hints{}` clause they set into a program you can keep, so the grid is pinned by
+an audit that explains itself rather than by a menu choice that vanishes on
+reload. The Help panel's control list and tab guide were rewritten to match the
+six groups, since both still described the a25 layout.
+
+Fourteen new tests in `tests/test_derive.py`, the load-bearing ones being the
+cache pair: the old id is gone rather than still serving the moved object, and
+the derived program rebuilds to the same id as a cache hit. Both branches of
+the probe are covered, moved and confirmed, since a move pins hints and leaves
+the button live while a confirmation writes the note and greys it.
+
 ## 1.0.0a44
 
 Six groups, each with its own sub-tab row. Stage 3 of

@@ -116,38 +116,21 @@
                 </ul>
             </div>
 
-            <div class="dropdown">
-                <button id="log2-btn" class="btn btn-outline-secondary shadow-sm dropdown-toggle opt-toggle"
-                        data-bs-toggle="dropdown" aria-expanded="false">
-                    log2 <span class="v d-none d-sm-inline" id="log2-val">auto</span></button>
-                <ul id="log2-menu" class="dropdown-menu shadow-sm">
-                    <li><a class="dropdown-item small active" href="#" data-val="auto">auto</a></li>
-                    <li><a class="dropdown-item small" href="#" data-val="10">10</a></li>
-                    <li><a class="dropdown-item small" href="#" data-val="11">11</a></li>
-                    <li><a class="dropdown-item small" href="#" data-val="12">12</a></li>
-                    <li><a class="dropdown-item small" href="#" data-val="13">13</a></li>
-                    <li><a class="dropdown-item small" href="#" data-val="14">14</a></li>
-                    <li><a class="dropdown-item small" href="#" data-val="15">15</a></li>
-                    <li><a class="dropdown-item small" href="#" data-val="16">16</a></li>
-                </ul>
-            </div>
+            <!-- The three derivations. Each returns DecL that lands in the
+                 editor, so you read what was built and can edit it; none of
+                 them mutates an object behind a cached id.
 
-            <div class="dropdown">
-                <button id="bs-btn" class="btn btn-outline-secondary shadow-sm dropdown-toggle opt-toggle"
-                        data-bs-toggle="dropdown" aria-expanded="false">
-                    bs <span class="v d-none d-sm-inline" id="bs-val">auto</span></button>
-                <ul id="bs-menu" class="dropdown-menu shadow-sm">
-                    <li><a class="dropdown-item small active" href="#" data-val="auto">auto</a></li>
-                    <li><a class="dropdown-item small" href="#" data-val="1">1</a></li>
-                    <li><a class="dropdown-item small" href="#" data-val="0.5">1/2</a></li>
-                    <li><a class="dropdown-item small" href="#" data-val="0.015625">1/64</a></li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li class="bs-custom">
-                        <input type="text" id="bs-custom" class="form-control form-control-sm"
-                               autocomplete="off" autocorrect="off" autocapitalize="off"
-                               placeholder="custom, then Enter"></li>
-                </ul>
-            </div>
+                 They replaced the log2 and bs dropdowns that stood here, which
+                 nobody used. Sharpen writes the `hints{}` clause those knobs
+                 used to set, and writes it into a program you can keep, so the
+                 grid is pinned by an audit that explains itself rather than by
+                 a menu choice that vanishes when you reload. -->
+            <button id="sharpen-btn" class="btn btn-outline-secondary shadow-sm"
+                    title="audit the grid and move to a better one">Sharpen</button>
+            <button id="pnl-btn" class="btn btn-outline-secondary shadow-sm"
+                    title="wrap this object in a P&amp;L">PnL</button>
+            <button id="reset-btn" class="btn btn-outline-secondary shadow-sm"
+                    title="back to the program you built">Reset</button>
         </div>
 
         <!-- Build summary / status line -->
@@ -315,19 +298,25 @@
             <ul class="help-tabs">
                 <li><span class="t">Build</span>: run the program (same as Ctrl+Enter)</li>
                 <li><span class="t">Examples</span>: load a ready-made program</li>
-                <li><span class="t">log2</span>: FFT grid size, 2<sup>log2</sup> buckets (auto picks it, max 16)</li>
-                <li><span class="t">bs</span>: bucket size / resolution (auto picks it)</li>
+                <li><span class="t">Sharpen</span>: audit the grid and move to a better one, writing
+                    the <code>hints{}</code> clause that pins it</li>
+                <li><span class="t">PnL</span>: wrap what you built in a profit and loss account</li>
+                <li><span class="t">Reset</span>: back to the program you wrote</li>
             </ul>
+            <p class="small text-muted">Each of the three writes DecL into the editor, so you can
+                read what it did, edit it, and build it again anywhere.</p>
 
-            <h6>Output tabs</h6>
+            <h6>Output groups</h6>
             <ul class="help-tabs">
-                <li><span class="t">Overview</span>: what you built, its density and exceedance curve, and the risk tables</li>
-                <li><span class="t">Plot</span>: the object's own native plot</li>
-                <li><span class="t">Reins</span>: ceded / net by layer, with a gross / ceded / net exhibit</li>
-                <li><span class="t">Price</span>: pricing metrics and allocation analysis</li>
+                <li><span class="t">Overview</span>: the distribution and its tail, then the risk tables</li>
+                <li><span class="t">Economics</span>: a P&amp;L's ledger, its ratios, and the margin walk</li>
+                <li><span class="t">Reinsurance</span>: ceded and net by layer, with a gross / ceded / net exhibit</li>
+                <li><span class="t">Pricing</span>: determine a premium, or evaluate one already set</li>
                 <li><span class="t">Bounds</span>: pricing bounds (coming)</li>
-                <li><span class="t">More</span>: Validation · Stats · Density · bs window · Info</li>
+                <li><span class="t">More</span>: Validation · Stats · Density · Window · Dependency · Narrative</li>
             </ul>
+            <p class="small text-muted">A group or a leaf greyed out is one this object cannot
+                answer. Nothing is hidden, so the menu is always the same shape.</p>
 
             <h6>Learn more</h6>
             <p class="help-links mb-0">

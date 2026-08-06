@@ -201,6 +201,7 @@ export function capsFromResponse(capability, built = true) {
             canPrice: Boolean(cap.can_price),
             canEvaluate: Boolean(cap.can_evaluate),
             canSharpen: Boolean(cap.can_sharpen),
+            canPnl: Boolean(cap.can_pnl),
             hasPremium: Boolean(cap.has_premium),
             needsPremium: Boolean(cap.needs_premium),
         },

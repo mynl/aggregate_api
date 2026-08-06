@@ -69,10 +69,14 @@ const state = {
     canPrice: false,        // app leaf: Pricing / Determine
     canEvaluate: false,     // app leaf: Pricing / Evaluate
     needsPremium: false,    // Evaluate's premium input, for a position with none
-    canSharpen: false,      // app leaf: the Sharpen button (Stage 4)
-    hasPremium: false,      // app leaf: the PnL button's form (Stage 4)
-    log2: null,             // null = auto
-    bs: null,               // null = auto
+    canSharpen: false,      // the Sharpen button
+    canPnl: false,          // the PnL button
+    hasPremium: false,      // whether a PnL would inherit a premium or size one
+    // The program you built yourself, and whether you have since derived from
+    // it. Together they are Reset: at any moment you are either on your own
+    // program or exactly one derivation away from it.
+    base: null,
+    derived: false,
     // Each group remembers its own last leaf, so stepping away from Pricing and
     // back returns you where you were rather than to its first leaf.
     leaf: {},
@@ -122,45 +126,43 @@ emacsSwitch.checked = emacsEnabledDefault();
 emacsSwitch.addEventListener('change', () => editor.setEmacs(emacsSwitch.checked));
 
 // ----------------------------------------------------------------------
-// log2 / bs dropdowns
-// ----------------------------------------------------------------------
-function wireOptionDropdown(menuId, valId, onPick) {
-    const menu = $(menuId);
-    menu.querySelectorAll('a.dropdown-item[data-val]').forEach((a) => {
-        a.addEventListener('click', (ev) => {
-            ev.preventDefault();
-            menu.querySelectorAll('a.dropdown-item').forEach(x => x.classList.remove('active'));
-            a.classList.add('active');
-            $(valId).textContent = a.textContent.trim();
-            onPick(a.dataset.val);
-        });
-    });
-}
-
-wireOptionDropdown('log2-menu', 'log2-val', (val) => {
-    state.log2 = val === 'auto' ? null : parseInt(val, 10);
-});
-wireOptionDropdown('bs-menu', 'bs-val', (val) => {
-    state.bs = val === 'auto' ? null : parseFloat(val);
-});
-
-// Custom bs: free text, committed on Enter.
-const bsCustom = $('bs-custom');
-bsCustom.addEventListener('keydown', (ev) => {
-    if (ev.key !== 'Enter') return;
-    ev.preventDefault();
-    const v = parseFloat(bsCustom.value);
-    if (!Number.isFinite(v) || v <= 0) return;
-    state.bs = v;
-    $('bs-val').textContent = bsCustom.value.trim();
-    $('bs-menu').querySelectorAll('a.dropdown-item').forEach(x => x.classList.remove('active'));
-    bootstrap.Dropdown.getOrCreateInstance($('bs-btn')).hide();
-});
-
-// ----------------------------------------------------------------------
 // Build
 // ----------------------------------------------------------------------
+// The log2 and bs dropdowns used to sit next to this button and were never
+// used. Sharpen replaced them: it writes the `hints{}` clause they set, into a
+// program you can read, edit and keep, so the grid is pinned by an audit that
+// explains itself rather than by a menu choice that vanishes on reload. Every
+// build now asks the library to choose, unless the program says otherwise.
 const buildBtn = $('build-btn');
+
+/**
+ * Take a build manifest as the object now on screen.
+ *
+ * Shared by Build and by the three derivations, because a derived object is an
+ * object: same manifest, same panes, same gating. The one thing this does not
+ * do is touch the editor, since who owns that text differs. Build reads it, a
+ * derivation writes it.
+ */
+function adoptBuild(res) {
+    state.id = res.id;
+    state.kind = res.kind;
+    state.name = res.name;
+    // The exhibit draws a mean reference line; the build response already
+    // carries it, so there is no reason to refetch a frame to find it.
+    state.mean = res.mean;
+    state.hasReins = Boolean(res.has_reins);
+    applyCapability(res.capability);
+    renderSummary(res);
+    clearPanes();
+    loadActiveTab();
+}
+
+/** Forget the object: a failed build leaves nothing that can answer anything. */
+function forgetBuild() {
+    state.id = state.kind = state.name = state.mean = null;
+    state.hasReins = false;
+    applyCapability(null);
+}
 
 async function build() {
     const decl = editor.getText().trim();
@@ -168,35 +170,126 @@ async function build() {
 
     buildBtn.disabled = true;
     buildBtn.textContent = 'Building…';
-
-    const opts = {};
-    if (state.log2 != null) opts.log2 = state.log2;
-    if (state.bs != null) opts.bs = state.bs;
-
     try {
-        const res = await api.build(decl, opts);
-        state.id = res.id;
-        state.kind = res.kind;
-        state.name = res.name;
-        // The exhibit draws a mean reference line; the build response already
-        // carries it, so there is no reason to refetch a frame to find it.
-        state.mean = res.mean;
-        state.hasReins = Boolean(res.has_reins);
-        applyCapability(res.capability);
-        renderSummary(res);
+        const res = await api.build(decl, {});
+        adoptBuild(res);
         history.record(decl);
-        clearPanes();
-        loadActiveTab();
+        // A build from the editor is the program you are working on, so it is
+        // what Reset comes back to. Recorded here and nowhere else: a
+        // derivation deliberately does not move the mark, or Reset would only
+        // ever undo the most recent of two derivations.
+        state.base = decl;
+        state.derived = false;
+        renderActionRow();
     } catch (err) {
-        state.id = state.kind = state.name = state.mean = null;
-        state.hasReins = false;
-        applyCapability(null);
+        forgetBuild();
         renderBuildFailure(err);
+        renderActionRow();
     } finally {
         buildBtn.disabled = false;
         buildBtn.textContent = 'Build';
     }
 }
+
+// ----------------------------------------------------------------------
+// The action row: Sharpen, PnL, Reset
+// ----------------------------------------------------------------------
+// Each derivation is a program you can see. The server answers with DecL and
+// the object it builds; the text goes into the editor, so you read what was
+// made, you can edit it, and history, sharing and rebuild all keep working.
+// Nothing is derived behind a cached id.
+const sharpenBtn = $('sharpen-btn');
+const pnlBtn = $('pnl-btn');
+const resetBtn = $('reset-btn');
+
+/** Grey the derivation buttons the current object cannot answer. */
+function renderActionRow() {
+    const off = (btn, disabled) => {
+        btn.classList.toggle('disabled', disabled);
+        btn.toggleAttribute('disabled', disabled);
+        btn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+    };
+    off(sharpenBtn, !state.canSharpen);
+    off(pnlBtn, !state.canPnl);
+    // Reset is the way back from a derivation, so it means nothing until one
+    // has happened. At any moment you are either on your own program or
+    // exactly one derivation away from it.
+    off(resetBtn, !state.derived);
+}
+
+/**
+ * Run one derivation: fetch the program and its object, then adopt both.
+ *
+ * @param {HTMLElement} btn     the button, disabled with a label while it runs
+ * @param {string} busy         what the button says meanwhile
+ * @param {function} call       returns the derived response
+ * @param {string} [land]       group to show afterwards, when the result belongs
+ *                              somewhere other than where you are
+ */
+async function runDerivation(btn, busy, call, land) {
+    if (!state.id || btn.hasAttribute('disabled')) return;
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = busy;
+    try {
+        const res = await call(state.id);
+        // The editor first: if adopting the object threw, the text that made it
+        // is still what you are looking at.
+        editor.setText(res.program);
+        adoptBuild(res);
+        state.derived = true;
+        renderActionRow();
+        if (res.description) noteDerivation(res.description);
+        if (land) showTab(land);
+    } catch (err) {
+        replacePane(PANE_OF[activeTabName()] || 'pane-overview', errorNode(err));
+    } finally {
+        btn.disabled = false;
+        btn.textContent = label;
+        renderActionRow();
+    }
+}
+
+/** Put a derivation's own account of itself on the timing line. */
+function noteDerivation(text) {
+    const line = $('summary-timing');
+    if (line) line.textContent = text;
+}
+
+sharpenBtn?.addEventListener('click', () => runDerivation(
+    sharpenBtn, 'Sharpening…', (id) => api.sharpen(id)));
+
+pnlBtn?.addEventListener('click', () => runDerivation(
+    pnlBtn, 'Wrapping…', (id) => api.pnl(id), 'economics'));
+
+/**
+ * Back to the program you built yourself.
+ *
+ * Rebuilds from the text rather than restoring an id, because Sharpen consumes
+ * the object it audits: its entry moves to the sharpened program's id, so the
+ * base object may no longer be in the cache. After a PnL it still is, and this
+ * is a cache hit. Paying the build only on the undo is the right way round.
+ *
+ * Distinct from history on Ctrl+Up and Ctrl+Down, which steps through programs
+ * you built yourself.
+ */
+resetBtn?.addEventListener('click', async () => {
+    if (!state.base || resetBtn.hasAttribute('disabled')) return;
+    resetBtn.disabled = true;
+    resetBtn.textContent = 'Resetting…';
+    try {
+        editor.setText(state.base);
+        adoptBuild(await api.build(state.base, {}));
+        state.derived = false;
+    } catch (err) {
+        forgetBuild();
+        renderBuildFailure(err);
+    } finally {
+        resetBtn.disabled = false;
+        resetBtn.textContent = 'Reset';
+        renderActionRow();
+    }
+});
 
 /**
  * Take the build response's capability block into module state.
@@ -213,6 +306,7 @@ function applyCapability(capability) {
     state.canEvaluate = Boolean(cap.can_evaluate);
     state.needsPremium = Boolean(cap.needs_premium);
     state.canSharpen = Boolean(cap.can_sharpen);
+    state.canPnl = Boolean(cap.can_pnl);
     state.hasPremium = Boolean(cap.has_premium);
 }
 
@@ -1413,6 +1507,11 @@ async function loadHeroes(attempt = 1) {
     loadExample(item.decl);
     build();
 }
+
+// Before anything is built there is no object, so every derivation is greyed.
+// Drawn once at startup rather than left to the first build, which would leave
+// three live-looking buttons on an empty page.
+renderActionRow();
 
 loadHeroes();
 

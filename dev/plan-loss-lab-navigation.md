@@ -316,9 +316,24 @@ rather than to its first leaf.
 the Sharpen button that replaces them, so no version ships with neither. See the
 note under Stage 4.
 
-## Stage 4: [Action-Row]
+## Stage 4: [Action-Row] (landed, 1.0.0a45)
 
 Build, Examples, Sharpen, PnL, Reset.
+
+**Two corrections found in execution.** `can_pnl` was missing from the flag
+list, the same omission `can_price` was: the button is app behavior with no
+exhibit behind it, so something has to gate it. And the plan said PnL is
+"greyed for a portfolio until the inline portfolio engine lands upstream",
+which it no longer is: `aggregate` a216 `[Inline-Port-Engine]` landed before
+this stage ran, so the button lights for both kinds and the text is
+self-contained either way.
+
+The other thing execution turned up is that the id equality this stage depends
+on needs the whitespace collapse to be **shared** rather than reproduced. The
+library renders derived programs in its multi-line spread layout and the build
+route collapses before hashing, so a derivation computing its own id any other
+way would file the object where a rebuild of the same text could never find it.
+`collapse_program` is now one helper with that reasoning written on it.
 
 **Sharpen** is one request. The server sharpens the cached object in place,
 re-files it under the id its own `sharpen_program` hashes to, and returns both

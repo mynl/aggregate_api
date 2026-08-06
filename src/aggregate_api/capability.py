@@ -202,6 +202,29 @@ def can_evaluate(obj: Any) -> bool:
     return hasattr(obj, "evaluate")
 
 
+def can_pnl(obj: Any) -> bool:
+    """Can this object be wrapped in a P&L?
+
+    Consumer: the action row's PnL button.
+
+    Read off ``pnl_program``, which the library puts only on the two classes
+    that can honestly answer, so "does this object have it" is the whole test.
+    Deliberately not folded into :func:`can_price`, even though both are true
+    for exactly an ``Aggregate`` and a ``Portfolio`` today: they are two
+    different questions and a shared flag would tie a future change in one to
+    the other.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    bool
+    """
+    return hasattr(obj, "pnl_program")
+
+
 def needs_premium(obj: Any) -> bool:
     """Must the Evaluate form ask for a premium before it can run?
 
@@ -245,6 +268,7 @@ def capability_for(obj: Any) -> dict:
         "charts": charts_for(obj),
         "has_premium": has_premium(obj),
         "can_sharpen": can_sharpen(obj),
+        "can_pnl": can_pnl(obj),
         "can_price": can_price(obj),
         "can_evaluate": can_evaluate(obj),
         "needs_premium": needs_premium(obj),
