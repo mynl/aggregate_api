@@ -98,8 +98,11 @@ class Capability(BaseModel):
     has_premium: bool = False
     can_sharpen: bool = False
     can_pnl: bool = False
+    can_reins: bool = False
     can_price: bool = False
     can_evaluate: bool = False
+    can_bounds: bool = False
+    can_allocate: bool = False
     needs_premium: bool = False
 
 
@@ -182,6 +185,85 @@ class PnlProgramRequest(BaseModel):
     expense_ratio: float = Field(
         0.25, ge=0, lt=1,
         description="Gross expense as a fraction of premium; 0 omits the clause.")
+
+
+class NarrativeSection(BaseModel):
+    """One heading in the Narrative pane: a short form and a long one."""
+
+    model_config = _RESPONSE_CFG
+
+    name: str
+    description: str = ""
+    explanation: str = ""
+
+
+class NarrativeResponse(BaseModel):
+    """``GET /v1/objects/{id}/narrative``: everything the object says in prose.
+
+    The ``info`` block first, then a section per text field the object carries.
+    Sections are found by suffix rather than listed, so a narrative the library
+    adds upstream appears here on its own.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    info: str = ""
+    sections: list[NarrativeSection] = []
+
+
+class BoundsRequest(BaseModel):
+    """Body for the two tabular bounds routes.
+
+    ``premium`` is the calibration: the price some distortion puts on this
+    object. Everything reported is the range over the distortions consistent
+    with it, so without a premium there is no question to ask.
+    """
+
+    premium: float = Field(..., gt=0, description="Target premium for this object.")
+    assets: float | None = Field(
+        None, gt=0,
+        description="Asset cap; prices min(X, a). Unbounded when omitted.")
+    against: list[str] = Field(
+        default_factory=list,
+        description=("PricingBounds only: the risks to price against this one. "
+                     "Each is a unit of the current portfolio, or a DecL "
+                     "fragment for a line that does not exist yet."),
+    )
+
+
+class BoundsResponse(BaseModel):
+    """A bounds table: one row per unit or per named risk.
+
+    ``lower`` and ``upper`` are the ends of the consistent range and ``width``
+    is the reading, being how much of the price is decided by the choice of
+    distortion rather than by the premium the object was calibrated to.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    premium: float
+    table: FrameResponse
+    ir: dict[str, Any] | None = Field(
+        None,
+        description="Table document for the static view, keyed 'table'.",
+    )
+
+
+class ReinsProgramRequest(BaseModel):
+    """Body for ``POST /v1/objects/{id}/reins``.
+
+    ``cession`` is one clause per tier, each opening with ``occurrence`` or
+    ``aggregate``. A clause is authoritative for its own tier and leaves the
+    other alone, which is how the grammar reads it too, so composing an
+    occurrence and an aggregate cession means sending both rather than sending
+    one and then ceding again.
+    """
+
+    cession: str | list[str] = Field(
+        ...,
+        description=("A cession clause, or one per tier: "
+                     "'occurrence net of 500 xs 500'."),
+    )
 
 
 class ObjectSummary(BaseModel):

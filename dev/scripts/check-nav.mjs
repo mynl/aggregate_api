@@ -64,9 +64,12 @@ const EXPECTED = {
     'reinsurance:plot': ['agg_reins'],
     'pricing:determine': ['agg', 'agg_reins', 'port'],
     'pricing:evaluate': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl'],
-    'bounds:bounds': [],
-    'bounds:pricing': [],
-    'bounds:allocation': [],
+    // Bounds takes an Aggregate or a Portfolio, which is the library's own
+    // accepted set; allocation needs the per-unit conditional expectations only
+    // a portfolio's density frame carries.
+    'bounds:bounds': ['agg', 'agg_reins', 'port'],
+    'bounds:pricing': ['agg', 'agg_reins', 'port'],
+    'bounds:allocation': ['port'],
     'more:validation': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl'],
     'more:stats': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl'],
     'more:density': ['agg', 'agg_reins', 'port', 'sev', 'distortion', 'bvagg', 'pnl', 'xpnl'],
@@ -101,8 +104,15 @@ for (const [group, def] of Object.entries(NAV_GROUPS)) {
 console.log('\nGroups, and the leaf each lands on\n');
 console.log('  '.padEnd(24) + kinds.map(pad).join(' '));
 for (const group of Object.keys(NAV_GROUPS)) {
-    const cells = kinds.map((k) => pad(
-        groupAvailable(caps[k], group) ? activeLeaf(caps[k], null, group) : '.'));
+    const cells = kinds.map((k) => {
+        if (!groupAvailable(caps[k], group)) return pad('.');
+        const leaf = activeLeaf(caps[k], null, group);
+        // A live group can still have no live leaf: Reinsurance for a gross
+        // aggregate is the entry box and nothing else. `activeLeaf` falls back
+        // to the first key so a pill is drawn active, but printing that name
+        // here would claim a pane that stays empty.
+        return pad(leafAvailable(caps[k], group, leaf) ? leaf : '(no leaf)');
+    });
     console.log(group.padEnd(24) + cells.join(' '));
 }
 
@@ -111,6 +121,25 @@ for (const group of Object.keys(NAV_GROUPS)) {
 for (const k of kinds) {
     if (!groupAvailable(caps[k], 'overview')) {
         findings.push(`${k}: Overview is dark, so a rebuild has nowhere to land`);
+    }
+}
+
+// The Reinsurance group is live with every leaf dark, for an aggregate with no
+// cession, because the entry box below the row is its content until there is a
+// program to describe. That is the one place a group and its leaves disagree,
+// so it gets its own check rather than riding on the grid above.
+const GROSS_AGG = 'agg';
+if (caps[GROSS_AGG]) {
+    const anyLeaf = ['summary', 'stats', 'density', 'plot']
+        .some((key) => leafAvailable(caps[GROSS_AGG], 'reinsurance', key));
+    if (anyLeaf) findings.push('reinsurance: a gross aggregate should have no leaves');
+    if (!groupAvailable(caps[GROSS_AGG], 'reinsurance')) {
+        findings.push('reinsurance: the group must stay live so cover can be added');
+    }
+}
+for (const k of ['port', 'pnl', 'sev', 'distortion', 'bvagg']) {
+    if (caps[k] && groupAvailable(caps[k], 'reinsurance')) {
+        findings.push(`reinsurance: ${k} cannot cede, so the group should be dark`);
     }
 }
 

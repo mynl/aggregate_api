@@ -4,6 +4,76 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a46
+
+Stages 5, 6 and 7 of `dev/plan-loss-lab-navigation.md`, which closes the plan.
+The reinsurance entry box, Bounds with real content, and the Narrative pane.
+
+**Cede a layer.** One box and one button below the Reinsurance sub-tab row,
+because the editor is the preview: the derived program goes straight into it
+and builds, so a separate copy control would be a second control for a thing
+already on screen. `POST /objects/{id}/reins` over the library's
+`reins_program`, which mutates the spec and re-renders rather than splicing
+text. That matters: an occurrence cession sits before the frequency clause and
+an aggregate cession after it, so a clause cannot simply be appended. One
+clause per tier, and a clause is authoritative for its own tier.
+
+`can_reins` joins the capability block, and it does something the other flags
+do not: it keeps the Reinsurance **group** live when every leaf in it is dark.
+An aggregate with no cession has nothing to tabulate or draw and is exactly the
+object you want to add cover to, so `NAV_GROUPS` grew an `alsoLive` field
+rather than the group name being special-cased in `groupAvailable`.
+
+**Bounds stops being a placeholder.** Three leaves against the three classes in
+`bounds.py`. Ordinary pricing picks a distortion and reports its number; these
+hold the calibration fixed, let the distortion range over everything consistent
+with it, and report how wide the answer can be. The width is the reading: narrow
+means the premium decided the price, wide means the distortion did.
+
+`GET /bounds/envelope` is the three-panel figure as an SVG, a GET because it is
+an image identified entirely by its query and so cacheable by the browser.
+`POST /bounds/allocation` is per-unit natural-allocation ranges, portfolio only
+and not by our choice: it reads the `exeqa_*` columns a portfolio's density
+frame carries. `POST /bounds/pricing` carries the calibration across to a second
+risk, which is the question behind quoting a new line off an existing book, and
+its target is either a unit of the current object or a DecL fragment for a line
+that does not exist yet. A fragment is an ordinary build reached by a different
+door, so it answers to the same log2 cap, and there is a test that it cannot be
+used to get round it.
+
+**The plan's cost worry was unfounded, and now it is measured rather than
+argued.** Constructing a `Bounds` is 0.01 s, `cloud_df` 0.12 s, and the
+fifty-resample envelope 0.5 to 0.9 s. The resamples are overplotted columns
+drawn from a frame that is already computed, so asking for fifty rather than
+none costs the drawing and nothing else. `test_the_envelope_is_not_expensive`
+times both and asserts the second is not a different kind of request.
+
+Two more derived gates: `can_bounds` and `can_allocate`. These are `isinstance`
+rather than `hasattr`, unlike every other flag, and the difference is honest.
+The others name a method the object either has or does not; `Bounds` declares
+the types it accepts, and a duck-typed near miss would fail somewhere deep
+instead of at the door. It is still the library deciding, just through a
+different door.
+
+**Narrative** replaces "Info (raw)". The `info` block first, then a section per
+text field the object carries, each with its short form and its long one.
+`GET /objects/{id}/narrative` finds them **by suffix**, so a `*_description` the
+library adds upstream appears with no change on either side, which is the same
+contract the exhibit and chart routes keep. An aggregate reports five sections
+where the old view showed one block, so the descriptions and explanations the
+library has been writing all along are finally reachable from the page.
+
+One judgment recorded: "Sharpen: not run." and "No reinsurance" stay. The
+library writes an informative line where a narrative has nothing to report, and
+that reads better than silence, since a missing Sharpen heading looks like an
+app that forgot it. Genuinely empty strings are dropped; nothing matches on the
+text, which would rot the moment a sentence was rephrased.
+
+Sixteen new tests in `tests/test_bounds.py` and six more in `test_derive.py`.
+`check-nav.mjs` carries the Bounds expectations and one rule of its own: the
+Reinsurance group is live with every leaf dark for a gross aggregate, and dark
+for every kind that cannot cede.
+
 ## 1.0.0a45
 
 Sharpen, PnL and Reset join Build and Examples, and the log2 and bs dropdowns

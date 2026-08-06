@@ -289,6 +289,45 @@ header .navbar { min-height: 56px; }
 #price-target-label { display: inline-block; min-width: 2.3rem; }
 .price-section-title { font-size: .8rem; font-weight: 600; color: #374151; margin: .2rem 0 .45rem; }
 
+/* ---- Narrative ----
+   Prose, so it gets a reading measure rather than the pane's full width, and
+   the info block keeps its own monospace layout because the library formats it
+   as a small table of its own. */
+.narrative { max-width: 46rem; }
+.narrative-info {
+    font-family: var(--mono); font-size: .72rem; line-height: 1.45;
+    background: #f8f9fa; border: 1px solid #e9ecef; border-radius: .4rem;
+    padding: .6rem .7rem; margin-bottom: .9rem; overflow-x: auto;
+}
+.narrative-lead { font-size: .84rem; font-weight: 500; margin-bottom: .3rem; }
+.narrative-body { font-size: .8rem; color: #495057; margin-bottom: 1rem; }
+
+/* ---- Bounds ----
+   The envelope is a three-panel SVG that is wider than it is tall, so it takes
+   the pane's width and keeps its own aspect. `against` is prose like the
+   cession box, not a number, so it gets room for a DecL fragment. */
+.bounds-figure { max-width: 100%; height: auto; display: block; }
+#bounds-form .bounds-against { flex: 1 1 20rem; min-width: 11rem; }
+#bounds-form .bounds-against input {
+    width: 100%; font-family: var(--mono); font-size: .74rem;
+}
+#bounds-premium, #bounds-assets { width: 6.5rem; }
+@media (max-width: 575.98px) {
+    #bounds-form .bounds-against input { font-size: 16px; }
+}
+
+/* ---- Reinsurance entry ----
+   A cession clause is prose, not a number, so its box gets room to show one
+   rather than the 5rem the pricing fields want. It grows with the pane and
+   stops before the button, which stays reachable at every width. */
+.reins-entry .reins-cession { flex: 1 1 22rem; min-width: 12rem; }
+.reins-entry .reins-cession input {
+    width: 100%; font-family: var(--mono); font-size: .74rem;
+}
+@media (max-width: 575.98px) {
+    .reins-entry .reins-cession input { font-size: 16px; }
+}
+
 /* ---- Rate-limit card (friendly HTTP 429 on the shared demo) ---- */
 .agg-ratelimit {
     display: flex; gap: 1rem; align-items: flex-start; max-width: 640px;

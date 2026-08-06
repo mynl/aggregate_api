@@ -55,7 +55,8 @@ def test_every_kind_carries_a_capability_block(client, label):
     _, body = _build(client, label)
     cap = body["capability"]
     assert set(cap) == {"exhibits", "charts", "has_premium", "can_sharpen",
-                        "can_pnl", "can_price", "can_evaluate", "needs_premium"}
+                        "can_pnl", "can_reins", "can_price", "can_evaluate",
+                        "can_bounds", "can_allocate", "needs_premium"}
     for item in cap["exhibits"]:
         assert set(item) == {"name", "title", "perspectives"}
         assert item["perspectives"], "an unavailable exhibit is absent, not empty"

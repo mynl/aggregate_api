@@ -86,7 +86,8 @@ from aggregate.parser_errors import ErrorReport, format_error
 from .. import models
 from ..audit import AuditLog
 from ..cache import CacheEntry, ObjectCache, canonicalize_decl, object_id
-from ..capability import can_sharpen, capability_for
+from ..bounds import run_allocation, run_envelope, run_pricing_bounds
+from ..capability import can_sharpen, capability_for, narrative_for
 from ..config import Settings, get_settings
 from ..plotting import render_plot
 from ..pricing import (
@@ -1809,6 +1810,190 @@ def post_pnl(
     built = post_object(models.BuildRequest(decl=program), request,
                         settings, cache, audit)
     return {"program": program, "description": None, **built}
+
+
+@router.post("/objects/{oid}/reins", response_model=models.DerivedResponse)
+def post_reins(
+    oid: str,
+    req: models.ReinsProgramRequest,
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    cache: ObjectCache = Depends(_get_cache),
+    audit: AuditLog = Depends(_get_audit),
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """Cede a layer, and return the program that rebuilds the net object.
+
+    The clause cannot simply be appended to the program text: an occurrence
+    cession sits **before** the frequency clause and an aggregate cession after
+    it, so anyone splicing strings rather than specs gets it wrong. The library
+    mutates the spec and re-renders instead, and this route only asks.
+
+    Like the P&L wrap this mutates nothing, so the derived text goes through
+    the ordinary build path. The derived object is ``NAME_net``, and Reset on
+    the action row is the way back to the gross one, which is why the
+    reinsurance pane needs no reset of its own.
+
+    Notes
+    -----
+    Two refusals come straight from the library and are 422s here, because both
+    are a statement about the program rather than a server fault: a malformed
+    clause, and an occurrence cession joined to an ``approximate`` clause, which
+    the parser rejects, so returning the text would hand back something that
+    cannot build.
+    """
+    obj = entry.obj
+    if not hasattr(obj, "reins_program"):
+        raise HTTPException(
+            status_code=400,
+            detail="a cession applies to an Aggregate")
+    try:
+        program = obj.reins_program(req.cession)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    program = collapse_program(program)
+    built = post_object(models.BuildRequest(decl=program), request,
+                        settings, cache, audit)
+    return {"program": program, "description": None, **built}
+
+
+@router.get("/objects/{oid}/narrative", response_model=models.NarrativeResponse)
+def get_narrative(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
+    """Everything this object says about itself in prose.
+
+    The ``info`` block first, then one section per text field it carries, each
+    with its short form and its long one. Absorbs the old "Info (raw)" view,
+    which showed the first of those and none of the rest.
+
+    Derived by suffix rather than from a list, so a narrative the library adds
+    upstream appears here with no endpoint change, which is the same contract
+    the exhibit and chart routes keep.
+    """
+    return {
+        "info": str(getattr(entry.obj, "info", "") or ""),
+        "sections": narrative_for(entry.obj),
+    }
+
+
+# ----------------------------------------------------------------------
+# Pricing bounds: how much of the price the distortion decides
+# ----------------------------------------------------------------------
+
+def _resolve_risk(obj: Any, text: str, settings: Settings):
+    """A named unit of this portfolio, or a line built from a DecL fragment.
+
+    The two ways a user names a second risk, and they are tried in that order
+    because a unit name is unambiguous and free while a fragment is a build.
+
+    Parameters
+    ----------
+    obj : Any
+        The reference object, whose units are searched first.
+    text : str
+        A unit name, or DecL for a line that does not exist yet.
+    settings : Settings
+        For the log2 cap, which a fragment has to respect exactly as a typed
+        program does: it is the same build, reached by a different door.
+
+    Returns
+    -------
+    (str, object)
+        Display name and the risk.
+    """
+    name = text.strip()
+    if not name:
+        raise ValueError("name a risk, or write the DecL for one")
+    for unit in getattr(obj, "unit_names", []) or []:
+        if str(unit) == name:
+            return name, obj[name]
+
+    program = collapse_program(name)
+    hint_log2 = max((int(m) for m in _HINTS_LOG2.findall(program)), default=0)
+    if hint_log2 > settings.log2_cap:
+        raise ValueError(
+            f"log2 {hint_log2} exceeds AGGAPI_LOG2_CAP={settings.log2_cap}")
+    try:
+        built = _build_singleton(program)
+    except Exception as exc:  # noqa: BLE001 -- reported as a 422
+        raise ValueError(
+            f"{name!r} is not a unit of this object, and does not build: "
+            f"{exc}") from exc
+    return getattr(built, "name", name), built
+
+
+@router.get("/objects/{oid}/bounds/envelope")
+def get_bounds_envelope(
+    oid: str,
+    premium: float = Query(..., gt=0, description="Target premium."),
+    assets: float | None = Query(None, gt=0, description="Asset cap."),
+    n_resamples: int = Query(50, ge=0, le=500,
+                             description="Bracket columns to overplot."),
+    format: str = Query("svg", description="svg|png"),
+    entry: CacheEntry = Depends(_locked_entry),
+) -> Response:
+    """The envelope figure: every distortion consistent with this premium.
+
+    A GET because it is an image identified entirely by its query, which is
+    what makes it usable as an ``<img src>`` and cacheable by the browser.
+
+    See :mod:`aggregate_api.bounds` for why fifty resamples is cheap.
+    """
+    try:
+        payload, media_type = run_envelope(
+            entry.obj, premium=premium, assets=assets,
+            n_resamples=n_resamples, fmt=format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(content=payload, media_type=media_type,
+                    headers={"Cache-Control": "no-cache"})
+
+
+@router.post("/objects/{oid}/bounds/allocation", response_model=models.BoundsResponse)
+def post_allocation_bounds(
+    oid: str,
+    req: models.BoundsRequest,
+    ir: bool = Query(False, description="Also return a table document."),
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """Per-unit natural-allocation ranges consistent with the total premium.
+
+    Portfolio only, and not by our choice: the calculation reads the ``exeqa_*``
+    columns of a portfolio's density frame, which a single aggregate has no
+    analogue of.
+    """
+    try:
+        return run_allocation(entry.obj, premium=req.premium,
+                              assets=req.assets, ir=ir)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/objects/{oid}/bounds/pricing", response_model=models.BoundsResponse)
+def post_pricing_bounds(
+    oid: str,
+    req: models.BoundsRequest,
+    ir: bool = Query(False, description="Also return a table document."),
+    settings: Settings = Depends(get_settings),
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """Given this object priced to ``premium``, what can a second risk cost?
+
+    The question behind quoting a new line off an existing book: the
+    calibration is carried across, and the width of the answer is how much of
+    the second price the choice of distortion decides.
+
+    Each entry in ``against`` is a unit of the current portfolio or a DecL
+    fragment for a line that does not exist yet. A fragment is an ordinary
+    build and answers to the same log2 cap.
+    """
+    try:
+        targets = dict(_resolve_risk(entry.obj, text, settings)
+                       for text in req.against)
+        return run_pricing_bounds(entry.obj, premium=req.premium,
+                                  targets=targets, assets=req.assets, ir=ir)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 # ----------------------------------------------------------------------

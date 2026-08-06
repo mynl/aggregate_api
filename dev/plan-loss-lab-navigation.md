@@ -1,6 +1,12 @@
 # plan-loss-lab-navigation: the aggregate Loss Lab navigation
 
-Status: **ready to execute**. The library work this waited on has landed:
+Status: **executed**, all seven stages, at `1.0.0a42` through `1.0.0a46`. What
+each stage found on the way is recorded under it. Two things this plan named and
+did not do, both deliberately out of its scope: the header's Perspective control
+(the exhibit fetches take insurer, which is the plan's default), and the chart IR
+conversions, which land upstream chart by chart.
+
+The library work this waited on has landed:
 `aggregate` a213 `[Derived-Programs]` supplies `sharpen_program`, `pnl_program`
 and `reins_program`, and a215 `[Sharpen-Pin]` fixes what first use of them
 found. One version bump per stage, starting at the next free number. The stage
@@ -374,7 +380,7 @@ cross `AGGAPI_LOG2_CAP` is held at the cap by the probe rather than by a 422 on
 the rebuild; and a second Sharpen on a confirmed grid is refused by the flag
 rather than run and discarded.
 
-## Stage 5: [Reinsurance-Entry]
+## Stage 5: [Reinsurance-Entry] (landed, 1.0.0a46)
 
 Below the sub-tab row, a text box for the cession and **one** button. It derives
 the program, fills the editor and builds, all in one step, because the editor is
@@ -389,7 +395,13 @@ both come back as a 422 the error pane already knows how to render.
 The derived object is `NAME_net`. Reset from the action row takes you back to
 the gross object, which is why the reinsurance pane needs no reset of its own.
 
-## Stage 6: [Bounds]
+**Found in execution.** The group has to stay live for an aggregate with **no**
+cession, which is the object the box exists for, and every leaf in it is dark
+until there is a program to describe. So `can_reins` gates the box, and
+`NAV_GROUPS` grew an `alsoLive` field rather than `groupAvailable`
+special-casing this one group by name.
+
+## Stage 6: [Bounds] (landed, 1.0.0a46)
 
 The tab stops being greyed out and grows three sub-tabs against the three real
 classes in `bounds.py`: `Bounds` (line 149), `PricingBounds` (line 1440) and
@@ -410,11 +422,28 @@ If Bounds construction does prove slow on the VPS, the lever is a server-side
 time budget surfaced on the existing timing line, not a guess about the client's
 connection: what varies is server CPU, and the payload is one figure either way.
 
-## Stage 7: [Narrative-Pane]
+**Measured, so the lever is not needed.** Constructing a `Bounds` is 0.01 s,
+`cloud_df` 0.12 s, and the fifty-resample figure 0.5 to 0.9 s. The worry is
+formally closed by `test_the_envelope_is_not_expensive`, which times the figure
+with and without the resamples and asserts the second is not a different kind of
+request.
+
+## Stage 7: [Narrative-Pane] (landed, 1.0.0a46)
 
 One pane collecting every text field the object carries: the `info` block first,
 then each available `*_description` and `*_explanation` under its own heading.
 Absorbs today's "Info (raw)" view, which stops existing separately.
+
+Found by **suffix** rather than from a list, so a narrative the library adds
+upstream appears with no change on either side, which is the contract the
+exhibit and chart routes already keep.
+
+**One judgment taken in execution.** "Sharpen: not run." and "No reinsurance"
+stay. The library writes an informative line where a narrative has nothing to
+report, and that reads better than silence: a missing Sharpen heading looks like
+an app that forgot it, where the line reads as an audit you have not asked for
+yet. Genuinely empty strings are dropped, and nothing matches on the text, which
+would rot the moment a sentence was rephrased.
 
 ## Decisions taken during design, with the reasoning
 

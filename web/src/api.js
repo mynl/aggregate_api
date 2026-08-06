@@ -131,6 +131,7 @@ export const api = {
     // is the one an ordinary build of that text would produce.
     sharpen:      (id)              => _json('POST', `/v1/objects/${id}/sharpen`, {}),
     pnl:          (id, body = {})   => _json('POST', `/v1/objects/${id}/pnl`, body),
+    reins:        (id, cession)     => _json('POST', `/v1/objects/${id}/reins`, { cession }),
 
     // DecL editor support
     complete:     (decl, cursor)    => _json('POST', '/v1/decl/complete', { decl, cursor }),
@@ -149,6 +150,19 @@ export const api = {
 
     /** Plot URL: handed straight to an <img>. Native multi-panel by default. */
     plotUrl:      (id, p = {})      => `${API_BASE}/v1/objects/${id}/plot?${qs(p)}`,
+
+    /** Everything the object says about itself in prose, in one payload. */
+    narrative:    (id)              => _json('GET',  `/v1/objects/${id}/narrative`),
+
+    // Pricing bounds. The envelope is an image identified entirely by its
+    // query, so it is a URL rather than a fetch and the browser caches it; the
+    // other two are tables and come back as payloads.
+    boundsEnvelopeUrl: (id, p = {}) =>
+        `${API_BASE}/v1/objects/${id}/bounds/envelope?${qs(p)}`,
+    allocationBounds: (id, body)    =>
+        _json('POST', `/v1/objects/${id}/bounds/allocation?ir=true`, body),
+    pricingBounds:    (id, body)    =>
+        _json('POST', `/v1/objects/${id}/bounds/pricing?ir=true`, body),
 
     /** Download-all-session-models URL. form: 'raw' (as typed) | 'agg' (canonical). */
     sessionModelsUrl: (form = 'raw') => `${API_BASE}/v1/session/models.agg?form=${form}`,

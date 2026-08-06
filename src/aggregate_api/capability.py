@@ -37,6 +37,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+from aggregate import Aggregate, Portfolio
 from aggregate import charts as agg_charts
 from aggregate import exhibits as agg_exhibits
 
@@ -225,6 +226,73 @@ def can_pnl(obj: Any) -> bool:
     return hasattr(obj, "pnl_program")
 
 
+def can_reins(obj: Any) -> bool:
+    """Can a cession be added to this object?
+
+    Consumer: the Reinsurance group's entry box, and the group pill above it.
+    This is the flag that makes the group live for an aggregate carrying **no**
+    cession, which is the case the entry box exists for: every table and chart
+    in there is dark until there is a program to describe, so without this the
+    group would grey out exactly when you wanted to add cover.
+
+    Read off ``reins_program``, which the library puts on ``Aggregate`` alone.
+    A portfolio cedes through its units rather than as a whole.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    bool
+    """
+    return hasattr(obj, "reins_program")
+
+
+def can_bounds(obj: Any) -> bool:
+    """Can pricing bounds be computed for this object?
+
+    Consumers: the Bounds group's envelope and PricingBounds leaves.
+
+    An ``isinstance`` rather than a ``hasattr``, unlike the flags above, and
+    the difference is honest: those name a method the object either has or does
+    not, while ``aggregate.bounds.Bounds`` declares the types it accepts and a
+    duck-typed near miss would fail somewhere deep instead of at the door. This
+    is the library's own accepted set, restricted to the two members the api
+    can hold, so it is still the library deciding.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    bool
+    """
+    return isinstance(obj, (Aggregate, Portfolio))
+
+
+def can_allocate(obj: Any) -> bool:
+    """Can allocation bounds be computed?
+
+    Consumer: the Bounds group's AllocationBounds leaf.
+
+    A portfolio and nothing else. The calculation reads the ``exeqa_*`` columns
+    that a portfolio's density frame carries, which is the conditional
+    expectation of each unit given the total, and a single aggregate has no
+    analogue: there is one unit, so there is nothing to allocate.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    bool
+    """
+    return isinstance(obj, Portfolio)
+
+
 def needs_premium(obj: Any) -> bool:
     """Must the Evaluate form ask for a premium before it can run?
 
@@ -250,6 +318,57 @@ def needs_premium(obj: Any) -> bool:
             and not has_premium(obj))
 
 
+#: Text fields are found by suffix rather than listed, so a narrative the
+#: library adds appears with no edit here. Leading-underscore names are the
+#: private working copies behind the public properties and would print twice.
+NARRATIVE_SUFFIXES = ("_description", "_explanation")
+
+
+def narrative_for(obj: Any) -> list[dict]:
+    """Every text field this object carries, in one list.
+
+    Consumer: the More group's Narrative leaf, which is the pane that collects
+    what the object says about itself in prose rather than in numbers.
+
+    Derived by suffix, in the same spirit as the exhibit list: a new
+    ``*_description`` upstream shows up here on its own. Sections are grouped by
+    stem, so ``validation_description`` and ``validation_explanation`` arrive as
+    one heading with a short form and a long one, which is what they are.
+
+    Empty strings are dropped rather than rendered as blank headings. Most of
+    these are empty most of the time: ``sharpen_*`` before a probe has run,
+    ``reins_*`` with no cession.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    list of dict
+        ``{"name", "description", "explanation"}``, alphabetical by name.
+    """
+    sections: dict[str, dict] = {}
+    for attr in dir(obj):
+        if attr.startswith("_"):
+            continue
+        for suffix in NARRATIVE_SUFFIXES:
+            if not attr.endswith(suffix):
+                continue
+            try:
+                text = getattr(obj, attr)
+            except Exception:  # noqa: BLE001 -- a field that raises is absent
+                continue
+            text = str(text or "").strip()
+            if not text:
+                continue
+            stem = attr[: -len(suffix)]
+            section = sections.setdefault(
+                stem, {"name": stem, "description": "", "explanation": ""})
+            section[suffix.lstrip("_")] = text
+    return [sections[name] for name in sorted(sections)]
+
+
 def capability_for(obj: Any) -> dict:
     """The whole capability block for one object.
 
@@ -269,7 +388,10 @@ def capability_for(obj: Any) -> dict:
         "has_premium": has_premium(obj),
         "can_sharpen": can_sharpen(obj),
         "can_pnl": can_pnl(obj),
+        "can_reins": can_reins(obj),
         "can_price": can_price(obj),
         "can_evaluate": can_evaluate(obj),
+        "can_bounds": can_bounds(obj),
+        "can_allocate": can_allocate(obj),
         "needs_premium": needs_premium(obj),
     }

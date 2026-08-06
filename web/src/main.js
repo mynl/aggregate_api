@@ -71,6 +71,7 @@ const state = {
     needsPremium: false,    // Evaluate's premium input, for a position with none
     canSharpen: false,      // the Sharpen button
     canPnl: false,          // the PnL button
+    canReins: false,        // the Reinsurance entry box, and its group pill
     hasPremium: false,      // whether a PnL would inherit a premium or size one
     // The program you built yourself, and whether you have since derived from
     // it. Together they are Reset: at any moment you are either on your own
@@ -307,7 +308,9 @@ function applyCapability(capability) {
     state.needsPremium = Boolean(cap.needs_premium);
     state.canSharpen = Boolean(cap.can_sharpen);
     state.canPnl = Boolean(cap.can_pnl);
+    state.canReins = Boolean(cap.can_reins);
     state.hasPremium = Boolean(cap.has_premium);
+    renderReinsEntry();
 }
 
 buildBtn.addEventListener('click', build);
@@ -477,6 +480,10 @@ const LOADERS = {
     'pricing:determine': () => showPricingLeaf('determine'),
     'pricing:evaluate': () => showPricingLeaf('evaluate'),
 
+    'bounds:bounds': () => showBoundsLeaf('bounds'),
+    'bounds:pricing': () => showBoundsLeaf('pricing'),
+    'bounds:allocation': () => showBoundsLeaf('allocation'),
+
     'more:validation': () => replacePaneTable('pane-more', 'validation_df',
         { columnFilters: false }),
     'more:stats': () => replacePaneTable('pane-more', 'stats_df', GRID_FULL),
@@ -506,8 +513,7 @@ const LOADERS = {
     },
     'more:window': () => replacePaneTable('pane-more', 'bs_window_df', GRID_FULL),
     'more:dependency': () => loadExhibitLeaf('pane-more', 'dependency'),
-    'more:narrative': async () => replacePane('pane-more',
-        renderInfo(await api.info(state.id))),
+    'more:narrative': () => loadNarrative(),
 };
 
 /** The capability shape the `nav.js` rules take, from module state. */
@@ -921,6 +927,42 @@ async function loadOverviewFrames(specs) {
 }
 
 /**
+ * More / Narrative: everything the object says about itself in prose.
+ *
+ * The `info` block first, then a section per text field, each with its short
+ * form and its long one. Absorbs the old "Info (raw)" view, which showed the
+ * first of those and none of the rest, so the descriptions and explanations
+ * the library has been writing all along were reachable only from the api.
+ *
+ * The section list is derived server side by suffix, so a narrative the library
+ * adds upstream appears here with no edit on either side.
+ */
+async function loadNarrative() {
+    const payload = await api.narrative(state.id);
+    const root = el('div', { className: 'narrative' });
+    if (payload.info) {
+        root.appendChild(el('h6', { className: 'exhibit-title' }, 'Info'));
+        root.appendChild(el('pre', { className: 'narrative-info' }, payload.info));
+    }
+    for (const section of payload.sections || []) {
+        root.appendChild(el('h6', { className: 'exhibit-title' }, section.name));
+        // The short form reads as the verdict and the long one as the working,
+        // so the first is emphasized and the second follows it.
+        if (section.description) {
+            root.appendChild(el('p', { className: 'narrative-lead' }, section.description));
+        }
+        if (section.explanation) {
+            root.appendChild(el('p', { className: 'narrative-body' }, section.explanation));
+        }
+    }
+    if (!root.firstChild) {
+        root.appendChild(el('div', { className: 'text-muted small' },
+            'This object carries no narrative text.'));
+    }
+    replacePane('pane-more', root);
+}
+
+/**
  * One library exhibit in a pane, as its envelope.
  *
  * The generic leaf loader for Economics and More's Dependency. It takes the
@@ -1094,6 +1136,42 @@ async function loadReinsPlot() {
             'No reinsurance chart for this object.'));
     }
 }
+
+/**
+ * The cession entry box: derive, fill the editor, build, in one step.
+ *
+ * A derivation like Sharpen and PnL, and it goes through the same machinery, so
+ * Reset on the action row comes back to the gross object with no reset of its
+ * own here. Shown only where a cession can be added, which is an aggregate; the
+ * group stays live for one carrying no cession yet, since that is exactly the
+ * object you want this for.
+ */
+function renderReinsEntry() {
+    const box = $('reins-entry');
+    if (!box) return;
+    box.classList.toggle('d-none', !state.canReins);
+}
+
+const reinsBtn = $('reins-btn');
+const reinsInput = $('reins-input');
+
+async function cede() {
+    const cession = reinsInput.value.trim();
+    if (!cession || !state.canReins) return;
+    await runDerivation(reinsBtn, 'Ceding…', (id) => api.reins(id, cession),
+        'reinsurance');
+    // The clause is now in the program in the editor, which is the record, so
+    // leaving a copy in the box would be the same text in two places, and the
+    // second one would go stale the moment you edited the first.
+    if (state.derived) reinsInput.value = '';
+}
+
+reinsBtn?.addEventListener('click', cede);
+reinsInput?.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    cede();
+});
 
 /** Reinsurance / Summary, Stats and Density: one per-layer frame. */
 async function loadReinsFrame(which) {
@@ -1320,6 +1398,104 @@ document.querySelectorAll('input[name="price-target"]').forEach((radio) => {
         $('price-target-label').textContent = isCoc ? 'CoC' : 'LR';
         $('price-target-val').value = isCoc ? '0.15' : '0.9';
     });
+});
+
+// ----------------------------------------------------------------------
+// Bounds: how much of the price the choice of distortion decides
+// ----------------------------------------------------------------------
+// Ordinary pricing picks a distortion and reports its number. These hold the
+// calibration fixed and let the distortion range over everything consistent
+// with it, so the width of the answer is the reading: narrow means the premium
+// decided the price, wide means the distortion did.
+//
+// The three leaves share one form, because they share one question. Only the
+// `against` box differs, and it belongs to PricingBounds alone.
+const BOUNDS_HINTS = {
+    bounds: 'the band every consistent distortion sweeps, with fifty of them drawn',
+    pricing: 'name a unit of this object, or write DecL for a line that does not exist yet',
+    allocation: 'each unit’s range, consistent with the total premium',
+};
+
+/** Which bounds leaf is showing; the button reads it when you press Compute. */
+let boundsWhich = 'bounds';
+
+/**
+ * Show one bounds leaf: same form, different extras, pane cleared.
+ *
+ * Nothing computes here. Each of the three is real work and wants a premium
+ * that only you can choose, so arriving at a leaf sets it up and waits.
+ */
+async function showBoundsLeaf(which) {
+    boundsWhich = which;
+    $('bounds-against-field').classList.toggle('d-none', which !== 'pricing');
+    $('bounds-hint').textContent = BOUNDS_HINTS[which] || '';
+    // A premium has to sit above the expected loss for the question to mean
+    // anything, so the object's own mean is the only sensible starting point.
+    const premium = $('bounds-premium');
+    if (!premium.value && Number.isFinite(state.mean)) {
+        premium.value = Math.round(state.mean * 1.25);
+    }
+    replacePane('pane-bounds', el('div', { className: 'text-muted small' },
+        'Set a premium and press Compute.'));
+}
+
+/** Render a bounds table: one row per unit or per named risk. */
+function renderBoundsTable(payload) {
+    const paneId = 'pane-bounds';
+    const ir = payload.ir || {};
+    const draw = () => {
+        const root = el('div', { className: 'price-result' });
+        replacePane(paneId, root);
+        root.appendChild(el('div', { className: 'price-section-title' },
+            `Consistent with a premium of ${fmt(payload.premium)}`));
+        root.appendChild(el('div', { className: 'exhibit-caption mb-2' },
+            'Lower and upper are the ends of the range over every distortion '
+            + 'that prices this object to the premium above. Width is the '
+            + 'reading: it is how much of the answer the choice of distortion '
+            + 'decides rather than the calibration.'));
+        const host = el('div');
+        root.appendChild(host);
+        mountTable(paneId, host,
+            ir.table ? { doc: ir.table } : { frame: payload.table },
+            { ...GRID_FULL, maxRows: 30 });
+        onTableViewChange(paneId, draw, root);
+    };
+    draw();
+}
+
+const boundsBtn = $('bounds-btn');
+boundsBtn?.addEventListener('click', async () => {
+    if (!state.id) return;
+    const premium = parseFloat($('bounds-premium').value);
+    if (!Number.isFinite(premium)) return;
+    const assetsRaw = parseFloat($('bounds-assets').value);
+    const assets = Number.isFinite(assetsRaw) ? assetsRaw : null;
+    boundsBtn.disabled = true;
+    boundsBtn.textContent = 'Computing…';
+    try {
+        if (boundsWhich === 'bounds') {
+            // An image identified entirely by its query, so it is a GET and the
+            // browser can cache it. No fetch: the <img> does the work.
+            const img = el('img', {
+                className: 'bounds-figure',
+                src: api.boundsEnvelopeUrl(state.id, { premium, assets }),
+                alt: 'pricing bounds envelope',
+            });
+            replacePane('pane-bounds', img);
+        } else if (boundsWhich === 'allocation') {
+            renderBoundsTable(await api.allocationBounds(state.id, { premium, assets }));
+        } else {
+            const against = $('bounds-against').value.trim();
+            if (!against) return;
+            renderBoundsTable(await api.pricingBounds(
+                state.id, { premium, assets, against: [against] }));
+        }
+    } catch (err) {
+        replacePane('pane-bounds', errorNode(err));
+    } finally {
+        boundsBtn.disabled = false;
+        boundsBtn.textContent = 'Compute';
+    }
 });
 
 // ----------------------------------------------------------------------

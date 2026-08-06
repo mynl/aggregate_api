@@ -70,6 +70,13 @@ export const NAV_GROUPS = {
     },
     reinsurance: {
         label: 'Reinsurance',
+        // The one group that is live with every leaf dark. An aggregate with no
+        // cession has nothing to tabulate or draw, and is exactly the object
+        // you want to add cover to, so the entry box below the row is the
+        // group's content until there is a program to describe. `alsoLive`
+        // says so declaratively rather than special-casing the group name in
+        // `groupAvailable`.
+        alsoLive: 'canReins',
         leaves: {
             summary: {
                 label: 'Summary',
@@ -103,9 +110,21 @@ export const NAV_GROUPS = {
     bounds: {
         label: 'Bounds',
         leaves: {
-            bounds: { label: 'Bounds', soon: true },
-            pricing: { label: 'PricingBounds', soon: true },
-            allocation: { label: 'AllocationBounds', soon: true },
+            bounds: {
+                label: 'Bounds',
+                flag: 'canBounds',
+                hint: 'every distortion consistent with this premium, as a band',
+            },
+            pricing: {
+                label: 'PricingBounds',
+                flag: 'canBounds',
+                hint: 'what a second risk can cost, given this one priced there',
+            },
+            allocation: {
+                label: 'AllocationBounds',
+                flag: 'canAllocate',
+                hint: 'per-unit ranges consistent with the total; a portfolio only',
+            },
         },
     },
     more: {
@@ -169,9 +188,19 @@ export function leafAvailable(caps, group, key) {
     return Boolean(caps.built);
 }
 
-/** A group is live when any of its leaves is. */
+/**
+ * A group is live when any of its leaves is, or when it carries its own
+ * `alsoLive` flag and that flag is set.
+ *
+ * The second clause is for a group whose content is not all leaves: the
+ * Reinsurance entry box sits below the sub-tab row and is the whole point of
+ * the group for an object with no cession yet.
+ */
 export function groupAvailable(caps, group) {
-    return Object.keys(NAV_GROUPS[group]?.leaves || {})
+    const def = NAV_GROUPS[group];
+    if (!def) return false;
+    if (def.alsoLive && caps.flags?.[def.alsoLive]) return true;
+    return Object.keys(def.leaves || {})
         .some((key) => leafAvailable(caps, group, key));
 }
 
@@ -202,6 +231,9 @@ export function capsFromResponse(capability, built = true) {
             canEvaluate: Boolean(cap.can_evaluate),
             canSharpen: Boolean(cap.can_sharpen),
             canPnl: Boolean(cap.can_pnl),
+            canReins: Boolean(cap.can_reins),
+            canBounds: Boolean(cap.can_bounds),
+            canAllocate: Boolean(cap.can_allocate),
             hasPremium: Boolean(cap.has_premium),
             needsPremium: Boolean(cap.needs_premium),
         },

@@ -187,6 +187,22 @@
             <div class="tab-pane fade" id="t-reinsurance">
                 <div class="sub-tabs" id="sub-reinsurance"></div>
                 <div class="reins-desc" id="reins-desc"></div>
+                <!-- Cede a layer. One box and one button, because the editor is
+                     the preview: the derived program goes straight into it and
+                     builds, so a separate copy control would be a second
+                     control for a thing already on screen. One clause per tier,
+                     since a clause is authoritative for its own tier and leaves
+                     the other alone. Reset on the action row is the way back to
+                     the gross object, so this pane needs no reset of its own. -->
+                <div class="tab-tools reins-entry" id="reins-entry">
+                    <label class="price-field reins-cession">cession
+                        <input id="reins-input" type="text" autocomplete="off"
+                               autocorrect="off" autocapitalize="off" spellcheck="false"
+                               placeholder="occurrence net of 500 xs 500"></label>
+                    <button id="reins-btn" class="btn btn-primary btn-sm">Cede</button>
+                    <span class="text-muted ms-1" style="font-size:.7rem;">one clause per tier,
+                        each opening <code>occurrence</code> or <code>aggregate</code></span>
+                </div>
                 <div id="pane-reinsurance" class="pane"></div>
             </div>
 
@@ -242,14 +258,31 @@
                 </div>
             </div>
 
-            <!-- Bounds: three leaves against the three classes in bounds.py,
-                 all greyed until they are built. The pane exists so each leaf
-                 has a target and the shape of what is coming is on record. -->
+            <!-- Bounds: three leaves against the three classes in bounds.py.
+
+                 Ordinary pricing picks a distortion and reports its number.
+                 These ask the other question: hold the calibration fixed, let
+                 the distortion range over everything consistent with it, and
+                 report how wide the answer can be. So every leaf needs a
+                 premium, which is the calibration, and none computes on
+                 arrival: they are work, and a leaf that computed on the way in
+                 would spend it every time you passed through. -->
             <div class="tab-pane fade" id="t-bounds">
                 <div class="sub-tabs" id="sub-bounds"></div>
-                <div id="pane-bounds" class="pane">
-                    <div class="text-muted small">Pricing bounds are not wired up yet.</div>
+                <div class="tab-tools price-form" id="bounds-form">
+                    <label class="price-field">premium
+                        <input id="bounds-premium" type="number" step="1" min="0" autocomplete="off"></label>
+                    <label class="price-field">assets
+                        <input id="bounds-assets" type="number" step="1" min="0"
+                               placeholder="none" autocomplete="off"></label>
+                    <label class="price-field bounds-against d-none" id="bounds-against-field">against
+                        <input id="bounds-against" type="text" autocomplete="off"
+                               autocorrect="off" autocapitalize="off" spellcheck="false"
+                               placeholder="a unit name, or DecL for a new line"></label>
+                    <button id="bounds-btn" class="btn btn-primary btn-sm">Compute</button>
+                    <span class="sub-hint" id="bounds-hint"></span>
                 </div>
+                <div id="pane-bounds" class="pane"></div>
             </div>
 
             <!-- More: the specialist frames. The hint line and the copy button

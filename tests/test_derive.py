@@ -229,6 +229,88 @@ def test_pnl_declines_what_it_cannot_wrap(client):
         assert "Aggregate or a Portfolio" in r.json()["detail"]
 
 
+# ----------------------------------------------------------------------
+# Reinsurance
+# ----------------------------------------------------------------------
+
+def test_ceding_a_layer_returns_the_net_program(client):
+    """The derived object is ``NAME_net``, built from self-contained text."""
+    source = _build(client, AGG)
+    r = client.post(f"/v1/objects/{source['id']}/reins",
+                    json={"cession": "occurrence net of 500 xs 500"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "agg"
+    assert body["has_reins"] is True
+    assert "agg." not in body["program"] and "port." not in body["program"]
+    # And the gross object is untouched, which is what makes Reset a cache hit.
+    assert client.get(f"/v1/objects/{source['id']}").status_code == 200
+
+
+def test_a_cession_lights_the_reinsurance_group(client):
+    """Before, only the entry box; after, the tables and the chart.
+
+    The group is live either way, which is the point of ``can_reins``: an
+    aggregate with no cession has nothing to tabulate and is exactly the object
+    you want to add cover to.
+    """
+    source = _build(client, AGG)
+    gross = source["capability"]
+    assert gross["can_reins"] is True
+    assert "reins" not in {e["name"] for e in gross["exhibits"]}
+    assert "reins" not in gross["charts"]
+
+    net = client.post(f"/v1/objects/{source['id']}/reins",
+                      json={"cession": "occurrence net of 500 xs 500"}).json()
+    assert "reins" in {e["name"] for e in net["capability"]["exhibits"]}
+    assert "reins" in net["capability"]["charts"]
+
+
+def test_a_clause_per_tier(client):
+    """Occurrence and aggregate cessions land in different slots.
+
+    Which is the whole reason this is a library question: a clause cannot be
+    appended, since an occurrence cession sits before the frequency clause and
+    an aggregate cession after it.
+    """
+    source = _build(client, AGG)
+    r = client.post(f"/v1/objects/{source['id']}/reins", json={
+        "cession": ["occurrence net of 500 xs 500",
+                    "aggregate net of 1000 xs 1000"]})
+    assert r.status_code == 200, r.text
+    program = r.json()["program"]
+    assert "occurrence net of" in program
+    assert "aggregate net of" in program
+
+
+def test_a_malformed_cession_is_a_422(client):
+    """The error pane already knows how to render one."""
+    source = _build(client, AGG)
+    r = client.post(f"/v1/objects/{source['id']}/reins",
+                    json={"cession": "net of 500 xs 500"})
+    assert r.status_code == 422
+
+
+def test_ceding_declines_where_it_cannot_apply(client):
+    """A portfolio cedes through its units, not as a whole."""
+    port = _build(client, PORT)
+    r = client.post(f"/v1/objects/{port['id']}/reins",
+                    json={"cession": "occurrence net of 500 xs 500"})
+    assert r.status_code == 400
+    assert port["capability"]["can_reins"] is False
+
+
+def test_the_net_program_rebuilds_to_the_same_object(client):
+    """Same contract as the other two derivations."""
+    source = _build(client, AGG)
+    derived = client.post(f"/v1/objects/{source['id']}/reins",
+                          json={"cession": "occurrence net of 500 xs 500"}).json()
+    again = client.post("/v1/objects", json={"decl": derived["program"]})
+    assert again.status_code == 200, again.text
+    assert again.json()["id"] == derived["id"]
+    assert again.json()["cached"] is True
+
+
 def test_a_derived_program_goes_through_the_ordinary_build_guards(client):
     """The P&L route calls the build endpoint rather than reimplementing it.
 
