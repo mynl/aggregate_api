@@ -34,6 +34,8 @@ import {
     leafAvailable as navLeafAvailable,
     groupAvailable as navGroupAvailable,
     activeLeaf as navActiveLeaf,
+    whyLeaf,
+    whyGroup,
 } from './nav.js';
 import * as history from './history.js';
 import { $, el, empty } from './utils/dom.js';
@@ -361,13 +363,48 @@ function renderSummary(res) {
     if (res.mean != null) { bits.push(sep(), el('span', { className: 'mono' }, `mean ${fmt(res.mean)}`)); }
     if (res.cv != null)   { bits.push(sep(), el('span', { className: 'mono' }, `CV ${fmt(res.cv)}`)); }
     if (res.validation) {
-        const ok = res.validation.trim() === 'not unreasonable';
-        bits.push(sep(), el('span', { className: `mono ${ok ? 'ok' : 'warn'}` }, res.validation));
+        const state = validationState(res.validation);
+        bits.push(sep(), el('span', { className: `mono ${state}` }, res.validation));
+        setStripState(state);
+    } else {
+        setStripState('ok');
     }
     if (res.cached) { bits.push(sep(), el('span', { className: 'mono' }, 'cached')); }
     inner.append(...bits);
     renderTiming(res);
     syncSummaryMore();
+}
+
+/**
+ * Grade a validation string into one of the three strip states.
+ *
+ * The library's verdict is prose, and "not unreasonable" is the *good* one: it
+ * is the phrase a clean build reports. Anything mentioning the mean is a hard
+ * failure, because a wrong mean means the grid cannot represent the
+ * distribution at all; everything else (cv, skew, a defective distribution) is
+ * a warning about accuracy rather than about correctness.
+ *
+ * @param {string} text the `validation` field off the build response.
+ * @returns {'ok'|'warn'|'bad'}
+ */
+function validationState(text) {
+    const s = String(text).trim().toLowerCase();
+    if (s === 'not unreasonable') return 'ok';
+    return /\bmean\b/.test(s) ? 'bad' : 'warn';
+}
+
+/**
+ * Tint the whole status strip, not just the verdict word.
+ *
+ * Hue alone is too weak for a state you must not miss, and it would ask the
+ * reader to tell a scarlet failure from the brick red of a selected tab a few
+ * centimetres away. The strip keeps its shape and changes its ground.
+ */
+function setStripState(state) {
+    const strip = $('status-strip');
+    if (!strip) return;
+    strip.classList.toggle('is-warn', state === 'warn');
+    strip.classList.toggle('is-fail', state === 'bad');
 }
 
 /** Sub-line: "Calculated aggregate in 0.000 seconds" (or cache note). */
@@ -385,8 +422,9 @@ function renderBuildFailure(err) {
     const limited = err instanceof ApiError && err.status === 429;
     const inner = $('summary-inner');
     empty(inner);
-    inner.appendChild(el('span', { className: 'mono warn' },
+    inner.appendChild(el('span', { className: 'mono bad' },
         limited ? 'rate limited; please pause a moment' : 'build failed'));
+    setStripState('bad');
     $('summary-timing').textContent = '';
     syncSummaryMore();
     // Surface the rich parse-error report (or the friendly rate-limit card) on
@@ -532,7 +570,21 @@ function activeLeaf(group) {
     return navActiveLeaf(navCaps(), state.leaf[group], group);
 }
 
-/** Render one group's sub-tab row, greying the leaves it cannot answer. */
+/**
+ * Render one group's sub-tab row, greying the leaves it cannot answer.
+ *
+ * Notes
+ * -----
+ * A dark leaf is marked with `aria-disabled` and `data-why` rather than the
+ * native `disabled`. Two reasons, both about the tooltip: `disabled` suppresses
+ * it in Chrome, and it also kills the pointer events the CSS `:hover` rule
+ * needs. The click is refused in the handler instead, which is the same
+ * guarantee by a different route.
+ *
+ * The leaf hint no longer appears here. It moved into the exhibit lede, which
+ * sits on the table it describes rather than up in the menu; a hint to the
+ * right of the row read as a third kind of item inside the row.
+ */
 function renderSubTabs(group) {
     const row = $(`sub-${group}`);
     if (!row) return;
@@ -542,22 +594,31 @@ function renderSubTabs(group) {
         const off = !leafAvailable(group, key);
         const btn = el('button', {
             type: 'button',
-            className: `btn btn-outline-secondary${key === current ? ' active' : ''}`
-                + (off ? ' disabled' : ''),
-            title: leaf.soon ? 'designed, not built yet' : '',
+            className: `sub-link${key === current ? ' active' : ''}`
+                + (off ? ' nav-off' : ''),
         }, leaf.label);
-        if (off) btn.setAttribute('disabled', '');
-        else btn.addEventListener('click', () => selectLeaf(group, key));
+        // Roving tabindex: only the selected leaf is a Tab stop, and the arrow
+        // keys move within the row. See wireStripKeys.
+        btn.setAttribute('role', 'tab');
+        btn.setAttribute('aria-selected', String(key === current));
+        btn.tabIndex = key === current && !off ? 0 : -1;
+        if (off) {
+            const reason = leaf.soon ? 'designed, not built yet' : whyLeaf(group, key);
+            btn.setAttribute('aria-disabled', 'true');
+            btn.setAttribute('data-why', reason);
+            btn.setAttribute('aria-label', `${leaf.label}, ${reason}`);
+        } else {
+            btn.addEventListener('click', () => selectLeaf(group, key));
+        }
         row.appendChild(btn);
     }
     const leaf = leafOf(group, current);
     if (leaf?.copy) {
         const paneId = PANE_OF[group];
-        const copyBtn = el('button', { className: 'btn btn-outline-secondary' }, 'copy');
+        const copyBtn = el('button', { className: 'sub-link' }, 'copy');
         copyBtn.addEventListener('click', () => copyPane(paneId, copyBtn));
         row.appendChild(copyBtn);
     }
-    if (leaf?.hint) row.appendChild(el('span', { className: 'sub-hint' }, leaf.hint));
 }
 
 /** Move a group to one of its leaves and load it. */
@@ -617,12 +678,18 @@ function applyCapabilityGating() {
         const btn = document.querySelector(`.out-tabs [data-tab="${group}"]`);
         if (!btn) continue;
         const off = !groupAvailable(group);
-        // Grey out via Bootstrap's .disabled plus the native attribute
-        // (self-styling, pointer-events: none, and Bootstrap's Tab plugin will
-        // not activate it).
+        // Grey out with .nav-off, which styles it and carries the tooltip.
+        // Bootstrap's own .disabled is kept because its Tab plugin checks for
+        // it and will not activate the trigger; the native `disabled`
+        // attribute is NOT set, because it suppresses the tooltip in Chrome
+        // and kills the pointer events the :hover rule needs. The click is
+        // refused below instead.
+        btn.classList.toggle('nav-off', off);
         btn.classList.toggle('disabled', off);
-        btn.toggleAttribute('disabled', off);
         btn.setAttribute('aria-disabled', off ? 'true' : 'false');
+        btn.tabIndex = off ? -1 : 0;
+        if (off) btn.setAttribute('data-why', whyGroup(group));
+        else btn.removeAttribute('data-why');
         if (off && activeTabName() === group) activeWentDark = true;
         renderSubTabs(group);
     }
@@ -634,6 +701,73 @@ function loadActiveTab() { loadTab(activeTabName()); }
 // Bootstrap fires shown.bs.tab on the tab trigger when a pill activates.
 document.querySelectorAll('.out-tabs [data-tab]').forEach((btn) => {
     btn.addEventListener('shown.bs.tab', () => loadTab(btn.dataset.tab));
+    // A dark group keeps its pointer events so the tooltip fires, so the click
+    // has to be refused here. Capture phase, ahead of Bootstrap's own handler.
+    btn.addEventListener('click', (e) => {
+        if (btn.classList.contains('nav-off')) {
+            e.preventDefault(); e.stopPropagation();
+        }
+    }, true);
+});
+
+// ----------------------------------------------------------------------
+// Keyboard navigation over the two strips
+// ----------------------------------------------------------------------
+/**
+ * Arrow keys within a tab strip, the standard tablist pattern.
+ *
+ * Both rows carry a roving tabindex, so Tab makes one stop per strip and then
+ * moves on to the content, rather than walking through nine buttons. Left and
+ * Right move within the strip and skip everything dark; Home and End jump to
+ * the first and last live item.
+ *
+ * @param {HTMLElement} row the strip to wire.
+ * @param {string} sel selector matching its buttons.
+ */
+function wireStripKeys(row, sel) {
+    row.addEventListener('keydown', (e) => {
+        if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) return;
+        const live = [...row.querySelectorAll(sel)]
+            .filter((b) => !b.classList.contains('nav-off'));
+        if (!live.length) return;
+        e.preventDefault();
+        const at = live.indexOf(document.activeElement);
+        let i;
+        if (e.key === 'Home') i = 0;
+        else if (e.key === 'End') i = live.length - 1;
+        else if (at < 0) i = 0;
+        else i = (at + (e.key === 'ArrowRight' ? 1 : -1) + live.length) % live.length;
+        const target = live[i];
+        target.click();
+        // Selecting a leaf re-renders its whole row, so the button just clicked
+        // is detached and focusing it would drop focus to <body> mid keyboard
+        // run. Re-find by position instead of holding the reference.
+        const after = [...row.querySelectorAll(sel)]
+            .filter((b) => !b.classList.contains('nav-off'));
+        (after[i] || target).focus();
+    });
+}
+
+wireStripKeys(document.querySelector('.out-tabs'), '[data-tab]');
+document.querySelectorAll('.sub-tabs')
+    .forEach((row) => wireStripKeys(row, '.sub-link'));
+
+/**
+ * `Alt+1…6` jumps straight to a group from anywhere, including the editor.
+ *
+ * Alt is the one modifier the editor does not already spend: Ctrl+Enter builds,
+ * Ctrl+Space completes, and Ctrl+arrows walk history and the example library. A
+ * dark group refuses the jump rather than landing you somewhere empty.
+ */
+document.addEventListener('keydown', (e) => {
+    if (!e.altKey || e.ctrlKey || e.metaKey) return;
+    const n = Number(e.key);
+    const groups = Object.keys(NAV_GROUPS);
+    if (!Number.isInteger(n) || n < 1 || n > groups.length) return;
+    const group = groups[n - 1];
+    if (!groupAvailable(group)) return;
+    e.preventDefault();
+    showTab(group);
 });
 
 /**
@@ -792,18 +926,20 @@ function renderOverviewExhibits(box, ir = {}) {
     empty(box);
     if (ir.summary) renderOneExhibit(box, ir.summary, {
         title: 'Summary',
-        caption: 'Moments and key percentiles. CV blank for signed / near-break-even '
-            + 'rows; Freq percentiles blank by design (PGF-only).',
+        gloss: 'mean, SD, CV, skewness and key percentiles, by component',
+        caption: 'CV blank for signed or near break even rows. Freq percentiles '
+            + 'blank by design, the PGF carries no quantiles.',
     });
     if (ir.tail) renderOneExhibit(box, ir.tail, {
-        title: 'Tail risk',
-        caption: '1-in-200 (Solvency II) and 1-in-250 (US) are the capital anchors. '
+        title: 'Return periods',
+        gloss: 'VaR, TVaR and xsVaR by return period',
+        caption: '1 in 200 (Solvency II) and 1 in 250 (US) are the capital anchors. '
             + 'Exact from the FFT grid, not simulated.',
     });
     if (ir.tail_behavior) renderOneExhibit(box, ir.tail_behavior, {
         title: 'Tail behavior',
-        caption: 'Support, the decay class on each side, and concentration. '
-            + 'Read from the spec, so it holds before any grid is chosen.',
+        gloss: 'support, the decay class on each side, and concentration',
+        caption: 'Read from the spec, so it holds before any grid is chosen.',
     });
 }
 
@@ -811,7 +947,17 @@ function renderOverviewExhibits(box, ir = {}) {
 // CsvGrid derived from the same one. Title and caption are the SPA's own either
 // way, so the two views differ in the table and in nothing else.
 function renderOneExhibit(box, doc, opts) {
-    if (opts.title) box.appendChild(el('h6', { className: 'exhibit-title' }, opts.title));
+    // Title and gloss on one line, bold then explanation. Through a46 this was
+    // a heading over a separate hint line, and on Overview / Summary the pair
+    // said "Summary" twice, at two sizes and two alignments, a few pixels
+    // apart. One line, one idea, and the gloss now sits on the table it
+    // describes rather than in the menu above it.
+    if (opts.title) {
+        const lede = el('p', { className: 'exhibit-lede' },
+            el('b', {}, opts.title));
+        if (opts.gloss) lede.appendChild(document.createTextNode(`: ${opts.gloss}`));
+        box.appendChild(lede);
+    }
     const host = el('div');
     box.appendChild(host);
     mountTable('pane-overview', host, { doc }, GRID_FULL);

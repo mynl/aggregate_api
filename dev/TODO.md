@@ -133,6 +133,15 @@ and the standing REMINDER below about what is worth plotting.
 
 ## Near term (get it healthy)
 
+- [x] **plan-revamp-aug-06 — the shell revamp** (→ 1.0.0a47). One type scale
+      replacing twenty sizes, the press ramp with the house red as the accent
+      and blue gone, real folder tabs over a small caps sub menu, one action
+      row and one status strip, a merged title-and-gloss line per exhibit,
+      greyed items that say why on hover, and keyboard navigation over both
+      strips. `site.css` fully tokenized on the way through. Designed in
+      `hacks/mockup-10-concepts.html`. Follow-up, still Bootstrap-colored:
+      `gt.css`, `csv-grid.css` and the ECharts palette in `charts/theme.js`.
+      *(done; moved to `dev/done/`)*
 - [x] **plan-0001 — bootstrap standalone** (→ 1.0.0a2). Make the extracted code
       import, run, and pass tests as `aggregate_api`. Wire the `aggregate`
       editable source. *(done; moved to `dev/done/`)*

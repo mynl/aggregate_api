@@ -30,8 +30,11 @@
 .cm-editor .tok-atom            { color: #6a3eaf; }                     /* distortion / sev names */
 .cm-editor .tok-number,
 .cm-editor .ͼ1                  { color: #b87333; }                     /* numeric -- copper */
+/* The one green in the app: `site.css` reads the same token for a clean
+   validation verdict, so the two cannot drift into being two near-identical
+   greens that look like a mistake. */
 .cm-editor .tok-string,
-.cm-editor .ͼ2                  { color: #2e7d32; }                     /* string -- forest */
+.cm-editor .ͼ2                  { color: var(--green); }                /* string, forest */
 .cm-editor .tok-comment,
 .cm-editor .ͼm                  { color: #8a8f99; font-style: italic; } /* comment */
 .cm-editor .tok-bracket         { color: #555; }

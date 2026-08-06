@@ -74,15 +74,13 @@
          ============================================================ -->
     <main class="container-fluid px-3 px-md-4 py-3" style="max-width:1280px;">
 
-        <!-- The lede. PLACEHOLDER COPY: two lines saying what this is, to be
-             replaced. The hero cards that stood here through a36 are gone; one
-             hero is still picked at random and built on load, so the page still
-             lands populated, and the gallery is to resurface inside the Examples
-             dropdown. -->
-        <p class="lede">Every program here describes a book of insurance: how often
-           it loses, how much it loses when it does, and what sits on top of it.
-           Build one and the whole distribution comes back, from the mean to the
-           far tail.</p>
+        <!-- The lede. One sentence naming what the app is for, on the same
+             measure as every other run of prose. The hero cards that stood here
+             through a36 are gone; one hero is still picked at random and built
+             on load, so the page still lands populated, and the gallery is to
+             resurface inside the Examples dropdown. -->
+        <p class="lede">Model a book of insurance, investigate tail risk,
+           allocate margin, apply and price reinsurance.</p>
 
         <!-- Editor box (CM6 mounts into #editor-host) -->
         <div class="editor-wrap">
@@ -92,23 +90,19 @@
             <i class="bi bi-x-circle editor-clear" id="editor-clear" title="clear" role="button" aria-label="clear editor"></i>
         </div>
 
-        <!-- Feedback line (folds away below sm, since phones have no Ctrl key) -->
-        <div class="feedback d-none d-sm-flex">
-            <span class="fb-text">Ctrl+Enter build · Ctrl+Space complete · Ctrl+↑↓ history · Ctrl+Shift+↑↓ examples</span>
-            <span class="fb-emacs">
-                emacs keys:
-                <span class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="emacs-switch">
-                </span>
-            </span>
-        </div>
+        <!-- Action row. One band: through a46 this was the button row over a
+             separate feedback line, and between them they held one idea. The
+             key hints and the emacs switch ride on the right; they fold away
+             below sm, since phones have no Ctrl key.
 
-        <!-- Buttons row -->
+             Build carries no color. The accent means selected and nothing
+             else, and Build is not a selection: it leads by weight and by
+             being first. -->
         <div class="btnrow">
-            <button id="build-btn" class="btn btn-primary px-4 shadow-sm">Build</button>
+            <button id="build-btn" class="btn btn-outline-secondary btn-build">Build</button>
 
             <div class="dropdown">
-                <button class="btn btn-outline-primary px-3 shadow-sm dropdown-toggle"
+                <button class="btn btn-outline-secondary dropdown-toggle"
                         data-bs-toggle="dropdown" aria-expanded="false">
                     <i class="bi bi-collection me-1"></i><span class="d-none d-sm-inline"> Examples</span></button>
                 <ul id="examples-menu" class="dropdown-menu shadow-sm examples-menu">
@@ -118,31 +112,59 @@
 
             <!-- The three derivations. Each returns DecL that lands in the
                  editor, so you read what was built and can edit it; none of
-                 them mutates an object behind a cached id.
+                 them mutates an object behind a cached id. They are grouped
+                 behind one label because they are a family: five peer buttons
+                 in a row said they were five unrelated verbs.
 
                  They replaced the log2 and bs dropdowns that stood here, which
                  nobody used. Sharpen writes the `hints{}` clause those knobs
                  used to set, and writes it into a program you can keep, so the
                  grid is pinned by an audit that explains itself rather than by
                  a menu choice that vanishes when you reload. -->
-            <button id="sharpen-btn" class="btn btn-outline-secondary shadow-sm"
-                    title="audit the grid and move to a better one">Sharpen</button>
-            <button id="pnl-btn" class="btn btn-outline-secondary shadow-sm"
-                    title="wrap this object in a P&amp;L">PnL</button>
-            <button id="reset-btn" class="btn btn-outline-secondary shadow-sm"
-                    title="back to the program you built">Reset</button>
+            <span class="derive-label">derive</span>
+            <div class="btn-group" role="group" aria-label="derive a new program">
+                <button id="sharpen-btn" class="btn btn-outline-secondary"
+                        title="audit the grid and move to a better one">Sharpen</button>
+                <button id="pnl-btn" class="btn btn-outline-secondary"
+                        title="wrap this object in a P&amp;L">PnL</button>
+                <button id="reset-btn" class="btn btn-outline-secondary"
+                        title="back to the program you built">Reset</button>
+            </div>
+
+            <span class="fb-right d-none d-sm-flex">
+                <span class="fb-text">Ctrl+Enter build<span class="sep">·</span>Ctrl+Space complete<span class="sep">·</span>Alt+1…6 groups</span>
+                <span class="fb-emacs">
+                    emacs keys:
+                    <span class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="emacs-switch">
+                    </span>
+                </span>
+            </span>
         </div>
 
-        <!-- Build summary / status line -->
-        <div class="summary" id="summary">
-            <div class="summary-inner" id="summary-inner">
-                <span class="text-muted">Type DecL above and press
-                    <span class="mono">Ctrl+Enter</span> to build.</span>
+        <!-- Status strip: what is built, and whether it is OK. The summary line
+             and the timing line share one container so the instrumentation
+             reads as one thing. main.js sets `is-warn` / `is-fail` on the
+             wrapper from the build's own verdict, which tints the whole strip:
+             hue alone is too weak for a state you must not miss. -->
+        <div class="status-strip" id="status-strip">
+            <div class="summary" id="summary">
+                <div class="summary-inner" id="summary-inner">
+                    <span class="text-muted">Type DecL above and press
+                        <span class="mono">Ctrl+Enter</span> to build.</span>
+                </div>
+                <button class="summary-more" id="summary-more" title="show full summary">
+                    <i class="bi bi-chevron-down"></i></button>
             </div>
-            <button class="summary-more" id="summary-more" title="show full summary">
-                <i class="bi bi-chevron-down"></i></button>
+            <div class="summary-timing" id="summary-timing"></div>
         </div>
-        <div class="summary-timing" id="summary-timing"></div>
+
+        <!-- The object's identity: name, kind, tags and its note. It sits ABOVE
+             the group strip, not inside Overview, because it names the object
+             rather than any one view of it. Nothing may stand between a group
+             strip and its sub menu, or the two stop reading as parent and
+             child, which is exactly what they did through a46. -->
+        <div id="head-overview"></div>
 
         <!-- Output navigation: six groups, each with its own sub-tab row.
              The groups are editorial, a judgment about how insurance work
@@ -166,12 +188,10 @@
         </ul>
 
         <div class="tab-content">
-            <!-- Overview: the landing group. The identity block sits above the
-                 sub-tab row because it names the object rather than any one
-                 leaf, so it stays put as you move between Plot, Summary and
-                 Tail. -->
+            <!-- Overview: the landing group. The identity block used to sit
+                 here, above the sub-tab row; it moved above the group strip at
+                 a47 so nothing stands between the two menu levels. -->
             <div class="tab-pane fade show active" id="t-overview">
-                <div id="head-overview"></div>
                 <div class="sub-tabs" id="sub-overview"></div>
                 <div id="pane-overview" class="pane"></div>
             </div>

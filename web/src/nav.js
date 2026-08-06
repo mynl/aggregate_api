@@ -26,6 +26,10 @@
  *
  * `soon: true` greys a leaf that is designed but not built. Per the house rule
  * nothing is hidden, so what is coming is visible and plainly not ready.
+ *
+ * `why` is what a dark leaf says on hover. It states what *does* answer, not
+ * what this object lacks, because the reader is deciding what to build next.
+ * See `whyLeaf` / `whyGroup`.
  */
 
 export const NAV_GROUPS = {
@@ -39,11 +43,13 @@ export const NAV_GROUPS = {
             summary: {
                 label: 'Summary',
                 exhibit: 'summary',
+                why: 'a severity carries no summary frame',
                 hint: 'moments and key percentiles',
             },
             tail: {
                 label: 'Tail',
                 exhibit: 'tail',
+                why: 'needs a full loss distribution, so an aggregate or a portfolio',
                 hint: 'return periods, then how each tail behaves',
             },
         },
@@ -54,16 +60,19 @@ export const NAV_GROUPS = {
             ledger: {
                 label: 'Ledger',
                 exhibit: 'economic',
+                why: 'a P&L only',
                 hint: 'the P&L sheet, line by line',
             },
             ratios: {
                 label: 'Ratios',
                 exhibit: 'economic_ratios',
+                why: 'a P&L only',
                 hint: 'the same sheet read as ratios',
             },
             waterfall: {
                 label: 'Waterfall',
                 exhibit: 'economic_waterfall',
+                why: 'a P&L tower only',
                 hint: 'the margin walk, gross to net; a tower only',
             },
         },
@@ -81,21 +90,25 @@ export const NAV_GROUPS = {
             summary: {
                 label: 'Summary',
                 exhibit: 'reins',
+                why: 'needs a cession; add one below',
                 hint: 'the program layer by layer',
             },
             stats: {
                 label: 'Stats',
                 exhibit: 'reins',
+                why: 'needs a cession; add one below',
                 hint: 'gross, ceded and net moments',
             },
             density: {
                 label: 'Density',
                 exhibit: 'reins',
+                why: 'needs a cession; add one below',
                 hint: 'the three distributions on one grid',
             },
             plot: {
                 label: 'Plot',
                 chart: 'reins',
+                why: 'needs a cession; add one below',
                 hint: 'what the cession does to the shape, and to the tail',
             },
         },
@@ -103,8 +116,10 @@ export const NAV_GROUPS = {
     pricing: {
         label: 'Pricing',
         leaves: {
-            determine: { label: 'Determine', flag: 'canPrice' },
-            evaluate: { label: 'Evaluate', flag: 'canEvaluate' },
+            determine: { label: 'Determine', flag: 'canPrice',
+                         why: 'an aggregate or a portfolio only' },
+            evaluate: { label: 'Evaluate', flag: 'canEvaluate',
+                        why: 'needs an object that can be priced' },
         },
     },
     bounds: {
@@ -113,16 +128,19 @@ export const NAV_GROUPS = {
             bounds: {
                 label: 'Bounds',
                 flag: 'canBounds',
+                why: 'an aggregate or a portfolio only',
                 hint: 'every distortion consistent with this premium, as a band',
             },
             pricing: {
-                label: 'PricingBounds',
+                label: 'Pricing Bounds',
                 flag: 'canBounds',
+                why: 'an aggregate or a portfolio only',
                 hint: 'what a second risk can cost, given this one priced there',
             },
             allocation: {
-                label: 'AllocationBounds',
+                label: 'Allocation Bounds',
                 flag: 'canAllocate',
+                why: 'a portfolio only',
                 hint: 'per-unit ranges consistent with the total; a portfolio only',
             },
         },
@@ -133,12 +151,14 @@ export const NAV_GROUPS = {
             validation: {
                 label: 'Validation',
                 exhibit: 'validation',
+                why: 'needs computed moments',
                 hint: 'theoretical vs empirical moments; reads “not unreasonable” on a clean build',
                 copy: true,
             },
             stats: {
                 label: 'Stats',
                 exhibit: 'stats',
+                why: 'needs computed moments',
                 hint: 'frequency / severity / aggregate moments; raw moment rows are dropped',
             },
             density: {
@@ -148,11 +168,13 @@ export const NAV_GROUPS = {
             window: {
                 label: 'Window',
                 exhibit: 'bs_window',
+                why: 'needs an FFT grid',
                 hint: 'bucket / window estimator; the selected row is the chosen grid',
             },
             dependency: {
                 label: 'Dependency',
                 exhibit: 'dependency',
+                why: 'a bivariate only',
                 hint: 'the copula and what it does to the joint; a bivariate only',
             },
             narrative: {
@@ -167,6 +189,40 @@ export const NAV_GROUPS = {
 /** The leaf definition for a group, by key. */
 export function leafOf(group, key) {
     return NAV_GROUPS[group]?.leaves?.[key];
+}
+
+/**
+ * Why a leaf is dark, in the reader's terms rather than the gate's.
+ *
+ * The rules above already know every one of these; until a47 they simply never
+ * said. A Severity lights 3 leaves out of 22, and a wall of grey that explains
+ * itself on hover is a map of what the object is rather than a broken page.
+ *
+ * Phrased as what *does* answer ("a portfolio only") rather than as what this
+ * object lacks, because the reader is deciding what to build next.
+ *
+ * @returns {string} the reason, or a generic fallback if a leaf carries none.
+ */
+export function whyLeaf(group, key) {
+    return leafOf(group, key)?.why || 'not available for this object';
+}
+
+/**
+ * Why a whole group is dark: the reason shared by all its leaves if they agree,
+ * otherwise the generic line.
+ *
+ * Derived rather than declared, so a group cannot drift from the leaves under
+ * it. Economics is "a P&L only" because all three of its leaves are; Overview
+ * and More never grey, so they never ask.
+ */
+export function whyGroup(group) {
+    const reasons = Object.keys(NAV_GROUPS[group]?.leaves || {})
+        .map((key) => leafOf(group, key)?.why)
+        .filter(Boolean);
+    const first = reasons[0];
+    return first && reasons.length === Object.keys(NAV_GROUPS[group].leaves).length
+        && reasons.every((r) => r === first)
+        ? first : 'not available for this object';
 }
 
 /**

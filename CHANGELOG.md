@@ -4,6 +4,88 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a47
+
+`dev/plan-revamp-aug-06.md`, executed in one batch. The page around the output
+is rebuilt. Nothing about what the app computes changes; this is the shell.
+Designed in `hacks/mockup-10-concepts.html` over five rounds against the running
+api, three concepts down to one.
+
+**A type scale, at last.** Five steps (`--fs-meta` through `--fs-title`)
+replacing the twenty distinct sizes the sheet declared between `.6rem` and
+`1.05rem`. Nothing on the page except the brand used to be larger than
+`1.05rem`, so hierarchy was being signalled by one pixel steps the eye cannot
+resolve, and nothing read as a heading.
+
+**The press ramp and the house red.** `--ink` / `--ink-2` / `--mut` go to pure
+black through true neutrals, over Bootstrap's greys, which are three colors from
+three different hues pretending to be one ramp. `--house #a81313` becomes the
+accent and keeps its old job on inline `code` and the parse-error caret. Blue
+leaves the page entirely. Build therefore carries no color: the accent means
+*selected* and Build is not a selection, so it leads by weight and position
+instead. `site.css` is fully tokenized on the way through, from 7 tokens and 49
+inline literals to no color outside `:root` except a handful of one-off tints.
+
+**One green.** `--green` is the editor's own string green, now read from
+`:root` by `cm6.css` too, so there is one green in the stylesheet instead of two
+that differed by a few points. Worth recording that the premise this started
+from was wrong: the editor's *numbers* are copper `#b87333`, not green, and a
+DecL object name is plain text rather than red.
+
+**Real tabs.** The six groups become folder tabs, drawn from the same Bootstrap
+`nav-pills` markup with the Tab plugin, the panes and the capability gating all
+untouched. Every tab is drawn, not only the selected one: previously only the
+active pill carried a background, so landing on More left the left half of the
+strip looking like loose text under a rule. The active tab is filled in the
+accent and paints 2px over the strip's rule, so tab and content read as one
+surface.
+
+**A sub menu that reads as a menu.** Letterspaced small caps, so the two levels
+differ in case as well as size. The sub menu and the panes indent by `--tabpad`,
+the tab's own left padding, so everything below aligns with the first tab's
+*label* rather than its box edge. `renderSubTabs` emits `sub-link` rather than
+`btn btn-outline-secondary`, whose Bootstrap `.active` was a solid dark fill:
+the child level shouted while the parent whispered.
+
+**The identity block moved above the group strip.** It was between the two menu
+rows, which is why they never read as parent and child.
+
+**One action row, one status strip.** The button row and the feedback line
+merge; Sharpen, PnL and Reset collapse into one labelled `derive` group, because
+each writes DecL back into the editor rather than acting on the object. The
+summary line and the timing line share one bordered container that wraps and
+never overflows.
+
+**Validation grades into three states.** "not unreasonable" is the good one and
+reads green. A wrong mean is a hard failure and reads scarlet; cv, skew and the
+defective-distribution warning read orange. Each of the two bad states tints the
+whole strip rather than only coloring a word, because hue alone is too weak for
+a state you must not miss and a scarlet failure must never be mistaken for the
+brick red of a selected tab.
+
+**One line per exhibit.** `<b>Return periods</b>: VaR, TVaR and xsVaR by return
+period` replaces a heading over a separate hint line. On Overview / Summary the
+old pair said "Summary" twice, at two sizes and two alignments, a few pixels
+apart. The sub-tab hint line is deleted; this is where it went.
+
+**Greyed items say why.** A `why:` string per leaf in `nav.js`, plus `whyLeaf`
+and `whyGroup`, rendered as a drawn tooltip rather than a native `title`, which
+Chrome sits on for about a second. A Severity lights 3 leaves out of 22, and a
+wall of grey that explains itself is a map of what the object is. Dark items
+keep their pointer events so the tooltip fires and refuse the click in the
+handler; `disabled` would have suppressed both. `check-nav.mjs` confirms not one
+gate moved.
+
+**Keyboard navigation.** Roving tabindex on both strips, so Tab makes one stop
+per strip rather than walking nine buttons. Left and Right move within a strip
+and skip everything dark, Home and End jump to its ends, and `Alt+1…6` reaches a
+group from anywhere including the editor. Alt is the one modifier the editor
+does not already spend.
+
+Not in scope, and still Bootstrap-colored: `gt.css` (served from the
+`greater_tables` package), `csv-grid.css`, and the ECharts palette in
+`web/src/charts/theme.js`.
+
 ## 1.0.0a46
 
 Stages 5, 6 and 7 of `dev/plan-loss-lab-navigation.md`, which closes the plan.
