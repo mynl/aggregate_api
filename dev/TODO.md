@@ -103,14 +103,23 @@ uv run aggregate-api --port 8001 --library T:\tmp\short.agg
 Still open from before and probably part of this: the Bounds tab has no content,
 and the standing REMINDER below about what is worth plotting.
 
-- [ ] **plan-loss-lab-navigation — the answer to (c)**, and it absorbs the
-      Bounds item above. Seven stages, one version bump each: the Loss Lab
-      rename, the capability payload that kills `NA_TABS_BY_KIND` and
+- [x] **plan-loss-lab-navigation — the answer to (c)**, and it absorbed the
+      Bounds item above. Seven stages, one version bump each (a42 to a46): the
+      Loss Lab rename, the capability payload that killed `NA_TABS_BY_KIND` and
       `NA_MORE_BY_KIND`, six nav groups with their own sub-tab rows, the
       Sharpen / PnL / Reset action row, the reinsurance entry box, Bounds, and
-      the Narrative pane. Unparked 2026-08-05: the library dependency landed
-      upstream at a213 and a215. One upstream piece is still in flight, the
-      inline portfolio engine, and it gates one button for one kind.
+      the Narrative pane. *(done; moved to `dev/done/`)*
+
+      Left open by it, deliberately: the header's **Perspective** control. The
+      plan lists it under page-wide preferences and no stage owns it, so the
+      exhibit fetches take `insurer`, which is the plan's stated default. The
+      Tables switch beside it is live; this one is not built.
+
+      **Nobody has clicked any of it.** The gating is proved by
+      `check-nav.mjs` against real payloads and every route has tests, but the
+      six groups, the three derivation buttons, the cession box, the three
+      bounds forms and the Narrative pane have never been used in a browser.
+      The author's first pass is the next thing that matters.
 
 ## SM
 
