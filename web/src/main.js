@@ -6,9 +6,9 @@
 //   * construct the CM6 editor + wire build / history / clear / emacs
 //   * wire the Build button, log2 / bs dropdowns, Examples dropdown
 //   * render the one-line build summary
-//   * lazily fetch + render each output tab (Info / Summary / Plot /
-//     Reins, plus Stats under the More dropdown), caching per built
-//     object; Price and Density are placeholders (wired later)
+//   * render the six output groups and their sub-tab rows, lazily fetching
+//     each leaf and caching what a pane is showing per built object; the
+//     skeleton and the greying rules live in `nav.js`
 //   * surface aggregate/api versions in the header
 
 // ---- Bootstrap + icons + site styles ----
@@ -34,6 +34,7 @@ import {
     leafAvailable as navLeafAvailable,
     groupAvailable as navGroupAvailable,
     activeLeaf as navActiveLeaf,
+    capsFromResponse,
     whyLeaf,
     whyGroup,
 } from './nav.js';
@@ -63,18 +64,18 @@ const state = {
     name: null,
     mean: null,             // headline mean, for the exhibit's reference line
     hasReins: false,        // the Price basis selector; the Reins tab reads `exhibits`
-    // What the object can answer, straight off the build response. The app
-    // holds no per-kind table of its own: a new library exhibit reaches the
+    // What the object can answer, straight off the build response and already
+    // in the shape `nav.js` takes: `{built, exhibits, charts, flags}`. The app
+    // holds no per-kind table of its own, so a new library exhibit reaches the
     // menu with no edit here, which is the whole point of the exhibit registry.
-    exhibits: new Set(),    // library exhibit names
-    charts: new Set(),      // library chart names
-    canPrice: false,        // app leaf: Pricing / Determine
-    canEvaluate: false,     // app leaf: Pricing / Evaluate
-    needsPremium: false,    // Evaluate's premium input, for a position with none
-    canSharpen: false,      // the Sharpen button
-    canPnl: false,          // the PnL button
-    canReins: false,        // the Reinsurance entry box, and its group pill
-    hasPremium: false,      // whether a PnL would inherit a premium or size one
+    //
+    // One object, built by one function, read everywhere. This used to be seven
+    // loose `canX` fields copied onto `state` by hand, with `capsFromResponse`
+    // sitting unused beside them: `canBounds` and `canAllocate` never got
+    // copied when Bounds landed, so the whole group greyed for every object
+    // while `check-nav.mjs` passed, because the checker called that function
+    // and the app did not. A flag cannot be wired in one and not the other now.
+    caps: capsFromResponse(null, false),
     // The program you built yourself, and whether you have since derived from
     // it. Together they are Reset: at any moment you are either on your own
     // program or exactly one derivation away from it.
@@ -212,8 +213,8 @@ function renderActionRow() {
         btn.toggleAttribute('disabled', disabled);
         btn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
     };
-    off(sharpenBtn, !state.canSharpen);
-    off(pnlBtn, !state.canPnl);
+    off(sharpenBtn, !can('canSharpen'));
+    off(pnlBtn, !can('canPnl'));
     // Reset is the way back from a derivation, so it means nothing until one
     // has happened. At any moment you are either on your own program or
     // exactly one derivation away from it.
@@ -302,17 +303,15 @@ resetBtn?.addEventListener('click', async () => {
  * keeping the last object's shape and lying about the one that did not build.
  */
 function applyCapability(capability) {
-    const cap = capability || {};
-    state.exhibits = new Set((cap.exhibits || []).map((e) => e.name));
-    state.charts = new Set(cap.charts || []);
-    state.canPrice = Boolean(cap.can_price);
-    state.canEvaluate = Boolean(cap.can_evaluate);
-    state.needsPremium = Boolean(cap.needs_premium);
-    state.canSharpen = Boolean(cap.can_sharpen);
-    state.canPnl = Boolean(cap.can_pnl);
-    state.canReins = Boolean(cap.can_reins);
-    state.hasPremium = Boolean(cap.has_premium);
+    // `state.id` is already set by the time this runs on the adopt path, and
+    // already cleared on the forget path, so it is the honest `built`.
+    state.caps = capsFromResponse(capability, Boolean(state.id));
     renderReinsEntry();
+}
+
+/** One capability flag, by the name `nav.js` gates on. */
+function can(flag) {
+    return Boolean(state.caps.flags[flag]);
 }
 
 buildBtn.addEventListener('click', build);
@@ -554,20 +553,12 @@ const LOADERS = {
     'more:narrative': () => loadNarrative(),
 };
 
-/** The capability shape the `nav.js` rules take, from module state. */
-function navCaps() {
-    return {
-        built: Boolean(state.id),
-        exhibits: state.exhibits,
-        charts: state.charts,
-        flags: state,
-    };
-}
-
-function leafAvailable(group, key) { return navLeafAvailable(navCaps(), group, key); }
-function groupAvailable(group) { return navGroupAvailable(navCaps(), group); }
+// The rules, bound to the one capability object. `state.caps` is already the
+// shape `nav.js` takes, so there is nothing to assemble here.
+function leafAvailable(group, key) { return navLeafAvailable(state.caps, group, key); }
+function groupAvailable(group) { return navGroupAvailable(state.caps, group); }
 function activeLeaf(group) {
-    return navActiveLeaf(navCaps(), state.leaf[group], group);
+    return navActiveLeaf(state.caps, state.leaf[group], group);
 }
 
 /**
@@ -665,8 +656,9 @@ async function loadLeaf(group) {
  * A group greys when every one of its leaves is dark, which needs no rule of
  * its own: Economics is a P&L's group because only a P&L serves the economic
  * exhibits, and Reinsurance lights on the cession the `reins` exhibit is
- * registered behind. Bounds greys for everything because all three of its
- * leaves are still marked `soon`.
+ * registered behind. Bounds lights for an aggregate or a portfolio, which is
+ * the accepted set `aggregate.bounds.Bounds` declares, and its Allocation leaf
+ * for a portfolio alone.
  *
  * The active group is left alone unless it just went dark. Stepping through
  * examples on Pricing should stay on Pricing, and the only reason to move is
@@ -1295,7 +1287,7 @@ async function loadReinsPlot() {
 function renderReinsEntry() {
     const box = $('reins-entry');
     if (!box) return;
-    box.classList.toggle('d-none', !state.canReins);
+    box.classList.toggle('d-none', !can('canReins'));
 }
 
 const reinsBtn = $('reins-btn');
@@ -1303,7 +1295,7 @@ const reinsInput = $('reins-input');
 
 async function cede() {
     const cession = reinsInput.value.trim();
-    if (!cession || !state.canReins) return;
+    if (!cession || !can('canReins')) return;
     await runDerivation(reinsBtn, 'Ceding…', (id) => api.reins(id, cession),
         'reinsurance');
     // The clause is now in the program in the editor, which is the record, so
@@ -1345,7 +1337,7 @@ async function showPricingLeaf(which) {
     // The premium input is for a position carrying no consideration of its own.
     // A P&L keeps its premium in its ledger and never asks; an exposure that
     // states one does not either.
-    $('evaluate-premium-field').classList.toggle('d-none', !state.needsPremium);
+    $('evaluate-premium-field').classList.toggle('d-none', !can('needsPremium'));
 }
 
 // ----------------------------------------------------------------------
@@ -1686,7 +1678,7 @@ const evaluateBtn = $('evaluate-btn');
 evaluateBtn?.addEventListener('click', async () => {
     if (!state.id) return;
     const body = {};
-    if (state.needsPremium) {
+    if (can('needsPremium')) {
         const premium = parseFloat($('evaluate-premium').value);
         if (!Number.isFinite(premium)) return;
         body.premium = premium;

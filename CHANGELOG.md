@@ -4,6 +4,37 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a48
+
+Not from a plan. `dev/TODO.md` closed the navigation work with a warning that
+nobody had clicked any of it, and the first pass over the Bounds group found it
+dark for every object.
+
+**Bounds lights, for an aggregate or a portfolio.** `capability.py` has emitted
+`can_bounds` and `can_allocate` since a46, and `nav.js` gates the three Bounds
+leaves on them, but `main.js` never copied either onto the object it handed the
+rules. Both read `undefined`, so all three leaves greyed, and with no live leaf
+the group pill greyed with them: there was no object anywhere in the app that
+could reach Bounds. An aggregate and a portfolio now light Bounds and Pricing
+Bounds, and a portfolio also lights Allocation Bounds, which is the set
+`aggregate.bounds.Bounds` accepts. Nothing else moved: the routes, the forms and
+the three loaders were all built and correct.
+
+**One capability object, which is why it cannot recur.** `nav.js` already
+exported `capsFromResponse`, the correct build-response to rules mapping, and
+its only caller was `dev/scripts/check-nav.mjs`. The app assembled its own
+equivalent by hand from seven `canX` fields copied onto `state`. So the checker
+and the app read different shapes, the checker expected Bounds live for `agg`,
+`agg_reins` and `port` and passed, and the app greyed it. `state.caps` is now
+that one function's output, read by the rules and by the six call sites that
+used to reach for a loose field. A flag added in one place and forgotten in the
+other is no longer expressible.
+
+**Stale text.** The gating docstring claimed Bounds greyed because its leaves
+were marked `soon`, which stopped being true when they were built; the About
+panel still listed Bounds as "(coming)"; and `main.js`'s file header still
+described the tab set from before the six groups landed.
+
 ## 1.0.0a47
 
 `dev/plan-revamp-aug-06.md`, executed in one batch. The page around the output

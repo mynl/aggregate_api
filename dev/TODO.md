@@ -115,11 +115,12 @@ and the standing REMINDER below about what is worth plotting.
       exhibit fetches take `insurer`, which is the plan's stated default. The
       Tables switch beside it is live; this one is not built.
 
-      **Nobody has clicked any of it.** The gating is proved by
+      **Nobody had clicked any of it.** The gating was proved by
       `check-nav.mjs` against real payloads and every route has tests, but the
       six groups, the three derivation buttons, the cession box, the three
-      bounds forms and the Narrative pane have never been used in a browser.
-      The author's first pass is the next thing that matters.
+      bounds forms and the Narrative pane had never been used in a browser.
+      The author's first pass found the Bounds group dark for every object
+      (fixed at a48, below). The rest of the list still wants clicking.
 
 ## SM
 
@@ -132,6 +133,14 @@ and the standing REMINDER below about what is worth plotting.
 - [ ] 
 
 ## Near term (get it healthy)
+
+- [x] **Bounds was dark for every object** (→ 1.0.0a48). `can_bounds` and
+      `can_allocate` reached the browser and were never copied onto the flags
+      the rules read, so the group greyed everywhere while `check-nav.mjs`
+      passed: the checker called `capsFromResponse` and the app hand-rolled its
+      own equivalent. The app now uses that one function, so the two cannot
+      drift again. Found on the first browser pass, which is the note above
+      earning its place.
 
 - [x] **plan-revamp-aug-06 — the shell revamp** (→ 1.0.0a47). One type scale
       replacing twenty sizes, the press ramp with the house red as the accent
