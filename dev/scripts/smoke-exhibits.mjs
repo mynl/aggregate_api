@@ -116,7 +116,9 @@ function noInteriorGap(data) {
  * 2. **Which axis each panel answers.** Loss on the density, survival on the
  *    tail, declared per grid.
  * 3. **The sampler is on** wherever it is safe, which is what makes the density
- *    render as steps rather than as leaning pyramids.
+ *    render as steps rather than as leaning pyramids. Exempt on the stem rung:
+ *    the point of that rung is that every atom is drawn, and a per-pixel
+ *    reduction would merge a stem's base with its peak.
  */
 function checkTwoPanel(option, notes) {
     const [x0, x1] = option.xAxis;
@@ -131,7 +133,9 @@ function checkTwoPanel(option, notes) {
     if (readAxis[0] !== 'x' || readAxis[1] !== 'y') {
         notes.push(`read axes [${readAxis.join(', ')}], expected [x, y]`);
     }
+    const stems = option.densityDrawnAs === 'stem';
     const unsampled = (option.series || [])
+        .filter((s) => !(stems && s.xAxisIndex === 0))
         .filter((s) => noInteriorGap(s.data) && s.sampling !== 'minmax')
         .map((s) => s.name);
     if (unsampled.length) notes.push(`not sampled: ${unsampled.join(', ')}`);
@@ -259,8 +263,15 @@ for (const [kind, key] of CASES) {
 
         let shape;
         if (grids.length >= 2) {
-            const half = series.length / 2;
-            if (!series.slice(half).every((s) => (s.data || []).some((p) => p != null))) {
+            // Split the panels by which x axis each series is on, not by
+            // counting halves. The halves arithmetic assumed one density series
+            // per right-panel series, which stopped being true at a50: the stem
+            // rung draws each density as two, the stems and the dots on their
+            // ends.
+            const density = series.filter((s) => s.xAxisIndex === 0);
+            const tail = series.filter((s) => s.xAxisIndex === 1);
+            if (!tail.length) notes.push('no right-panel series');
+            else if (!tail.every((s) => (s.data || []).some((p) => p != null))) {
                 notes.push('right panel entirely null');
             }
             const x = option.xAxis[0];
@@ -269,13 +280,28 @@ for (const [kind, key] of CASES) {
             }
             checkTwoPanel(option, notes);
             const got = checkAspect(grids, option.panelFootprint, notes);
-            // Steps are unconditional now, so *every* density series carries
-            // them. A value in the frame is the mass in one bucket, not a sample
-            // of a curve, so joining two with a slope draws probability between
-            // grid points that carry none. The density series are the first half.
-            const density = series.slice(0, series.length / 2);
-            const flat = density.filter((s) => s.step !== 'middle').map((s) => s.name);
-            if (flat.length) notes.push(`not stepped: ${flat.join(', ')}`);
+            // The library's ladder, asserted rather than assumed. Through a49
+            // every density was stepped unconditionally and this checked exactly
+            // that; the rule now is that the drawing follows the room each atom
+            // gets, so what there is to check is that the chosen rung and the
+            // series actually built agree.
+            const drawn = option.densityDrawnAs;
+            if (!['stem', 'step', 'line'].includes(drawn)) {
+                notes.push(`unknown density drawing ${drawn}`);
+            } else if (drawn === 'step') {
+                const flat = density.filter((s) => s.step !== 'middle').map((s) => s.name);
+                if (flat.length) notes.push(`not stepped: ${flat.join(', ')}`);
+            } else {
+                // Neither the stem rung nor the plain-line rung may carry steps:
+                // a stem is drawn at its atom and a sampled ordinate has no
+                // bucket for a step to hold across.
+                const stepped = density.filter((s) => s.step).map((s) => s.name);
+                if (stepped.length) notes.push(`${drawn} drawing is stepped: ${stepped.join(', ')}`);
+                if (drawn === 'stem' && density.length !== 2 * tail.length) {
+                    notes.push(`stem drawing built ${density.length} density series `
+                        + `for ${tail.length} units, expected ${2 * tail.length}`);
+                }
+            }
             shape = `${Math.round(grids[0].width)}x${Math.round(grids[0].height)}`
                 + (got ? ` fp=${got.toFixed(2)}` : '') + ` h=${Math.round(option.hostHeight)}`
                 // The tail floor, printed rather than asserted: `T_MAX` bounds
@@ -296,7 +322,8 @@ for (const [kind, key] of CASES) {
         if (notes.length) { fail(`${key} (${layout.name}): ${notes.join('; ')}`); broke = true; break; }
 
         const marks = series.filter((s) => s.markLine).length;
-        lines.push(`${layout.name} ${shape} marks=${marks}`);
+        lines.push(`${layout.name} ${shape} marks=${marks}`
+            + (option.densityDrawnAs ? ` draw=${option.densityDrawnAs}` : ''));
     }
     if (broke) continue;
     console.log(`OK   ${key.padEnd(11)} ${lines.join('  |  ')}`);

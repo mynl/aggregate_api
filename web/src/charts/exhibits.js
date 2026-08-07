@@ -9,10 +9,14 @@
 // Both panels read left to right in loss, which is the orientation an insurance
 // reader already has in their head. The transposed form (loss against return
 // period) is a toggle rather than the default: it answers "what is the 1-in-200
-// number" directly, but it makes you re-orient to get there. With exceedance on
-// a log y-axis, a second axis on the right of that panel reads the same curve as
-// a return period, so 1e-5 and 1-in-100,000 are the same gridline and neither
-// question needs a transpose.
+// number" directly, but it makes you re-orient to get there.
+//
+// The toggle picks one reading. Through a49 the panel also carried a second
+// y-axis on its right showing whichever reading was not picked, on the argument
+// that then neither question needs a transpose. What that actually did was
+// leave the toggle deciding nothing, ask the reader which of two scales they
+// were reading, and, because the axis reserved margin only when log y was on,
+// make pressing log y on the right panel resize the left one.
 //
 // Both panels are drawn from the same row array, so a point's index means the
 // same thing in each. That is what lets the cursor link exactly: hovering a
@@ -52,21 +56,21 @@ import { chartdocToEcharts } from './chartdoc-to-echarts.js';
 // when WebGL is unavailable or the chunk failed to load.
 let surfaceReady = false;
 
-// Return periods marked on the tail panel. **Two**, not three: 1-in-100 and
-// 1-in-250 sit far enough apart to label, and adding 1-in-200 between them put
-// three labels in a space that fits two. The pair still spans the regulatory
-// range (Solvency II reads 1-in-200, the US 1-in-250), and the tooltip gives any
-// other return period on demand.
+// The capital anchors, marked on **both** panels and governed by the reference
+// lines toggle along with the mean.
 //
-// The first label is right-aligned to its line and the second left-aligned, so
-// they open away from each other and cannot collide even when the two lines are
-// close.
-const ANCHORS = [100, 250];
-
-// The anchor carried onto the density panel as a reference line. One, not two:
-// the point there is to say where capital sits, and a second dashed vertical
-// says it again.
-const REF_ANCHOR = 200;
+// 1-in-100 and 1-in-200, which is q(0.99) and q(0.995). It was 100 and 250
+// through a49, on the argument that the wider pair leaves room for two labels;
+// but the reader asking for a reference line is asking where capital sits, and
+// in this book that is Solvency II's 1-in-200. 1-in-250 is on the default
+// ladder and one hover away in the tooltip, and the return-period table beside
+// the chart emphasizes both.
+//
+// Two, not three, and never more: `anchorMarks` alternates the label side so
+// the pair opens away from each other, which works for two lines and not for a
+// third between them. Both are on the library's DEFAULT_RETURN_PERIODS, so the
+// rows are there to read.
+const ANCHORS = [100, 200];
 
 // The return-period window runs from an annual event out to 1-in-1 billion.
 //
@@ -95,7 +99,6 @@ const PAD_TOP = 26;        // the panel title strip
 const GAP_X = 76;          // between side-by-side panels: the right one's axis
 const GAP_Y = 30;          // between stacked panels, on top of AXIS_BOTTOM
 const LEGEND_H = 24;
-const RP_AXIS = 52;        // the return-period twin on the right of panel 2
 
 // Clamps on the computed plot-area height. The aspect rules between them; these
 // stop a very wide window from producing a panel taller than the viewport and a
@@ -133,17 +136,78 @@ const SQUARE_MAX = 420;
 // box before any data arrives and get the same answer the build will.
 const SQUARE_CHROME = PAD_TOP + 52;
 
-// The density is drawn as steps, always. `step: 'middle'` is matplotlib's
-// `drawstyle='steps-mid'`: the value holds across a bucket centered on its grid
-// point, which is what a discretized density *is*. Every value in the frame is
-// the mass in one bucket, not a sample of a smooth curve, so joining two of them
-// with a slope draws probability at values between grid points that carry none.
+// ---- how a density is drawn -------------------------------------------
 //
-// This used to be conditional, on a count of nonzero points, which was a guess
-// at "is this discrete". The guess is unnecessary: steps are correct for the
-// coarse case and correct for the fine case, where at 2**16 points a bucket is
-// sub-pixel and steps and lines are indistinguishable anyway. A condition that
-// can only be wrong in one direction should not be a condition.
+// The library's ladder, not one of our own. `aggregate/charts/ir.py:88-102`
+// states it renderer-agnostically and `aggregate/plots/_chartdoc.py:41,46,67-104`
+// implements it for matplotlib with these same two constants. Reproduced here
+// so the interactive exhibit and the server-rendered figure make the same
+// choice on the same book, which is most of what makes two renderers read as
+// one instrument.
+//
+// What the x values *are* comes first, and it is a fact about the law rather
+// than about the drawing:
+//
+//   atomic      the points carry the whole distribution and there is nothing
+//               between them. A discretized aggregate **is** the distribution,
+//               not an approximation to some continuous ideal, so this is the
+//               normal case here
+//   continuous  the points are samples of a function that exists everywhere
+//               between them: a frozen severity's pdf, a distortion's g(s)
+//
+// A continuous series is a plain line at any density, and none of what follows
+// applies to it. Drawing a sampled ordinate as steps claims the value holds
+// across a bucket, and for a pdf there is no bucket.
+//
+// An atomic series takes one of three drawings, by how much room each atom gets:
+//
+//   <= 40 atoms in view    a stem to the value with a dot on the end. A mass
+//                          lives *at* its atom, and where the atoms are far
+//                          enough apart to see, that is what to draw
+//   >= 3 px per atom       steps centered on the grid point, matplotlib's
+//                          `steps-mid`. The point of them is the sharp vertical
+//                          jump where a line would draw a slope the law does
+//                          not have
+//   otherwise              a plain line. Sub-pixel, steps and a line are the
+//                          same picture, so no lie is told by the cheaper one
+//
+// Counted in atoms **in view**, not in the frame, so a zoomed window is judged
+// on what it shows and a cropped Dice comes out as a lollipop.
+//
+// Through a49 this was `step: 'middle'` unconditionally, with a comment arguing
+// that a condition which can only be wrong in one direction should not be a
+// condition. That argument was right about the *old* condition, a guess at "is
+// this discrete" from a count of nonzero points. It is not an argument against
+// the library's rule, which is about room rather than about discreteness, and
+// which the author had already agreed the app would follow.
+const LOLLIPOP_ATOMS = 40;
+const STEP_PIXELS = 3.0;
+
+/**
+ * Which of the three drawings this panel's series take.
+ *
+ * One answer for the whole panel, not one per series: every series shares the
+ * grid, the window and the panel width, so they would all reach the same answer
+ * and a panel drawing one unit as stems and another as steps would read as two
+ * different kinds of thing.
+ *
+ * @param {number[]} loss the shared grid.
+ * @param {number[]|null} window `[lo, hi]` in loss, or null for the whole grid.
+ * @param {number} panelW plot-area width in CSS pixels.
+ * @param {string} support `'atomic'` (default) or `'continuous'`.
+ * @returns {'stem'|'step'|'line'}
+ */
+function densityStyle(loss, window, panelW, support) {
+    if (support === 'continuous') return 'line';
+    let seen = 0;
+    if (window) {
+        for (const x of loss) { if (x >= window[0] && x <= window[1]) seen++; }
+    } else {
+        seen = loss.length;
+    }
+    if (seen <= LOLLIPOP_ATOMS) return 'stem';
+    return (panelW || 0) / seen >= STEP_PIXELS ? 'step' : 'line';
+}
 
 // ---- view state -------------------------------------------------------
 //
@@ -161,7 +225,7 @@ const VIEW_DEFAULTS = {
     epMode: 'survival', // right panel: 'survival' (S vs loss) or 'rp' (the transpose)
     rightLogY: true,    // right panel: log or linear y
     xFull: false,       // density x: cropped to q(0.001)..q(0.999), or the full grid
-    refLines: true,     // mean and the 1-in-200 anchor, drawn on both panels
+    refLines: true,     // mean, 1-in-100 and 1-in-200, drawn on both panels
     surface3d: true,    // bivariate: 3-D relief, or the flat heatmap
     logZ: true,         // bivariate surface: log or linear height
 };
@@ -198,7 +262,7 @@ const CONTROLS = {
     },
     refLines: {
         label: 'reference lines',
-        title: 'Mean and the 1-in-200 anchor, on both panels',
+        title: 'Mean, 1-in-100 and 1-in-200, on both panels',
     },
     epMode: {
         label: 'return period',
@@ -209,8 +273,8 @@ const CONTROLS = {
     },
     rightLogY: {
         label: 'log y',
-        title: 'Log axis on the exceedance panel; also carries the '
-            + 'return-period scale',
+        title: 'Log axis on the exceedance panel, where a survival curve '
+            + 'spends most of its range',
     },
     surface3d: {
         label: '3D surface',
@@ -315,8 +379,8 @@ function rightPairs(loss, tailProb, mode) {
  * Fixing the axis at `[1/T_MAX, 1]` would be simpler but wastes the panel on a
  * light-tailed book: three dice have a minimum survival near 5e-3, so with
  * `T_MAX` at 1e9 more than six decades would draw empty. Rounding the observed
- * minimum down to a decade keeps the gridlines on round numbers, which is what
- * makes the return-period twin legible.
+ * minimum down to a decade keeps the gridlines on round numbers, so both
+ * readings of the axis, S and 1/S, land on values worth labeling.
  */
 function survivalRange(series) {
     let lo = 1;
@@ -399,40 +463,104 @@ function gapFree(values) {
 
 // Why every series below asks for `sampling: 'minmax'`.
 //
-// The density is drawn as steps and, at 2**16 grid points across a ~400 px
-// panel, it was not coming out as steps: the risers leaned. `step: 'middle'` is
-// applied correctly (`turnPointsIntoStep`, echarts/lib/chart/line/LineView.js),
-// and the damage is one layer down in `drawSegment` (.../line/poly.js), which
-// skips any segment under sqrt(0.5) px **and does not advance `prevX` when it
-// does**. So a point is emitted only once it is ~0.7 px from the last point
-// actually emitted. A bucket here is about 0.006 px wide, so every horizontal
-// move the step inserted is culled, the risers lose the base points that made
-// them vertical, and what survives is joined by a plain `lineTo`. A point mass
-// then draws as a rise and a fall over a couple of pixels: a little pyramid,
-// where the whole point of steps is a Haar function.
+// ECharts' own culling, in `drawSegment` (echarts/lib/chart/line/poly.js), skips
+// any segment under sqrt(0.5) px **and does not advance `prevX` when it does**,
+// so a point is emitted only once it is ~0.7 px from the last point actually
+// emitted. At 2**16 grid points across a ~400 px panel a bucket is about 0.006
+// px wide, so what survives that filter is whichever points happened to fall on
+// the right side of an accumulating threshold: peaks are dropped, and an atom
+// carrying real mass can disappear entirely.
 //
 // `sampling: 'minmax'` reduces to the smallest and the largest value per device
-// pixel column before the path is built. The pair is at most one frame apart in
-// x and as far apart in y as the data goes, so the riser is drawn, and the peak
-// is preserved rather than averaged away, which matters because these peaks are
-// atoms. It also runs *after* the dataZoom filter, so zooming in drops the
-// visible count and the full grid comes back.
+// pixel column before the path is built. The peak is preserved rather than
+// averaged away or culled, which matters because these peaks are atoms. It also
+// runs *after* the dataZoom filter, so zooming in drops the visible count and
+// the full grid comes back.
+//
+// Through a49 this comment was about steps specifically: the risers leaned,
+// because the culling ate the horizontal moves that made them vertical. That is
+// still true of the step rung. It is no longer the main case, since at 2**16
+// points the ladder above draws a plain line, which is where the peak-dropping
+// half of the argument does the work.
 const SAMPLING = 'minmax';
 
-/** One density line, filled under the curve when it is the only one. */
-function densitySeries(name, loss, mass, i, solo) {
+/**
+ * One density series, as one or two ECharts series.
+ *
+ * Two for the stem drawing: the stems and the dots on their ends. They share a
+ * `name`, so they share one legend entry and toggle together, and so they match
+ * the single right-panel series of the same name, which is what links the two
+ * panels on one legend click.
+ *
+ * Both are `type: 'line'`, so nothing beyond `LineChart` has to be registered
+ * in `theme.js`. The stems are a line whose data runs base, value, gap per atom
+ * and therefore draws as disconnected verticals; the dots are a line with a
+ * zero-width stroke and its symbols shown, which is a scatter by another name.
+ *
+ * @param {'stem'|'step'|'line'} style from `densityStyle`, one per panel.
+ * @returns {object[]} one or two series.
+ */
+function densitySeries(name, loss, mass, i, solo, style = 'step') {
     const color = seriesColor(i);
     // A log axis cannot place zero, and the tail of a discretized density is
     // full of exact zeros and of FFT dust below 1e-15. Emit both as gaps rather
     // than letting ECharts drop them silently or clamp them onto the axis floor.
     const y = view.logY ? mass.map((v) => (v > LOG_FLOOR ? v : null)) : mass;
-    return {
+    const points = loss.map((x, k) => (y[k] == null ? null : [x, y[k]]));
+
+    if (style === 'stem') {
+        // The base a stem runs from. Zero on a linear axis, which is what a
+        // mass is measured against; on a log axis, where zero has no position,
+        // the axis floor, which is where matplotlib's `vlines` ends up clipped
+        // to as well. Either way the stem's *top* is the value, and the value
+        // is what is being read.
+        const base = view.logY ? logMin() : 0;
+        const stems = [];
+        for (const p of points) {
+            if (!p) continue;
+            stems.push([p[0], base], [p[0], p[1]], null);
+        }
+        return [
+            {
+                name,
+                type: 'line',
+                xAxisIndex: 0,
+                yAxisIndex: 0,
+                data: stems,
+                showSymbol: false,
+                connectNulls: false,
+                // No `sampling` here: the whole point of this rung is that
+                // there are few enough atoms to draw each one, and a per-pixel
+                // reduction would merge the base and the peak of a stem.
+                lineStyle: { width: 1, color, opacity: 0.55 },
+                itemStyle: { color },
+                silent: true,
+                z: 2,
+            },
+            {
+                name,
+                type: 'line',
+                xAxisIndex: 0,
+                yAxisIndex: 0,
+                data: points,
+                showSymbol: true,
+                symbolSize: 5,
+                connectNulls: false,
+                lineStyle: { width: 0 },
+                itemStyle: { color },
+                emphasis: { focus: 'series' },
+                z: 3,
+            },
+        ];
+    }
+
+    return [{
         name,
         type: 'line',
         xAxisIndex: 0,
         yAxisIndex: 0,
-        step: 'middle',
-        data: loss.map((x, k) => (y[k] == null ? null : [x, y[k]])),
+        ...(style === 'step' ? { step: 'middle' } : {}),
+        data: points,
         sampling: gapFree(y) ? SAMPLING : undefined,
         showSymbol: false,
         connectNulls: false,
@@ -442,7 +570,7 @@ function densitySeries(name, loss, mass, i, solo) {
         // floor rather than to zero, which is a different (and false) area.
         areaStyle: (solo && !view.logY) ? { color: fade(color, 0.10) } : undefined,
         emphasis: { focus: 'series' },
-    };
+    }];
 }
 
 /** One right-panel line. */
@@ -596,19 +724,25 @@ function refLine(entries) {
  *     default rather than collapsing the panel.
  * wide : bool
  *     Side by side, or stacked.
- * twin : bool
- *     Whether the tail panel carries its twin axis, which needs its own strip of
- *     right-hand margin.
  *
  * Returns
  * -------
  * {grids, panelW, panelH, height}
  *     `grids` are two ECharts grid objects with numeric geometry, `height` the
  *     host height the whole thing needs.
+ *
+ * Notes
+ * -----
+ * There was a third parameter through a49, `twin`, saying whether the tail
+ * panel carried a return-period axis on its right and so needed 52px of margin
+ * reserved for it. The twin axis is gone (see `twoPanelData`), and with it the
+ * one thing that made this geometry depend on a *view* toggle: pressing log y on
+ * the right panel changed the space left over, which the two panels split, so
+ * the LEFT panel resized. Nothing here reads `view` now.
  */
-export function panelGeometry(width, wide, twin = true) {
+export function panelGeometry(width, wide) {
     const w = width || 900;
-    const rightPad = PAD_RIGHT + (twin ? RP_AXIS : 0);
+    const rightPad = PAD_RIGHT;
     const panelW = wide
         ? Math.max(160, (w - AXIS_LEFT - GAP_X - rightPad) / 2)
         : Math.max(200, w - AXIS_LEFT - rightPad);
@@ -681,33 +815,38 @@ export function reservedHeight(width, kind) {
  * Returns
  * -------
  * object
- *     `series` as given, plus `solo`, `asRP`, `logRight`, `twin`, the density
- *     `window`, the survival range `sLo`/`sHi`, and `densRefs` / `tailRefs`,
- *     each a list of `{x, name, faint?, align?}` verticals.
+ *     `series` as given, plus `solo`, `asRP`, `logRight`, the density `window`,
+ *     the survival range `sLo`/`sHi`, and `densRefs` / `tailRefs`, each a list
+ *     of `{x, name, faint?, align?}` verticals.
  */
 function twoPanelData({
-    loss, cdf, series, tail, box, mean, zeroLine,
+    loss, cdf, series, tail, box, mean, zeroLine, support,
     densityTitle, densityName, tailTitles, tailNames,
 }) {
     const asRP = view.epMode === 'rp';
     const logRight = Boolean(view.rightLogY);
-    // The twin axis only lines up against a log primary: T = 1/p is log-linear
-    // in p, so on a linear axis the two scales would not correspond and the twin
-    // would be decoration that lies.
-    const twin = logRight;
 
     // Both panels are on the loss axis, so every reference is a vertical.
+    //
+    // The toggle governs all of them, on both panels, which is what its label
+    // says and what it did not do through a49: the anchors were computed out
+    // here, outside the guard, so `reference lines` turned off the mean and the
+    // density panel's single anchor and left the tail panel's two lit. The mean
+    // and the anchors are the same kind of mark and answer to the same switch.
+    //
+    // The break-even line is not one of them. It is a P&L's zero, a fact about
+    // where the axis changes sign rather than a reference the reader chose to
+    // add, so it stays whatever the toggle says.
     const densRefs = [];
-    const tailRefs = anchorMarks(tail);
+    const tailRefs = [];
     if (zeroLine != null) densRefs.push({ x: zeroLine, name: 'break even' });
     if (view.refLines) {
-        const anchorVaR = varAt(tail, REF_ANCHOR);
+        const anchors = anchorMarks(tail);
+        densRefs.push(...anchors);
+        tailRefs.push(...anchors);
         if (Number.isFinite(mean)) {
             densRefs.push({ x: mean, name: 'mean' });
             tailRefs.push({ x: mean, name: 'mean' });
-        }
-        if (Number.isFinite(anchorVaR)) {
-            densRefs.push({ x: anchorVaR, name: `1-in-${REF_ANCHOR}` });
         }
     }
     const [sLo, sHi] = survivalRange(series);
@@ -719,18 +858,22 @@ function twoPanelData({
     // (OEP / AEP) and this is neither. It is S(x) = P(X > x).
     const titles = tailTitles || ['Survival', 'Return period'];
     const names = tailNames || ['S(x)', 'return period'];
+    const window = densityWindow(loss, cdf);
     return {
         loss, series, box, mean,
         solo: series.length === 1,
-        asRP, logRight, twin,
+        asRP, logRight,
         logY: Boolean(view.logY),
-        window: densityWindow(loss, cdf),
+        window,
+        // The drawing chosen once for the whole panel, from the room each atom
+        // gets in it. A decision about the data and the space, so it belongs
+        // here with the rest of them rather than inside the option literal.
+        densityStyle: densityStyle(loss, window, box?.panelW, support),
         sLo, sHi, densRefs, tailRefs,
         densityTitle: densityTitle || 'Density',
         densityName: view.logY ? `log ${densityName || 'density'}`
                                : (densityName || 'density'),
-        // The pair, because when the twin axis is on both readings are drawn:
-        // whichever is not primary sits on the right.
+        // Still a pair: `asRP` picks which one names the single tail y axis.
         tailNames: names,
         tailTitle: asRP ? titles[1] : titles[0],
     };
@@ -763,25 +906,57 @@ const PANEL_READ_AXIS = ['x', 'y'];
 
 function twoPanel(args) {
     const {
-        loss, series, box, solo, asRP, logRight, twin, window, sLo, sHi,
+        loss, series, box, solo, asRP, logRight, window, sLo, sHi,
         densRefs, tailRefs, densityTitle, densityName, tailNames, tailTitle,
+        densityStyle: drawAs,
     } = twoPanelData(args);
 
-    const density = series.map((s, i) => densitySeries(s.name, loss, s.mass, i, solo));
+    // flatMap, because the stem drawing is two ECharts series (the stems and
+    // the dots on their ends) sharing one name and therefore one legend entry.
+    const density = series.flatMap(
+        (s, i) => densitySeries(s.name, loss, s.mass, i, solo, drawAs));
     const right = series.map((s, i) => rightSeries(s.name, loss, s.tailProb, i));
 
     // Reference lines go on the first series of each panel, so they draw once.
-    const dens = densRefs.map((r) => ({ xAxis: r.x, name: r.name }));
-    const rightRefs = tailRefs.map((r) => (r.faint
-        ? anchorLineStyle(r)
-        : { xAxis: r.x, name: r.name }));
+    //
+    // One mapping for both panels. The density panel used to take a plainer one
+    // that dropped `faint` and `align`, which was invisible while it carried a
+    // single anchor and became the 1-in-200 label sitting on top of its own rule
+    // the moment it carried two. A mark knows how it wants to be drawn; which
+    // panel it lands on does not change that.
+    const markOf = (r) => (r.faint ? anchorLineStyle(r) : { xAxis: r.x, name: r.name });
+    const dens = densRefs.map(markOf);
+    const rightRefs = tailRefs.map(markOf);
     if (dens.length) density[0].markLine = refLine(dens);
     if (rightRefs.length && right.length) right[0].markLine = refLine(rightRefs);
 
     // The box was computed by the spec's `layout()` before the fetch and is
-    // handed in, not recomputed. `twin` above and the `view.rightLogY` the box
-    // was built from are the same flag, so the two agree by construction.
+    // handed in, not recomputed. It is now a function of the host width alone,
+    // so a reservation and its build cannot disagree whatever the toggles say.
     const { grids, hostHeight, footprint } = box;
+
+    // The x-axis label formatter, shared by both panels.
+    //
+    // ECharts always draws a tick at an explicit `min` and `max`, and ours are
+    // not round numbers: `densityWindow` pads the crop by two percent either
+    // side, so the endpoints are arbitrary reals and `fmt` printed them at six
+    // significant figures. Every chart had a 7,238.94 at one end and a
+    // 91,447.2 at the other, wider than every other label and saying nothing:
+    // the window is a viewport, not a number anyone reads off.
+    //
+    // Suppressed rather than rounded away. Rounding the window to nice numbers
+    // would move the crop, which is a decision about what the reader sees, to
+    // make a label look better. The window stays exactly where it was and the
+    // two labels that name its edges do not print.
+    //
+    // Compared with the same tolerance ECharts used to place them, so a value
+    // that arrives back through the formatter as a float a few ulps off its
+    // own endpoint is still recognized.
+    const atEdge = (v) => window
+        && (Math.abs(v - window[0]) <= 1e-9 * Math.abs(window[0])
+            || Math.abs(v - window[1]) <= 1e-9 * Math.abs(window[1]));
+    const lossLabel = { fontSize: 10, color: '#6c757d', hideOverlap: true,
+                        formatter: (v) => (atEdge(v) ? '' : fmt(v)) };
 
     // Loss on x in BOTH panels, always. The right panel is the same book seen
     // through its tail rather than a transposed picture of it, so the two read
@@ -790,30 +965,39 @@ function twoPanel(args) {
         gridIndex: 1, type: 'value', name: 'loss', scale: true,
         min: window ? window[0] : 'dataMin',
         max: window ? window[1] : 'dataMax',
-        axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
-                     formatter: (v) => fmt(v) },
+        axisLabel: lossLabel,
     });
 
     // The toggle changes the y-axis only: S(x), or its reciprocal as a return
-    // period. Same curve, two readings, and whichever is not primary is the
-    // twin on the right, so both are always legible.
-    const survivalAxis = (extra = {}) => axisStyle({
+    // period. Same curve, two readings, and the toggle picks one. Both were
+    // drawn at once through a49, the unpicked one as a twin on the right, which
+    // left the toggle with nothing to decide. Each builder took an `extra`
+    // argument whose only caller was the twin, and it went with it.
+    const survivalAxis = () => axisStyle({
         gridIndex: 1, name: tailNames[0],
         ...(logRight ? { type: 'log', logBase: 10, min: sLo, max: sHi }
                      : { type: 'value', min: 0, max: sHi }),
         axisLabel: { fontSize: 10, color: '#6c757d',
                      formatter: (v) => (v >= 0.01 ? String(v) : v.toExponential(0)) },
-        ...extra,
     });
-    const returnAxis = (extra = {}) => axisStyle({
+    const returnAxis = () => axisStyle({
         gridIndex: 1, name: tailNames[1], nameGap: 34,
         ...(logRight ? { type: 'log', logBase: 10, min: 1 / sHi, max: 1 / sLo }
                      : { type: 'value', min: 1 / sHi, max: 1 / sLo }),
         axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
                      formatter: (v) => compactPeriod(v) },
-        ...extra,
     });
 
+    // Two y axes, one per panel, and no twin.
+    //
+    // The tail panel used to carry a second axis on its right reading the same
+    // curve the other way round, S against return period. That is exactly what
+    // the `return period` toggle is for: offering both at once is the toggle
+    // answering its own question, so the reader has to work out which of two
+    // scales they are reading rather than choosing one. It also cost 52px of
+    // reserved margin whose presence depended on `rightLogY`, and since the two
+    // panels split what is left, pressing log y on the right panel resized the
+    // left one. Deleting the axis is what fixes that, not a geometry change.
     const yAxes = [
         axisStyle({
             gridIndex: 0, type: view.logY ? 'log' : 'value',
@@ -824,20 +1008,6 @@ function twoPanel(args) {
         }),
         asRP ? returnAxis() : survivalAxis(),
     ];
-    if (twin) {
-        // `inverse` on the return-period side puts 1-in-1 at the top against
-        // S = 1, and both axes span the same whole decades, so T = 1/S holds
-        // gridline for gridline rather than approximately.
-        //
-        // The twin never carries the pointer: it is the same reading as the
-        // primary, so a pointer on both would only make which one answered
-        // depend on which half of the panel the cursor was in. ECharts picks the
-        // grid's *first* y axis as its base, which is the primary, so this is
-        // already true and `show: false` says so.
-        const twinOpts = { axisPointer: { show: false }, position: 'right',
-                           inverse: true, splitLine: { show: false } };
-        yAxes.push(asRP ? survivalAxis(twinOpts) : returnAxis(twinOpts));
-    }
 
     const option = {
         ...baseOption(),
@@ -859,8 +1029,7 @@ function twoPanel(args) {
                 gridIndex: 0, type: 'value', name: 'loss', scale: true,
                 min: window ? window[0] : 'dataMin',
                 max: window ? window[1] : 'dataMax',
-                axisLabel: { fontSize: 10, color: '#6c757d', hideOverlap: true,
-                             formatter: (v) => fmt(v) },
+                axisLabel: lossLabel,
             }),
             rightX,
         ],
@@ -905,9 +1074,12 @@ function twoPanel(args) {
     };
     // Not ECharts keys: carried through so the smoke test can read the shape the
     // layout was aiming for, and can assert that what the build produced is the
-    // height that was reserved.
+    // height that was reserved. `densityDrawnAs` joined them at a50, because the
+    // rung of the ladder a panel landed on is now a decision worth asserting and
+    // it cannot be recovered from the series without guessing.
     option.hostHeight = hostHeight;
     option.panelFootprint = footprint;
+    option.densityDrawnAs = drawAs;
     return option;
 }
 
@@ -946,10 +1118,11 @@ function squareLayout(width, { left = 56, rightPad = 28 } = {}) {
 
 /** The two-panel box: four kinds plus the reinsurance exhibit. */
 function twoPanelBox(width) {
-    // `view.rightLogY` decides whether the tail panel carries its return-period
-    // twin, which changes the panel width and so the height. Reading it here
-    // rather than assuming it is what makes the reservation exact.
-    const g = panelGeometry(width, (width || 0) >= WIDE_PX, Boolean(view.rightLogY));
+    // A function of the width alone since a50. It used to read `view.rightLogY`
+    // too, because that decided whether the tail panel reserved a strip for its
+    // return-period twin; the twin is gone and the geometry is back to being
+    // about the page rather than about which toggles are pressed.
+    const g = panelGeometry(width, (width || 0) >= WIDE_PX);
     return { ...g, twoPanel: true, hostHeight: Math.round(g.height) };
 }
 
@@ -1033,6 +1206,14 @@ function sevPanelArgs({ density }, { name, box, mean }) {
         // aggregate's semantics.
         densityTitle: 'Severity density',
         densityName: 'pdf',
+        // The one panel in the app whose x values are samples of a function
+        // rather than the whole of it, so it draws as a continuous line at any
+        // density. Steps would claim the value holds across a bucket, and a pdf
+        // has no bucket: `f(x)` is the ordinate at `x` and it is different at
+        // every point between two grid points. It has been drawn as steps since
+        // the exhibit landed, because one shared `densitySeries` applied the
+        // aggregate's reasoning to every kind that passed through it.
+        support: 'continuous',
     };
 }
 

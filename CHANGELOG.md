@@ -4,6 +4,65 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a50
+
+`dev/plan-ui-round-3.md` phase 2, the charts. Six items, all in
+`web/src/charts/`, none of them touching what is computed.
+
+**The density draws at the honest density, on the library's ladder.** Not one of
+ours: `aggregate/charts/ir.py` states it renderer-agnostically and
+`aggregate/plots/_chartdoc.py` implements it for matplotlib with the same two
+constants, `LOLLIPOP_ATOMS = 40` and `STEP_PIXELS = 3`. Forty or fewer atoms in
+view and each is drawn as a stem with a dot on the end; three or more pixels per
+atom and it is steps centered on the grid point; under that, a plain line, since
+steps and a line are the same picture at that size. Counted in atoms **in view**,
+so a zoomed window is judged on what it shows. Dice now comes out as a lollipop,
+which it has not since the exhibit landed.
+
+Through a49 the density was `step: 'middle'` unconditionally, on the argument
+that a condition which can only be wrong in one direction should not be a
+condition. That was right about the *old* condition, a guess at "is this
+discrete" from a count of nonzero points; it is not an argument against a rule
+about how much room each atom gets.
+
+**A severity is a line.** Its x values are samples of a function that exists
+everywhere between them, not the mass in a bucket, so the aggregate's reasoning
+for steps does not apply to it and never did: one shared `densitySeries` was
+applying it to every kind that passed through. `densityStyle` now takes the
+support kind, `atomic` or `continuous`, which is the library's own vocabulary.
+
+**The twin axis is gone, and with it the panel that moved on its own.** The tail
+panel carried a second y axis on its right showing whichever reading the
+`return period` toggle had not picked. That left the toggle deciding nothing and
+asked the reader which of two scales they were looking at. It also reserved 52px
+only when log y was on, and the two panels split what is left, so pressing log y
+on the *right* panel resized the *left* one. Deleting the axis is what fixes
+that; the geometry is now a function of the host width alone and reads no view
+state at all. The panels are 26px wider each for it.
+
+**Reference lines mean all of them, on both panels.** The toggle governed the
+mean and the density panel's single anchor while the tail panel's anchors were
+computed outside the guard and stayed lit regardless. The anchors are also
+1-in-100 and 1-in-200 now, `q(0.99)` and `q(0.995)`, rather than 100 and 250:
+a reader asking for a reference line is asking where capital sits, and in this
+book that is Solvency II. Both are on the library's default ladder.
+
+**The 1-in-200 label is beside its rule, not on it.** The density panel took a
+plainer mark mapping that dropped the `align` the anchors carry, which was
+invisible while it drew one anchor and became a label on top of its own line the
+moment it drew two. Both panels take one mapping now.
+
+**No more six-figure tick at each end of every x axis.** ECharts always draws a
+tick at an explicit `min` and `max`, and ours are the crop padded by two percent,
+so the endpoints are arbitrary reals and printed at six significant figures. The
+two endpoint labels are suppressed; the window itself is untouched, because
+rounding it would move what the reader sees to make a label look better.
+
+**The smoke test stops assuming.** It split the two panels by counting series in
+half, which the stem rung breaks by drawing each density as two. It now splits
+on `xAxisIndex`, and it asserts the rung the ladder chose against the series
+actually built rather than asserting that everything is stepped.
+
 ## 1.0.0a49
 
 `dev/plan-ui-round-3.md` phase 1, the shell and the status strip. Nine items off
