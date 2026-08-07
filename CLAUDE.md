@@ -28,17 +28,53 @@ This package **depends on** `aggregate`; it does not vendor it. The api imports:
 - `aggregate.style`, the plot styling context
 
 `aggregate.parser_errors` is recent and lives only in the in-development
-`1.0.0a` line (not on PyPI). For co-development, install `aggregate` editable
-from its local checkout. See `[tool.uv.sources]` in `pyproject.toml` and
+`1.0.0a` line (PyPI stops at 0.30.1). So `aggregate` is the one dependency that
+**must** be an editable path source: a clone of this repo needs
+`aggregate_REFACTOR` checked out beside it before `uv sync` can succeed. See
+`[tool.uv.sources]` in `pyproject.toml` and
 `dev/done/plan-0001-bootstrap-standalone.md`. Do **not** copy library internals into
 this repo; depend on them and, if something is missing or awkward to import,
 raise it as an upstream change in `aggregate`.
 
+`greater-tables` used to be a path source for the same reason and **is not any
+more**: 6.0.0 shipped to PyPI at a53, so it is an ordinary registry dependency
+pinned `>=6.0.0`. The floor matters. PyPI also carries 5.3, the previous
+generation under the same name, and it has no `build`, `canonical_json` or
+`IR_VERSION`, so resolving to it fails at import rather than at install. To
+co-develop it for a session, `uv pip install -e c:/s/ai/greatest-tables` after a
+sync; the next `uv sync` silently puts the released build back, which matters
+because every version bump runs one.
+
 ## Commands
 
-Use `uv` for all environment and dependency management. Set
-`$env:UV_LINK_MODE = "copy"` (PowerShell), because the repo path defeats uv's default
-hardlink mode.
+Use `uv` for all environment and dependency management. No `UV_LINK_MODE`
+setting is needed: the repo's `.venv` is a junction to `V:\dev\venvs\aggregate_api`
+and `UV_CACHE_DIR` is `V:\uv\cache`, so cache and environment sit on one volume
+and uv's default hardlink mode works. The old `$env:UV_LINK_MODE = "copy"`
+instruction dates from when the environment really lived under `T:` and
+hardlinks could not reach it.
+
+Two traps the junction sets, both worth knowing before diagnosing anything here.
+`sys.prefix` reports the `T:` path, because it resolves *through* the junction,
+so the environment looks like it never moved. And `uv sync` fails with
+`os error 32` on `Scripts/aggregate-api.exe` while a server is running, since
+uv rebuilds the editable package and cannot replace a locked executable. Stop
+the server, or use `uv run --no-sync` when only source has changed, which is
+always enough for an editable install.
+
+A third trap, now closed. The junction was **committed**, through a52: git saw
+it as a symlink and stored a `120000` blob holding the literal Windows path, so
+checking the repo out anywhere else (a Linux box, most obviously) produced a
+dangling `.venv`. `.gitignore` had said `.venv/`, and a trailing slash matches
+directories only, so the pattern never applied to it. It is untracked now and
+the pattern is `.venv`, which matches a directory, a file and a link alike.
+Note that ignoring a path does nothing about one already tracked; that took
+`git rm --cached .venv`, which leaves the junction on disk.
+
+The junction itself is a local convenience and nothing in the repo depends on
+it. To put the environment elsewhere on another machine, set
+`UV_PROJECT_ENVIRONMENT`, which uv honors directly and leaves nothing in the
+tree for git to pick up.
 
 **Sync environment (with dev extras):**
 ```

@@ -35,9 +35,12 @@ is no `static/` under `web/`.
 One FastAPI process serves both the UI and the api, same origin:
 
 ```powershell
-$env:UV_LINK_MODE = "copy"
 uv run aggregate-api --port 8001
 ```
+
+The `$env:UV_LINK_MODE = "copy"` line that used to head this block is gone: the
+venv is a junction to `V:\dev\venvs\aggregate_api` and the uv cache is on the
+same volume, so hardlinking works and the override does nothing.
 
 Then browse to it (don't open the HTML as a `file://`):
 - SPA playground: http://127.0.0.1:8001/
@@ -477,6 +480,103 @@ checkout), not this repo — fix them there, then `uv sync`:
   Jupyter review); nothing in `aggregate_api` controls it.
 - **Parser internals** the api leans on (`parser_errors`, `parser._PARSER`):
   bugs in DecL completion / error reports are upstream too.
+
+## Design work: the mockup loop
+
+How the a47 shell redesign was actually done, and worth repeating. The `hacks/`
+folder is gitignored, so everything here is throwaway by construction.
+
+1. **One self-contained HTML per round**, `hacks/mockup-NN.html`. Bootstrap and
+   its icons from the CDN, everything else inline. Opens over `file://` or off a
+   `python -m http.server` when the browser is on another machine.
+2. **Real data, not lorem.** Build one object of each kind against the running
+   api, capture the capability blocks, and drive the mockup's greying from
+   those. The Summary and Tail numbers in mockup-10 are a real `BasicBook`
+   build. A mockup that lies about its content produces decisions that do not
+   survive contact with the app.
+3. **A black scaffolding bar of selectors, top right.** Deliberately ugly so it
+   never gets ported. Every open question is a dropdown, so options are compared
+   by flipping rather than by diffing two files in two windows. Object, so the
+   greying can be seen under load, is the one that stays useful longest.
+4. **Killing a selector is how a decision gets recorded.** Once something is
+   chosen it gets baked into the CSS and its dropdown is deleted. The file
+   converges on being the spec, and what remains on the bar is exactly what is
+   still open.
+5. **Present three concepts, not one.** Then refine the winner. Two of the three
+   in round one were dropped outright, which is the point of building three.
+
+### Filling the capability matrix
+
+Do not hand-write "what applies where". Build one object per kind against the
+live api, then run the capability blocks through the *real* `web/src/nav.js`
+rules with a throwaway node script (import it as a `file:///` URL on Windows or
+node rejects the drive letter). The table and the code then cannot disagree.
+Done this way at a46, the result matched the hand-written plan cell for cell.
+
+## Revealed design preferences
+
+Standing preferences, from the a47 round. Apply without re-asking.
+
+- **Clean, few boxes.** Hierarchy comes from type size and whitespace, not from
+  containers. A box has to earn its place.
+- **One idea per line.** A bold title followed by its gloss on one line beats a
+  heading over a separate hint line. Never two elements saying the same word at
+  two different sizes and two different alignments.
+- **Explanatory text goes below the thing it qualifies**, never to its right.
+  To the right it reads as another item in the row it sits in.
+- **Fixed menus.** The menu set never changes shape. Non-applicable items grey
+  out, never hide. Greyed items say *why* on hover, in the reader's terms; live
+  items do not, because they already carry their own explanation.
+- **The accent means selected, and nothing else.** Spending it on a Build button
+  as well made the eye meet it three times down the page with no relation
+  between the three. Build carries no color; it holds primacy by weight and
+  position.
+- **Decoration that carries no information gets cut**, even when it looks nice.
+  The accent rule over the exhibit title went for exactly this reason.
+- **Real tab shapes over underlines**, and *every* tab drawn rather than only
+  the active one, so the strip reads as a strip whichever tab you are standing
+  on. Content aligns to the first tab's **label**, not to its box edge.
+- **One measure for all prose.** In `rem`, not `ch`: different elements sit at
+  different font sizes and `ch` would give them different right edges.
+- **State needs more than hue.** Validation tints the whole status strip as well
+  as coloring the verdict, so a warning cannot be missed and a scarlet failure
+  is never mistaken for the brick red of a selected tab.
+- **Tie colors that mean the same thing.** One green in the app, shared by the
+  clean validation verdict and the editor's string tokens, rather than two that
+  differ by a few points and look like a mistake. The accent is the house red
+  that already marked inline `code` and the parse-error caret.
+  *Checked at execution, and worth knowing:* the editor colors numbers **copper**
+  `#b87333`, and a DecL object name is plain text, because `decl-mode.js` emits
+  keyword / atom / number / string / comment / bracket and a name is none of
+  them. The mockup faked a red object name; the app has none.
+- **No serif.** Tried on the display level, rejected outright.
+- **Press ramp** (pure black through true neutrals) over Bootstrap's greys.
+- Status strip wraps, never overflows.
+
+## Where color actually lives (before restyling anything)
+
+`site.css` holds 56 hex literals, 21 distinct, and only **7** of them are in the
+`:root` block. `#374151` alone appears 9 times as a body-text slate that is not
+a token at all. Tokenize first, restyle second, or it is a hunt.
+
+Three color sources sit **outside** `site.css` and will not follow a change to
+it:
+
+- **`gt.css`**, the static booktabs table look. Fetched at runtime from
+  `/v1/assets/gt.css` (`web/src/tables.js`), served out of the `greater_tables`
+  *package*. Override from `site.css` (mind the specificity: gt.css writes
+  `.gt.gt td`, so a bare `.gt-host td` loses) or fix upstream.
+- **`csv-grid.css`**, the interactive table view, imported from the npm package
+  in `web/src/grid.js`.
+- **`web/src/charts/theme.js`**, the ECharts palette, as JS constants and
+  currently Bootstrap's own (`#0d6efd`, `#198754`, `#dc3545`, …).
+
+Good news on structure: restyling the group tabs is **CSS only**. The shipped
+`nav nav-pills out-tabs` markup with `data-bs-toggle="pill"` can be drawn as
+folder tabs without touching the Bootstrap Tab plugin, the panes, or the
+capability gating (`main.js` couples to the plugin in three places: the
+`getOrCreateInstance().show()` call, the `shown.bs.tab` listener, and the
+`.disabled` toggle in `applyCapabilityGating`).
 
 ## Session log
 
