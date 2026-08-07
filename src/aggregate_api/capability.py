@@ -186,6 +186,39 @@ def has_sharpen(obj: Any) -> bool:
     return df is not None and not df.empty
 
 
+def reins_bases_for(obj: Any) -> list[str]:
+    """Which reinsurance bases this object can be calibrated on.
+
+    Consumer: the Pricing group's "calibrate on" row, which offered all three of
+    gross, net occ and net to any reinsured object. A portfolio's
+    ``reins_density_df`` carries no ``p_agg_net_occ``, and an occurrence-only
+    program's net occ *is* its net, so on most objects at least one of the three
+    was a button that either 400'd or repeated a column already on screen.
+
+    The list is the same one ``pricing.reins_bases`` computes and the reins
+    pricing response already reports, hoisted onto the capability block so the
+    app knows it at **build** time. The response's copy arrives after a price
+    has been asked for, which is too late to grey a button you press to ask.
+
+    Empty for an object carrying no cession, which is what makes the row grey
+    out as a whole rather than vanish.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    list of str
+    """
+    from .pricing import reins_bases
+
+    try:
+        return list(reins_bases(obj))
+    except Exception:  # noqa: BLE001 -- an object that cannot answer offers none
+        return []
+
+
 def can_price(obj: Any) -> bool:
     """Can this object answer the pricing forms?
 
@@ -449,6 +482,7 @@ def capability_for(obj: Any) -> dict:
         "has_sharpen": has_sharpen(obj),
         "can_pnl": can_pnl(obj),
         "can_reins": can_reins(obj),
+        "reins_bases": reins_bases_for(obj),
         "can_price": can_price(obj),
         "can_evaluate": can_evaluate(obj),
         "can_bounds": can_bounds(obj),

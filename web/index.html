@@ -246,13 +246,28 @@
                      the other alone. Reset on the action row is the way back to
                      the gross object, so this pane needs no reset of its own. -->
                 <div class="tab-tools reins-entry" id="reins-entry">
-                    <label class="price-field reins-cession">cession
-                        <input id="reins-input" type="text" autocomplete="off"
-                               autocorrect="off" autocapitalize="off" spellcheck="false"
-                               placeholder="occurrence net of 500 xs 500"></label>
-                    <button id="reins-btn" class="btn btn-primary btn-sm">Cede</button>
-                    <span class="text-muted ms-1" style="font-size:.7rem;">one clause per tier,
-                        each opening <code>occurrence</code> or <code>aggregate</code></span>
+                    <div class="reins-entry-row">
+                        <label class="price-field reins-cession">Adjust cession
+                            <input id="reins-input" type="text" autocomplete="off"
+                                   autocorrect="off" autocapitalize="off" spellcheck="false"
+                                   list="reins-openers"
+                                   placeholder="occurrence net of 500 xs 500"></label>
+                        <button id="reins-btn" class="btn btn-primary btn-sm">Add reinsurance</button>
+                    </div>
+                    <!-- The two openers, as a datalist rather than as buttons.
+                         They are long to type and the grammar accepts no
+                         abbreviation for either (`occ` and `agg` are not
+                         accepted in this position), which is exactly why the
+                         typing is long. A datalist offers them on focus and
+                         still lets you type over the top. -->
+                    <datalist id="reins-openers">
+                        <option value="occurrence net of "></option>
+                        <option value="aggregate net of "></option>
+                    </datalist>
+                    <p class="reins-entry-hint">One clause per tier, each opening
+                        <code>occurrence</code> or <code>aggregate</code>. The clause is
+                        folded into the program in the editor, so an occurrence cession
+                        lands before the frequency clause and an aggregate one after it.</p>
                 </div>
                 <div id="pane-reinsurance" class="pane"></div>
             </div>
@@ -303,7 +318,7 @@
                         <label class="price-field" id="evaluate-premium-field">premium
                             <input id="evaluate-premium" type="number" step="1" min="0" autocomplete="off"></label>
                         <button id="evaluate-btn" class="btn btn-primary btn-sm">Evaluate</button>
-                        <span class="text-muted ms-1" style="font-size:.7rem;">breakeven acceptability: the distortion that values the margin at zero</span>
+                        <span class="text-muted ms-1 form-gloss">breakeven acceptability: the distortion that values the margin at zero</span>
                     </div>
                     <div id="pane-evaluate" class="pane"></div>
                 </div>
@@ -363,8 +378,8 @@
             <div class="help-try">
                 <code id="help-example">agg Demo 100 claims 1000 xs 0 sev lognorm 90 cv 1.5 poisson</code>
                 <div class="mt-2 d-flex align-items-center gap-2">
-                    <button id="help-load" class="btn btn-sm btn-primary" style="--bs-btn-font-size:.76rem;">Load it</button>
-                    <span class="text-muted" style="font-size:.74rem;">then press <kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>
+                    <button id="help-load" class="btn btn-sm btn-primary">Load it</button>
+                    <span class="text-muted form-gloss">then press <kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>
                 </div>
             </div>
 

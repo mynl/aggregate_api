@@ -75,6 +75,64 @@ def test_the_envelope_is_not_expensive(client):
         f"fifty resamples took {with_fifty:.2f}s against {without:.2f}s bare")
 
 
+def test_the_envelope_fills_all_three_panels_with_an_asset_cap(client):
+    """Three panels drawn and three panels *filled*, for either kind.
+
+    The figure has always been a one by three grid. The api used to ask for
+    ``distortions='space'``, which matches neither of the library's two overlay
+    branches, so the block was skipped and panels 2 and 3 came back blank: the
+    reported "Bounds plot only has one panel" was two empty boxes beside a full
+    one. Passing the calibrated set as a list fills them, and it works for an
+    aggregate too, which the ``'ordered'`` shorthand refuses.
+
+    Asserted on figure size rather than by parsing SVG: an empty axes is a
+    handful of path elements and a filled one is thousands, so the three-panel
+    figure is several times the one-panel figure. The one-panel case below is
+    the control.
+    """
+    from aggregate_api.bounds import _envelope_overlay
+
+    for decl in (AGG, PORT):
+        body = _build(client, decl)
+        premium = _premium(body)
+        assets = round(premium * 2.5)
+        params = {"premium": premium, "n_resamples": 0}
+
+        full = client.get(f"/v1/objects/{body['id']}/bounds/envelope",
+                          params={**params, "assets": assets})
+        assert full.status_code == 200, full.text
+        # No asset cap means no cost of capital to calibrate to, so the two
+        # panels come off rather than shipping blank.
+        one = client.get(f"/v1/objects/{body['id']}/bounds/envelope",
+                         params=params)
+        assert one.status_code == 200, one.text
+        assert len(full.content) > 2 * len(one.content), (
+            f"{decl.split()[1]}: three panels {len(full.content)} bytes "
+            f"against one panel {len(one.content)}")
+
+
+def test_the_envelope_overlay_declines_rather_than_raising(client):
+    """No asset cap, no calibration, and that is a smaller figure not an error.
+
+    Capital is ``a - premium``, so an unbounded asset level leaves no cost of
+    capital for the distortion set to be fitted to. Panel 1, the envelope
+    itself, is unaffected and still worth drawing.
+    """
+    from aggregate import build as agg_build
+    from aggregate_api.bounds import _envelope_overlay
+
+    obj = agg_build(AGG, log2=13)
+    premium = float(obj.est_m) * 1.25
+    assert _envelope_overlay(obj, premium, None) is None
+    # And the boundary the Bounds class itself allows: premium equal to the cap
+    # leaves zero capital.
+    assert _envelope_overlay(obj, premium, premium) is None
+    overlay = _envelope_overlay(obj, premium, premium * 2.5)
+    assert overlay is not None
+    assert [sorted(panel) for panel in overlay] == [
+        ["ccoc", "tvar"], ["dual", "ph", "wang"]]
+
+
 def test_the_envelope_declines_a_kind_it_cannot_draw(client):
     body = _build(client, SEV)
     r = client.get(f"/v1/objects/{body['id']}/bounds/envelope",
@@ -130,6 +188,37 @@ def test_pricing_bounds_against_a_unit_of_this_object(client):
                     json={"premium": _premium(body), "against": ["A", "B"]})
     assert r.status_code == 200, r.text
     assert len(r.json()["table"]["rows"]) == 2
+
+
+def test_pricing_bounds_defaults_to_every_unit_of_a_portfolio(client):
+    """An empty ``against`` on a portfolio prices all of its units.
+
+    That is the question a portfolio invites, and having to name one unit to
+    ask any of it made the default answer nothing at all. Naming one still
+    narrows to it, which is the other half of the contract.
+    """
+    body = _build(client, PORT)
+    every = client.post(f"/v1/objects/{body['id']}/bounds/pricing",
+                        json={"premium": _premium(body)})
+    assert every.status_code == 200, every.text
+    assert len(every.json()["table"]["rows"]) == 2
+
+    one = client.post(f"/v1/objects/{body['id']}/bounds/pricing",
+                      json={"premium": _premium(body), "against": ["A"]})
+    assert one.status_code == 200, one.text
+    assert len(one.json()["table"]["rows"]) == 1
+
+
+def test_pricing_bounds_still_needs_a_target_on_an_aggregate(client):
+    """An aggregate has no units, so there is nothing to default to.
+
+    The empty case is a real error there rather than a shorthand, and it says
+    so in the same words it always did.
+    """
+    body = _build(client, AGG)
+    r = client.post(f"/v1/objects/{body['id']}/bounds/pricing",
+                    json={"premium": _premium(body)})
+    assert r.status_code == 422, r.text
 
 
 def test_pricing_bounds_against_a_line_that_does_not_exist_yet(client):

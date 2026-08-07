@@ -1,10 +1,18 @@
 # plan-ui-round-3: the first full pass over the running site
 
-Status: **in progress.** Written 2026-08-07 from the author's punch list, taken
-after the first end-to-end run of the whole site. That list survives verbatim at
-the foot of this file. Reviewed against the code on the same day before any of
-it was executed; the five corrections that review turned up are recorded under
-"Corrections from the review" below and are folded into the phases.
+Status: **phases 1 to 4 landed** at `1.0.0a49` through `1.0.0a52`; **phase 5 is
+blocked** on the companion agg plan, which has not started. Written 2026-08-07
+from the author's punch list, taken after the first end-to-end run of the whole
+site. That list survives verbatim at the foot of this file. Reviewed against the
+code on the same day before any of it was executed; the five corrections that
+review turned up are recorded under "Corrections from the review" below and are
+folded into the phases. This doc moves to `dev/done/` when phase 5 lands.
+
+One further finding, from executing `panels` rather than from the review, is
+recorded in that item: the library's `plot_envelope(distortions='space')` is a
+documented value that draws nothing, which is why the Bounds figure looked
+one-panelled. The api builds the overlay list itself now and no longer asks for
+it.
 
 Roughly forty items. Most are this repo's, a handful belong in `aggregate`, and
 two api items cannot start until a library change lands. The companion doc is
@@ -432,15 +440,27 @@ Version bump `1.0.0a51`.
   (`models.py:214-231`, resolved at `objects.py:1883-1922`) pass
   `obj.unit_names`; a name in the box then narrows to that unit. Note the SPA
   sends exactly one `against` despite the list type (`main.js:1626-1629`).
-* **`panels`.** Diagnose before changing. `run_envelope` passes
-  `distortions=DISTORTION_OVERLAY` with `DISTORTION_OVERLAY = "space"`
-  (`bounds.py:53`, call at `:133-134`), which is not the library's `'ordered'`
-  default. `plot_envelope` (`aggregate/bounds.py:476`) builds a one by three
-  grid, and panels two and three need a Portfolio carrying calibrated
-  distortions or they raise, which is exactly why `"space"` was chosen. Find out
-  whether the figure genuinely comes back with one axes or whether all three are
-  drawn and two are empty. If the library cannot fill them for the objects the
-  app builds, the item moves to the agg plan.
+* **`panels`. Diagnosed, and it is the api's after all.** All three axes are
+  always drawn and two of them were empty. `plot_bounds_envelope`
+  (`aggregate/plots/_bounds.py:99-116`) fills panels 2 and 3 only when
+  `distortions` is a **dict or a list**; the string `"space"` the api passed
+  (`bounds.py:53`) matches neither branch, so the whole overlay block was
+  skipped. It is a documented value of the parameter that does nothing, which is
+  worth reporting upstream, and it was chosen only because `'ordered'` raises
+  for anything that is not a Portfolio carrying calibrated distortions.
+
+  Measured, on an aggregate and on a portfolio: `'space'` gives
+  `[(8 lines, 1 collection), (0, 0), (0, 0)]`; `'ordered'` raises
+  `ValueError: distortions='ordered' requires a Portfolio` for an aggregate and
+  `TypeError` for an uncalibrated portfolio; after `calibrate_distortions` a
+  portfolio gives `[(8, 1), (5, 1), (7, 1)]`.
+
+  So the api builds the list itself, which also lifts the Portfolio-only
+  restriction that only the shorthand carries. Calibration needs a cost of
+  capital and the form gives a premium and an asset cap, which are one pentagon
+  identity apart: `coc = (premium - L) / (a - premium)` with `L` from
+  `prob_loss_assets`. With no asset cap there is no capital and so no
+  calibration, and the two panels are removed rather than shipped blank.
 
 Version bump `1.0.0a52`.
 

@@ -1295,6 +1295,66 @@ def test_reins_price_net_basis_matches_the_object(client):
         assert got[name]["L"] == pytest.approx(float(quote.el), rel=1e-9), name
 
 
+def test_reins_price_takes_either_capital_anchor(client):
+    """The assets anchor reaches the reinsured path, and agrees with ``p``.
+
+    The Price form has offered both anchors since a44 and `ReinsPriceRequest`
+    took only `p`, so choosing assets on a *reinsured* object was a 422 from the
+    model before any pricing ran, while the same choice on a plain object
+    worked. The two anchors are one `prob_loss_assets` call apart, so asking by
+    the asset level a `p` resolved to must come back to that same `p`.
+    """
+    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
+    by_p = client.post(
+        f"/v1/objects/{oid}/reins_price",
+        json={"p": 0.99, "coc": 0.15, "basis": "gross"},
+    )
+    assert by_p.status_code == 200, by_p.text
+
+    by_a = client.post(
+        f"/v1/objects/{oid}/reins_price",
+        json={"a": by_p.json()["a"], "coc": 0.15, "basis": "gross"},
+    )
+    assert by_a.status_code == 200, by_a.text
+    assert by_a.json()["a"] == pytest.approx(by_p.json()["a"])
+    assert by_a.json()["p"] == pytest.approx(by_p.json()["p"], abs=1e-4)
+    assert by_a.json()["roe"] == pytest.approx(by_p.json()["roe"])
+
+
+def test_reins_price_wants_exactly_one_anchor(client):
+    """Both, or neither, is a question with no answer."""
+    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
+    for body in ({"coc": 0.15}, {"p": 0.99, "a": 100.0, "coc": 0.15}):
+        r = client.post(f"/v1/objects/{oid}/reins_price", json=body)
+        assert r.status_code == 400, r.text
+        assert "exactly one" in r.json()["detail"]
+
+
+def test_an_aggregate_gets_its_distortion_parameters(client):
+    """The pentagon *and* the fitted set, on a plain aggregate.
+
+    The four pricing cases used to disagree: an aggregate with no reinsurance
+    returned one row of pentagon results and nothing else, while the same
+    aggregate with a cession showed the parameters down the reins path and a
+    portfolio showed them either way. `calibrate_distortions` is on Aggregate
+    too; the non-portfolio path just returned before calling it.
+
+    Allocations stay portfolio-only, and not by preference:
+    `analyze_distortions` reads the `exeqa_*` columns, which a single aggregate
+    has no analogue of.
+    """
+    plain = "agg PX.Plain 100 claims 1000 xs 0 sev lognorm 90 cv 1.5 poisson"
+    oid = client.post("/v1/objects", json={"decl": plain, "log2": 14}).json()["id"]
+    r = client.post(f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.15})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "agg"
+    assert len(body["pentagon"]["rows"]) == 1
+    assert body["distortion_df"] is not None, "no distortion parameters"
+    assert len(body["distortion_df"]["rows"]) == 5
+    assert body["distortions"] is None, "an aggregate has no per-unit allocation"
+
+
 def test_reins_price_rejects_a_plain_object(client):
     """No cession, no basis to calibrate on: a clean 400, not a 500."""
     oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]

@@ -1481,21 +1481,54 @@ async function loadReinsPlot() {
 function renderReinsEntry() {
     const box = $('reins-entry');
     if (!box) return;
-    box.classList.toggle('d-none', !can('canReins'));
+    // Greyed, not hidden, which is the same house rule the sub-tabs and the
+    // calibration row keep: a control the object cannot use stays on the page
+    // and says why. It used to be `d-none`, so on a portfolio or a P&L the tab
+    // simply had nothing in it and the reader had no way to learn that ceding
+    // is an aggregate's affair.
+    const off = !can('canReins');
+    const why = 'a cession applies to an aggregate';
+    box.classList.toggle('is-off', off);
+    for (const control of box.querySelectorAll('input, button')) {
+        control.disabled = off;
+        if (off) control.setAttribute('title', why);
+        else control.removeAttribute('title');
+    }
+    const hint = box.querySelector('.reins-entry-hint');
+    if (hint) hint.classList.toggle('d-none', off);
+    let note = box.querySelector('.reins-entry-off');
+    if (off && !note) {
+        note = el('p', { className: 'reins-entry-hint reins-entry-off' }, why);
+        box.appendChild(note);
+    } else if (!off && note) {
+        note.remove();
+    }
 }
 
 const reinsBtn = $('reins-btn');
 const reinsInput = $('reins-input');
 
+// The last cession, kept across a reload.
+//
+// Ceding is iterative: you try `250 xs 250`, look at what it did, and try
+// `500 xs 500`. Through a51 the box cleared on success, on the argument that
+// the clause is now in the program in the editor and a second copy would go
+// stale. True, and it made every retry a retype of a clause the grammar accepts
+// no abbreviation for. The box is a *draft*, not a record: the editor is the
+// record, and a draft that survives is the point of a draft.
+const CESSION_KEY = 'aggapi.lastCession';
+if (reinsInput) {
+    try { reinsInput.value = localStorage.getItem(CESSION_KEY) || ''; }
+    catch { /* private mode */ }
+}
+
 async function cede() {
     const cession = reinsInput.value.trim();
     if (!cession || !can('canReins')) return;
+    try { localStorage.setItem(CESSION_KEY, cession); }
+    catch { /* private mode */ }
     await runDerivation(reinsBtn, 'Ceding…', (id) => api.reins(id, cession),
         'reinsurance');
-    // The clause is now in the program in the editor, which is the record, so
-    // leaving a copy in the box would be the same text in two places, and the
-    // second one would go stale the moment you edited the first.
-    if (state.derived) reinsInput.value = '';
 }
 
 reinsBtn?.addEventListener('click', cede);
@@ -1659,32 +1692,68 @@ let priceBasis = (() => {
 })();
 
 /**
- * The basis selector, shown above the Price form when there is reinsurance.
+ * The basis selector, above the Price form.
  *
- * Not a hidden row that appears and disappears: the container is always in the
- * markup and this fills or empties it, so the form does not jump when you step
- * from a reinsured example to a plain one.
+ * **Always drawn, never emptied.** House style is that a control the object
+ * cannot use greys out and says why, so the reader learns the choice exists and
+ * that this object does not offer it; through a51 this returned early on an
+ * object with no cession and the whole row vanished, so the form changed shape
+ * as you stepped between examples and the choice was invisible until you
+ * happened to load something reinsured.
+ *
+ * Which of the three are live comes from the capability block, not from a
+ * guess. A portfolio's `reins_density_df` has no `p_agg_net_occ`, and an
+ * occurrence-only program's net occ *is* its net, so offering all three to
+ * anything reinsured meant a button that either 400'd or repeated a column
+ * already on screen. The api computes the set at build time and this only asks.
+ *
+ * Drawn as one divided button group, like `derive` on the action row. It used
+ * to stack three visual languages down the tab: house-red toggles here,
+ * Bootstrap grey radios for the anchor below, and a blue Price button under
+ * those. Grey for the active member, matching the p / assets pair it sits over,
+ * because the accent means *selected in the navigation* and nothing else.
  */
 function renderPriceBasis() {
     const host = $('price-basis');
     if (!host) return;
     empty(host);
-    if (!state.hasReins) return;
+    const live = state.caps.flags.reinsBases || [];
     host.appendChild(el('span', { className: 'exhibit-group-label' }, 'calibrate on'));
-    const btns = PRICE_BASES.map(([value, label, title]) => {
-        const b = el('button', {
-            type: 'button', title,
-            className: `exhibit-toggle${value === priceBasis ? ' active' : ''}`,
-        }, label);
-        b.addEventListener('click', () => {
-            priceBasis = value;
-            try { localStorage.setItem('aggapi.priceBasis', value); }
-            catch { /* private mode */ }
-            for (const x of btns) x.classList.toggle('active', x === b);
-        });
-        return b;
+    const group = el('div', {
+        className: 'btn-group btn-group-sm',
+        role: 'group',
     });
-    host.append(...btns);
+    group.setAttribute('aria-label', 'calibration basis');
+    // Fall back to the first live basis when the sticky choice is one this
+    // object cannot answer, so a stored 'net occ' does not silently price the
+    // wrong thing on the next object.
+    if (live.length && !live.includes(priceBasis)) priceBasis = live[0];
+
+    for (const [value, label, title] of PRICE_BASES) {
+        const off = !live.includes(value);
+        const why = state.hasReins
+            ? 'this program has no distinct basis of that kind'
+            : 'needs a cession; add one on the Reinsurance tab';
+        const b = el('button', {
+            type: 'button',
+            title: off ? why : title,
+            className: 'btn btn-outline-secondary'
+                + (value === priceBasis && !off ? ' active' : ''),
+        }, label);
+        if (off) {
+            b.disabled = true;
+            b.setAttribute('aria-label', `${label}, ${why}`);
+        } else {
+            b.addEventListener('click', () => {
+                priceBasis = value;
+                try { localStorage.setItem('aggapi.priceBasis', value); }
+                catch { /* private mode */ }
+                renderPriceBasis();
+            });
+        }
+        group.appendChild(b);
+    }
+    host.appendChild(group);
 }
 
 /**

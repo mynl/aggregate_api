@@ -199,12 +199,9 @@ def run_price_pentagon(
     docs: dict = {}
     if ir:
         docs["pentagon"] = _document(pent)
-    if not is_port:
-        out["ir"] = docs or None
-        return out
 
-    # Portfolio: calibrate to the pentagon's cost of capital at the same p,
-    # then analyze. Both steps are best-effort -- collect warnings, don't 500.
+    # Calibrate to the pentagon's own cost of capital at the same anchor. Both
+    # steps are best-effort -- collect warnings, don't 500.
     import warnings as _warnings
 
     warns: list[str] = []
@@ -225,6 +222,22 @@ def run_price_pentagon(
         out["distortion_df"] = frame_to_payload(reset_index_safe(dist_df))
         if ir:
             docs["distortion_df"] = _document(dist_df)
+
+    if not is_port:
+        # An aggregate stops here. It gets the pentagon and the distortion
+        # parameters, and no allocation: `analyze_distortions` reads the
+        # `exeqa_*` columns, which are what a portfolio's density frame carries
+        # and a single aggregate has no analogue of.
+        #
+        # Through a51 it returned before the calibration too, so an aggregate
+        # with no reinsurance showed one row of pentagon results and nothing
+        # else, while the same aggregate *with* a cession showed the parameters
+        # (down the reins pricing path) and a portfolio showed them either way.
+        # `calibrate_distortions` is on Aggregate as well; nothing was missing
+        # but the call.
+        out["warnings"] = warns
+        out["ir"] = docs or None
+        return out
 
     with _warnings.catch_warnings(record=True) as caught:
         _warnings.simplefilter("always")
@@ -344,7 +357,8 @@ def reins_bases(obj: Any) -> list[str]:
 def run_reins_price(
     obj: Any,
     *,
-    p: float,
+    p: float | None = None,
+    a: float | None = None,
     coc: float | None = None,
     lr: float | None = None,
     basis: str = "gross",
@@ -362,11 +376,17 @@ def run_reins_price(
     ----------
     obj : Aggregate
         A built object carrying reinsurance.
-    p : float
-        VaR probability. Each basis takes its own asset level ``a = q(p)`` from
-        it, so the comparison holds the *threshold* fixed rather than the capital
-        (a reinsured book needs less capital, and that saving is part of what the
-        cession bought).
+    p, a : float, optional
+        Exactly one capital anchor, matching :func:`run_price`. ``p`` is a VaR
+        probability; ``a`` is an asset level **on the calibration basis**, which
+        the library's ``prob_loss_assets`` converts to the probability it sits
+        at. Either way what travels to the other bases is the *probability*, so
+        each takes its own asset level ``a = q(p)`` and the comparison holds the
+        threshold fixed rather than the capital (a reinsured book needs less
+        capital, and that saving is part of what the cession bought).
+
+        Both anchors have been on the form since a44 and only ``p`` reached this
+        function, so choosing assets on a reinsured object was a 422.
     coc, lr : float, optional
         Exactly one pricing target on the calibration basis.
     basis : str
@@ -392,6 +412,8 @@ def run_reins_price(
 
     if (coc is None) == (lr is None):
         raise ValueError("pass exactly one of coc (CoC/ROE) or lr (loss ratio)")
+    if (p is None) == (a is None):
+        raise ValueError("pass exactly one of p (VaR probability) or a (assets)")
     rd = getattr(obj, "reins_density_df", None)
     if rd is None:
         raise ValueError("no reinsurance on this object")
@@ -409,8 +431,15 @@ def run_reins_price(
     }
 
     # ---- calibrate on the chosen basis -------------------------------
+    #
+    # The anchor is resolved once, on the calibration basis, from whichever end
+    # the caller gave. `prob_loss_assets` answers a mutually consistent
+    # (p, L, a) from either, so an asset level becomes the probability the other
+    # bases are then compared at, and the whole path below sees one `p` exactly
+    # as it always did.
     cal = views[basis]
-    anchor = cal.gd.prob_loss_assets(p=p)
+    anchor = cal.gd.prob_loss_assets(**({"p": p} if p is not None else {"a": a}))
+    p = float(anchor.p)
     target = Pentagon()
     target.solve(L=anchor.L, a=anchor.a, **({"roe": coc} if coc is not None
                                             else {"lr": lr}))

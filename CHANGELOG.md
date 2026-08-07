@@ -4,6 +4,86 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a52
+
+`dev/plan-ui-round-3.md` phase 4, the reinsurance and pricing forms. Nine
+items. Phase 5 is deferred: it waits on the companion `aggregate` plan, which
+has not started, so `evaluate`, `alloc`, `cession` and `replot` stay open.
+
+**The Bounds figure has three panels, and they have something in them.** This
+was the item the plan said to diagnose before touching, and the diagnosis is
+the whole fix. The figure was always a one by three grid; the api asked for
+`distortions='space'`, which matches neither of the library's two overlay
+branches, so the block that draws panels 2 and 3 was skipped entirely and they
+came back blank. "Only one panel" was one drawn panel beside two empty boxes.
+
+`'space'` was chosen because `'ordered'`, the shorthand that does fill them,
+raises for anything that is not a Portfolio carrying calibrated distortions.
+Building the list ourselves lifts that: the five named distortions are
+calibrated to **this request's own premium**, which is what panel 1 is the
+envelope of, so the three panels finally answer one question. The cost of
+capital `calibrate_distortions` wants is the pentagon identity away from the
+premium and the asset cap, and the limited expected loss comes from the
+library's `prob_loss_assets`. An aggregate gets three panels too now, which
+`'ordered'` could never give it. Without an asset cap there is no capital and
+so no calibration, and the two panels are **removed** rather than shipped
+blank.
+
+**The assets anchor works on a reinsured object.** The Price form has offered
+`p` or assets since a44, and `ReinsPriceRequest` required `p` and had no `a`,
+so choosing assets on a reinsured object was a 422 from the model before any
+pricing ran, while the identical choice on a plain object was fine. No library
+work was needed: `prob_loss_assets` answers a mutually consistent `(p, L, a)`
+from either end, so the route resolves the anchor on the calibration basis and
+the rest of the path sees one `p` exactly as before.
+
+**An aggregate gets its distortion parameters.** Four pricing cases and they
+disagreed: an aggregate with no reinsurance returned one row of pentagon
+results and nothing else, while the same aggregate *with* a cession showed the
+parameters down the reins path, and a portfolio showed them either way. The
+non-portfolio path returned before calling `calibrate_distortions`, which is on
+`Aggregate` as well. Allocations stay portfolio-only, and not by preference:
+`analyze_distortions` reads the `exeqa_*` columns a single aggregate has no
+analogue of.
+
+**"Calibrate on" is one control, and it greys.** It stacked three visual
+languages down the tab, house-red toggles over Bootstrap grey radios over a
+blue button; it is a divided button group like `derive` now, grey for active,
+matching the p / assets pair directly beneath it. And it no longer vanishes: on
+an object with no cession the row used to empty itself, so the form changed
+shape between examples and the choice was invisible until you happened to load
+something reinsured. Which of the three are live comes from a new `reins_bases`
+capability field rather than from offering all three and finding out: a
+portfolio has no `p_agg_net_occ` and an occurrence-only program's net occ *is*
+its net, so at least one button was wrong on most objects.
+
+**PricingBounds on a portfolio defaults to every unit.** That is the question a
+portfolio invites, and having to type one unit name to ask any of it made the
+default answer nothing at all. Naming a unit still narrows to it and a DecL
+fragment still prices a line that does not exist yet. An aggregate has no units
+to default to, so the empty case stays the error it was.
+
+**The cession row.** `Adjust cession [box] [Add reinsurance]`, with the
+description on its own line beneath the pair rather than trailing the button,
+and real space under it. The box keeps what you last ceded across a reload,
+because ceding is iterative and clearing it on success made every retry a
+retype of a clause the grammar accepts no abbreviation for; the editor is the
+record, and this box is a draft. A datalist offers the two openers, which is as
+far as this goes: `occ` and `agg` are not accepted in that position, and there
+is nothing shorter to offer. The row greys rather than disappearing when a
+cession cannot apply.
+
+**The reinsurance plot says what its buttons do.** The three bases are three
+gross / ceded / net readings taken at different points in the program, and the
+explanation existed only as a native `title` that arrives after a second of
+hover. It is a line under the buttons, including the trap it was hiding: the
+third triple's first column is the aggregate cover's *subject*, what the
+occurrence program left, and reading it as gross understates the cession
+whenever both stages are present.
+
+**Off-scale sizes.** The last three inline `font-size` rules in the markup, at
+`.7rem` and `.74rem`, neither of them a step on the scale.
+
 ## 1.0.0a51
 
 `dev/plan-ui-round-3.md` phase 3, the text and the tables. Eight items.

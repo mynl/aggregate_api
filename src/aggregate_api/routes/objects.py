@@ -2179,10 +2179,23 @@ def post_pricing_bounds(
     Each entry in ``against`` is a unit of the current portfolio or a DecL
     fragment for a line that does not exist yet. A fragment is an ordinary
     build and answers to the same log2 cap.
+
+    **An empty ``against`` on a portfolio means every unit.** That is the
+    question a portfolio makes you want to ask, and having to type one unit name
+    to ask any of it made the default answer nothing at all.
+    ``Portfolio.pricing_bounds`` takes a source, a list or a dict, so this is a
+    default rather than a loop. Naming a unit narrows to that one; naming a DecL
+    fragment prices a line that does not exist yet, and both still work.
+
+    An aggregate has no units to default to, so an empty ``against`` there is
+    still the error it always was: there is no second risk to price.
     """
     try:
+        against = list(req.against)
+        if not against:
+            against = [str(u) for u in (getattr(entry.obj, "unit_names", None) or [])]
         targets = dict(_resolve_risk(entry.obj, text, settings)
-                       for text in req.against)
+                       for text in against)
         return run_pricing_bounds(entry.obj, premium=req.premium,
                                   targets=targets, assets=req.assets, ir=ir)
     except ValueError as exc:
@@ -2365,7 +2378,8 @@ def post_reins_price(
     """
     try:
         return run_reins_price(
-            entry.obj, p=req.p, coc=req.coc, lr=req.lr, basis=req.basis, ir=ir,
+            entry.obj, p=req.p, a=req.a, coc=req.coc, lr=req.lr,
+            basis=req.basis, ir=ir,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

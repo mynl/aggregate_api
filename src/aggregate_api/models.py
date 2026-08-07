@@ -103,6 +103,10 @@ class Capability(BaseModel):
     has_sharpen: bool = False
     can_pnl: bool = False
     can_reins: bool = False
+    # Which calibration bases the reins pricing form may offer, known at build
+    # time so the buttons the object cannot answer grey rather than 400. Empty
+    # for an object with no cession.
+    reins_bases: list[str] = []
     can_price: bool = False
     can_evaluate: bool = False
     can_bounds: bool = False
@@ -234,7 +238,10 @@ class BoundsRequest(BaseModel):
         default_factory=list,
         description=("PricingBounds only: the risks to price against this one. "
                      "Each is a unit of the current portfolio, or a DecL "
-                     "fragment for a line that does not exist yet."),
+                     "fragment for a line that does not exist yet. Empty on a "
+                     "portfolio means every unit, which is the question a "
+                     "portfolio invites; an aggregate has no units, so empty "
+                     "there is an error."),
     )
 
 
@@ -527,9 +534,21 @@ class ReinsPriceRequest(BaseModel):
     the distortion set is calibrated on. The others are then priced with that
     same set, so the spread between them is attributable to the distribution
     rather than to two different calibrations.
+
+    "Same shape as ``PriceRequest``" became true again at 1.0.0a52. ``p`` was
+    required and there was no ``a``, while the form above offers both anchors,
+    so choosing assets on a **reinsured** object posted ``a`` and got a 422 from
+    the model before any pricing code ran. No library work was needed:
+    ``prob_loss_assets`` returns a mutually consistent ``(p, L, a)`` from either
+    end, so the route converts an asset level to the probability the bases are
+    compared at.
     """
 
-    p: float = Field(..., gt=0, le=1, description="VaR probability in (0, 1].")
+    p: float | None = Field(
+        None, gt=0, le=1, description="VaR probability in (0, 1] fixing capital.")
+    a: float | None = Field(
+        None, gt=0,
+        description="Asset level fixing capital, on the calibration basis.")
     coc: float | None = Field(None, gt=0, description="Cost-of-capital (ROE) target.")
     lr: float | None = Field(None, gt=0, description="Loss-ratio target.")
     basis: str = Field(

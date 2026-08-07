@@ -1600,8 +1600,12 @@ export function mountReinsExhibit(container, frame) {
 
     empty(container);
     const tools = el('div', { className: 'exhibit-controls' });
+    // Its own node, created once. `renderTools` runs again on every toggle, so
+    // a rubric inserted as a sibling of `tools` would stack a copy per press.
+    const rubric = el('p', { className: 'exhibit-rubric' });
     const host = el('div', { className: 'exhibit-canvas' });
     container.appendChild(tools);
+    container.appendChild(rubric);
     container.appendChild(host);
 
     const isWide = () => (host.clientWidth || 0) >= WIDE_PX;
@@ -1632,6 +1636,46 @@ export function mountReinsExhibit(container, frame) {
         const viewControls = renderControls(
             ['logY', 'xFull', 'epMode', 'rightLogY'], false, () => redraw());
         for (const g of [...viewControls.children]) tools.appendChild(g);
+        renderRubric();
+    }
+
+    /**
+     * What the basis buttons are actually choosing, in a line under them.
+     *
+     * The frame is not "gross, ceded, net". It is three separate gross / ceded
+     * / net readings taken at different points in the program, and which one
+     * you want is a real question. Through a51 the answer existed only as a
+     * native `title` on each button, which arrives after a second's hover and
+     * is invisible to anyone who does not think to hover.
+     *
+     * The `subject` wrinkle is spelled out because it is a trap: on the third
+     * triple the first column is what the occurrence program *left*, not the
+     * true gross, and reading it as gross understates the cession whenever both
+     * stages are present.
+     */
+    function renderRubric() {
+        empty(rubric);
+        const bit = (label, text) => {
+            rubric.appendChild(el('b', {}, label));
+            rubric.appendChild(document.createTextNode(` ${text}`));
+        };
+        const parts = [];
+        if (available.includes('sev')) {
+            parts.push(['occurrence', 'one claim, either side of the per-occurrence cover.']);
+        }
+        if (available.includes('occ')) {
+            parts.push(['after occurrence',
+                        'the aggregate of each of those, so gross here is the true gross.']);
+        }
+        if (available.includes('agg')) {
+            parts.push(['after aggregate',
+                        'the aggregate cover, whose first column is its subject, what the '
+                        + 'occurrence program left, and not the gross.']);
+        }
+        parts.forEach(([label, text], i) => {
+            if (i) rubric.appendChild(document.createTextNode(' '));
+            bit(label, text);
+        });
     }
 
     function buildOption() {

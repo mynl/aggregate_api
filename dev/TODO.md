@@ -120,7 +120,37 @@ and the standing REMINDER below about what is worth plotting.
       six groups, the three derivation buttons, the cession box, the three
       bounds forms and the Narrative pane had never been used in a browser.
       The author's first pass found the Bounds group dark for every object
-      (fixed at a48, below). The rest of the list still wants clicking.
+      (fixed at a48, below), and the rest of that first pass became
+      `plan-ui-round-3`, immediately below.
+
+- [x] **plan-ui-round-3 — the first full pass over the running site**
+      (a49 to a52). Roughly forty items off the author's punch list, taken after
+      the first end-to-end run. Four phases: the shell and the status strip; the
+      charts; the text and the tables; the reinsurance and pricing forms.
+      *(phases 1 to 4 done; the doc stays in `dev/` until phase 5 lands)*
+
+      **Phase 5 is not done and is blocked**, on
+      `aggregate_REFACTOR/dev/plan-loss-lab-round-3.md` phase A, which has not
+      started. Four items wait on it:
+
+      - `evaluate`, gross / net occurrence / net on the Evaluate form, which
+        needs the library's basis keyword rather than more of the `_BasisView`
+        shim.
+      - `alloc`, the per-unit allocation tables a reinsured portfolio silently
+        loses, same keyword.
+      - `cession`, pricing a cession with a distortion; the library has no glue
+        between reinsurance and distortions at all.
+      - `replot`, the Reinsurance Plot leaf on a reinsured **portfolio**, which
+        greys because `chart_reins` is registered for `Aggregate` alone.
+
+      Two things the round turned up that are the library's and are recorded
+      here rather than acted on:
+
+      - `plot_envelope(distortions='space')` is a documented value that does
+        nothing: it matches neither of the overlay branches, so panels 2 and 3
+        draw empty. a52 stopped asking for it and builds the list itself.
+      - `format_program(width=)` is accepted and ignored, which is the agg
+        plan's `width` item.
 
 ## SM
 

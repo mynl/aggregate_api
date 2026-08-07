@@ -46,11 +46,21 @@ from .plotting import WEB_OVERRIDES
 #: notes.
 DEFAULT_RESAMPLES = 50
 
-#: What panels 2 and 3 overlay. ``'ordered'`` is the richer choice and needs a
-#: Portfolio carrying calibrated distortions, which an object arriving here may
-#: not have; ``'space'`` sweeps the parameter space instead and works for both
-#: kinds with nothing prepared.
-DISTORTION_OVERLAY = "space"
+#: The two panels' worth of named distortions, in the library's own grouping:
+#: the two that pin an extreme against the three smooth ones.
+#:
+#: `plot_envelope` fills panels 2 and 3 only when it is handed a **list of
+#: dicts**. Its ``'ordered'`` shorthand builds exactly this list, but only from
+#: a ``Portfolio`` that already carries calibrated distortions, and it raises
+#: otherwise. The api used to pass ``'space'`` to dodge that raise, and
+#: ``'space'`` matches neither the dict branch nor the list branch inside the
+#: library, so the whole overlay block was skipped: the figure came back with
+#: three axes, one of them drawn and two of them blank. That is what "the Bounds
+#: plot only has one panel" was.
+#:
+#: Building the list here rather than asking for ``'ordered'`` also lifts the
+#: Portfolio-only restriction, since only that shorthand carries it.
+ENVELOPE_PANELS = (("ccoc", "tvar"), ("ph", "wang", "dual"))
 
 
 def _document(df, formats: str = "price") -> dict | None:
@@ -61,6 +71,88 @@ def _document(df, formats: str = "price") -> dict | None:
         return frame_document_dict(df, formats=formats)
     except Exception:  # noqa: BLE001 -- a static table is never worth a 500
         return None
+
+
+def _envelope_overlay(obj: Any, premium: float, assets: float | None):
+    """The distortion set to overlay on panels 2 and 3, or ``None``.
+
+    Calibrated to **the premium the request already gave**, which is the whole
+    point of the exhibit: panel 1 is every distortion consistent with that
+    premium, and panels 2 and 3 name five of them, so they have to be the same
+    five the calibration produces or the three panels are answering different
+    questions.
+
+    ``calibrate_distortions`` takes a cost-of-capital rather than a premium, and
+    the two are one identity apart at a fixed asset level::
+
+        L = E[min(X, a)]        the limited expected loss
+        M = premium - L         the margin
+        Q = a - premium         the capital
+        coc = M / Q
+
+    ``L`` comes from the library's own ``prob_loss_assets``, which returns a
+    mutually consistent ``(p, L, a)``, so the only api arithmetic here is the
+    pentagon identity itself.
+
+    Returns ``None`` rather than raising, in three cases, and each leaves the
+    figure honestly one-panelled instead of falsely three:
+
+    * **no asset cap.** Capital is unbounded, so there is no cost of capital to
+      calibrate to. The envelope in panel 1 is still meaningful.
+    * **degenerate margin or capital.** ``Bounds`` already refuses a premium
+      below the mean or above the cap; this catches the boundary where premium
+      equals the cap and capital is zero.
+    * **the calibration itself declines**, which it does on a book where a mass
+      distortion cannot be fitted.
+
+    Notes
+    -----
+    This **mutates** the cached object: ``calibrate_distortions`` writes
+    ``distortions``, ``distortion_df`` and ``calibration_df`` onto it. That is
+    the library's contract for the method and already how ``pricing.run_price``
+    uses it, so the object is no more shared-mutable than before; it is worth
+    knowing that a Bounds request leaves a calibration behind.
+    """
+    import math
+
+    if assets is None or not math.isfinite(float(assets)):
+        return None
+    assets = float(assets)
+    premium = float(premium)
+    try:
+        limited = obj.prob_loss_assets(a=assets)
+    except Exception:  # noqa: BLE001 -- an object that cannot answer gets one panel
+        return None
+    margin = premium - float(limited.L)
+    capital = assets - premium
+    if not (margin > 0 and capital > 0):
+        return None
+    try:
+        obj.calibrate_distortions(margin / capital, a=assets)
+    except Exception:  # noqa: BLE001 -- reported by the figure having one panel
+        return None
+    fitted = getattr(obj, "distortions", None) or {}
+    panels = [{k: fitted[k] for k in group if k in fitted}
+              for group in ENVELOPE_PANELS]
+    return panels if all(panels) else None
+
+
+def _drop_empty_panels(fig, axs) -> None:
+    """Remove the axes the overlay could not fill.
+
+    The library always builds a one by three grid, so without this an object
+    whose distortions would not calibrate shows one drawn panel beside two empty
+    boxes, which reads as a broken figure rather than as a smaller one. An axes
+    with no lines, collections or patches drew nothing.
+    """
+    empty = [ax for ax in axs if not (ax.lines or ax.collections or ax.patches)]
+    for ax in empty:
+        fig.delaxes(ax)
+    if empty and len(empty) < len(list(axs)):
+        # Give the survivors the width the removed ones were holding.
+        fig.set_size_inches(fig.get_size_inches()[0]
+                            * (len(list(axs)) - len(empty)) / len(list(axs)),
+                            fig.get_size_inches()[1])
 
 
 def _require_risk(obj: Any) -> None:
@@ -85,9 +177,13 @@ def run_envelope(
     """The three-panel envelope figure, as image bytes.
 
     Panel one is the cloud of sampled bracket columns shaded by weight, with the
-    min and max envelope drawn over it. Panels two and three put calibrated
-    distortions on the same band, so you can see which part of the feasible
-    space a named distortion actually occupies.
+    min and max envelope drawn over it. Panels two and three put the five named
+    distortions, calibrated to this request's own premium, on the same band, so
+    you can see which part of the feasible space each one actually occupies.
+
+    Two panels, or one, when the distortions will not calibrate: see
+    :func:`_envelope_overlay` for the three cases and :func:`_drop_empty_panels`
+    for why the figure shrinks rather than shipping blanks.
 
     Parameters
     ----------
@@ -129,10 +225,20 @@ def run_envelope(
     # The style context restores prior rcParams on exit, so the api does not
     # bleed style state across requests; the figure is always closed, since
     # matplotlib holds figures in ``Gcf`` and would balloon the process.
+    overlay = _envelope_overlay(obj, premium, assets)
     with agg_style.context(**WEB_OVERRIDES):
-        fig, _ = bounds.plot_envelope(n_resamples=int(n_resamples),
-                                      distortions=DISTORTION_OVERLAY)
+        fig, axs = bounds.plot_envelope(
+            n_resamples=int(n_resamples),
+            # A list is the only form that fills panels 2 and 3. With nothing to
+            # overlay, `'space'`: it matches neither of the library's two
+            # branches so the whole block is skipped, which is what the api used
+            # to rely on unknowingly for *every* request. An empty list is not
+            # the same thing and is not safe, because the block's closing "Avg
+            # extreme" line indexes `distortions[-1]`.
+            distortions=overlay if overlay else "space",
+        )
         try:
+            _drop_empty_panels(fig, axs)
             fig.savefig(buf, format=fmt)
         finally:
             plt.close(fig)
