@@ -35,14 +35,17 @@ dependencies = [
     # same install also ships the walker that renders that IR, which is what
     # makes version skew between the two impossible. See dev/plan-gt2-ir.md.
     #
-    # This is the *new* generation (1.9.0, briefly named `greatest-tables`),
-    # which is unpublished and so takes an editable source like `aggregate`
-    # does. The name collides with the old PyPI `greater-tables` 5.3, the
-    # previous generation of the same package, and the two cannot coexist in one
-    # environment. Plain `pip install greater-tables` still resolves to 5.3
-    # until 6.0.0 ships, so a deploy without the source below gets 5.3 and dies
-    # at import: 5.3 has no `build`, `canonical_json` or `IR_VERSION`.
-    "greater-tables",
+    # **An ordinary registry dependency since a53.** 6.0.0 has shipped to PyPI,
+    # so the editable source this used to carry is gone and a fresh clone works
+    # with nothing checked out beside it.
+    #
+    # The floor is load bearing and must not be relaxed. PyPI also holds 5.3,
+    # the previous generation of the same package under the same name, and the
+    # two cannot coexist in one environment: 5.3 has no `build`,
+    # `canonical_json` or `IR_VERSION`, so resolving to it does not fail at
+    # install, it fails at import. Without `>=6` a resolver working around some
+    # other constraint could quietly pick it.
+    "greater-tables>=6.0.0",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
@@ -71,19 +74,33 @@ aggregate-api = "aggregate_api.__main__:main"
 # ---------------------------------------------------------------------------
 # uv source override for co-development.
 #
-# `aggregate` 1.0.0a* is not published to PyPI, and the api depends on
-# internals that exist only in the local working tree. Point uv at that
-# tree as an editable install. Edit the path to match your checkout, then
-# `uv sync`. plan-0001 settles the canonical path for this machine.
+# `aggregate` 1.0.0a* is not published to PyPI: the newest release there is
+# 0.30.1, and the api depends on internals (`parser_errors`, `parser._PARSER`)
+# that exist only in the local working tree. So this one has to stay, and a
+# clone of this repo needs `aggregate_REFACTOR` checked out beside it before
+# `uv sync` can succeed. Edit the path to match your checkout; plan-0001
+# settles the canonical path for this machine.
 #
-# `greater-tables` is unpublished for the same reason and is co-developed
-# alongside this repo, so it gets the same treatment. Its checkout folder is
-# still named `greatest-tables` after the working name it carried for a day;
-# that is deliberate and the path below is correct as written.
+# `greater-tables` **left this table at a53**, when 6.0.0 shipped to PyPI. It
+# is a plain registry dependency now.
+#
+# To go back to an editable greater-tables for a session of co-development,
+# without editing this file:
+#
+#     uv sync --extra dev                                  # PyPI, the default
+#     uv pip install -e c:/s/ai/greatest-tables            # swap in the local
+#
+# The checkout folder is still named `greatest-tables` after the working name
+# it carried for a day; that is deliberate and the path above is correct.
+#
+# Note the swap lasts until the next `uv sync`, which reinstalls from the lock
+# and silently puts 6.0.0 back. That matters here because the release workflow
+# runs `uv sync` on every version bump, so a bump in the middle of GT work will
+# drop the editable install without saying so. `uv run --no-sync` is the way to
+# work in between, and it is what this repo uses anyway.
 # ---------------------------------------------------------------------------
 [tool.uv.sources]
 aggregate = { path = "../aggregate_REFACTOR", editable = true }
-greater-tables = { path = "c:/s/ai/greatest-tables", editable = true }
 
 [tool.setuptools]
 include-package-data = true
