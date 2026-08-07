@@ -129,19 +129,120 @@ ROW_FLAGS: dict[str, Callable[[pd.DataFrame, int], Sequence[str]]] = {
 #: applies to **every** column. The second form is for the per-distortion slices,
 #: whose columns are unit names rather than statistics: the whole slice is one
 #: statistic, so one format covers it.
+#: Money, everywhere money appears. Grouped, and to the cent.
+#:
+#: It was ``,d`` through a50, and on a real book that made the whole pricing
+#: table integers: every column of the pentagon is money except the three
+#: ratios, `P` was declared ``,d`` outright, and `L`, `M`, `Q` and `a` fell
+#: through to greater-tables' inference, which drops to zero decimals once a
+#: column's mean reaches 20,000 (``engine/formats.py``). So a book priced in the
+#: millions reported its margin as a whole number of dollars and its loss ratio
+#: to a tenth of a percent, which is the wrong way round: the margin is the
+#: small difference between two large numbers and is exactly where the digits
+#: are worth having.
+#:
+#: Two decimals rather than a scale-aware choice. Money is money at every
+#: magnitude, and a table whose decimal count moves with the book is harder to
+#: read across than one that is slightly over-precise in places.
+MONEY = ",.2f"
+
+#: A probability that has to separate 0.99 from 0.995 from 0.999.
+PROBABILITY = ".4f"
+
 FORMATS: dict[str, dict[str, object] | str] = {
     # The pricing pentagon, whose columns are the statistics themselves.
-    "price": {"LR": ".1%", "ROE": ".0%", "P": ",d", "PQ": ".3f"},
-    # Gross / ceded / net by distortion, plus the difference rows.
+    # L loss, M margin, P premium, Q capital, a assets; LR, PQ and ROE the
+    # three ratios between them.
+    "price": {
+        "L": MONEY, "M": MONEY, "P": MONEY, "Q": MONEY, "a": MONEY,
+        "LR": ".1%", "PQ": ".3f", "ROE": ".1%",
+    },
+    # Gross / ceded / net by distortion, plus the difference rows. The same
+    # statistics as the pentagon, so deliberately the same formats: the two
+    # tables sit on the same tab and a number must not change shape between
+    # them.
     "reins_price": {
-        "a": ",d", "L": ",d", "M": ",d", "P": ",d", "Q": ",d",
+        "a": MONEY, "L": MONEY, "M": MONEY, "P": MONEY, "Q": MONEY,
         "LR": ".1%", "PQ": ".3f", "ROE": ".1%",
     },
     # One per-distortion slice each, columns being units.
     "stat_LR": ".1%",
-    "stat_P": ",d",
+    "stat_P": MONEY,
     "stat_PQ": ".3f",
-    "stat_ROE": ".0%",
+    "stat_ROE": ".1%",
+    # ---- the generic display frames --------------------------------------
+    #
+    # These reach the client through the one `frame/{which}` route, which passed
+    # no format key at all until a51, so every one of them was pure dtype
+    # inference and the same 20,000 rule flattened the money columns on any book
+    # worth pricing. The route now passes the frame's own name, so an entry here
+    # is all it takes.
+    "summary": {
+        "Mean": MONEY, "SD": MONEY, "P01": MONEY, "Median": MONEY, "P99": MONEY,
+        "CV": ".3f", "Skew": ".3f",
+    },
+    "tail_df": {
+        "p": PROBABILITY, "VaR": MONEY, "TVaR": MONEY, "xsVaR": MONEY,
+        "VaR/Mean": ".3f",
+    },
+    # Gross / net moments either side of a cession, with the relative change
+    # between them. The changes are proportions, not money.
+    "validation_df": {
+        "Gross EX": MONEY, "Net EX": MONEY, "Gross CV": ".3f", "Net CV": ".3f",
+        "Gross Sk": ".3f", "Net Sk": ".3f",
+        "Change EX": ".1%", "Change CV": ".1%",
+    },
+    "reins_summary_df": {
+        "EX": MONEY, "Est EX": MONEY, "CV": ".3f", "Est CV": ".3f",
+        "Sk": ".3f", "Est Sk": ".3f",
+        "Change EX": ".1%", "Change CV": ".1%",
+    },
+    # The grid-window estimator. Its numeric columns arrive as `object` dtype,
+    # because the frame mixes bools, floats and strings down one column, and an
+    # object column gives inference nothing to work from: that is why `x_max`
+    # and `W` printed at full float width. Naming them is the fix.
+    #
+    # `W` is the window width, `x_max - x_min`, and the api serves the library's
+    # private `_bs_window_df` in preference to the public one, which is where it
+    # comes from. Formatted the same as the two endpoints it is the difference
+    # of, since a width read against a window it does not visibly match is worse
+    # than no width at all.
+    "bs_window_df": {
+        "x_min": MONEY, "x_max": MONEY, "W": MONEY, "bs": ",.4g",
+        "log2_need": ".0f", "clipped": ".0f",
+    },
+    # The grid audit's per-cell detail. The `u_*` columns are relative errors
+    # against the analytic moments and run from about 1e-7 to a few percent, so
+    # they need a scientific format rather than a fixed one: at `.4f` a good cell
+    # and a perfect cell both print 0.0000, which is exactly the comparison the
+    # table exists to support. `score` is the number that decides, and gets the
+    # digits to separate two cells that are close.
+    "sharpen_df": {
+        "score": ".5f", "extent": MONEY, "x_min": MONEY, "bs": ",.4g",
+        "u_sev_mean": ".2e", "u_sev_cv": ".2e", "u_sev_skew": ".2e",
+        "u_agg_mean": ".2e", "u_agg_cv": ".2e", "u_agg_skew": ".2e",
+        "aliasing": ".4f", "deficit": ".2e", "seconds": ".3f",
+    },
+    # The score grid, whose columns are steps in log2 rather than statistics, so
+    # one spec covers all of them.
+    "sharpen_score": ".5f",
+    # The layering analysis, transposed. Its terms block mixes three kinds of
+    # number in one row, which is why it needed declaring: a share and three
+    # probabilities are proportions, a limit and an attachment are money, and
+    # loss-on-line is a rate. Inference sees eight float columns and formats
+    # them all the same way.
+    "reins_stats_terms": {
+        "share": ".1%", "limit": MONEY, "attach": MONEY,
+        "pr_attach": ".3%", "pr_detach": ".3%", "pr_loss": ".1%",
+        "lol": ".3f", "output": ".0f",
+    },
+    # Moments. On an aggregate the columns are a (component, measure)
+    # MultiIndex, so these keys are the measure alone and `frame_spec` matches
+    # them against the innermost level: one declaration covers freq, sev and agg
+    # alike, which is right, because the format belongs to the measure. On a
+    # portfolio the columns are the three measures flat, and the same keys match
+    # directly.
+    "reins_stats_moments": {"mean": MONEY, "cv": ".4f", "skew": ".4f"},
 }
 
 
@@ -192,7 +293,22 @@ def frame_spec(
         # Filter to what the frame actually has: an Aggregate's pentagon carries
         # fewer columns than a Portfolio's, and naming an absent one is not an
         # error worth raising.
-        columns = {k: v for k, v in (chosen or {}).items() if k in df.columns}
+        #
+        # Under a **spanned** header the name to match is the innermost level,
+        # not the whole tuple. `x in df.columns` on a MultiIndex tests the first
+        # level, so a frame whose columns are (component, measure) matched none
+        # of the measure names declared above and quietly fell through to
+        # inference for the whole table. Building the key set from the last
+        # level and mapping back to the full tuples is what makes one
+        # declaration cover `('freq', 'mean')`, `('sev', 'mean')` and
+        # `('agg', 'mean')`, which is right: the format belongs to the measure.
+        wanted = chosen or {}
+        if isinstance(df.columns, pd.MultiIndex):
+            columns = {
+                col: wanted[col[-1]] for col in df.columns if col[-1] in wanted
+            }
+        else:
+            columns = {k: v for k, v in wanted.items() if k in df.columns}
     return TableSpec(
         include_raw=list(df.columns),
         max_rows=MAX_ROWS,

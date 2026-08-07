@@ -4,6 +4,101 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a51
+
+`dev/plan-ui-round-3.md` phase 3, the text and the tables. Eight items.
+
+**A derived program comes back readable.** All three derivations collapsed their
+program to one line, so a wrapped portfolio arrived as several hundred
+characters of unbroken DecL in the editor, which is the one place it has to be
+editable. They render through `format_program(layout='spread', trailer=True)`
+now, one clause per indented line.
+
+`trailer=True` is load bearing, not cosmetic. The default is `False` and it
+silently drops `note{}`, `tags{}` and `hints{}`; Sharpen's whole contract is
+that the `hints{}` it writes rides on the returned text, so a program rendered
+without its trailer looks right and rebuilds on the old grid. **The same default
+was a live bug in the session `.agg` download**, which stripped the trailer ten
+lines after `spec_to_decl` emitted it: every file exported before this is
+missing its `hints{}`.
+
+The cache key is untouched, and does not need touching. `post_object` collapses
+before it hashes, so a spread program already hashes to its collapsed twin's id;
+what a derivation shows and what the cache is keyed on differ only in
+whitespace. The one place that needed care is Sharpen, which computes its own id
+to re-file the moved entry, and keeps hashing the collapsed form.
+
+**Tail behavior is a leaf, and it works.** `tail_behavior_df` was drawn as a
+second block inside Overview / Tail, which was wrong twice over. Wrong on the
+merits, because `tail_df` is the return-period ladder read off the computed grid
+and this is the analytic classification of the frequency, severity and aggregate
+tails, sub or super exponential, bounded, concentrated: two different questions.
+And it had never actually rendered, because that pane takes the *frame* route,
+`tail_behavior_df` is not in `_CSV_FRAMES`, and the loader swallows a failed
+fetch. It is a More leaf now, off the `tail_behavior` exhibit the library
+already registers and the api already serves, so it needed no backend change at
+all.
+
+**The grid audit is visible.** Sharpen computed `sharpen_df` and threw it away:
+the reader was told a grid had moved and never shown the search that moved it.
+More gains a Sharpen leaf with two blocks, the score grid
+(`score.unstack('d_log2')`, the library's own picture, `d_bs` down and `d_log2`
+across, lower better, NaN where the walk ran out of budget) and the full
+per-cell frame under it. Gated on a new `has_sharpen` capability flag, which is
+**not** the negation of `can_sharpen`: one asks whether running a probe is worth
+offering and the other whether one has run, and an object can answer yes to
+both.
+
+**The layering analysis reads the way it is used.** `reins_stats_df` arrives
+with the measures down and the layers across, and it holds two different kinds
+of thing in one table. It is now two, both with the layers down the rows, where
+the eye compares gross against ceded against net: the **terms**, share, limit,
+attachment and the probabilities of reaching each layer, and the **moments**,
+what the layer does to the frequency, severity and aggregate distributions. A
+portfolio carries a different frame with no terms at all, and takes the same
+treatment with view by unit down the rows.
+
+**Money reads as money.** `tables.FORMATS` never reached the generic frame
+route, which passed no format key, so `summary`, `tail_df`, `stats_df`,
+`validation_df`, `bs_window_df` and every reins frame were pure dtype inference,
+and inference drops the decimals once a column's mean reaches 20,000. A book
+worth pricing reported its VaR as a whole number of dollars. The route passes
+each frame's own name now, and the pentagon's money columns are declared: `P`
+was `,d` outright and `L`, `M`, `Q` and `a` fell through, so the margin, which
+is the small difference between two large numbers, was the column losing the
+most.
+
+`frame_spec` also matched format keys against the **first** level of a spanned
+header, so a frame with `(component, measure)` columns matched none of its
+declared measures and quietly fell through to inference for the whole table. It
+matches the innermost level now, which is right: a format belongs to the
+measure, not to the block it sits under.
+
+**The window says what it shows.** `x_max` and `W` printed at full float width,
+because those columns arrive as `object` dtype and inference has nothing to work
+from. Declared, along with the leaf's own lede: each row proposes a window
+`[x_min, x_max]` of width `W`, and the grid `bs · 2^log2` that covers it.
+
+**Every leaf has a lede.** `nav.js` has carried a `hint` per leaf since a44 and
+`renderSubTabs`'s comment says it "moved into the exhibit lede"; it had not, and
+the only two ledes on the page were hardcoded strings for the Overview pair.
+Every leaf renders its own now.
+
+**The Ledger's caption stays on screen.** The walker draws it as a real
+`<caption>` inside the table, `.gt` is `width: fit-content`, and `.gt-host` is a
+horizontal scroll container: so a paragraph of caption prose *set the table's
+scroll width* and ran off the right of the screen, dragging a reasonable table
+into a scroll it did not need. Capped at `--measure` like every other run of
+prose, and lightened off the walker's 600 weight, which read as a section
+heading rather than as a note on a table. Exhibit blocks also get vertical air
+between them; stacked flush, a two-block exhibit read as one table that changed
+its mind about its columns half way down.
+
+**The Narrative pane is in reading order.** It came out sorted by attribute
+stem, which is alphabetical over names the reader never sees. It is info, bs,
+validation, tail, reins, sharpen, with anything the library adds later appended
+alphabetically so a new stem still appears without an edit.
+
 ## 1.0.0a50
 
 `dev/plan-ui-round-3.md` phase 2, the charts. Six items, all in

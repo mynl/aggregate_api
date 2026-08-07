@@ -578,18 +578,26 @@ function showTab(name) {
 const LOADERS = {
     'overview:plot': () => loadOverviewPlot(),
     'overview:summary': () => loadOverviewFrames([['summary', 'summary']]),
-    // Two blocks in one pane: both answer the same question and neither is
-    // large enough to want a pane of its own.
-    'overview:tail': () => loadOverviewFrames([
-        ['tail_df', 'tail'], ['tail_behavior_df', 'tail_behavior']]),
+    // The return-period ladder, and only that. It was paired with
+    // `tail_behavior_df` through a50 on the grounds that both are about the
+    // tail; they are not the same question, and in any case the pairing never
+    // drew, because this loader takes the frame route and that name is not in
+    // `_CSV_FRAMES`. Tail behavior is its own leaf under More now, off the
+    // exhibit the library registers for it.
+    'overview:tail': () => loadOverviewFrames([['tail_df', 'tail']]),
 
-    'economics:ledger': () => loadExhibitLeaf('pane-economics', 'economic'),
-    'economics:ratios': () => loadExhibitLeaf('pane-economics', 'economic_ratios'),
-    'economics:waterfall': () => loadExhibitLeaf('pane-economics', 'economic_waterfall'),
+    'economics:ledger': () => loadExhibitLeaf('pane-economics', 'economic',
+        ['economics', 'ledger']),
+    'economics:ratios': () => loadExhibitLeaf('pane-economics', 'economic_ratios',
+        ['economics', 'ratios']),
+    'economics:waterfall': () => loadExhibitLeaf('pane-economics', 'economic_waterfall',
+        ['economics', 'waterfall']),
 
-    'reinsurance:summary': () => loadReinsFrame('reins_summary_df'),
-    'reinsurance:stats': () => loadReinsFrame('reins_stats_df'),
-    'reinsurance:density': () => loadReinsFrame('reins_density_df'),
+    'reinsurance:summary': () => loadReinsFrame('reins_summary_df',
+        ['reinsurance', 'summary']),
+    'reinsurance:stats': () => loadReinsStats(),
+    'reinsurance:density': () => loadReinsFrame('reins_density_df',
+        ['reinsurance', 'density']),
     'reinsurance:plot': () => loadReinsPlot(),
 
     'pricing:determine': () => showPricingLeaf('determine'),
@@ -600,8 +608,9 @@ const LOADERS = {
     'bounds:allocation': () => showBoundsLeaf('allocation'),
 
     'more:validation': () => replacePaneTable('pane-more', 'validation_df',
-        { columnFilters: false }),
-    'more:stats': () => replacePaneTable('pane-more', 'stats_df', GRID_FULL),
+        { columnFilters: false }, null, ['more', 'validation']),
+    'more:stats': () => replacePaneTable('pane-more', 'stats_df', GRID_FULL,
+        null, ['more', 'stats']),
     'more:density': () => {
         // `resolution: 'display'` here and nowhere else. The *plots* take every
         // grid point, because a binned atom is a lie; a *table* of 65,536 rows
@@ -624,10 +633,20 @@ const LOADERS = {
             { ...GRID_FULL, maxRows: 25, renderCap: 8192 },
             () => (WHOLE_DENSITY_KINDS.has(state.kind)
                 ? api.density_df(state.id, opts)
-                : api.density_df(state.id, { ...opts, cols: 'loss,p_total,F,S' })));
+                : api.density_df(state.id, { ...opts, cols: 'loss,p_total,F,S' })),
+            ['more', 'density']);
     },
-    'more:window': () => replacePaneTable('pane-more', 'bs_window_df', GRID_FULL),
-    'more:dependency': () => loadExhibitLeaf('pane-more', 'dependency'),
+    // The exhibit route, not the frame route: the library registers a
+    // `tail_behavior` exhibit and the api already serves it, so this leaf needs
+    // no backend change at all. Its neighbors here take the frame route for
+    // historical reasons rather than good ones.
+    'more:behavior': () => loadExhibitLeaf('pane-more', 'tail_behavior',
+        ['more', 'behavior']),
+    'more:window': () => replacePaneTable('pane-more', 'bs_window_df', GRID_FULL,
+        null, ['more', 'window']),
+    'more:dependency': () => loadExhibitLeaf('pane-more', 'dependency',
+        ['more', 'dependency']),
+    'more:sharpen': () => loadSharpenAudit(),
     'more:narrative': () => loadNarrative(),
 };
 
@@ -1016,11 +1035,6 @@ function renderOverviewExhibits(box, ir = {}) {
         caption: '1 in 200 (Solvency II) and 1 in 250 (US) are the capital anchors. '
             + 'Exact from the FFT grid, not simulated.',
     });
-    if (ir.tail_behavior) renderOneExhibit(box, ir.tail_behavior, {
-        title: 'Tail behavior',
-        gloss: 'support, the decay class on each side, and concentration',
-        caption: 'Read from the spec, so it holds before any grid is chosen.',
-    });
 }
 
 // One exhibit: the static table walked from its document, or the interactive
@@ -1191,25 +1205,110 @@ async function loadNarrative() {
 }
 
 /**
+ * The lede for a leaf: its label in bold, then what it declares it shows.
+ *
+ * `nav.js` has carried a `hint` on every leaf since a44, and `renderSubTabs`'s
+ * own comment says it "moved into the exhibit lede". It did not: the only two
+ * ledes on the page were hardcoded strings in `renderOverviewExhibits`, and
+ * every other leaf's hint was written down and rendered nowhere. This is that
+ * comment becoming true.
+ *
+ * One sentence saying what the table is, on the table rather than in the menu
+ * above it. That is where it belongs for the same reason the Overview pair sit
+ * there: a hint beside a sub-tab reads as a third kind of item inside the row.
+ *
+ * @returns {HTMLElement|null} the lede, or null for a leaf that declares none.
+ */
+function ledeFor(group, key) {
+    const leaf = leafOf(group, key);
+    if (!leaf?.hint) return null;
+    const p = el('p', { className: 'exhibit-lede' }, el('b', {}, leaf.label));
+    p.appendChild(document.createTextNode(`: ${leaf.hint}`));
+    return p;
+}
+
+/**
+ * More \ Sharpen: what the grid audit tried, and what it decided.
+ *
+ * Two blocks, because the probe answers at two levels. The score grid first,
+ * `sharpen_df.score.unstack('d_log2')`, which is the library's own documented
+ * picture of the walk: rows are steps in bs, columns steps in log2, cells the
+ * score, lower better, and the NaN corners are directions the probe ran out of
+ * budget before reaching. Then the full frame, one row per cell with its
+ * realized moments, its validation verdict, the time it took, and the
+ * `selected` flag marking the winner.
+ *
+ * The audit was computed and thrown away through a50: Sharpen wrote its
+ * one-line verdict into the status strip and `sharpen_df` was reachable from
+ * nothing, so the reader was told a grid had moved and never shown the search
+ * that moved it.
+ */
+async function loadSharpenAudit() {
+    const [score, full] = await Promise.all([
+        api.frameIr(state.id, 'sharpen_score').catch(() => null),
+        api.frameIr(state.id, 'sharpen_df').catch(() => null),
+    ]);
+    const draw = () => {
+        const root = el('div', { className: 'overview-exhibits exhibit-blocks' });
+        replacePane('pane-more', root);
+        const lede = ledeFor('more', 'sharpen');
+        if (lede) root.appendChild(lede);
+        if (!score && !full) {
+            root.appendChild(el('div', { className: 'text-muted small' },
+                'No audit on this object. Press Sharpen on the action row.'));
+            return;
+        }
+        if (score) {
+            root.appendChild(el('p', { className: 'exhibit-lede' },
+                el('b', {}, 'Score grid'),
+                ': every cell the probe walked, as steps in bs down and steps '
+                + 'in log2 across. Blank cells are where it stopped.'));
+            const host = el('div');
+            root.appendChild(host);
+            mountTable('pane-more', host, { doc: score }, GRID_FULL);
+        }
+        if (full) {
+            root.appendChild(el('p', { className: 'exhibit-lede' },
+                el('b', {}, 'Every cell'),
+                ': the same walk with its working, one row per grid tried.'));
+            const host = el('div');
+            root.appendChild(host);
+            mountTable('pane-more', host, { doc: full }, GRID_FULL);
+        }
+        onTableViewChange('pane-more', draw, root);
+    };
+    draw();
+}
+
+/**
  * One library exhibit in a pane, as its envelope.
  *
- * The generic leaf loader for Economics and More's Dependency. It takes the
- * exhibit route rather than the frame route for two reasons. Some of these
- * exhibits have no frame behind them at all: `economic_waterfall` and
- * `dependency` are built by the library and reachable only this way. And where
- * both exist the envelope is the richer one, since the library owns the
- * business translation and ships each block with its own caption.
+ * The generic leaf loader for Economics, More's Dependency and More's Tail
+ * behavior. It takes the exhibit route rather than the frame route for two
+ * reasons. Some of these exhibits have no frame behind them at all:
+ * `economic_waterfall` and `dependency` are built by the library and reachable
+ * only this way. And where both exist the envelope is the richer one, since the
+ * library owns the business translation and ships each block with its own
+ * caption.
  *
  * An exhibit is one or more blocks, each a table document, so a pane may hold
  * several tables. `economic_ratios` is the reason: its insurer framing splits
  * into pure-unit blocks rather than one frame with mixed measures.
+ *
+ * @param {[string, string]} leaf `[group, key]`, for the lede.
  */
-async function loadExhibitLeaf(paneId, name) {
+async function loadExhibitLeaf(paneId, name, leaf) {
     const envelope = await api.exhibit(state.id, name);
     const blocks = envelope.blocks || [];
     const draw = () => {
-        const root = el('div', { className: 'overview-exhibits' });
+        // `.exhibit-blocks`, not `.overview-exhibits`: the blocks here have no
+        // lede of their own between them, so the spacing has to come from the
+        // container. Stacked flush, a two-block exhibit reads as one table that
+        // changed its mind about its columns half way down.
+        const root = el('div', { className: 'overview-exhibits exhibit-blocks' });
         replacePane(paneId, root);
+        const lede = leaf && ledeFor(leaf[0], leaf[1]);
+        if (lede) root.appendChild(lede);
         if (!blocks.length) {
             root.appendChild(el('div', { className: 'text-muted small' },
                 'Nothing to show for this object.'));
@@ -1256,7 +1355,8 @@ function replacePane(paneId, node) {
  * direct request and wrong to render silently, so this refetches the whole frame
  * and hands it to the grid instead.
  */
-async function replacePaneTable(paneId, which, opts = GRID_FULL, bulk = null) {
+async function replacePaneTable(paneId, which, opts = GRID_FULL, bulk = null,
+                                leaf = null) {
     let source = null;
     if (!bulk) {
         const doc = await api.frameIr(state.id, which).catch(() => null);
@@ -1267,15 +1367,19 @@ async function replacePaneTable(paneId, which, opts = GRID_FULL, bulk = null) {
         source = { frame: await fetchFrame() };
     }
     const draw = () => {
+        const root = el('div');
+        const lede = leaf && ledeFor(leaf[0], leaf[1]);
+        if (lede) root.appendChild(lede);
         const host = el('div');
-        replacePane(paneId, host);        // tears down the previous mode first
+        root.appendChild(host);
+        replacePane(paneId, root);        // tears down the previous mode first
         mountTable(paneId, host, source, opts);
         // Re-register against the node just created, not against the pane. The
         // pane outlives everything, so a listener keyed on it would survive a
         // rebuild and redraw the *previous* object's frame on the next flip.
         // This node is dropped by `clearPanes`, and a disconnected node is what
         // prunes the listener.
-        onTableViewChange(paneId, draw, host);
+        onTableViewChange(paneId, draw, root);
     };
     draw();
 }
@@ -1402,7 +1506,7 @@ reinsInput?.addEventListener('keydown', (ev) => {
 });
 
 /** Reinsurance / Summary, Stats and Density: one per-layer frame. */
-async function loadReinsFrame(which) {
+async function loadReinsFrame(which, leaf = null) {
     if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
     // The density is the bulk one: the table takes the binned grid, and only
     // the plot leaf wants every point.
@@ -1410,7 +1514,64 @@ async function loadReinsFrame(which) {
         ? () => api.frameOf(state.id, which, { resolution: 'display' })
         : null;
     await replacePaneTable('pane-reinsurance', which,
-        { ...GRID_FULL, renderCap: 8192 }, bulk);
+        { ...GRID_FULL, renderCap: 8192 }, bulk, leaf);
+}
+
+/**
+ * Reinsurance \ Stats: the layering analysis, read the way round it is used.
+ *
+ * Two tables, from one library frame that holds two different kinds of thing.
+ * The **terms** are the layer's own contract, share, limit, attachment and the
+ * probabilities of reaching it; the **moments** are what that layer does to the
+ * frequency, severity and aggregate distributions. Both run gross, ceded, net
+ * down the rows, because that is the comparison a reinsurance reader makes and
+ * the eye makes it down a column, not across a row.
+ *
+ * The library builds the frame the other way up, measures down and layers
+ * across, which is right for the library (a layer is a natural column of an
+ * analysis) and wrong on a page. The transpose and the split are the api's, at
+ * `_reins_stats_transposed`.
+ *
+ * A portfolio has no layer terms, so its `reins_stats_terms` comes back 400 and
+ * only the moments block draws. That is a shape difference, not a failure,
+ * which is why both fetches are caught rather than either being required.
+ */
+async function loadReinsStats() {
+    if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
+    const [terms, moments] = await Promise.all([
+        api.frameIr(state.id, 'reins_stats_terms').catch(() => null),
+        api.frameIr(state.id, 'reins_stats_moments').catch(() => null),
+    ]);
+    const draw = () => {
+        const root = el('div', { className: 'overview-exhibits exhibit-blocks' });
+        replacePane('pane-reinsurance', root);
+        const lede = ledeFor('reinsurance', 'stats');
+        if (lede) root.appendChild(lede);
+        if (!terms && !moments) {
+            root.appendChild(el('div', { className: 'text-muted small' },
+                'No layering analysis on this object.'));
+            return;
+        }
+        const block = (doc, title, gloss) => {
+            root.appendChild(el('p', { className: 'exhibit-lede' },
+                el('b', {}, title), `: ${gloss}`));
+            const host = el('div');
+            root.appendChild(host);
+            mountTable('pane-reinsurance', host, { doc }, GRID_FULL);
+        };
+        if (terms) {
+            block(terms, 'Layer terms',
+                'share, limit and attachment, with the probability of reaching '
+                + 'and of exhausting each layer');
+        }
+        if (moments) {
+            block(moments, 'Moments',
+                'what each layer does to the frequency, severity and aggregate '
+                + 'distributions');
+        }
+        onTableViewChange('pane-reinsurance', draw, root);
+    };
+    draw();
 }
 
 /**

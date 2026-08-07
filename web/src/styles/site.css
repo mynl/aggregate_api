@@ -718,6 +718,26 @@ header .navbar { min-height: 56px; }
 .gt-host { overflow-x: auto; }
 .gt-host .gt.gt table { font-size: .86rem; }
 .gt-host .gt.gt .gt-r { font-family: var(--mono); }
+/* The library's own caption, which the walker draws as a real <caption> inside
+   the table.
+
+   That is the whole problem. `.gt-host` is a horizontal scroll container and
+   `.gt` is `width: fit-content`, so the table's width is the wider of its
+   columns and its caption, and the Ledger's caption is a paragraph of prose.
+   It therefore set the scroll width, ran off the right of the screen, and
+   dragged an otherwise reasonable table into a scroll it did not need.
+   Capped at the same measure every other run of prose on the page takes, so
+   the caption wraps and the table goes back to deciding its own width.
+
+   Specificity has to match gt.css, which writes `.gt.gt .gt-caption`; a bare
+   `.gt-host .gt-caption` loses to it and the rule is dead. Also lightened from
+   the walker's 600: a caption sitting above a table in bold reads as the
+   heading of the section rather than as a note on the table, which is what the
+   author saw and called "look bold?". */
+.gt-host .gt.gt .gt-caption {
+    max-width: var(--measure); font-weight: 400;
+    font-size: var(--fs-meta); color: var(--mut); line-height: 1.45;
+}
 /* The capital anchors. Backgrounds go on the cells, not the row, because
    `border-collapse: collapse` defeats a background on the <tr> itself.
    #fff7e6 is the shade these rows have carried since the hand-built exhibit. */
@@ -747,9 +767,20 @@ header .navbar { min-height: 56px; }
    The lede carries the separation between stacked exhibits, so the gap belongs
    above it rather than between a table and its own caption. */
 .overview-exhibits { margin-top: .75rem; }
+/* Blocks with no lede between them, which is every library exhibit: the
+   Overview pair carry the app's own ledes and take their spacing from those,
+   but an exhibit envelope is one or more table documents stacked directly.
+   Flush, a two-block exhibit reads as one table that changed its mind about its
+   columns half way down. Same 1.9rem the lede reserves, so the two kinds of
+   pane breathe alike. */
+.exhibit-blocks > * + * { margin-top: 1.9rem; }
 .exhibit-lede { font-size: var(--fs-body); color: var(--ink-2);
     max-width: var(--measure); margin: 1.9rem 0 .15rem; }
 .exhibit-lede:first-child { margin-top: 0; }
+/* A lede followed by its own table is one unit; the gap belongs above the pair,
+   which `.exhibit-lede` already carries. Without this the block rule above
+   would add a second gap between a lede and the table it introduces. */
+.exhibit-blocks > .exhibit-lede + * { margin-top: .15rem; }
 .exhibit-lede b { color: var(--ink); font-weight: 700; }
 .exhibit-caption { font-size: var(--fs-meta); color: var(--mut);
     max-width: var(--measure); margin: .35rem 0 .25rem; }

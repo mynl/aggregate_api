@@ -97,6 +97,10 @@ class Capability(BaseModel):
     # document; each names its consumer in ``capability.py``.
     has_premium: bool = False
     can_sharpen: bool = False
+    # Whether a probe has already **run**, which is a different question from
+    # whether running one is worth offering: an object can answer True to both.
+    # Gates the More group's Sharpen leaf, since `sharpen_df` is None until then.
+    has_sharpen: bool = False
     can_pnl: bool = False
     can_reins: bool = False
     can_price: bool = False

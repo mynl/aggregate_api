@@ -55,8 +55,9 @@ def test_every_kind_carries_a_capability_block(client, label):
     _, body = _build(client, label)
     cap = body["capability"]
     assert set(cap) == {"exhibits", "charts", "has_premium", "can_sharpen",
-                        "can_pnl", "can_reins", "can_price", "can_evaluate",
-                        "can_bounds", "can_allocate", "needs_premium"}
+                        "has_sharpen", "can_pnl", "can_reins", "can_price",
+                        "can_evaluate", "can_bounds", "can_allocate",
+                        "needs_premium"}
     for item in cap["exhibits"]:
         assert set(item) == {"name", "title", "perspectives"}
         assert item["perspectives"], "an unavailable exhibit is absent, not empty"
@@ -206,6 +207,47 @@ def test_can_sharpen_goes_false_on_a_confirmed_grid(client):
                  "note{a note of my own; sharpen: grid confirmed, no change}")
     r = client.post("/v1/objects", json={"decl": confirmed, "log2": 12})
     assert r.json()["capability"]["can_sharpen"] is False
+
+
+def test_has_sharpen_is_not_the_negation_of_can_sharpen(client):
+    """Two questions, not one fact and its complement.
+
+    ``can_sharpen`` asks whether running a probe is worth offering;
+    ``has_sharpen`` asks whether one has already run and left an audit to read.
+    A fresh object answers False and True. After a probe that *confirms* the
+    grid it answers True and False, which is the pair a naive "one flag, two
+    readings" implementation would make impossible.
+    """
+    _, body = _build(client, "agg")
+    assert body["capability"]["has_sharpen"] is False
+    assert body["capability"]["can_sharpen"] is True
+
+    derived = client.post(f"/v1/objects/{body['id']}/sharpen", json={}).json()
+    assert derived["capability"]["has_sharpen"] is True
+    assert derived["capability"]["can_sharpen"] is False
+
+
+def test_the_sharpen_audit_frames_appear_with_the_flag(client):
+    """The leaf's gate and the frames behind it agree.
+
+    A flag that lights a leaf whose route 404s is worse than a dark leaf, which
+    is the failure this whole capability block exists to prevent.
+    """
+    _, body = _build(client, "agg")
+    # 400, not 404: the name is known and this object cannot answer it yet,
+    # which is the route's existing split. 404 is reserved for a frame nobody
+    # serves.
+    for which in ("sharpen_score", "sharpen_df"):
+        assert client.get(
+            f"/v1/objects/{body['id']}/frame/{which}?format=ir"
+        ).status_code == 400, f"{which} before the probe"
+
+    derived = client.post(f"/v1/objects/{body['id']}/sharpen", json={}).json()
+    assert derived["capability"]["has_sharpen"] is True
+    for which in ("sharpen_score", "sharpen_df"):
+        r = client.get(f"/v1/objects/{derived['id']}/frame/{which}?format=ir")
+        assert r.status_code == 200, f"{which}: {r.text}"
+        assert r.json()["body"], f"{which} served an empty table"
 
 
 def test_has_premium_follows_the_exposure(client):

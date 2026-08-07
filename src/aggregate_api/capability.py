@@ -157,6 +157,35 @@ def can_sharpen(obj: Any) -> bool:
     return not any(v.startswith(SHARPEN_NOTE_PREFIX) for v in verdicts)
 
 
+def has_sharpen(obj: Any) -> bool:
+    """Has a grid audit actually run on this object, leaving a table to read?
+
+    Consumer: the More group's Sharpen leaf, which shows what the probe tried.
+
+    **Not the negation of** :func:`can_sharpen`, and the two are not two views of
+    one fact. ``can_sharpen`` asks whether running the probe is worth offering;
+    this asks whether one has already run. An object that has never been
+    sharpened answers False to this and True to that; an object whose probe
+    *moved* the grid answers True to both, because the library says a walk that
+    ran out of its bucket limit while still improving is worth resuming.
+
+    Read off ``sharpen_df``, which the library leaves at ``None`` until
+    ``sharpen()`` runs (``_aggregate.py:814``, ``_portfolio.py:1041``), so this
+    is the frame's own account of whether it exists rather than a guess from the
+    note.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    bool
+    """
+    df = getattr(obj, "sharpen_df", None)
+    return df is not None and not df.empty
+
+
 def can_price(obj: Any) -> bool:
     """Can this object answer the pricing forms?
 
@@ -323,6 +352,29 @@ def needs_premium(obj: Any) -> bool:
 #: private working copies behind the public properties and would print twice.
 NARRATIVE_SUFFIXES = ("_description", "_explanation")
 
+#: Reading order for the Narrative pane, by attribute stem.
+#:
+#: The sections used to come out sorted by stem, which is alphabetical order over
+#: names the reader never sees and has no reason to care about: `bs` before
+#: `info` before `reins` before `sharpen` before `tail` before `validation`. That
+#: is not an order, it is the absence of one.
+#:
+#: This is the order the questions actually get asked in. What was built, what
+#: grid it was built on, whether that grid is trustworthy, how it behaves out in
+#: the tail, what was ceded off it, and finally what the grid audit found, which
+#: is the most specialist of the six and the one most often absent.
+#:
+#: Anything the library adds later is appended, alphabetically among itself, so a
+#: new stem still appears without an edit here. That is the same contract the
+#: suffix rule above keeps: derived by default, ordered by hand only where the
+#: order carries meaning.
+#:
+#: ``info`` never matches a stem, since the object's ``info`` block is a plain
+#: string served alongside these rather than a ``*_description`` pair. It leads
+#: the list because that is where the pane puts it, and naming it here is what
+#: makes this tuple the whole reading order rather than most of it.
+NARRATIVE_ORDER = ("info", "bs", "validation", "tail", "reins", "sharpen")
+
 
 def narrative_for(obj: Any) -> list[dict]:
     """Every text field this object carries, in one list.
@@ -346,7 +398,8 @@ def narrative_for(obj: Any) -> list[dict]:
     Returns
     -------
     list of dict
-        ``{"name", "description", "explanation"}``, alphabetical by name.
+        ``{"name", "description", "explanation"}``, in ``NARRATIVE_ORDER``, with
+        anything unlisted appended alphabetically.
     """
     sections: dict[str, dict] = {}
     for attr in dir(obj):
@@ -366,7 +419,13 @@ def narrative_for(obj: Any) -> list[dict]:
             section = sections.setdefault(
                 stem, {"name": stem, "description": "", "explanation": ""})
             section[suffix.lstrip("_")] = text
-    return [sections[name] for name in sorted(sections)]
+
+    # Listed stems first in their declared order, then whatever else the object
+    # carried, alphabetically among themselves so the tail of the list is at
+    # least stable.
+    rank = {name: i for i, name in enumerate(NARRATIVE_ORDER)}
+    order = sorted(sections, key=lambda n: (rank.get(n, len(rank)), n))
+    return [sections[name] for name in order]
 
 
 def capability_for(obj: Any) -> dict:
@@ -387,6 +446,7 @@ def capability_for(obj: Any) -> dict:
         "charts": charts_for(obj),
         "has_premium": has_premium(obj),
         "can_sharpen": can_sharpen(obj),
+        "has_sharpen": has_sharpen(obj),
         "can_pnl": can_pnl(obj),
         "can_reins": can_reins(obj),
         "can_price": can_price(obj),

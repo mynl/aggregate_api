@@ -77,8 +77,17 @@ const EXPECTED = {
     'more:validation': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl'],
     'more:stats': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl'],
     'more:density': ['agg', 'agg_reins', 'port', 'sev', 'distortion', 'bvagg', 'pnl', 'xpnl'],
+    // Same set as overview:tail, and for the same reason: both need a full loss
+    // distribution. They answer different questions about it, which is why they
+    // are two leaves rather than two blocks in one pane.
+    'more:behavior': ['agg', 'agg_reins', 'port'],
     'more:window': ['agg', 'agg_reins', 'port', 'bvagg'],
     'more:dependency': ['bvagg'],
+    // Dark for every kind here, and that is the assertion, not an omission.
+    // The Sharpen leaf shows an audit that only exists once the probe has run,
+    // and `capture-capability.py` builds each fixture and stops. An object that
+    // has been sharpened lights it; nothing captured has been.
+    'more:sharpen': [],
     'more:narrative': ['agg', 'agg_reins', 'port', 'sev', 'distortion', 'bvagg', 'pnl', 'xpnl'],
 };
 

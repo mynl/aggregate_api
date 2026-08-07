@@ -368,6 +368,84 @@ def test_reins_frames_present(client):
         assert len(body["rows"]) > 0
 
 
+def test_reins_stats_reads_layers_down_the_rows(client):
+    """The layering analysis, transposed, and split into terms and moments.
+
+    The library builds `reins_stats_df` with the measures down and the layers
+    across, which is right for a library and wrong on a page: the comparison a
+    reinsurance reader makes is gross against ceded against net, and the eye
+    makes it down a column. The two blocks are the two kinds of thing the one
+    frame holds, the layer's own contract and what it does to the moments.
+    """
+    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
+
+    terms = client.get(f"/v1/objects/{oid}/frame/reins_stats_terms?format=ir")
+    assert terms.status_code == 200, terms.text
+    head = [h["text"] for h in terms.json()["head"][-1]]
+    assert "layer" in head, head
+    for term in ("share", "limit", "attach"):
+        assert term in head, f"{term} missing from {head}"
+
+    moments = client.get(f"/v1/objects/{oid}/frame/reins_stats_moments?format=ir")
+    assert moments.status_code == 200, moments.text
+    doc = moments.json()
+    # Two header levels: the component spans (freq / sev / agg) over the three
+    # measures. Raw moments are gone, and they are columns now, so the drop had
+    # to move with them.
+    assert len(doc["head"]) == 2, doc["head"]
+    spans = {h["text"] for h in doc["head"][0] if h.get("text")}
+    assert {"freq", "sev", "agg"} <= spans, spans
+    measures = [h["text"] for h in doc["head"][-1]]
+    assert measures.count("mean") == 3, measures
+    assert not any(m.startswith("ex") for m in measures), measures
+
+
+def test_reins_stats_terms_are_an_aggregate_thing(client):
+    """A portfolio carries no layer terms, and says so rather than inventing them.
+
+    Its `reins_stats_df` is a different frame: view by measure down, units
+    across, with nothing about limits or attachments in it. The moments block
+    still answers, view by unit down the rows.
+    """
+    port = ("port RS.P "
+            "agg RS.A 10 claims 1000 xs 0 sev lognorm 90 cv 1.5 "
+            "occurrence net of 500 xs 500 poisson "
+            "agg RS.B 5 claims 500 xs 0 sev lognorm 60 cv 1.2 poisson")
+    oid = client.post("/v1/objects", json={"decl": port, "log2": 12}).json()["id"]
+
+    # 400, the route's "known frame, this object has none" answer.
+    assert client.get(
+        f"/v1/objects/{oid}/frame/reins_stats_terms?format=ir").status_code == 400
+
+    moments = client.get(f"/v1/objects/{oid}/frame/reins_stats_moments?format=ir")
+    assert moments.status_code == 200, moments.text
+    head = [h["text"] for h in moments.json()["head"][-1]]
+    assert head[:2] == ["view", "unit"], head
+    assert head[2:] == ["mean", "cv", "skew"], head
+
+
+def test_the_frame_route_applies_declared_formats(client):
+    """`tables.FORMATS` reaches the generic frame route, which it did not.
+
+    The route passed no format key at all through a50, so every frame it served
+    was pure dtype inference; inference reads a column's magnitude and drops the
+    decimals once its mean reaches 20,000, so a book worth pricing reported its
+    money as whole units. This book's VaR is in the tens of millions.
+    """
+    big = "agg FMT.Big 5000 claims 100000 xs 0 sev lognorm 9000 cv 2.5 poisson"
+    oid = client.post("/v1/objects", json={"decl": big, "log2": 16}).json()["id"]
+    doc = client.get(f"/v1/objects/{oid}/frame/tail_df?format=ir").json()
+
+    head = [h["text"] for h in doc["head"][-1]]
+    cells = doc["body"][0]["cells"]
+    var = cells[head.index("VaR")]
+    assert "," in var["text"], f"VaR unseparated: {var['text']}"
+    assert var["text"].endswith(".00") or "." in var["text"], var["text"]
+    # The probability column needs enough digits to tell 0.99 from 0.995.
+    p = cells[head.index("p")]
+    assert len(p["text"].split(".")[1]) >= 4, p["text"]
+
+
 def test_density_df_is_full_resolution_by_default(client):
     """Every grid point, unbinned, and the atoms survive intact.
 

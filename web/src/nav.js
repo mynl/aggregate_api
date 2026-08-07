@@ -64,7 +64,7 @@ export const NAV_GROUPS = {
                 label: 'Tail',
                 exhibit: 'tail',
                 why: 'needs a full loss distribution, so an aggregate or a portfolio',
-                hint: 'return periods, then how each tail behaves',
+                hint: 'VaR, TVaR and xsVaR by return period',
             },
         },
     },
@@ -179,17 +179,51 @@ export const NAV_GROUPS = {
                 label: 'Density',
                 hint: 'binned to a power-of-two display grid; copy / save from the grid',
             },
+            // Not the same question as Overview / Tail, which is the
+            // return-period ladder read off the computed grid. This is the
+            // analytic classification of the frequency, severity and aggregate
+            // tails: the family, the support, sub or super exponential on each
+            // side, bounded, concentrated. It holds before any grid is chosen.
+            //
+            // The two were drawn as one pane through a50, which was wrong on
+            // the merits and invisible anyway: that pane fetched
+            // `tail_behavior_df` through the *frame* route, which resolves
+            // names out of `_CSV_FRAMES` and has never carried that one, so the
+            // request 404'd and the loader swallowed it.
+            behavior: {
+                label: 'Tail behavior',
+                exhibit: 'tail_behavior',
+                why: 'needs a full loss distribution, so an aggregate or a portfolio',
+                hint: 'the decay class on each side, and whether the support is bounded',
+            },
             window: {
                 label: 'Window',
                 exhibit: 'bs_window',
                 why: 'needs an FFT grid',
-                hint: 'bucket / window estimator; the selected row is the chosen grid',
+                // Says what the columns *are*, which the table did not. Each row
+                // is one estimate of the range the aggregate needs, as
+                // [x_min, x_max]; W is that range's width, and bs and log2 are
+                // the grid it implies, since W = bs * 2**log2.
+                hint: 'each row proposes a window [x_min, x_max] of width '
+                    + 'W = x_max - x_min, and the grid bs · 2^log2 that covers '
+                    + 'it; the selected row is the one used',
             },
             dependency: {
                 label: 'Dependency',
                 exhibit: 'dependency',
                 why: 'a bivariate only',
                 hint: 'the copula and what it does to the joint; a bivariate only',
+            },
+            // Gated on `hasSharpen`, which is not the negation of the
+            // `canSharpen` behind the action-row button: that one asks whether
+            // running a probe is worth offering, this asks whether one has run
+            // and left an audit to read. An object can answer yes to both.
+            sharpen: {
+                label: 'Sharpen',
+                flag: 'hasSharpen',
+                why: 'press Sharpen on the action row first; this is its audit',
+                hint: 'every grid the probe tried and what it scored; lower is '
+                    + 'better, and the selected row is the one it moved to',
             },
             narrative: {
                 label: 'Narrative',
@@ -312,6 +346,7 @@ export function capsFromResponse(capability, built = true) {
             canPrice: Boolean(cap.can_price),
             canEvaluate: Boolean(cap.can_evaluate),
             canSharpen: Boolean(cap.can_sharpen),
+            hasSharpen: Boolean(cap.has_sharpen),
             canPnl: Boolean(cap.can_pnl),
             canReins: Boolean(cap.can_reins),
             canBounds: Boolean(cap.can_bounds),

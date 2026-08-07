@@ -53,6 +53,38 @@ def test_sharpen_returns_the_program_that_rebuilds_the_object(client):
     assert body["kind"] == "agg"
 
 
+def test_a_derived_program_comes_back_spread(client):
+    """One clause per indented line, not one long line.
+
+    The text lands in the editor and the whole point of a derivation is that you
+    read what it did and can edit it. Through a50 all three derivations
+    collapsed their program first, and a wrapped portfolio came back as several
+    hundred characters of unbroken DecL.
+    """
+    first = _build(client, AGG)
+    program = client.post(f"/v1/objects/{first['id']}/sharpen",
+                          json={}).json()["program"]
+    lines = [ln for ln in program.splitlines() if ln.strip()]
+    assert len(lines) > 1, f"still one line: {program!r}"
+    assert lines[0].startswith("agg "), "the statement opens undented"
+    assert any(ln.startswith("  ") for ln in lines[1:]), "clauses are indented"
+
+
+def test_the_spread_program_keeps_its_trailer(client):
+    """`format_program` drops `note{}` / `tags{}` / `hints{}` unless told not to.
+
+    Which would be fatal here rather than cosmetic: Sharpen's entire contract is
+    that the `hints{}` it writes rides on the returned text, so building that
+    text reproduces the grid the probe chose. A program rendered without its
+    trailer looks right and rebuilds on the old grid.
+    """
+    first = _build(client, AGG)
+    body = client.post(f"/v1/objects/{first['id']}/sharpen", json={}).json()
+    # AGG's grid is confirmed rather than moved, so the trailer it carries is
+    # the `note{}` verdict. Either clause proves the trailer survived.
+    assert "note{" in body["program"] or "hints{" in body["program"], body["program"]
+
+
 def test_the_entry_moves_with_the_object(client):
     """The old id is gone rather than still serving the moved object.
 

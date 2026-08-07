@@ -451,6 +451,110 @@ def _bs_window_frame(obj: Any):
     return df if df is not None else _resolve_frame(obj, "bs_window_df")
 
 
+def _sharpen_score_frame(obj: Any):
+    """The sharpen probe's score grid: ``d_bs`` down, ``d_log2`` across.
+
+    The library's own documented picture of the audit
+    (``_bucket_window.py:1835``), and the one worth leading with. ``sharpen_df``
+    has one row per probed cell and twenty columns; this is the single number
+    that decides between them, laid out as the grid the probe actually walked,
+    so the shape of the search and where the winner sits are both visible at a
+    glance. Lower is better. A ragged walk leaves NaN in the corners it never
+    reached, which is information rather than a gap: it says the probe ran out
+    of budget in that direction.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    pandas.DataFrame or None
+        ``None`` before ``sharpen()`` has run, and on any object whose frame
+        does not carry the two index levels (nothing does today, but this route
+        must not 500 if that changes).
+    """
+    df = _resolve_frame(obj, "sharpen_df")
+    if df is None or df.empty or "score" not in df.columns:
+        return None
+    if "d_log2" not in (df.index.names or []):
+        return None
+    try:
+        return df["score"].unstack("d_log2")
+    except Exception:  # noqa: BLE001 -- a frame that will not pivot has no grid
+        return None
+
+
+#: The three moments the reins stats tables report, in reading order.
+_REINS_MOMENTS = ["mean", "cv", "skew"]
+
+#: The aggregate frame's non-moment components, in reading order. `meta` is the
+#: layer terms; the other three are the moment blocks.
+_REINS_COMPONENTS = ["freq", "sev", "agg"]
+
+
+def _reins_stats_transposed(obj: Any):
+    """``reins_stats_df`` with the layers down the rows, as two frames.
+
+    The library builds this frame with the *measures* down the rows and the
+    layers across, which is the transpose of how it is read: a reinsurance
+    reader compares gross against ceded against net, so those belong on the rows
+    where the eye runs down them, with the measures across as columns.
+
+    Two frames rather than one, because the frame holds two different kinds of
+    thing and stacking them in one table gave seventeen rows of mixed units.
+    The **terms** are the layer's own contract, its share, limit, attachment and
+    the probabilities of hitting it. The **moments** are what that layer does to
+    the frequency, severity and aggregate distributions. One table each.
+
+    Two input shapes, because the two kinds do not carry the same frame:
+
+    * ``Aggregate``: rows ``(component, measure)`` with component one of
+      ``meta``, ``freq``, ``sev``, ``agg``; columns ``(view, layer)``. A plain
+      transpose puts it right, then it splits on the component level.
+    * ``Portfolio``: rows ``(view, measure)``, columns the unit names, and no
+      layer terms at all. Stacking the units and unstacking the measures gives
+      view by unit down the rows.
+
+    Raw moments (``ex1``, ``ex2``, ``ex3``) are dropped here rather than by
+    ``_drop_raw_moments``, which works on rows and would no longer find them:
+    after the reshape they are columns.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    (pandas.DataFrame or None, pandas.DataFrame or None)
+        ``(terms, moments)``. Terms is ``None`` for a portfolio, which carries
+        none, and both are ``None`` with no reinsurance on the object.
+    """
+    df = _resolve_frame(obj, "reins_stats_df")
+    if df is None or df.empty:
+        return None, None
+    levels = list(df.index.names or [])
+
+    if "component" in levels:
+        t = df.T
+        terms = t["meta"].dropna(axis=1, how="all") if "meta" in t.columns.get_level_values(0) else None
+        present = [c for c in _REINS_COMPONENTS if c in t.columns.get_level_values(0)]
+        moments = t.loc[:, (present, _REINS_MOMENTS)] if present else None
+        return terms, moments
+
+    if "measure" in levels:
+        # A portfolio: units across, so stack them under the row index and put
+        # the measures back across.
+        wide = df.stack().unstack("measure")
+        keep = [m for m in _REINS_MOMENTS if m in wide.columns]
+        # The stacked unit level arrives unnamed; say what it is, since it
+        # becomes a visible stub column.
+        wide.index = wide.index.set_names("unit", level=-1)
+        return None, (wide[keep] if keep else None)
+
+    return None, None
+
+
 def collapse_program(decl: str) -> str:
     """One line of DecL from however the text arrived.
 
@@ -895,8 +999,15 @@ def get_session_models(
             if not text.strip():
                 continue
             # ... then the spread text layout (line wraps) for readability.
+            #
+            # `trailer=True`, because `format_program` defaults it to False and
+            # would drop the `note{}`, `tags{}` and `hints{}` that `spec_to_decl`
+            # emitted ten lines up. This file is the re-loadable export: a
+            # program whose `hints{}` was stripped on the way out rebuilds on a
+            # different grid from the one it was written for, silently. Fixed at
+            # a51; every `.agg` downloaded before that is missing its trailers.
             try:
-                text = format_program(text, fmt="text")
+                text = format_program(text, fmt="text", trailer=True)
             except Exception:  # noqa: BLE001 -- keep the unwrapped canonical text
                 pass
             programs.append(text.strip())
@@ -1497,7 +1608,19 @@ _CSV_FRAMES = {
     "economic_ratios_df": lambda o: _resolve_frame(o, "economic_ratios_df"),
     "density_df": lambda o: _resolve_frame(o, "density_df"),
     "bs_window_df": lambda o: _bs_window_frame(o),
+    # The grid audit, in two views: the score grid the probe walked, and the
+    # full per-cell detail behind it. Both are ``None`` until ``sharpen()`` runs,
+    # which is what the ``has_sharpen`` capability flag reports, so the leaf that
+    # reads them is dark rather than empty before then.
+    "sharpen_score": lambda o: _sharpen_score_frame(o),
+    "sharpen_df": lambda o: _resolve_frame(o, "sharpen_df"),
     "reins_summary_df": lambda o: _resolve_frame(o, "reins_summary_df"),
+    # The layering analysis, transposed so the layers run down the rows, and
+    # split into the layer's own terms and what it does to the moments. The
+    # untransposed frame stays reachable under its own name for the CSV
+    # download, which is the "give me exactly what the library built" export.
+    "reins_stats_terms": lambda o: _reins_stats_transposed(o)[0],
+    "reins_stats_moments": lambda o: _reins_stats_transposed(o)[1],
     "reins_stats_df": lambda o: _drop_raw_moments(_resolve_frame(o, "reins_stats_df")),
     "reins_density_df": lambda o: _resolve_frame(o, "reins_density_df"),
 }
@@ -1613,7 +1736,14 @@ def get_frame_document(
         )
     df = _named_frame(entry, which)
     try:
-        body, doc_hash = frame_document(df, which)
+        # `formats=which`, so a frame's own name is its format key. This route
+        # passed none at all through a50, which left `summary`, `tail_df`,
+        # `stats_df`, `validation_df`, `bs_window_df` and every reins frame to
+        # dtype inference alone; that reads a column's magnitude and drops the
+        # decimals on anything averaging over 20,000, so a book worth pricing
+        # showed its money as whole units. A name with no `tables.FORMATS` entry
+        # resolves to nothing and behaves exactly as before.
+        body, doc_hash = frame_document(df, which, formats=which)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -1684,6 +1814,50 @@ def get_chart_document(
 # nothing is derived behind the user's back. The grammar knowledge lives in the
 # library (``aggregate/dev/done/plan-derived-programs.md``); these routes only
 # call it and file the result.
+
+
+def spread(program: str) -> str:
+    """A derived program as the reader gets it: one clause per indented line.
+
+    The text these routes hand back lands in the editor, which is the whole
+    point of a derivation: you read what it did, and you can edit it. Through
+    a50 all three collapsed it to one line first, and a portfolio wrapped in a
+    P&L came back as several hundred characters of unbroken DecL that nobody
+    could read or edit with any confidence.
+
+    ``trailer=True`` is **not** optional here, and the default is ``False``.
+    Without it ``format_program`` renders the bare declaration and silently
+    drops the ``note{}``, ``tags{}`` and ``hints{}`` clauses, which for Sharpen
+    is the entire result: the whole contract of a sharpened program is that the
+    ``hints{}`` it writes rides along, so building the returned text reproduces
+    the grid the probe chose. A Sharpen that returned its program without its
+    hints would look right and rebuild on the old grid.
+
+    Best effort. The library declines to render a spec it cannot round-trip
+    (minimum and mixture distortions, mostly), and a program that will not
+    re-render is still a program worth handing back, so the collapsed form is
+    the fallback rather than a 500.
+
+    Parameters
+    ----------
+    program : str
+        Collapsed DecL, as ``collapse_program`` leaves it.
+
+    Returns
+    -------
+    str
+        The spread rendering, or ``program`` unchanged if it will not render.
+    """
+    if not program.strip():
+        return program
+    from aggregate.decl_writer import format_program
+
+    try:
+        text = format_program(program, layout="spread", trailer=True)
+    except Exception:  # noqa: BLE001 -- an unrenderable program is not an error
+        return program
+    return text.strip() or program
+
 
 def _manifest(oid: str, entry: CacheEntry) -> dict:
     """The build manifest for an object already in the cache."""
@@ -1768,12 +1942,19 @@ def post_sharpen(
             status_code=422,
             detail="the probe ran but this object carries no program to pin")
 
+    # The id is computed over the **collapsed** text, and stays that way. An
+    # ordinary build of the returned program goes through ``post_object``, which
+    # collapses before it hashes (see ``:504``), so hashing the spread form here
+    # would re-file this entry under an id no build could ever ask for and the
+    # editor's rebuild would miss its own cache slot. What the reader gets and
+    # what the cache is keyed on differ only in whitespace, which is exactly the
+    # difference ``collapse_program`` exists to make irrelevant.
     new_oid = object_id(canonicalize_decl(program), 0, 0.0)
     entry.decl, entry.log2, entry.bs = program, 0, 0.0
     cache.delete(oid)
     cache.put(new_oid, entry)
     return {
-        "program": program,
+        "program": spread(program),
         "description": getattr(obj, "sharpen_description", None) or None,
         **_manifest(new_oid, entry),
     }
@@ -1821,7 +2002,7 @@ def post_pnl(
     program = collapse_program(program)
     built = post_object(models.BuildRequest(decl=program), request,
                         settings, cache, audit)
-    return {"program": program, "description": None, **built}
+    return {"program": spread(program), "description": None, **built}
 
 
 @router.post("/objects/{oid}/reins", response_model=models.DerivedResponse)
@@ -1867,7 +2048,7 @@ def post_reins(
     program = collapse_program(program)
     built = post_object(models.BuildRequest(decl=program), request,
                         settings, cache, audit)
-    return {"program": program, "description": None, **built}
+    return {"program": spread(program), "description": None, **built}
 
 
 @router.get("/objects/{oid}/narrative", response_model=models.NarrativeResponse)

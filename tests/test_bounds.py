@@ -222,6 +222,26 @@ def test_the_absent_is_reported_as_absent(client):
         assert section["description"] or section["explanation"]
 
 
+def test_narrative_sections_are_in_reading_order(client):
+    """Not alphabetical by attribute stem, which is no order at all.
+
+    The pane used to come out bs, reins, sharpen, tail, validation, sorted over
+    names the reader never sees. The order now is the order the questions get
+    asked in: what grid it was built on, whether that grid is trustworthy, how
+    it behaves in the tail, what was ceded off it, and last the grid audit,
+    which is the most specialist of them and the one most often absent.
+    """
+    body = _build(client, AGG)
+    names = [s["name"] for s in client.get(
+        f"/v1/objects/{body['id']}/narrative").json()["sections"]]
+    expected = [n for n in ("bs", "validation", "tail", "reins", "sharpen")
+                if n in names]
+    assert names[:len(expected)] == expected, names
+    # Anything the library adds later lands after the declared ones rather than
+    # disappearing or jumping the queue.
+    assert names[len(expected):] == sorted(names[len(expected):]), names
+
+
 def test_narrative_follows_what_the_object_actually_is(client):
     """A cession changes what the reinsurance narrative says.
 
