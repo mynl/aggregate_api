@@ -9,7 +9,18 @@ dist/
 .ruff_cache/
 
 # uv / virtualenvs
-.venv/
+#
+# No trailing slash on `.venv`. A trailing slash matches a *directory* only, and
+# on this machine `.venv` is a reparse point onto `V:\dev\venvs\aggregate_api`,
+# which git sees as a symlink rather than a directory. So `.venv/` did not match
+# it, the link itself got committed as a 120000 blob holding the literal text
+# `v:/dev/venvs/aggregate_api/`, and checking the repo out on Linux produced a
+# dangling symlink to a path that cannot exist there. Untracked at a53.
+#
+# If you want the environment out of the repo directory, set
+# `UV_PROJECT_ENVIRONMENT` rather than making a link: it is per-machine, uv
+# honors it directly, and there is nothing in the tree for git to pick up.
+.venv
 venv/
 
 # pyenv
