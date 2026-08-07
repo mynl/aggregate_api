@@ -1,22 +1,36 @@
-// Format Plan B's ErrorReport JSON for human reading.
+// Format the library's ErrorReport JSON for human reading.
 //
-// ErrorReport shape (from src/aggregate/parser_errors.py):
+// The full report the server sends, which is `ErrorReport.to_dict()` from
+// `aggregate/parser_errors.py` (an `asdict` over the dataclass, so this list is
+// exactly its fields and nothing else):
 //
 //   {
-//     "kind":        "parse" | "lex" | "limit",
-//     "message":     "Unexpected identifier 'mixedd'.",
 //     "line":        1,
 //     "column":      41,
-//     "got":         "mixedd",
-//     "expected":    ["MIXED", "NOTE", "$END"],
-//     "expected_labels": ["'mixed'", "'note'", "end of input"],
-//     "suggestions": ["mixed"],
 //     "source":      "agg X 100 claims sev lognorm 100 cv 2 mixedd poisson 0.5",
+//     "source_line": "agg X 100 claims sev lognorm 100 cv 2 mixedd poisson 0.5",
 //     "caret":       "                                        ^^^^^^",
+//     "got":         "mixedd",
+//     "got_type":    "NAME",
+//     "expected":    ["'mixed'", "'note'", "end of input"],
+//     "expected_terminals": ["MIXED", "NOTE", "$END"],
+//     "suggestions": ["mixed"],
+//     "message":     "Unexpected identifier 'mixedd'.",
 //   }
+//
+// Corrected at a49. This block used to document a `kind` field and an
+// `expected_labels` field, neither of which exists: `expected` **is** the
+// human-friendly list (`expected_terminals` is the raw Lark one), and the
+// `detail.expected_labels || detail.expected` below has always been resolving
+// on its second operand.
 //
 // We render it as a monospaced block with the caret line under the
 // source. Suggestions become a "did you mean" line in italics.
+//
+// The one-line form of the same report now also goes into the status strip
+// (`failureLine` in main.js), so the reader is told what was wrong without
+// scrolling. This pane is the detail: the source, the caret, and what would
+// have been accepted there.
 
 import { el } from './utils/dom.js';
 
@@ -101,7 +115,9 @@ export function renderError(err) {
             '?'));
     }
 
-    const labels = detail.expected_labels || detail.expected || [];
+    // `expected` is the human-friendly list. The `expected_labels` name this
+    // used to try first has never been sent by anything; see the header.
+    const labels = detail.expected || [];
     if (labels.length) {
         parts.push(el('div', { className: 'small text-muted' },
             'Expected: ', labels.join(', '), '.'));

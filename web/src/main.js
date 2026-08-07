@@ -124,10 +124,22 @@ $('editor-clear').addEventListener('click', () => {
     editor.focus();
 });
 
-// Emacs keys switch -- reflect the persisted default, then toggle live.
-const emacsSwitch = $('emacs-switch');
-emacsSwitch.checked = emacsEnabledDefault();
-emacsSwitch.addEventListener('change', () => editor.setEmacs(emacsSwitch.checked));
+// Emacs keys, a checked item in the header menu beside the Tables pair.
+//
+// It was a form switch on the action row through a48, where it sat among the
+// build verbs as the one control that does nothing to the object. A preference
+// belongs with the other preference. `.active` carries the state, exactly as
+// the table-view items do, so the tick and the weight come from one class and
+// there is no second source of truth to keep in step.
+const emacsItem = $('emacs-item');
+if (emacsItem) {
+    emacsItem.classList.toggle('active', emacsEnabledDefault());
+    emacsItem.addEventListener('click', () => {
+        const on = !emacsItem.classList.contains('active');
+        emacsItem.classList.toggle('active', on);
+        editor.setEmacs(on);
+    });
+}
 
 // ----------------------------------------------------------------------
 // Build
@@ -254,11 +266,21 @@ async function runDerivation(btn, busy, call, land) {
     }
 }
 
-/** Put a derivation's own account of itself on the timing line. */
+/**
+ * Put a derivation's own account of itself in the strip's note slot.
+ *
+ * Its own slot since a49, between the summary line and the timing line. It used
+ * to be written onto the timing line itself, which the very next `renderTiming`
+ * then overwrote, so Sharpen's verdict, the one sentence saying what the probe
+ * decided and why, was on screen for less time than it took to read.
+ */
 function noteDerivation(text) {
-    const line = $('summary-timing');
-    if (line) line.textContent = text;
+    const line = $('summary-note');
+    if (line) line.textContent = text || '';
 }
+
+/** Clear the note slot. Called on every build: a note belongs to one object. */
+function clearNote() { noteDerivation(''); }
 
 sharpenBtn?.addEventListener('click', () => runDerivation(
     sharpenBtn, 'Sharpening…', (id) => api.sharpen(id)));
@@ -321,15 +343,14 @@ buildBtn.addEventListener('click', build);
 // ----------------------------------------------------------------------
 // The api reports the library's own kind vocabulary (`bvagg`, not `bivariate`):
 // where the two disagree on a name, aggregate wins and this app follows.
-// KIND_LABEL is the display form, KIND_WORD the lower-case noun for the timing
-// line ("Calculated <word> in 0.123 seconds").
+//
+// One map, not two. The lower-case KIND_WORD existed only for the timing line,
+// which said "Calculated aggregate in 0.123 seconds" directly under a summary
+// line whose second item was already the kind. The timing line now reports the
+// timing and nothing else.
 const KIND_LABEL = {
     agg: 'Aggregate', port: 'Portfolio', sev: 'Severity',
     distortion: 'Distortion', bvagg: 'Bivariate', pnl: 'P&L',
-};
-const KIND_WORD = {
-    agg: 'aggregate', port: 'portfolio', sev: 'severity',
-    distortion: 'distortion', bvagg: 'bivariate', pnl: 'P&L',
 };
 
 // Kinds whose density frame is not the loss / p_total / F / S shape, so the
@@ -348,19 +369,31 @@ function fmtBs(bs) {
     return Math.abs(2 ** k - inv) < 1e-6 ? `1/${2 ** k}` : fmt(bs);
 }
 
+/**
+ * The strip's first line: name, kind, grid, moments, verdict.
+ *
+ * Everything after the name is joined by the same `·`, the kind included. It
+ * used to hang off the name on a bare `ms-2` margin, which made the first gap
+ * on the line the one gap that was not a separator, and the eye read name and
+ * kind as one item.
+ *
+ * `log2` joined `bs` at a49. They are one fact between them: bs is how fine the
+ * grid is, log2 how far it reaches, and neither alone says whether the window
+ * covers the distribution.
+ */
 function renderSummary(res) {
     const inner = $('summary-inner');
     empty(inner);
     applyCapabilityGating();
     renderPriceBasis();
     const kindLabel = KIND_LABEL[res.kind] || 'Aggregate';
-    const bits = [
-        el('span', { className: 'nm' }, res.name || '(anonymous)'),
-        el('span', { className: 'mono ms-2' }, kindLabel),
-    ];
-    if (res.bs != null)   { bits.push(sep(), el('span', { className: 'mono' }, `bs = ${fmtBs(res.bs)}`)); }
-    if (res.mean != null) { bits.push(sep(), el('span', { className: 'mono' }, `mean ${fmt(res.mean)}`)); }
-    if (res.cv != null)   { bits.push(sep(), el('span', { className: 'mono' }, `CV ${fmt(res.cv)}`)); }
+    const bits = [el('span', { className: 'nm' }, res.name || '(anonymous)')];
+    const add = (text) => bits.push(sep(), el('span', { className: 'mono' }, text));
+    add(kindLabel);
+    if (res.bs != null)   add(`bs = ${fmtBs(res.bs)}`);
+    if (res.log2 != null) add(`log2 = ${res.log2}`);
+    if (res.mean != null) add(`mean ${fmt(res.mean)}`);
+    if (res.cv != null)   add(`CV ${fmt(res.cv)}`);
     if (res.validation) {
         const state = validationState(res.validation);
         bits.push(sep(), el('span', { className: `mono ${state}` }, res.validation));
@@ -368,8 +401,9 @@ function renderSummary(res) {
     } else {
         setStripState('ok');
     }
-    if (res.cached) { bits.push(sep(), el('span', { className: 'mono' }, 'cached')); }
+    if (res.cached) add('cached');
     inner.append(...bits);
+    clearNote();
     renderTiming(res);
     syncSummaryMore();
 }
@@ -406,24 +440,68 @@ function setStripState(state) {
     strip.classList.toggle('is-fail', state === 'bad');
 }
 
-/** Sub-line: "Calculated aggregate in 0.000 seconds" (or cache note). */
+/**
+ * Last line of the strip: "Calculated in 0.000 seconds", or the cache note.
+ *
+ * No kind word. It named the object a second time, one line under a summary
+ * whose second item is the kind, at the one place on the strip where the
+ * reader is asking about time rather than about the object.
+ */
 function renderTiming(res) {
     const node = $('summary-timing');
     if (!node) return;
     if (res.elapsed_ms == null) { node.textContent = ''; return; }
-    const word = KIND_WORD[res.kind] || 'aggregate';
     node.textContent = res.cached
-        ? `Loaded ${word} from cache`
-        : `Calculated ${word} in ${(res.elapsed_ms / 1000).toFixed(3)} seconds`;
+        ? 'Loaded from cache'
+        : `Calculated in ${(res.elapsed_ms / 1000).toFixed(3)} seconds`;
+}
+
+/**
+ * What the strip says when a build did not produce an object.
+ *
+ * The strip carries the substance, not just the fact. Through a48 it said the
+ * literal `build failed` and threw the real message away, while the server's
+ * own account of what was wrong went into the Overview pane below the tab
+ * strip: the reader was told twice that something happened and once, further
+ * down the page, what. Now line one is `build failed` and then the position and
+ * the message, so the strip answers on its own and the caret pane below is the
+ * detail rather than the only copy.
+ *
+ * `failureLine` reads whatever the server actually sent. A parse failure is an
+ * `ErrorReport` dict with `line`, `column` and `message`; a library validation
+ * error is a bare string; a 429 is neither and says so in its own words.
+ */
+function failureLine(err) {
+    if (err instanceof ApiError && err.status === 429) {
+        return { text: 'rate limited; please pause a moment', detail: null };
+    }
+    const body = (err && err.body) || {};
+    const detail = body.detail || body || {};
+    if (typeof detail === 'string') return { text: 'build failed', detail };
+    // FastAPI's own 422: [{loc: [..., field], msg, type}, ...]. Same shape
+    // `errorNode` renders in a pane, reduced to one line for the strip.
+    if (Array.isArray(detail)) {
+        return { text: 'build failed', detail: detail.map((e) => e.msg).join('; ') };
+    }
+    if (detail.line && detail.column && detail.message) {
+        return {
+            text: 'build failed',
+            detail: `line ${detail.line}, column ${detail.column}: ${detail.message}`,
+        };
+    }
+    if (detail.message) return { text: 'build failed', detail: detail.message };
+    return { text: 'build failed', detail: err?.message || null };
 }
 
 function renderBuildFailure(err) {
     const limited = err instanceof ApiError && err.status === 429;
     const inner = $('summary-inner');
     empty(inner);
-    inner.appendChild(el('span', { className: 'mono bad' },
-        limited ? 'rate limited; please pause a moment' : 'build failed'));
+    const { text, detail } = failureLine(err);
+    inner.appendChild(el('span', { className: 'mono bad' }, text));
+    if (detail) inner.append(sep(), el('span', { className: 'mono' }, detail));
     setStripState('bad');
+    clearNote();
     $('summary-timing').textContent = '';
     syncSummaryMore();
     // Surface the rich parse-error report (or the friendly rate-limit card) on
@@ -680,8 +758,18 @@ function applyCapabilityGating() {
         btn.classList.toggle('disabled', off);
         btn.setAttribute('aria-disabled', off ? 'true' : 'false');
         btn.tabIndex = off ? -1 : 0;
-        if (off) btn.setAttribute('data-why', whyGroup(group));
-        else btn.removeAttribute('data-why');
+        // A dark group says why, on hover and to a screen reader, in the same
+        // two attributes and the same wording the sub-tabs use. Through a48 the
+        // group set `data-why` and no `aria-label`, so the two levels of the
+        // menu explained themselves by two different rules.
+        if (off) {
+            const reason = whyGroup(group);
+            btn.setAttribute('data-why', reason);
+            btn.setAttribute('aria-label', `${NAV_GROUPS[group].label}, ${reason}`);
+        } else {
+            btn.removeAttribute('data-why');
+            btn.removeAttribute('aria-label');
+        }
         if (off && activeTabName() === group) activeWentDark = true;
         renderSubTabs(group);
     }
@@ -957,7 +1045,7 @@ function renderOneExhibit(box, doc, opts) {
 }
 
 /**
- * The object's own header block: name, kind, tags, and the note as the lead.
+ * The object's own header block: its tags, and its note.
  *
  * Reads `/v1/objects/{id}/meta`, so it works for anything that was built,
  * including a hand-typed program carrying `note{}`. This replaces the old
@@ -969,24 +1057,26 @@ function renderOneExhibit(box, doc, opts) {
  *
  * Notes
  * -----
- * The program and its hints are deliberately **not** shown here. They sit in
- * the editor a few centimetres up the page, so a disclosure repeating them was
- * spending the most valuable strip of the tab on something already on screen.
- * The exhibit's toggle row occupies that space instead.
+ * **The name and the kind are gone from here.** They are the first two things
+ * the status strip says, a couple of centimetres up the page, so this row
+ * repeated them at a larger size and read as a second heading for the same
+ * object. What is left is what the strip does not carry: the tags and the note,
+ * on one quiet line above the group strip.
+ *
+ * The program and its hints are deliberately **not** shown here either. They
+ * sit in the editor, so a disclosure repeating them was spending the most
+ * valuable strip of the tab on something already on screen.
  */
 function renderOverviewHeader(meta) {
     if (!meta) return null;
+    // Always a node, even when the object carries neither, so the caller's
+    // "already fetched" guard still has something to test; `:empty` in the CSS
+    // is what stops an empty one taking up space.
     const head = el('div', { className: 'overview-head' });
-
-    const line = el('div', { className: 'overview-ident' },
-        el('span', { className: 'overview-name' }, meta.name || '(anonymous)'),
-        el('span', { className: 'overview-kind mono' }, KIND_LABEL[meta.kind] || meta.kind));
     for (const tag of meta.tags || []) {
-        line.appendChild(el('span', { className: 'overview-tag' }, tag));
+        head.appendChild(el('span', { className: 'overview-tag' }, tag));
     }
-    head.appendChild(line);
-
-    if (meta.note) head.appendChild(el('p', { className: 'overview-note' }, meta.note));
+    if (meta.note) head.appendChild(el('span', { className: 'overview-note' }, meta.note));
     return head;
 }
 

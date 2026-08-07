@@ -44,12 +44,26 @@
                                  something nobody changes twice in a session. The Overview carries a
                                  second affordance for the same value, next to the tables it steers. -->
                             <li><h6 class="dropdown-header">Tables</h6></li>
-                            <li><button type="button" class="dropdown-item table-view-item" data-table-view="static">
+                            <li><button type="button" class="dropdown-item menu-check-item" data-table-view="static">
                                 <i class="bi bi-check2"></i><span>Static</span>
                                 <small class="text-muted">book-quality, printed</small></button></li>
-                            <li><button type="button" class="dropdown-item table-view-item" data-table-view="interactive">
+                            <li><button type="button" class="dropdown-item menu-check-item" data-table-view="interactive">
                                 <i class="bi bi-check2"></i><span>Interactive</span>
                                 <small class="text-muted">sort, filter, search</small></button></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <!-- Editor: the emacs keys, in the same checked-item
+                                 form as Tables above and for the same reason,
+                                 a preference rather than a per-build decision.
+                                 Deliberately NOT a `form-switch` in here: a form
+                                 control inside a dropdown-menu keeps the menu
+                                 open on click unless the menu is given
+                                 data-bs-auto-close="outside", and a check-style
+                                 item that toggles and closes is the behavior
+                                 Tables already has. -->
+                            <li><h6 class="dropdown-header">Editor</h6></li>
+                            <li><button type="button" class="dropdown-item menu-check-item" id="emacs-item">
+                                <i class="bi bi-check2"></i><span>Emacs keys</span>
+                                <small class="text-muted">Ctrl+A/E/K/Y, N/P, F/B/D</small></button></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><button type="button" class="dropdown-item" data-bs-toggle="offcanvas" data-bs-target="#helpPanel">Help</button></li>
                             <li><button type="button" class="dropdown-item" id="dl-raw">Download models (raw)</button></li>
@@ -131,22 +145,33 @@
                         title="back to the program you built">Reset</button>
             </div>
 
+            <!-- Two rows, split by kind rather than by how often each is
+                 pressed: what you do to the program on top, where you go
+                 underneath. Ctrl+K and Ctrl+Shift+↑↓ stay in the help panel
+                 only; this is a reminder, not a second copy of the key table.
+
+                 The emacs switch used to ride here. It is a preference, not an
+                 action, so it moved into the hamburger beside the Tables
+                 choice. -->
             <span class="fb-right d-none d-sm-flex">
-                <span class="fb-text">Ctrl+Enter build<span class="sep">·</span>Ctrl+Space complete<span class="sep">·</span>Alt+1…6 groups</span>
-                <span class="fb-emacs">
-                    emacs keys:
-                    <span class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="emacs-switch">
-                    </span>
-                </span>
+                <span class="fb-text">Ctrl+Enter build<span class="sep">·</span>Ctrl+Space complete</span>
+                <span class="fb-text">Ctrl+↑↓ history<span class="sep">·</span>Alt+1…6 groups</span>
             </span>
         </div>
 
-        <!-- Status strip: what is built, and whether it is OK. The summary line
-             and the timing line share one container so the instrumentation
-             reads as one thing. main.js sets `is-warn` / `is-fail` on the
-             wrapper from the build's own verdict, which tints the whole strip:
-             hue alone is too weak for a state you must not miss. -->
+        <!-- Status strip: what is built, and whether it is OK. Three lines in
+             one container, so the instrumentation reads as one thing:
+
+               1. the object    name · kind · bs · log2 · mean · CV · validation
+               2. the note      what a derivation did, when one just ran
+               3. the timing    Calculated in 0.000 seconds
+
+             The note is its own line as of a49. Sharpen's verdict used to be
+             written onto the timing line, which the next render then overwrote.
+
+             main.js sets `is-warn` / `is-fail` on the wrapper from the build's
+             own verdict, which tints the whole strip: hue alone is too weak for
+             a state you must not miss. -->
         <div class="status-strip" id="status-strip">
             <div class="summary" id="summary">
                 <div class="summary-inner" id="summary-inner">
@@ -156,6 +181,7 @@
                 <button class="summary-more" id="summary-more" title="show full summary">
                     <i class="bi bi-chevron-down"></i></button>
             </div>
+            <div class="summary-note" id="summary-note"></div>
             <div class="summary-timing" id="summary-timing"></div>
         </div>
 
@@ -173,16 +199,21 @@
              main.js renders each row from the capability block. Nothing here
              says what a kind can do.
 
-             Reinsurance sits before Pricing because that is the order the work
-             happens in: you decide what you are keeping before you decide what
-             to charge for it. Bounds ships with its leaves greyed: the house
-             rule is that the menu set never changes shape, so what is coming is
-             visible and plainly not ready. -->
+             The order is the demo flow, which is the order the work happens in:
+             look at the gross book, add reinsurance, decide what to charge for
+             what is left, then read the economics of the result. Bounds is
+             orthogonal to all four and sits late; More is the specialist
+             frames. Nothing may stand between a group strip and its sub menu.
+
+             This order is written twice, here and as the key order of
+             NAV_GROUPS in nav.js, which is also what Alt+1…6 indexes.
+             `dev/scripts/check-nav.mjs` parses this list and asserts the two
+             agree, so they cannot drift apart again. -->
         <ul class="nav nav-pills out-tabs" role="tablist">
             <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#t-overview"    data-tab="overview"    type="button">Overview</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-economics"   data-tab="economics"   type="button">Economics</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-reinsurance" data-tab="reinsurance" type="button">Reinsurance</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-pricing"     data-tab="pricing"     type="button">Pricing</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-economics"   data-tab="economics"   type="button">Economics</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-bounds"      data-tab="bounds"      type="button">Bounds</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-more"        data-tab="more"        type="button">More</button></li>
         </ul>

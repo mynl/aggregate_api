@@ -40,13 +40,45 @@ def test_build_dice(client):
 
 
 def test_build_summary_fields(client):
-    """Build response carries mean / cv / validation for the SPA summary."""
+    """Build response carries the grid, the moments and the verdict."""
     body = client.post("/v1/objects", json={"decl": _DICE}).json()
     assert body["bs"] == pytest.approx(1.0)   # Dice resolves to bs=1
     assert body["mean"] == pytest.approx(10.5, rel=1e-3)
     # Fixed frequency -> agg CV = sd/mean = sqrt(3*Var(U[1..6]))/10.5.
     assert body["cv"] == pytest.approx(0.2817, rel=1e-2)
     assert body["validation"] == "not unreasonable"
+
+
+def test_build_reports_resolved_log2(client):
+    """``log2`` rides beside ``bs``, and reports the grid the object is *on*.
+
+    The pair is what says whether the window covers the distribution: bs alone
+    is only how fine the grid is. Both are the **resolved** values, not the
+    requested ones, which is the same contract ``bs`` has always kept here.
+
+    Dice is the case that proves it. Its support is 18 points, so the library
+    pins it at ``log2=5`` and asking for 8 does not move it; a continuous
+    aggregate takes the 13 it was given. A response echoing the request would
+    have the strip claim a 256-bucket grid under an object sitting on 32.
+
+    Checked on the cache-hit path too, because that branch assembles its payload
+    from a separate literal and is exactly where a new field gets forgotten.
+    """
+    body = client.post("/v1/objects", json={"decl": _DICE, "log2": 8}).json()
+    assert body["cached"] is False
+    assert body["log2"] == 5
+    assert isinstance(body["log2"], int)
+
+    cached = client.post("/v1/objects", json={"decl": _DICE, "log2": 8}).json()
+    assert cached["cached"] is True
+    assert cached["log2"] == 5
+
+    big = client.post(
+        "/v1/objects",
+        json={"decl": "agg Big 100 claims sev lognorm 100 cv 1.5 poisson",
+              "log2": 13},
+    ).json()
+    assert big["log2"] == 13
 
 
 def test_build_is_idempotent(client):

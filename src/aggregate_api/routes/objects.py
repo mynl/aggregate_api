@@ -295,7 +295,8 @@ def _has_reinsurance(obj: Any) -> bool:
 
 
 def _summary_fields(obj: Any) -> dict:
-    """Headline ``mean`` / ``cv`` / ``validation`` for the build summary.
+    """Headline grid and moments for the build summary: ``bs``, ``log2``,
+    ``mean``, ``cv``, ``validation``.
 
     ``Aggregate`` and ``Portfolio`` carry the analytic moments on ``actual_m`` /
     ``actual_cv`` and the realized (model-output) ones on ``est_m`` / ``est_cv``.
@@ -353,8 +354,19 @@ def _summary_fields(obj: Any) -> dict:
     if not reinsured:
         m, cv = m[::-1], cv[::-1]
 
+    # ``log2`` rides beside ``bs`` because the two are one fact: bs is how fine
+    # the grid is and log2 is how far it reaches, and bs * 2**log2 is the window
+    # the object was computed on. An int, and int-coerced rather than
+    # float-coerced, so the strip prints ``log2 = 16`` and not ``16.0``.
+    log2 = getattr(obj, "log2", None)
+    try:
+        log2 = int(log2) if log2 is not None else None
+    except (TypeError, ValueError):
+        log2 = None
+
     return {
         "bs": _num("bs"),
+        "log2": log2,
         "mean": _num(*m),
         "cv": _num(*cv),
         "validation": validation,

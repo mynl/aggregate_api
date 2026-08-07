@@ -126,10 +126,13 @@ class BuildResponse(BaseModel):
     cached: bool
     elapsed_ms: int
     # Headline stats for the SPA's one-line build summary. Optional so a
-    # future object kind without these accessors still serializes. ``bs`` is
-    # the *resolved* bucket size (the library's auto-pick when the request
-    # said "auto"), shown in the summary line.
+    # future object kind without these accessors still serializes. ``bs`` and
+    # ``log2`` are the *resolved* grid (the library's auto-pick when the
+    # request said "auto"), and they belong together: bs alone says how fine
+    # the grid is and log2 says how far it reaches, so a reader given one of
+    # them cannot tell whether the window covers the distribution.
     bs: float | None = None
+    log2: int | None = None
     mean: float | None = None
     cv: float | None = None
     validation: str | None = None

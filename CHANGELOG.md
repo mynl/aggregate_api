@@ -4,6 +4,77 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a49
+
+`dev/plan-ui-round-3.md` phase 1, the shell and the status strip. Nine items off
+the author's punch list, taken after the first end-to-end run of the whole site.
+
+**Bootstrap blue is gone, this time actually.** a47's comment said it was, and
+it was not: `--house` and `--primary` are our tokens and Bootstrap reads
+neither, so Cede, Price, Evaluate, Compute and the help panel's Load it all
+still came out `#0d6efd`, as did every link the sheet had not styled by hand.
+`site.css` now maps `--bs-primary`, the `--bs-link-*` pair, `--bs-focus-ring-color`
+and the `.btn-primary` token block onto the house red, with `--house-dark` for
+the pressed state and `--house-ring` for the focus ring.
+
+**The identity row goes.** The Overview header repeated the name and the kind
+that the status strip says two centimetres higher, at a larger size, so the page
+had two headings for one object. What is left is the material the strip does not
+carry, the tags and the note, on one quiet line above the group strip.
+`--fs-title` keeps its place in the scale with no subject rather than leaving a
+hole for the next page title to fall through.
+
+**The status strip, rebuilt.** Line one is name, kind, `bs`, `log2`, mean, CV
+and the verdict, every item joined by the same separator; the kind used to hang
+off the name on a bare margin, which made the one gap that was not a separator
+the first one on the line. `log2` is new, and joins `bs` because the two are one
+fact: bs is how fine the grid is, log2 how far it reaches. Line two is a new
+note slot, and line three is `Calculated in 0.000 seconds` with no kind word,
+since the kind is now directly above it.
+
+**Sharpen's verdict survives being read.** `noteDerivation` wrote the sharpen
+message onto the timing line, which the very next `renderTiming` overwrote, so
+the one sentence saying what the probe decided was on screen for less time than
+it took to read. It has its own slot now.
+
+**A failed build says what was wrong, in the strip.** It said the literal
+`build failed` and threw the server's message away, while the real account went
+into the Overview pane below the tab strip. The strip now carries the line,
+column and message off the `ErrorReport` the server already sends; the caret
+pane stays where it is, as the detail. `error-pane.js`'s header documented a
+`kind` field and an `expected_labels` field, neither of which the library has
+ever sent, and the code was resolving on the fallback.
+
+**Every greyed group says why.** `whyGroup` took a reason only when *every* leaf
+agreed on one, and three of the four groups that can grey do not agree, so
+Economics, Pricing and Bounds all collapsed to "not available for this object".
+It takes the first leaf's reason, which is the group's reason in all four cases
+and not by accident: a group's leaves run from its general answer to its
+specialized ones. Group tabs also carry `aria-label` now, so the two levels of
+the menu explain themselves by one rule instead of two.
+
+**Tab order is the demo flow, and cannot drift again.** Overview, Reinsurance,
+Pricing, Economics, Bounds, More: look at the gross book, add reinsurance,
+decide what to charge for what is left, then read the economics. Economics sat
+second, which put a P&L's group, dark for most objects, where the eye lands
+first. The order is written twice, as `NAV_GROUPS`' key order (which `Alt+1…6`
+indexes) and as the markup in `index.html`, and nothing checked that the two
+agreed; `dev/scripts/check-nav.mjs` now parses the strip and asserts it.
+
+**The action row.** The key hints become two lines split by kind, what you do to
+the program over where you go. The emacs switch leaves the row for the hamburger
+as a checked item under an `Editor` header: it is a preference, not an action,
+and it was the one control there that does nothing to the object. Not a form
+switch in a menu, because a form control inside a `dropdown-menu` holds the menu
+open on click; the check-style item that toggles and closes is what Tables
+already does, so `.table-view-item` is renamed `.menu-check-item` for the two of
+them.
+
+**Group tabs are 80% of their old height.** Height is two paddings plus
+line-height times font-size, which is why trimming the padding alone never got
+there. The bare `1rem` was also the only label on the page off the five-step
+scale, sitting between `--fs-body` and `--fs-head` and reading as neither.
+
 ## 1.0.0a48
 
 Not from a plan. `dev/TODO.md` closed the navigation work with a warning that

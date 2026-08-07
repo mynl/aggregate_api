@@ -11,6 +11,10 @@
  * captured from the api, and prints one grid: a row per leaf, a column per
  * kind, `on` or `.`. Anything else is a finding.
  *
+ * Since a49 it also checks the one thing about the navigation that is written
+ * twice: the group order, in `nav.js`'s key order and in the `out-tabs` list in
+ * `index.html`. See the foot of this file.
+ *
  * Capture the payloads first (they are the api's answer, not a fixture anyone
  * wrote by hand):
  *
@@ -154,6 +158,32 @@ if (towerCaps && plainCaps) {
     }
     if (activeLeaf(plainCaps, 'waterfall', 'economics') === 'waterfall') {
         findings.push('economics: a plain P&L must not keep the Waterfall leaf');
+    }
+}
+
+// The group order is written twice: as the key order of NAV_GROUPS, which is
+// what `Alt+1…6` indexes, and as the `<ul class="out-tabs">` list in
+// index.html, which is what the eye reads. Nothing made the two agree until
+// a49, and a strip whose fourth tab is not what Alt+4 opens is the kind of bug
+// nobody reports because each half looks right on its own.
+//
+// Parsed with a regex rather than a DOM: this file is the only markup in the
+// repo and one attribute off one element is not worth a parser dependency. A
+// strip that stops matching this shape fails loudly below rather than silently
+// finding nothing.
+const html = readFileSync(path.join(repo, 'web', 'index.html'), 'utf8');
+const strip = html.match(/<ul[^>]*class="[^"]*out-tabs[^"]*"[^>]*>([\s\S]*?)<\/ul>/);
+if (!strip) {
+    findings.push('index.html: no <ul class="out-tabs"> tab strip found to check');
+} else {
+    const markup = [...strip[1].matchAll(/data-tab="([^"]+)"/g)].map((m) => m[1]);
+    const declared = Object.keys(NAV_GROUPS);
+    if (markup.join(',') !== declared.join(',')) {
+        findings.push('group order disagrees between the two places it is written:\n'
+            + `           index.html: ${markup.join(' ')}\n`
+            + `           nav.js:     ${declared.join(' ')}`);
+    } else {
+        console.log(`Group order agrees in both files: ${declared.join(' ')}`);
     }
 }
 

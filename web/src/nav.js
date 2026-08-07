@@ -32,6 +32,20 @@
  * See `whyLeaf` / `whyGroup`.
  */
 
+/**
+ * The six groups, in the order they are drawn.
+ *
+ * **Key order is load bearing.** It is the tab strip's order, it is what
+ * `Alt+1…6` indexes, and it has to match the `<ul class="out-tabs">` list in
+ * `index.html`, which is the same order written a second time in markup.
+ * `dev/scripts/check-nav.mjs` parses that list and asserts the two agree.
+ *
+ * The order is the demo flow: look at the gross book, add reinsurance, decide
+ * what to charge for what is left, then read the economics of the result.
+ * Bounds is orthogonal to all four and sits late; More is the specialist
+ * frames. Through a48 Economics sat second, which put a P&L's group, dark for
+ * every object most sessions build, in the position the eye reaches first.
+ */
 export const NAV_GROUPS = {
     overview: {
         label: 'Overview',
@@ -51,29 +65,6 @@ export const NAV_GROUPS = {
                 exhibit: 'tail',
                 why: 'needs a full loss distribution, so an aggregate or a portfolio',
                 hint: 'return periods, then how each tail behaves',
-            },
-        },
-    },
-    economics: {
-        label: 'Economics',
-        leaves: {
-            ledger: {
-                label: 'Ledger',
-                exhibit: 'economic',
-                why: 'a P&L only',
-                hint: 'the P&L sheet, line by line',
-            },
-            ratios: {
-                label: 'Ratios',
-                exhibit: 'economic_ratios',
-                why: 'a P&L only',
-                hint: 'the same sheet read as ratios',
-            },
-            waterfall: {
-                label: 'Waterfall',
-                exhibit: 'economic_waterfall',
-                why: 'a P&L tower only',
-                hint: 'the margin walk, gross to net; a tower only',
             },
         },
     },
@@ -120,6 +111,29 @@ export const NAV_GROUPS = {
                          why: 'an aggregate or a portfolio only' },
             evaluate: { label: 'Evaluate', flag: 'canEvaluate',
                         why: 'needs an object that can be priced' },
+        },
+    },
+    economics: {
+        label: 'Economics',
+        leaves: {
+            ledger: {
+                label: 'Ledger',
+                exhibit: 'economic',
+                why: 'a P&L only',
+                hint: 'the P&L sheet, line by line',
+            },
+            ratios: {
+                label: 'Ratios',
+                exhibit: 'economic_ratios',
+                why: 'a P&L only',
+                hint: 'the same sheet read as ratios',
+            },
+            waterfall: {
+                label: 'Waterfall',
+                exhibit: 'economic_waterfall',
+                why: 'a P&L tower only',
+                hint: 'the margin walk, gross to net; a tower only',
+            },
         },
     },
     bounds: {
@@ -208,21 +222,33 @@ export function whyLeaf(group, key) {
 }
 
 /**
- * Why a whole group is dark: the reason shared by all its leaves if they agree,
- * otherwise the generic line.
+ * Why a whole group is dark: the reason its first leaf gives.
  *
  * Derived rather than declared, so a group cannot drift from the leaves under
- * it. Economics is "a P&L only" because all three of its leaves are; Overview
- * and More never grey, so they never ask.
+ * it.
+ *
+ * Through a48 this took the reason only when **every** leaf agreed on it, and
+ * fell back to the generic line otherwise. Three of the four groups that can
+ * grey do not agree, so three of the four said nothing:
+ *
+ *   Economics    "a P&L only" twice and "a P&L tower only" once
+ *   Pricing      "an aggregate or a portfolio only" and "needs an object that
+ *                can be priced"
+ *   Bounds       "an aggregate or a portfolio only" twice and "a portfolio
+ *                only" once
+ *
+ * In each the first leaf's reason is the group's reason and the others are
+ * narrower cases inside it, which is not a coincidence: a group's leaves run
+ * from its general answer to its specialized ones, and `activeLeaf` lands on
+ * the first live one for exactly that reason. So the first leaf speaks for the
+ * group. A group whose first leaf is genuinely narrower than the group would
+ * need to say so itself; none is today.
  */
 export function whyGroup(group) {
-    const reasons = Object.keys(NAV_GROUPS[group]?.leaves || {})
+    const first = Object.keys(NAV_GROUPS[group]?.leaves || {})
         .map((key) => leafOf(group, key)?.why)
-        .filter(Boolean);
-    const first = reasons[0];
-    return first && reasons.length === Object.keys(NAV_GROUPS[group].leaves).length
-        && reasons.every((r) => r === first)
-        ? first : 'not available for this object';
+        .find(Boolean);
+    return first || 'not available for this object';
 }
 
 /**

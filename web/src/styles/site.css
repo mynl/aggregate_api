@@ -21,7 +21,11 @@
     --fs-ui:    .82rem;   /* buttons, form controls           */
     --fs-body:  .94rem;   /* prose, table cells               */
     --fs-head:  1.15rem;  /* section headings                 */
-    --fs-title: 1.45rem;  /* the object's name                */
+    /* The top step has no subject on the page since a49, when the object's
+       name left the Overview header for the status strip that already carried
+       it. Kept, rather than deleted, because a scale with a hole in it is how
+       the next page title comes out at some invented 1.4rem. */
+    --fs-title: 1.45rem;  /* reserved: a page or object title */
 
     /* ---- Text, the "press" ramp ----
        Pure black down through true neutrals, chosen over Bootstrap's greys,
@@ -54,10 +58,21 @@
 
        Selection is the ONLY thing the accent means on the page. Build carries
        no color: spending the accent there too made the eye meet it three times
-       going down with no relation between the three. */
+       going down with no relation between the three.
+
+       Bootstrap does not read any of these. `--primary` is ours; Bootstrap's
+       own token is `--bs-primary`, and `.btn-primary` reads neither, it reads
+       `--bs-btn-bg` and friends. Through a48 that is why every "go" button on
+       the page came out Bootstrap blue while this comment claimed otherwise.
+       The mapping onto Bootstrap's tokens is at the foot of this block. */
     --house:   #a81313;
     --primary: var(--house);
     --code:    var(--house);
+    /* One step darker for the pressed / hovered state, and the focus ring's
+       translucent form. Derived by eye from --house rather than computed, so
+       there is one place to adjust the ramp. */
+    --house-dark: #8c1010;
+    --house-ring: rgba(168, 19, 19, .25);
 
     /* ---- State ----
        One green for the whole app. This is the editor's own string green, now
@@ -85,6 +100,51 @@
     --gutter:  1.15rem;
     --measure: 46rem;
     --tabpad:  1.05rem;
+}
+
+/* ---- The accent, in Bootstrap's own vocabulary ----
+   Everything above is ours and Bootstrap never sees it. This block is the
+   bridge, and without it the claim two comments up ("Bootstrap blue is gone
+   from the page entirely") was false: Cede, Price, Evaluate, Compute and the
+   help panel's Load it all came out #0d6efd, as did every link the page had not
+   explicitly styled.
+
+   Set on `:root`, not on `.btn-primary`. Bootstrap's button reads
+   `--bs-btn-bg` and friends, which `.btn-primary` sets from its own literals,
+   so the tokens have to be re-declared at the same place Bootstrap declares
+   them or the literal wins. `--bs-primary` and `--bs-primary-rgb` come along
+   for anything else reading them (`.text-primary`, `.border-primary`).
+
+   The hover and active values step to --house-dark rather than to a computed
+   shade, because a two-value ramp is the whole of what a button needs and
+   `color-mix()` here would put the ramp in two places. */
+:root {
+    --bs-primary: var(--house);
+    --bs-primary-rgb: 168, 19, 19;
+    --bs-link-color: var(--house);
+    --bs-link-color-rgb: 168, 19, 19;
+    --bs-link-hover-color: var(--house-dark);
+    --bs-link-hover-color-rgb: 140, 16, 16;
+    --bs-focus-ring-color: var(--house-ring);
+}
+.btn-primary {
+    --bs-btn-bg: var(--house);
+    --bs-btn-border-color: var(--house);
+    --bs-btn-hover-bg: var(--house-dark);
+    --bs-btn-hover-border-color: var(--house-dark);
+    --bs-btn-active-bg: var(--house-dark);
+    --bs-btn-active-border-color: var(--house-dark);
+    --bs-btn-disabled-bg: var(--house);
+    --bs-btn-disabled-border-color: var(--house);
+    --bs-btn-focus-shadow-rgb: 168, 19, 19;
+}
+/* Checkboxes, radios and switches. There is no `.form-switch` left on the page
+   once the emacs keys move into the hamburger, and the price / anchor radios
+   are `.btn-check`, which draws as a button and never as a tick. This is here
+   so the next checkbox anyone adds is not blue. */
+.form-check-input:checked { background-color: var(--house); border-color: var(--house); }
+.form-check-input:focus {
+    border-color: var(--house); box-shadow: 0 0 0 .25rem var(--house-ring);
 }
 
 body { font-family: var(--ui); color: var(--ink); background: #fff; }
@@ -169,7 +229,7 @@ header .navbar { min-height: 56px; }
 /* ---- Action row ----
    One band. Through a46 this was two full width strips, the button row and the
    feedback line below it, and between them they held one idea. Controls sit
-   left, the key hints and the emacs switch ride right.
+   left, the key hints ride right, in two lines of their own.
 
    Build carries no color. The accent means selected and nothing else, and Build
    is not a selection; it holds its primacy by weight and by being first. */
@@ -183,17 +243,17 @@ header .navbar { min-height: 56px; }
    five peer buttons said they were five unrelated verbs. */
 .derive-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em;
     color: var(--mut); margin-left: .45rem; }
+/* Two rows now, so a column rather than a row: what you do to the program on
+   the first line, where you go on the second. Right-aligned as one block, since
+   two lines ragged on the left against a button row would read as loose text.
+   The emacs switch that shared this space moved into the hamburger. */
 .btnrow .fb-right {
-    margin-left: auto; display: flex; align-items: center; gap: .6rem;
+    margin-left: auto; display: flex; flex-direction: column; align-items: flex-end;
+    gap: .1rem; line-height: 1.35;
     font-family: var(--mono); font-size: var(--fs-meta); color: var(--mut);
 }
 .btnrow .fb-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .btnrow .fb-text .sep { color: var(--line); margin: 0 .3rem; }
-.btnrow .fb-emacs {
-    flex: 0 0 auto; display: flex; align-items: center; gap: .35rem; white-space: nowrap;
-}
-.btnrow .fb-emacs .form-check { margin: 0; min-height: auto; }
-.btnrow .fb-emacs .form-check-input { margin-top: 0; }
 .opt-toggle .v { font-family: var(--mono); color: var(--ink); }
 .bs-custom { padding: .25rem .75rem; }
 .bs-custom input { height: 1.7rem; font-size: .78rem; }
@@ -234,7 +294,17 @@ header .navbar { min-height: 56px; }
     cursor: pointer; line-height: 1; padding: .1rem .3rem; font-size: 1rem; display: none;
 }
 .summary.expanded .summary-more i { transform: rotate(180deg); }
-/* Timing sub-line, inside the strip and under the summary row. */
+/* The note slot, between the summary row and the timing line: what a derivation
+   just did, in its own words. Set in the UI face rather than in mono, because
+   it is the one prose sentence on a strip that is otherwise all instrument
+   readings, and one step darker than the timing line, because it is worth
+   reading and the timing is not. */
+.summary-note {
+    font-size: var(--fs-meta); color: var(--ink-2); line-height: 1.4;
+    max-width: var(--measure); margin: .25rem 0 0;
+}
+.summary-note:empty { display: none; }
+/* Timing sub-line, inside the strip and last. */
 .summary-timing {
     font-family: var(--mono); font-size: var(--fs-meta); color: var(--mut);
     margin: .25rem 0 0;
@@ -267,16 +337,25 @@ header .navbar { min-height: 56px; }
 }
 .out-tabs::-webkit-scrollbar { display: none; }
 .out-tabs > .nav-item { flex: 0 0 auto; }
+/* Height comes from three numbers, not one, which is why trimming the padding
+   alone never reached the 80% the strip was asked for: 2 x padding + line-height
+   x font-size. It was .42rem, 1.5 (the body default) and a bare 1rem, so 2.34rem
+   of strip. It is now .32rem, 1.3 and --fs-body, so 1.86rem, a hair under 80%.
+
+   The font-size mattered on its own account: 1rem was the only label on the page
+   off the five-step scale, sitting between --fs-body and --fs-head and therefore
+   reading as neither. A group tab is a label on a control, so it takes body. */
 .out-tabs .nav-link {
     background: var(--soft); border: 1px solid var(--line); border-bottom: 0;
     border-radius: .4rem .4rem 0 0; white-space: nowrap;
-    padding: .42rem var(--tabpad); font-size: 1rem; color: var(--ink-2);
+    padding: .32rem var(--tabpad); font-size: var(--fs-body); line-height: 1.3;
+    color: var(--ink-2);
 }
 .out-tabs .nav-link:not(.active):hover { background: var(--line-2); color: var(--ink); }
 .out-tabs .nav-link.active {
     background: var(--primary); border-color: var(--primary);
     color: #fff; font-weight: 700;
-    margin-bottom: -2px; padding-bottom: calc(.42rem + 2px);
+    margin-bottom: -2px; padding-bottom: calc(.32rem + 2px);
 }
 
 /* ---- Sub-tab row: the leaves within a group ----
@@ -354,8 +433,8 @@ header .navbar { min-height: 56px; }
     /* Phones: tighten the tabs, and let the strip scroll when six spelled-out
        group names do not fit. The tooltip is clipped here; that is the trade. */
     .out-tabs { gap: .15rem; overflow-x: auto; }
-    .out-tabs .nav-link { padding: .35rem .55rem; font-size: .85rem; }
-    .out-tabs .nav-link.active { padding-bottom: calc(.35rem + 2px); }
+    .out-tabs .nav-link { padding: .28rem .55rem; font-size: var(--fs-ui); }
+    .out-tabs .nav-link.active { padding-bottom: calc(.28rem + 2px); }
     /* iOS Safari zooms the page when a focused input's font is < 16px. Bump
        the small form inputs (Price form + custom bs) to 16px on phones so
        focusing them doesn't magnify the layout. */
@@ -528,21 +607,24 @@ header .navbar { min-height: 56px; }
 
 /* ---- Overview tab ---- */
 
-/* Header block: what you built, read off the object itself via /meta. */
-.overview-head { margin: .1rem .1rem 1rem; }
-.overview-ident {
-    display: flex; align-items: baseline; flex-wrap: wrap; gap: .5rem;
-    margin-bottom: .35rem;
+/* Header block: the tags and the note, read off the object itself via /meta.
+   One line, not the two-deck heading it was through a48: the name and the kind
+   moved out because the status strip already opens with both, and --fs-title
+   now has no subject on the page. What is left is the material the strip does
+   NOT carry, set quietly, so the eye goes from the strip straight to the tabs
+   and reads this on the way past rather than stopping on it. */
+.overview-head {
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: .45rem;
+    margin: .1rem .1rem .85rem;
 }
-.overview-name { font-size: var(--fs-title); font-weight: 700; color: var(--ink); }
-.overview-kind { font-size: .78rem; color: var(--mut); }
+.overview-head:empty { display: none; }
 .overview-tag {
     font-family: var(--mono); font-size: .68rem; color: var(--ink-2);
     background: var(--soft); border: 1px solid var(--line);
     border-radius: 999px; padding: .05rem .5rem;
 }
 .overview-note {
-    font-size: var(--fs-body); color: var(--ink-2); margin: 0 0 .5rem;
+    font-size: var(--fs-body); color: var(--ink-2);
     max-width: var(--measure); line-height: 1.45;
 }
 /* The exhibit sizes itself: ECharts sets the canvas height from the panel
@@ -641,15 +723,20 @@ header .navbar { min-height: 56px; }
    #fff7e6 is the shade these rows have carried since the hand-built exhibit. */
 .gt-host .gt.gt tr.gt-emph > td { background: #fff7e6; }
 
-/* ---- Table view items in the header menu ----
-   A tick column that is always reserved, so the two rows do not shuffle
-   sideways as the choice moves between them. The hint sits to the right,
-   muted, because the difference between these two is worth one word each. */
-.table-view-item { display: flex; align-items: baseline; gap: .45rem; }
-.table-view-item .bi-check2 { visibility: hidden; width: 1em; flex: none; }
-.table-view-item.active .bi-check2 { visibility: visible; }
-.table-view-item.active { font-weight: 600; background: none; color: inherit; }
-.table-view-item small { margin-left: auto; font-size: .7rem; }
+/* ---- Checked items in the header menu ----
+   A tick column that is always reserved, so rows do not shuffle sideways as the
+   choice moves between them. The hint sits to the right, muted, because the
+   difference between these is worth one word each.
+
+   Named for the shape, not for one of its users: it started as the Tables
+   static / interactive pair and now also carries the Editor's emacs keys, which
+   is a checkbox rather than one of a set. Both are preferences, both toggle and
+   close, and both look like this. */
+.menu-check-item { display: flex; align-items: baseline; gap: .45rem; }
+.menu-check-item .bi-check2 { visibility: hidden; width: 1em; flex: none; }
+.menu-check-item.active .bi-check2 { visibility: visible; }
+.menu-check-item.active { font-weight: 600; background: none; color: inherit; }
+.menu-check-item small { margin-left: auto; font-size: .7rem; }
 
 /* ---- Exhibit chrome (lede + caption around either kind of table) ----
    Title and gloss on ONE line, bold then explanation, sitting on the table it
