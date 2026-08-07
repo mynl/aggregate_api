@@ -159,54 +159,80 @@ const SQUARE_CHROME = PAD_TOP + 52;
 // applies to it. Drawing a sampled ordinate as steps claims the value holds
 // across a bucket, and for a pdf there is no bucket.
 //
-// An atomic series takes one of three drawings, by how much room each atom gets:
+// An atomic series takes one of two drawings, by how much room each atom gets:
 //
 //   <= 40 atoms in view    a stem to the value with a dot on the end. A mass
 //                          lives *at* its atom, and where the atoms are far
 //                          enough apart to see, that is what to draw
-//   >= 3 px per atom       steps centered on the grid point, matplotlib's
+//   otherwise              steps centered on the grid point, matplotlib's
 //                          `steps-mid`. The point of them is the sharp vertical
 //                          jump where a line would draw a slope the law does
 //                          not have
-//   otherwise              a plain line. Sub-pixel, steps and a line are the
-//                          same picture, so no lie is told by the cheaper one
 //
-// Counted in atoms **in view**, not in the frame, so a zoomed window is judged
-// on what it shows and a cropped Dice comes out as a lollipop.
+// Counted in atoms **in view**, so a zoom is judged on what it shows: this is
+// what makes the lollipop reachable on an ordinary book rather than only on a
+// natively tiny one.
 //
-// Through a49 this was `step: 'middle'` unconditionally, with a comment arguing
-// that a condition which can only be wrong in one direction should not be a
-// condition. That argument was right about the *old* condition, a guess at "is
-// this discrete" from a count of nonzero points. It is not an argument against
-// the library's rule, which is about room rather than about discreteness, and
-// which the author had already agreed the app would follow.
+// **There is deliberately no pixel rung.** The library's ladder has a third
+// one, dropping to a plain line under three pixels per atom, and a50 copied it.
+// That was the wrong import. It is sound for `plot_chartdoc`, which draws a
+// static figure where sub-pixel steps and a line are the same pixels, and it is
+// wrong here for two reasons. The rung needs between 41 and 141 visible atoms
+// on a 424px panel, which no real book hits, so steps went from always to never
+// and the app drew every density as a line. And this chart zooms, so "how many
+// pixels does an atom get" is not a property of the data at all, it is a
+// property of a gesture that has not happened yet.
+//
+// `sampling: 'minmax'` already bounds what steps cost: it reduces to two points
+// per device pixel column before the path is built, so a 65,536 point step
+// series and a 65,536 point line series build paths of the same order.
 const LOLLIPOP_ATOMS = 40;
-const STEP_PIXELS = 3.0;
 
 /**
- * Which of the three drawings this panel's series take.
+ * How many of `loss` fall inside `window`.
+ *
+ * The count the ladder turns on. Linear rather than a binary search because the
+ * grid is sorted but the caller is not required to guarantee it, and this runs
+ * once per draw rather than per point.
+ */
+function atomsInView(loss, window) {
+    if (!window) return loss.length;
+    let seen = 0;
+    for (const x of loss) { if (x >= window[0] && x <= window[1]) seen++; }
+    return seen;
+}
+
+/**
+ * Which drawing this panel's series take.
  *
  * One answer for the whole panel, not one per series: every series shares the
- * grid, the window and the panel width, so they would all reach the same answer
- * and a panel drawing one unit as stems and another as steps would read as two
- * different kinds of thing.
+ * grid and the window, so they would all reach the same answer, and a panel
+ * drawing one unit as stems and another as steps would read as two different
+ * kinds of thing.
  *
- * @param {number[]} loss the shared grid.
- * @param {number[]|null} window `[lo, hi]` in loss, or null for the whole grid.
- * @param {number} panelW plot-area width in CSS pixels.
+ * @param {number} seen atoms inside the visible window.
  * @param {string} support `'atomic'` (default) or `'continuous'`.
  * @returns {'stem'|'step'|'line'}
  */
-function densityStyle(loss, window, panelW, support) {
+function densityStyle(seen, support) {
     if (support === 'continuous') return 'line';
-    let seen = 0;
-    if (window) {
-        for (const x of loss) { if (x >= window[0] && x <= window[1]) seen++; }
-    } else {
-        seen = loss.length;
-    }
-    if (seen <= LOLLIPOP_ATOMS) return 'stem';
-    return (panelW || 0) / seen >= STEP_PIXELS ? 'step' : 'line';
+    return seen <= LOLLIPOP_ATOMS ? 'stem' : 'step';
+}
+
+/**
+ * The same question for a cumulative axis: F, S, or a return period.
+ *
+ * Two rungs, not three. A cumulative takes a value at every x rather than only
+ * at the atoms, so the stem rung does not apply to it however far apart they
+ * are, and the honest drawing is a right-continuous step that jumps at the atom
+ * however few there are. That is the library's own split, at
+ * `_chartdoc.py:93-96`, and it is why this is a separate function rather than
+ * an argument to the one above.
+ *
+ * @returns {'step-post'|'line'}
+ */
+function cumulativeStyle(support) {
+    return support === 'continuous' ? 'line' : 'step-post';
 }
 
 // ---- view state -------------------------------------------------------
@@ -573,8 +599,21 @@ function densitySeries(name, loss, mass, i, solo, style = 'step') {
     }];
 }
 
-/** One right-panel line. */
-function rightSeries(name, loss, tailProb, i) {
+/**
+ * One right-panel series: S against loss, or its reciprocal as a return period.
+ *
+ * Stepped since a53, and it never was before: this function carried no `step`
+ * at all, so a survival curve over a discretized law drew as a polyline sloping
+ * between atoms, which is a value the law does not take.
+ *
+ * `step: 'end'` is ECharts' spelling of matplotlib's `steps-post`: hold at
+ * `y_i` across the interval and jump at `x_{i+1}`. That is what a cumulative
+ * does. Not `'middle'`, which is the density's style and would put the jump
+ * half a bucket before the atom that causes it.
+ *
+ * @param {'step-post'|'line'} style from `cumulativeStyle`.
+ */
+function rightSeries(name, loss, tailProb, i, style = 'step-post') {
     const color = seriesColor(i);
     const data = rightPairs(loss, tailProb, view.epMode);
     return {
@@ -582,6 +621,7 @@ function rightSeries(name, loss, tailProb, i) {
         type: 'line',
         xAxisIndex: 1,
         yAxisIndex: 1,
+        ...(style === 'step-post' ? { step: 'end' } : {}),
         data,
         sampling: gapFree(data) ? SAMPLING : undefined,
         showSymbol: false,
@@ -820,7 +860,7 @@ export function reservedHeight(width, kind) {
  *     of `{x, name, faint?, align?}` verticals.
  */
 function twoPanelData({
-    loss, cdf, series, tail, box, mean, zeroLine, support,
+    loss, cdf, series, tail, box, mean, zeroLine, support, zoom,
     densityTitle, densityName, tailTitles, tailNames,
 }) {
     const asRP = view.epMode === 'rp';
@@ -859,16 +899,29 @@ function twoPanelData({
     const titles = tailTitles || ['Survival', 'Return period'];
     const names = tailNames || ['S(x)', 'return period'];
     const window = densityWindow(loss, cdf);
+    // The count the ladder turns on, taken from the **zoom** where there is one
+    // and the crop otherwise. That is the whole of what makes lollipops
+    // reachable by zooming: `window` is fixed for the life of the object, so a
+    // style computed from it can only ever answer for a book that was already
+    // small. `zoom` is not used for the axis extent, only for this: dataZoom
+    // owns the visible range, and writing it back onto `min` / `max` would have
+    // the redraw fight the gesture that triggered it.
+    const seen = atomsInView(loss, zoom || window);
     return {
         loss, series, box, mean,
         solo: series.length === 1,
         asRP, logRight,
         logY: Boolean(view.logY),
         window,
-        // The drawing chosen once for the whole panel, from the room each atom
-        // gets in it. A decision about the data and the space, so it belongs
-        // here with the rest of them rather than inside the option literal.
-        densityStyle: densityStyle(loss, window, box?.panelW, support),
+        atomsSeen: seen,
+        // Carried so the zoom listener can re-judge the rung from a count,
+        // without building an option to find out what it would have been.
+        supportKind: support || 'atomic',
+        // Chosen once for the whole panel. A decision about the data and the
+        // room it has, so it belongs here with the rest of them rather than
+        // inside the option literal.
+        densityStyle: densityStyle(seen, support),
+        cumulativeStyle: cumulativeStyle(support),
         sLo, sHi, densRefs, tailRefs,
         densityTitle: densityTitle || 'Density',
         densityName: view.logY ? `log ${densityName || 'density'}`
@@ -908,14 +961,15 @@ function twoPanel(args) {
     const {
         loss, series, box, solo, asRP, logRight, window, sLo, sHi,
         densRefs, tailRefs, densityTitle, densityName, tailNames, tailTitle,
-        densityStyle: drawAs,
+        densityStyle: drawAs, cumulativeStyle: drawTailAs, atomsSeen, supportKind,
     } = twoPanelData(args);
 
     // flatMap, because the stem drawing is two ECharts series (the stems and
     // the dots on their ends) sharing one name and therefore one legend entry.
     const density = series.flatMap(
         (s, i) => densitySeries(s.name, loss, s.mass, i, solo, drawAs));
-    const right = series.map((s, i) => rightSeries(s.name, loss, s.tailProb, i));
+    const right = series.map(
+        (s, i) => rightSeries(s.name, loss, s.tailProb, i, drawTailAs));
 
     // Reference lines go on the first series of each panel, so they draw once.
     //
@@ -1009,6 +1063,16 @@ function twoPanel(args) {
         asRP ? returnAxis() : survivalAxis(),
     ];
 
+    // The held zoom, as the percentages dataZoom speaks in. Absent when the
+    // reader has not zoomed, which leaves the component at its own full-range
+    // default rather than pinning it to 0 and 100.
+    const zoomExtent = (args.zoom && window && window[1] > window[0])
+        ? {
+            start: (100 * (args.zoom[0] - window[0])) / (window[1] - window[0]),
+            end: (100 * (args.zoom[1] - window[0])) / (window[1] - window[0]),
+        }
+        : {};
+
     const option = {
         ...baseOption(),
         // Geometry from the box, plus the one thing that differs between the two
@@ -1037,9 +1101,16 @@ function twoPanel(args) {
         // filterMode 'filter' drops out-of-window points from the axis extent
         // calculation, so the y-axis rescales to what is actually visible.
         // Without it, zooming into a tail zooms into a flat strip near zero.
+        // `start` / `end` are carried explicitly, as percentages of the axis
+        // extent, so a rebuild restores the zoom the reader is holding.
+        // `renderer.update` replaces the option rather than merging it, and a
+        // dataZoom with no start / end resets to the full range: without this,
+        // the redraw that a zoom triggers would undo that same zoom. `args.zoom`
+        // is in loss units and `window` is the axis extent, so the conversion
+        // is exact.
         dataZoom: [
-            { type: 'inside', xAxisIndex: 0, filterMode: 'filter' },
-            { type: 'inside', xAxisIndex: 1, filterMode: 'filter' },
+            { type: 'inside', xAxisIndex: 0, filterMode: 'filter', ...zoomExtent },
+            { type: 'inside', xAxisIndex: 1, filterMode: 'filter', ...zoomExtent },
         ],
         tooltip: {
             ...baseOption().tooltip,
@@ -1080,6 +1151,13 @@ function twoPanel(args) {
     option.hostHeight = hostHeight;
     option.panelFootprint = footprint;
     option.densityDrawnAs = drawAs;
+    option.cumulativeDrawnAs = drawTailAs;
+    // What the rung was chosen from, so the zoom listener can tell whether a
+    // gesture has actually changed the answer without rebuilding to find out.
+    option.atomsSeen = atomsSeen;
+    option.lossWindow = window;
+    option.lossGrid = loss;
+    option.supportKind = supportKind;
     return option;
 }
 
@@ -1233,10 +1311,16 @@ function pnlPanelArgs({ density }, { name, box, mean }) {
     };
 }
 
-/** Wrap an argument builder as an ECharts `build`. */
+/**
+ * Wrap an argument builder as an ECharts `build`.
+ *
+ * `zoom` is injected here rather than threaded through each `panelArgs`. It is
+ * a fact about the viewport, not about the object, and none of the four
+ * builders has any use for it: they pick columns.
+ */
 const echartsBuild = (panelArgs) => (data, opts) => {
     const args = panelArgs(data, opts);
-    return args && twoPanel(args);
+    return args && twoPanel({ ...args, zoom: opts.zoom });
 };
 
 const EXHIBITS = {
@@ -1986,12 +2070,18 @@ export async function mountExhibit(container, state) {
 
     // `box` comes from the spec's own layout, so what the build draws into is
     // what was reserved. Recomputed per call because a resize changes it.
+    // The loss window the reader is currently zoomed into, or null for none.
+    // Read by the draw so the atom count, and therefore the drawing, follows
+    // the gesture. See the `dataZoom` wiring below.
+    let zoom = null;
+
     const opts = () => {
         const width = host.clientWidth || 0;
         return {
             ...state,
             wide: width >= WIDE_PX,
             width,
+            zoom,
             box: spec.layout(width),
         };
     };
@@ -2038,9 +2128,14 @@ export async function mountExhibit(container, state) {
     // The live renderer: `{update(), dispose()}`.
     let renderer = null;
 
+    // What the last draw settled on, so the zoom listener can tell a gesture
+    // that changes the picture from one that only moves it.
+    let drawn = null;
+
     function draw() {
         const next = spec.build(data, opts());
         if (!next) return false;
+        drawn = next;
         // Same height the skeleton was already holding, so nothing moves.
         host.style.height = `${next.hostHeight}px`;
         if (!renderer) {
@@ -2048,10 +2143,57 @@ export async function mountExhibit(container, state) {
             // over rather than replace.
             empty(host);
             renderer = echartsRenderer(host, next);
+            wireZoom();
             return true;
         }
         renderer.update(next);
         return true;
+    }
+
+    /**
+     * Redraw when a zoom changes which rung of the ladder applies.
+     *
+     * The half of the drawing rule that was never built. `dataZoom` was in the
+     * option from the start and nothing listened to it, so zooming into a
+     * handful of atoms left them drawn as whatever the full crop had decided:
+     * the lollipop was only ever reachable on a book that was small to begin
+     * with, which is not what it is for.
+     *
+     * Guarded twice, because a wheel gesture fires this continuously. The rung
+     * has to actually change, and rebuilding an option per wheel notch would
+     * be an option rebuild per frame otherwise. `renderer.update` then replaces
+     * the option, and `twoPanel` writes the held zoom back into the new
+     * dataZoom config so the gesture survives its own consequence.
+     */
+    function wireZoom() {
+        const chart = renderer && renderer.chart;
+        if (!chart || !drawn || !drawn.lossWindow) return;
+        chart.on('dataZoom', () => {
+            const w = drawn && drawn.lossWindow;
+            if (!w || !(w[1] > w[0])) return;
+            // Read back off the chart rather than out of the event: an `inside`
+            // dataZoom reports a batch on some gestures and bare start / end on
+            // others, and the component's own state is the one that is always
+            // current.
+            const dz = (chart.getOption().dataZoom || [])[0];
+            if (!dz || dz.start == null) return;
+            const span = w[1] - w[0];
+            const full = dz.start <= 0 && dz.end >= 100;
+            const next = full ? null : [w[0] + (span * dz.start) / 100,
+                                        w[0] + (span * dz.end) / 100];
+            // The rung, from a count rather than from a trial build. Building
+            // the option to find out would be the per-frame rebuild this guard
+            // exists to prevent.
+            const rung = densityStyle(
+                atomsInView(drawn.lossGrid, next), drawn.supportKind);
+            zoom = next;
+            if (rung === drawn.densityDrawnAs) return;
+            const redrawn = spec.build(data, opts());
+            if (!redrawn) return;
+            drawn = redrawn;
+            host.style.height = `${redrawn.hostHeight}px`;
+            renderer.update(redrawn);
+        });
     }
 
     if (!draw()) { empty(container); return null; }
@@ -2112,6 +2254,11 @@ function echartsRenderer(host, option) {
     linkPanels(chart, option);
     return {
         engine: 'echarts',
+        // Exposed for the zoom listener, which has to subscribe to the live
+        // instance and read its dataZoom state back. A getter rather than a
+        // field because `update` replaces the instance when the 3-D toggle
+        // flips, and a captured reference would go stale on that path.
+        get chart() { return chart; },
         update(next) {
             const next3d = Boolean(next.grid3D);
             if (next3d !== is3d) {

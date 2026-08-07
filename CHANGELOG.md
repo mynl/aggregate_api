@@ -4,6 +4,68 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a53
+
+`dev/plan-chart-draw-styles.md`. A regression fixed, and two things that were
+never built. Also the packaging tidy that preceded it, which carried no bump.
+
+**The density is steps again.** a50 replaced an unconditional `step: 'middle'`
+with the library's three-rung ladder, including its third rung: a plain line
+under three pixels per atom. That rung wants between 41 and 141 visible atoms on
+a 424px panel. No real book is in that band, so steps went from *always* to
+*never* and every density drew as a line. Measured: a lognormal at log2=16 has
+28,813 atoms in the crop, 0.015 px each.
+
+The rung is sound where it came from. `plot_chartdoc` draws a static figure, and
+sub-pixel steps and a line really are the same pixels there. This chart zooms,
+so "how many pixels does an atom get" is not a property of the data, it is a
+property of a gesture that has not happened yet. There is no pixel rung now:
+atomic and over 40 visible atoms is steps-mid, at any density. `sampling:
+'minmax'` already bounds what that costs.
+
+**S and F are stepped, which they never were.** `rightSeries` carried no `step`
+at all in its whole life, so a survival over a discretized law drew as a polyline
+sloping between atoms, through values the law does not take. It is steps-post
+(`step: 'end'`), not steps-mid: a cumulative jumps *at* the atom and holds to
+the right, and it never reaches the stem rung because it takes a value
+everywhere rather than only at the atoms. That is the library's own split, and
+it is why `cumulativeStyle` is a separate function rather than an argument.
+
+**Zoom changes the drawing.** The option has carried `dataZoom` from the start
+and nothing ever listened to it, so the lollipop rung was reachable only on a
+book that was already tiny, which is not what it is for. The listener re-judges
+the rung from the zoomed window and redraws only when the answer changes, since
+a wheel gesture fires continuously and rebuilding per notch would be an option
+rebuild per frame. The held zoom is written back into the new `dataZoom` config,
+because the replace that a redraw performs would otherwise reset the range and
+undo the gesture that triggered it.
+
+**Not the cause, and worth recording**: the parallel `aggregate` work found that
+`ChartSeries.support` was being stripped from the canonical dict whenever it
+equalled its `'atomic'` default, so the instruction to draw steps reached nobody
+while `'continuous'` survived. Real, and already fixed upstream. It could not
+have caused this, because the Overview plot reads **frames**, not chart
+documents: `agg`, `port` and `pnl` register no chart at all. The app's only
+consumer of the chart IR is the bivariate surface.
+
+**The smoke test now shows its working.** It prints the atom count beside the
+rung it chose, which is how a threshold no book could reach survived a green
+run, and it gained a zoom case proving the stem rung is reachable by narrowing
+the window rather than only by a small object.
+
+**Upstream catch-up.** `aggregate` 1.0.0a227 gave `PnL` and
+`BivariateAggregate` the current `tail_df` contract, so a P&L's `tail_df` route
+answers 200 where a test pinned 400. The navigation is unmoved: Overview / Tail
+gates on the `tail` exhibit, which a P&L still does not register.
+
+**Packaging, no bump of its own.** `greater-tables` is an ordinary registry
+dependency now that 6.0.0 has shipped, floored at `>=6.0.0` because PyPI still
+carries the 5.3 generation under the same name and it fails at import rather
+than at install. And the repo stopped committing `.venv`: it was tracked as a
+`120000` symlink blob holding a Windows absolute path, so a Linux checkout got a
+dangling link. `.gitignore` said `.venv/`, and a trailing slash matches
+directories only.
+
 ## 1.0.0a52
 
 `dev/plan-ui-round-3.md` phase 4, the reinsurance and pricing forms. Nine

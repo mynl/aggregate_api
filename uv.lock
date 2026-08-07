@@ -12,9 +12,10 @@ resolution-markers = [
 
 [[package]]
 name = "aggregate"
-version = "1.0.0a226"
+version = "1.0.0a229"
 source = { editable = "../aggregate_REFACTOR" }
 dependencies = [
+    { name = "greater-tables" },
     { name = "ipython" },
     { name = "lark" },
     { name = "matplotlib" },
@@ -30,6 +31,7 @@ requires-dist = [
     { name = "bokeh", marker = "extra == 'viz'" },
     { name = "datashader", marker = "extra == 'viz'" },
     { name = "docutils", marker = "extra == 'dev'", specifier = ">=0.20,<0.22" },
+    { name = "greater-tables", specifier = ">=6" },
     { name = "holoviews", marker = "extra == 'viz'" },
     { name = "ipython" },
     { name = "ipython-autotime", marker = "extra == 'notebook'" },
@@ -42,8 +44,8 @@ requires-dist = [
     { name = "myst-parser", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "nbsphinx", marker = "extra == 'dev'", specifier = ">=0.9.4" },
     { name = "numba", marker = "extra == 'numba'" },
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "pandas", specifier = ">=2.1" },
+    { name = "numpy", specifier = ">=2.0" },
+    { name = "pandas", specifier = ">=2.2" },
     { name = "pickleshare", marker = "extra == 'dev'" },
     { name = "pyarrow", marker = "extra == 'dev'", specifier = ">=15" },
     { name = "pygments" },
@@ -64,7 +66,7 @@ provides-extras = ["dev", "notebook", "numba", "massive", "viz"]
 
 [[package]]
 name = "aggregate-api"
-version = "1.0.0a52"
+version = "1.0.0a53"
 source = { editable = "." }
 dependencies = [
     { name = "aggregate" },

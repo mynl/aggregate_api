@@ -302,6 +302,23 @@ for (const [kind, key] of CASES) {
                         + `for ${tail.length} units, expected ${2 * tail.length}`);
                 }
             }
+
+            // The tail panel, which is a different question from the density
+            // and had a different answer for its whole life: it carried no
+            // `step` at all until a53, so a survival over a discretized law
+            // sloped between atoms. A cumulative takes a value everywhere, so
+            // it never reaches the stem rung; it is steps-post (`end` in
+            // ECharts) when atomic and a plain line when continuous.
+            const wantTail = option.cumulativeDrawnAs;
+            if (wantTail === 'step-post') {
+                const flat = tail.filter((s) => s.step !== 'end').map((s) => s.name);
+                if (flat.length) notes.push(`tail not steps-post: ${flat.join(', ')}`);
+            } else if (wantTail === 'line') {
+                const stepped = tail.filter((s) => s.step).map((s) => s.name);
+                if (stepped.length) notes.push(`continuous tail is stepped: ${stepped.join(', ')}`);
+            } else {
+                notes.push(`unknown cumulative drawing ${wantTail}`);
+            }
             shape = `${Math.round(grids[0].width)}x${Math.round(grids[0].height)}`
                 + (got ? ` fp=${got.toFixed(2)}` : '') + ` h=${Math.round(option.hostHeight)}`
                 // The tail floor, printed rather than asserted: `T_MAX` bounds
@@ -322,8 +339,13 @@ for (const [kind, key] of CASES) {
         if (notes.length) { fail(`${key} (${layout.name}): ${notes.join('; ')}`); broke = true; break; }
 
         const marks = series.filter((s) => s.markLine).length;
+        // The atom count is printed beside the rung it chose. It is the number
+        // the whole ladder turns on and nothing used to show it, which is how a
+        // pixel rung that no real book could reach survived a green test run.
         lines.push(`${layout.name} ${shape} marks=${marks}`
-            + (option.densityDrawnAs ? ` draw=${option.densityDrawnAs}` : ''));
+            + (option.densityDrawnAs
+                ? ` draw=${option.densityDrawnAs}/${option.cumulativeDrawnAs}`
+                  + ` atoms=${option.atomsSeen}` : ''));
     }
     if (broke) continue;
     console.log(`OK   ${key.padEnd(11)} ${lines.join('  |  ')}`);
@@ -368,6 +390,61 @@ if (fixtures) {
         else checked.push(key);
     }
     if (checked.length) console.log(`OK   ${'full x'.padEnd(11)} ${checked.join(', ')}`);
+}
+
+// Zooming changes the drawing, which is the half of the ladder that had never
+// been built and could not have been caught by any check above: every case
+// there is judged on the full crop, where an ordinary book always has thousands
+// of atoms in view and can only ever come out as steps.
+//
+// `opts.zoom` is the loss window the reader is holding. Narrowing it to a few
+// buckets has to reach the stem rung, and widening back has to leave it. The
+// windows are taken from the frame's own grid rather than written down, so this
+// does not go stale when a fixture is recaptured on a different bucket size.
+if (fixtures) {
+    const zoomCases = [];
+    for (const [kind, key] of CASES) {
+        const entry = fixtures[key];
+        const spec = EXHIBITS[kind];
+        if (!entry || !spec || !spec.panelArgs) continue;
+        const built = { name: entry.build.name, kind, mean: entry.build.mean,
+                        wide: true, width: 1000, box: spec.layout(1000) };
+        const base = spec.build(entry.frames, built);
+        if (!base || !base.lossGrid || base.supportKind !== 'atomic') continue;
+
+        const grid = base.lossGrid;
+        // Ten buckets from the middle of the grid: comfortably inside the
+        // 40-atom rung whatever the fixture's bucket size is.
+        const mid = Math.floor(grid.length / 2);
+        const tight = [grid[mid], grid[Math.min(mid + 9, grid.length - 1)]];
+        const zoomed = spec.build(entry.frames, { ...built, zoom: tight });
+        if (!zoomed) { fail(`${key} (zoom): build returned null`); continue; }
+
+        if (zoomed.densityDrawnAs !== 'stem') {
+            fail(`${key} (zoom): 10 atoms in view drew as `
+                + `${zoomed.densityDrawnAs}, expected stem`);
+            continue;
+        }
+        // And the stem drawing really is two series per unit, so the option
+        // matches the rung it reports rather than only labelling itself.
+        const dens = (zoomed.series || []).filter((s) => s.xAxisIndex === 0);
+        const tail = (zoomed.series || []).filter((s) => s.xAxisIndex === 1);
+        if (dens.length !== 2 * tail.length) {
+            fail(`${key} (zoom): ${dens.length} density series for `
+                + `${tail.length} units, expected ${2 * tail.length}`);
+            continue;
+        }
+        // Widening back leaves the rung, so this is a function of the window
+        // rather than a latch that trips once.
+        const back = spec.build(entry.frames, { ...built, zoom: null });
+        if (back.densityDrawnAs !== base.densityDrawnAs) {
+            fail(`${key} (zoom): un-zoom drew as ${back.densityDrawnAs}, `
+                + `expected ${base.densityDrawnAs}`);
+            continue;
+        }
+        zoomCases.push(`${key}:${base.densityDrawnAs}->stem`);
+    }
+    if (zoomCases.length) console.log(`OK   ${'zoom'.padEnd(11)} ${zoomCases.join(', ')}`);
 }
 
 // The Reins exhibit is keyed by tab rather than by object kind, so it is not in

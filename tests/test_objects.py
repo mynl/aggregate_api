@@ -781,8 +781,19 @@ def test_pnl_builds_and_reports(client):
     csv = client.get(f"/v1/objects/{oid}/frame/density_df.csv")
     assert csv.status_code == 200
     assert "loss" in csv.text.splitlines()[0]
-    # No tail / pricing / reinsurance / bs-window -> clean 400 (not 500).
-    assert client.get(f"/v1/objects/{oid}/tail_df").status_code == 400
+    # A P&L **does** have a tail now. `aggregate` 1.0.0a227 gave `PnL` and
+    # `BivariateAggregate` the current `tail_df` contract, which is the `kinds`
+    # item of the library's own round-3 plan: a P&L outcome has a downside worth
+    # reading return periods off, and it carried the old semantics under the new
+    # name until then. This asserted the absence, so it is pinned to the new
+    # contract rather than deleted.
+    #
+    # The navigation is deliberately unmoved by that: Overview / Tail gates on
+    # the `tail` *exhibit*, which the library has not registered for a P&L, so
+    # the frame is reachable through the api and the leaf stays dark. If the
+    # exhibit follows upstream, `check-nav.mjs` is what will say so.
+    assert client.get(f"/v1/objects/{oid}/tail_df").status_code == 200
+    # No pricing / reinsurance / bs-window -> clean 400 (not 500).
     assert client.post(
         f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.15}
     ).status_code == 400
