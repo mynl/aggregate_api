@@ -66,6 +66,17 @@ export const NAV_GROUPS = {
                 why: 'needs a full loss distribution, so an aggregate or a portfolio',
                 hint: 'VaR, TVaR and xsVaR by return period',
             },
+            // Moved up from More at a55. It answers "can I believe any of the
+            // numbers above", which is the question a reader has while looking
+            // at them, not one worth walking into a specialist menu for. It
+            // sits after Tail because it is a verdict on what Plot, Summary
+            // and Tail just showed.
+            validation: {
+                label: 'Validation',
+                exhibit: 'validation',
+                why: 'needs computed moments',
+                hint: 'theoretical vs empirical moments; reads “not unreasonable” on a clean build',
+            },
         },
     },
     reinsurance: {
@@ -77,7 +88,19 @@ export const NAV_GROUPS = {
         // says so declaratively rather than special-casing the group name in
         // `groupAvailable`.
         alsoLive: 'canReins',
+        // Plot first since a55, so the row parallels Overview: the picture, then
+        // the tables that quantify it. Key order is row order, and `activeLeaf`
+        // lands on the first *live* leaf, so a reinsured aggregate now opens on
+        // Plot. A reinsured portfolio still opens on Summary, because
+        // `chart_reins` is registered for `Aggregate` alone and Plot is dark
+        // there; that is the standing `replot` item, not a special case here.
         leaves: {
+            plot: {
+                label: 'Plot',
+                chart: 'reins',
+                why: 'needs a cession; add one below',
+                hint: 'what the cession does to the shape, and to the tail',
+            },
             summary: {
                 label: 'Summary',
                 exhibit: 'reins',
@@ -95,12 +118,6 @@ export const NAV_GROUPS = {
                 exhibit: 'reins',
                 why: 'needs a cession; add one below',
                 hint: 'the three distributions on one grid',
-            },
-            plot: {
-                label: 'Plot',
-                chart: 'reins',
-                why: 'needs a cession; add one below',
-                hint: 'what the cession does to the shape, and to the tail',
             },
         },
     },
@@ -162,13 +179,6 @@ export const NAV_GROUPS = {
     more: {
         label: 'More',
         leaves: {
-            validation: {
-                label: 'Validation',
-                exhibit: 'validation',
-                why: 'needs computed moments',
-                hint: 'theoretical vs empirical moments; reads “not unreasonable” on a clean build',
-                copy: true,
-            },
             stats: {
                 label: 'Stats',
                 exhibit: 'stats',
@@ -228,7 +238,6 @@ export const NAV_GROUPS = {
             narrative: {
                 label: 'Narrative',
                 hint: 'the object’s own text, verbatim',
-                copy: true,
             },
         },
     },

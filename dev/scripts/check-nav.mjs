@@ -59,6 +59,11 @@ const EXPECTED = {
     'overview:plot': ['agg', 'agg_reins', 'port', 'sev', 'distortion', 'bvagg', 'pnl', 'xpnl'],
     'overview:summary': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl'],
     'overview:tail': ['agg', 'agg_reins', 'port'],
+    // Moved out of More at a55: it is the verdict on what the three leaves above
+    // it just showed, so it belongs beside them rather than in the specialist
+    // menu. The live set is unchanged by the move, which is the point of
+    // asserting it here.
+    'overview:validation': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl'],
     'economics:ledger': ['pnl', 'xpnl'],
     'economics:ratios': ['pnl', 'xpnl'],
     'economics:waterfall': ['xpnl'],
@@ -74,7 +79,6 @@ const EXPECTED = {
     'bounds:bounds': ['agg', 'agg_reins', 'port'],
     'bounds:pricing': ['agg', 'agg_reins', 'port'],
     'bounds:allocation': ['port'],
-    'more:validation': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl'],
     'more:stats': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl'],
     'more:density': ['agg', 'agg_reins', 'port', 'sev', 'distortion', 'bvagg', 'pnl', 'xpnl'],
     // Same set as overview:tail, and for the same reason: both need a full loss

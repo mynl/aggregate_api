@@ -4,6 +4,60 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a55
+
+`dev/plan-ui-round-4.md` phase 1, the nav and its greying. Five items off the
+author's second pass over the running site. No server change.
+
+**A greyed group tab explained itself to nobody, and had not since a48.** The
+report was that hovering a dark tab does nothing while a dark sub-tab shows a
+message, and the cursor was the clue: it stayed an arrow instead of becoming the
+"not allowed" sign the stylesheet asks for, which meant the rule was not
+matching.
+
+`applyCapabilityGating` sets both `nav-off` and Bootstrap's `disabled` class on a
+dark group tab, the latter so Bootstrap's Tab plugin refuses to activate the
+trigger. But `.nav-link.disabled` carries `pointer-events: none`, so `:hover`
+never fired and the `data-why` tooltip could not draw at all. The sub-tabs are
+plain buttons that never take the class, which is why one level of the menu
+explained itself and the other stayed silent. The a48 comment at that line
+worried about the native `disabled` **attribute** doing exactly this and set the
+class instead, not noticing the class does the same thing by another route; both
+the comment and the rule are corrected.
+
+The fix restores `pointer-events: auto` under `.nav-link.nav-off` and keeps
+Bootstrap's guard. Nothing becomes clickable: the click was already refused in a
+capture-phase handler, which was the second of the two guarantees all along.
+
+**The tooltip is quieter, and the panic cursor is gone.** It was a near-black
+card with a 12px drop shadow, which is the styling of an alert for what is a
+footnote naming which object would answer. It is now a bordered note on the
+page's own surface, and `cursor: not-allowed` comes off both levels.
+
+**Copy buttons are gone from the app.** Both leaves that declared one
+(Validation, Narrative), the branch in `renderSubTabs` that drew it, `copyPane`,
+the `[data-copy]` wiring no markup ever used, and `flash`, which had no other
+caller. The app had grown two export stories and only one earns its place:
+CsvGrid's own copy and save is on every table, exports raw values rather than
+rendered text, and is what the author uses. A button beside the sub-tabs copying
+a pane's `innerText` was the worse answer in the more prominent spot.
+
+**Validation moved from More to Overview**, after Tail. It is the verdict on
+what Plot, Summary and Tail just showed, so it belongs beside them rather than
+in the specialist menu. Same frame, same options; only the pane id changed.
+
+**The Reinsurance row reordered** to Plot, Summary, Stats, Density, parallel to
+Overview. One visible consequence, accepted: a reinsured aggregate now opens on
+Plot. A reinsured portfolio still opens on Summary, because `chart_reins` is
+registered for `Aggregate` alone.
+
+**A little more air around the sub-tab row**, and equal above and below, so it
+reads as a level of the menu rather than as something attached to the tabs.
+
+`check-nav.mjs` gains the moved leaf and confirms the live set is unchanged by
+both moves, which is the point of asserting it there rather than trusting the
+edit.
+
 ## 1.0.0a54
 
 Catching up with `aggregate` a230, which broke the chart route and shipped the

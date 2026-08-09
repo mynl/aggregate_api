@@ -367,9 +367,13 @@ header .navbar { min-height: 56px; }
    Indented by --tabpad, along with the content, so both align with the first
    tab's LABEL rather than with its box edge. */
 .out-tabs + .sub-tabs, .sub-tabs { padding-left: var(--tabpad); }
+/* The two numbers are equal on purpose: the row sits in its own band of space,
+   the same above as below, so it reads as a level of the menu rather than as
+   something attached to the tabs or to the content. Both were a touch tight on
+   a tablet, where the strip is the thing a thumb aims at. */
 .sub-tabs {
     display: flex; flex-wrap: wrap; align-items: center; gap: .2rem;
-    padding-top: .5rem; margin-bottom: .55rem;
+    padding-top: .7rem; margin-bottom: .7rem;
 }
 .sub-tabs:empty { display: none; }
 .sub-tabs > * { flex: 0 0 auto; }
@@ -399,33 +403,56 @@ header .navbar { min-height: 56px; }
    fill just looks broken.
 
    Pointer events stay on so the tooltip fires; the click is refused in the
-   handler. `disabled` would suppress the tooltip in Chrome, which is the whole
-   point of having one. */
+   handler (main.js, capture phase). The native `disabled` ATTRIBUTE is never
+   set, because it suppresses the tooltip in Chrome.
+
+   No `not-allowed` cursor. It is the loudest thing on the strip for the mildest
+   fact, and the tooltip is the explanation; the cursor was a second, cruder one
+   shouting over it. */
 .out-tabs .nav-link.nav-off, .sub-tabs .sub-link.nav-off {
-    color: #b6bdc4 !important; cursor: not-allowed;
+    color: #b6bdc4 !important; cursor: default;
     font-weight: 400 !important; position: relative;
 }
-.out-tabs .nav-link.nav-off { background: var(--soft); }
+/* Bootstrap's `.disabled` CLASS is a different animal from the attribute, and
+   through a53 it silently broke half this protocol. `applyCapabilityGating`
+   sets it on a dark GROUP tab so Bootstrap's Tab plugin refuses to activate the
+   trigger, and `.nav-link.disabled` carries `pointer-events: none` plus
+   `cursor: default` (bootstrap.css). Pointer events off means `:hover` never
+   fires, so the `data-why` tooltip below could not draw at all: a greyed group
+   tab explained itself to a screen reader and to nobody looking at it, while
+   the sub-tabs, plain buttons that never take the class, explained themselves
+   fine. That asymmetry was reported twice as "the tabs do nothing".
+
+   Restore the hover and keep the plugin's guard. The click is refused in the
+   capture-phase handler either way, so nothing here makes a dark tab clickable. */
+.out-tabs .nav-link.nav-off { background: var(--soft); pointer-events: auto; }
 .out-tabs .nav-link.active.nav-off {
     background: var(--line-2); border-color: var(--line);
 }
 /* The reason, drawn here rather than left to the native `title`, which arrives
-   after about a second and reads as nothing happening. */
+   after about a second and reads as nothing happening.
+
+   Toned down at a55, from a near-black card with a drop shadow to a quiet note
+   on the page's own surface. The old one announced itself: full-contrast ground
+   and a 12px shadow is the styling of an alert, and this is a footnote saying
+   which object would answer. It reads as a remark now, not a warning, which is
+   also why the arrow lost its fill and became a hairline. */
 .nav-off[data-why]:hover::after, .nav-off[data-why]:focus-visible::after {
     content: attr(data-why);
     position: absolute; left: 50%; transform: translateX(-50%);
     top: calc(100% + 7px); z-index: 60;
-    background: var(--ink); color: #fff;
+    background: var(--soft); color: var(--ink-2);
+    border: 1px solid var(--line);
     font-size: .7rem; font-weight: 400; line-height: 1.35;
     text-transform: none; letter-spacing: 0;
     padding: .3rem .55rem; border-radius: .35rem;
     width: max-content; max-width: 230px; text-align: center;
-    box-shadow: 0 3px 12px rgba(0, 0, 0, .22); pointer-events: none;
+    pointer-events: none;
 }
 .nav-off[data-why]:hover::before, .nav-off[data-why]:focus-visible::before {
     content: ""; position: absolute; left: 50%; transform: translateX(-50%);
     top: calc(100% + 2px); z-index: 60;
-    border: 5px solid transparent; border-bottom-color: var(--ink);
+    border: 5px solid transparent; border-bottom-color: var(--line);
     width: 0; height: 0; pointer-events: none;
 }
 

@@ -585,6 +585,10 @@ const LOADERS = {
     // `_CSV_FRAMES`. Tail behavior is its own leaf under More now, off the
     // exhibit the library registers for it.
     'overview:tail': () => loadOverviewFrames([['tail_df', 'tail']]),
+    // Moved here from More at a55. Same frame and same options; only the pane
+    // changed, because Overview's leaves share `pane-overview`.
+    'overview:validation': () => replacePaneTable('pane-overview', 'validation_df',
+        { columnFilters: false }, null, ['overview', 'validation']),
 
     'economics:ledger': () => loadExhibitLeaf('pane-economics', 'economic',
         ['economics', 'ledger']),
@@ -607,8 +611,6 @@ const LOADERS = {
     'bounds:pricing': () => showBoundsLeaf('pricing'),
     'bounds:allocation': () => showBoundsLeaf('allocation'),
 
-    'more:validation': () => replacePaneTable('pane-more', 'validation_df',
-        { columnFilters: false }, null, ['more', 'validation']),
     'more:stats': () => replacePaneTable('pane-more', 'stats_df', GRID_FULL,
         null, ['more', 'stats']),
     'more:density': () => {
@@ -700,13 +702,6 @@ function renderSubTabs(group) {
         }
         row.appendChild(btn);
     }
-    const leaf = leafOf(group, current);
-    if (leaf?.copy) {
-        const paneId = PANE_OF[group];
-        const copyBtn = el('button', { className: 'sub-link' }, 'copy');
-        copyBtn.addEventListener('click', () => copyPane(paneId, copyBtn));
-        row.appendChild(copyBtn);
-    }
 }
 
 /** Move a group to one of its leaves and load it. */
@@ -770,9 +765,18 @@ function applyCapabilityGating() {
         // Grey out with .nav-off, which styles it and carries the tooltip.
         // Bootstrap's own .disabled is kept because its Tab plugin checks for
         // it and will not activate the trigger; the native `disabled`
-        // attribute is NOT set, because it suppresses the tooltip in Chrome
-        // and kills the pointer events the :hover rule needs. The click is
-        // refused below instead.
+        // attribute is NOT set, because it suppresses the tooltip in Chrome.
+        // The click is refused below instead.
+        //
+        // The a48 note here said the attribute "kills the pointer events the
+        // :hover rule needs", and stopped there, which missed that Bootstrap's
+        // `.disabled` CLASS does exactly the same thing: `.nav-link.disabled`
+        // carries `pointer-events: none`. So this line was suppressing the very
+        // tooltip the two lines below it set up, on every dark GROUP tab, from
+        // a48 to a53. The sub-tabs never take the class and were always fine,
+        // which is what made it read as "the tabs do nothing" rather than as a
+        // missing rule. `site.css` puts the pointer events back under
+        // `.nav-link.nav-off`; see the greying protocol block there.
         btn.classList.toggle('nav-off', off);
         btn.classList.toggle('disabled', off);
         btn.setAttribute('aria-disabled', off ? 'true' : 'false');
@@ -2016,37 +2020,22 @@ evaluateBtn?.addEventListener('click', async () => {
 });
 
 // ----------------------------------------------------------------------
-// Tab tools: copy a pane's text / download the plot SVG. Per-frame CSV download
-// and copy are handled by CsvGrid's own export controls (copy / save), so the
-// old per-tab "csv" buttons are gone: the grid is the single export path.
+// Tab tools: download the plot SVG.
 // ----------------------------------------------------------------------
-
-/** Copy a pane's rendered text to the clipboard. */
-async function copyPane(paneId, btn) {
-    const text = ($(paneId)?.innerText || '').trim();
-    if (!text) return;
-    try {
-        await navigator.clipboard.writeText(text);
-        if (btn) flash(btn, 'copied');
-    } catch { /* clipboard blocked; nothing useful to say */ }
-}
-
-// Static copy buttons declared in the markup. The More tab builds its own,
-// because which views offer one depends on the sub-view being shown.
-document.querySelectorAll('[data-copy]').forEach((btn) => {
-    btn.addEventListener('click', () => copyPane(btn.dataset.copy, btn));
-});
+// There is no copy button here any more, at any level. a55 took the last two
+// off (Validation and Narrative, the only leaves that declared `copy: true`)
+// along with `copyPane` and the dead `[data-copy]` wiring that no markup ever
+// used. The reason is that the app grew two export stories and only one of them
+// earns its place: CsvGrid's own copy / save is on every table, exports the raw
+// values rather than the rendered text, and is what the author actually uses. A
+// second button beside the sub-tabs, copying a pane's `innerText`, was a worse
+// answer to the same question sitting in the more prominent spot.
+// ----------------------------------------------------------------------
 
 document.querySelector('[data-plot-download]').addEventListener('click', () => {
     if (!state.id) return;
     window.open(api.plotUrl(state.id, { format: 'svg' }), '_blank');
 });
-
-function flash(btn, text) {
-    const original = btn.innerHTML;
-    btn.textContent = text;
-    setTimeout(() => { btn.innerHTML = original; }, 900);
-}
 
 // ----------------------------------------------------------------------
 // Examples dropdown + Ctrl+Shift-↑/↓ ring navigation
