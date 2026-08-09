@@ -4,6 +4,49 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a59
+
+`dev/plan-ui-round-4.md` phase 5, two page-wide preferences in the header menu.
+Both follow the Tables switch: a checked item, a sticky value, and a re-render
+of every live pane.
+
+**Perspective, Insurer or Raw.** The library owns the business translation
+(captions, row flags, drops, relabeling), so this is a passthrough on the
+exhibit route and nothing here knows what either reading does to a frame. The
+route and the client wrapper both already took the parameter; the control was
+what was missing.
+
+Worth stating plainly, because the honest answer is "some of the page": the
+leaves that respond are the five on the exhibit route, Economics Ledger, Ratios
+and Waterfall, plus More Tail behavior and Dependency. Everything else, the
+Overview tables, all four Reinsurance leaves and the rest of More, is served by
+the frame routes, which carry no perspective. Closing that is the
+`[Exhibits-App-Cleanup]` item in `dev/TODO.md`, not this one.
+
+**Full precision, as a third state of the Tables preference** rather than a
+fourth section. It answers the same question the other two do, how should a
+table read, and the interactive view is already exact, so "Static, full
+precision" is where it belongs.
+
+Nothing is fetched that was not already on the wire. Every table document
+carries the unrounded value beside the rendered text under `include_raw`, which
+is what lets the interactive grid sort on real numbers; the new
+`?precision=full` decides which of the two the **static** walker prints. A
+summary that read `3.16` reads `3.16227766016838`.
+
+Two details that were bugs first. Setting the house `float_format` alone
+changes nothing on any frame with a `FORMATS` entry, because an explicit
+`formatters` mapping beats the house default, so full precision drops the
+per-column formats as well; doing only the obvious half looks like the flag was
+ignored. And the format is `.15g`, not `.17g`: seventeen digits round-trips a
+double exactly and prints its dust, so a mean the model computed as 1234.5 would
+read `1234.5000000000002` and teach the reader about IEEE 754 rather than about
+their book.
+
+The content hash moves with the setting, which is correct rather than
+incidental: the ETag has to tell the two readings apart or a reader switching to
+full precision would be handed the rounded document out of cache.
+
 ## 1.0.0a58
 
 `dev/plan-ui-round-4.md` phase 4, the action row. Three items in a fixed order,

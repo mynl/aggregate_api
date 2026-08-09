@@ -76,7 +76,14 @@ export const api = {
      * spanned MultiIndex column headers. Rendered client side by the walker in
      * `tables.js`.
      */
-    frameIr:      (id, which)       => _json('GET',  `/v1/objects/${id}/frame/${which}?format=ir`),
+    /**
+     * @param {string} precision `'house'` (the presentation formats) or
+     *   `'full'` (every meaningful digit). Costs no extra data either way:
+     *   the exact values already ride in the document under `include_raw`,
+     *   and this only decides which of the two the static walker prints.
+     */
+    frameIr:      (id, which, precision = 'house') =>
+        _json('GET', `/v1/objects/${id}/frame/${which}?format=ir&precision=${precision}`),
     /**
      * A library exhibit as its envelope: title, then one table document per
      * block. The library owns the business translation per perspective

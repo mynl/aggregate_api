@@ -50,6 +50,33 @@
                             <li><button type="button" class="dropdown-item menu-check-item" data-table-view="interactive">
                                 <i class="bi bi-check2"></i><span>Interactive</span>
                                 <small class="text-muted">sort, filter, search</small></button></li>
+                            <!-- Full precision is a third state of the same
+                                 preference rather than a fourth section: it
+                                 changes how the static table prints, and the
+                                 interactive view already shows raw values, so
+                                 it reads as "static, all the digits". Nothing
+                                 is refetched that was not already on the wire;
+                                 every document carries the exact values under
+                                 include_raw and this decides which the static
+                                 view prints. -->
+                            <li><button type="button" class="dropdown-item menu-check-item" data-table-view="precise">
+                                <i class="bi bi-check2"></i><span>Static, full precision</span>
+                                <small class="text-muted">every meaningful digit</small></button></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <!-- Perspective: which business reading of an
+                                 exhibit to serve. The library owns the
+                                 translation (captions, row flags, drops,
+                                 relabeling), so this is a passthrough on the
+                                 exhibit route and reaches the leaves that take
+                                 it: Economics Ledger / Ratios / Waterfall, and
+                                 More Tail behavior / Dependency. -->
+                            <li><h6 class="dropdown-header">Perspective</h6></li>
+                            <li><button type="button" class="dropdown-item menu-check-item" data-perspective="insurer">
+                                <i class="bi bi-check2"></i><span>Insurer</span>
+                                <small class="text-muted">the business reading</small></button></li>
+                            <li><button type="button" class="dropdown-item menu-check-item" data-perspective="raw">
+                                <i class="bi bi-check2"></i><span>Raw</span>
+                                <small class="text-muted">the frame as computed</small></button></li>
                             <li><hr class="dropdown-divider"></li>
                             <!-- Editor: the emacs keys, in the same checked-item
                                  form as Tables above and for the same reason,

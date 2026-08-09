@@ -1495,6 +1495,52 @@ def test_pricing_at_ccoc_portfolio(client):
 # ----------------------------------------------------------------------
 
 
+def test_frame_ir_full_precision_shows_the_digits_it_already_had(client):
+    """``precision=full`` reprints, it does not refetch or recompute.
+
+    The exact values are in every document already, under ``include_raw``,
+    which is what lets the interactive grid sort on real numbers. So the
+    assertion that matters is the pair: the rendered **text** gains digits
+    while the **raw** values are untouched, which is what proves nothing about
+    the data changed and only the reading did.
+
+    The ETag has to move with it, or a reader switching to full precision would
+    be handed the rounded document out of cache.
+    """
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+
+    def read(precision):
+        r = client.get(
+            f"/v1/objects/{oid}/frame/summary?format=ir&precision={precision}")
+        assert r.status_code == 200, r.text
+        doc = r.json()
+        # Stub cells serialize as bare strings, data cells as objects, so the
+        # walk has to say which it wants rather than assume every cell is a
+        # mapping.
+        cells = [c for row in doc["body"] for c in row["cells"]
+                 if isinstance(c, dict)]
+        return (
+            [c["text"] for c in cells if c.get("text") is not None],
+            [c["raw"] for c in cells if c.get("raw") is not None],
+            r.headers["ETag"],
+        )
+
+    house_text, house_raw, house_etag = read("house")
+    full_text, full_raw, full_etag = read("full")
+
+    assert house_raw == full_raw, "the numbers are the same numbers"
+    assert house_text != full_text, "the rendering is not the same rendering"
+    assert full_etag != house_etag, "the two readings must not share a cache slot"
+    # Something, somewhere, prints more digits than the house format allowed.
+    assert max(len(t) for t in full_text) > max(len(t) for t in house_text)
+    # And no float dust: .15g rather than .17g, so a clean value stays clean.
+    assert not any("000000000" in t for t in full_text)
+
+    bad = client.get(f"/v1/objects/{oid}/frame/summary?format=ir&precision=nope")
+    assert bad.status_code == 422
+    assert "precision" in bad.json()["detail"]
+
+
 def test_frame_ir_sparsifies_the_row_index(client):
     """The whole argument for building from the DataFrame, in one assertion.
 

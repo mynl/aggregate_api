@@ -1897,6 +1897,13 @@ def get_frame_document(
     oid: str,
     which: str,
     format: str = Query("ir", description="ir"),
+    precision: str = Query(
+        "house",
+        description=(
+            "'house' = the presentation formats; 'full' = every meaningful "
+            "digit, for reading an exact value off the static table."
+        ),
+    ),
     request: Request = None,
     entry: CacheEntry = Depends(_locked_entry),
 ) -> Response:
@@ -1919,10 +1926,22 @@ def get_frame_document(
     Large frames truncate rather than fail (``tables.MAX_ROWS``), and say so in
     the document's notes. The SPA still sends anything over a few hundred rows to
     the interactive grid, which is the honest instrument for them.
+
+    ``precision='full'`` prints every meaningful digit instead of the house
+    formats. It fetches nothing extra: the exact values ride in every document
+    already, under ``include_raw``, which is what lets the interactive grid sort
+    on real numbers. The flag only decides which of the two the static view
+    shows, and it changes the content hash, so the two readings cannot collide
+    in a cache.
     """
     if format != "ir":
         raise HTTPException(
             status_code=422, detail=f"unknown format {format!r}; expected 'ir'"
+        )
+    if precision not in ("house", "full"):
+        raise HTTPException(
+            status_code=422,
+            detail=f"unknown precision {precision!r}; expected 'house' or 'full'",
         )
     df = _named_frame(entry, which)
     try:
@@ -1933,7 +1952,8 @@ def get_frame_document(
         # decimals on anything averaging over 20,000, so a book worth pricing
         # showed its money as whole units. A name with no `tables.FORMATS` entry
         # resolves to nothing and behaves exactly as before.
-        body, doc_hash = frame_document(df, which, formats=which)
+        body, doc_hash = frame_document(df, which, formats=which,
+                                        full_precision=precision == "full")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

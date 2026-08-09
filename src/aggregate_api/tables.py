@@ -246,8 +246,23 @@ FORMATS: dict[str, dict[str, object] | str] = {
 }
 
 
+#: The float format for the "full precision" reading, and why it is not 17.
+#:
+#: 17 significant digits is what round-trips a double exactly, and it is the
+#: wrong answer here: it prints the float's dust, so a mean the model computed
+#: as 1234.5 reads ``1234.5000000000002`` and the reader learns about IEEE 754
+#: rather than about their book. 15 is the most digits a double carries
+#: reliably, so it shows every digit that means anything and none that do not.
+#:
+#: ``g`` rather than ``f`` because the frames span money and probabilities in
+#: the same table: a fixed decimal count that suits a premium turns a 1e-9 tail
+#: probability into 0.000000000.
+FULL_PRECISION_FLOAT = "{x:.15g}"
+
+
 def frame_spec(
-    df: pd.DataFrame, which: str | None = None, formats: str | None = None
+    df: pd.DataFrame, which: str | None = None, formats: str | None = None,
+    full_precision: bool = False,
 ) -> TableSpec:
     """The build spec for one named frame.
 
@@ -263,6 +278,20 @@ def frame_spec(
         Key into ``FORMATS``. Separate from ``which`` because several frames
         share one format set: the four per-distortion slices are all priced the
         same way.
+    full_precision : bool, default False
+        Show every meaningful digit instead of the house presentation formats.
+
+        Nothing is fetched differently and nothing is recomputed: the exact
+        values are **already in the document**, because ``include_raw`` puts
+        the unrounded number beside the rendered text on every column (that is
+        what lets the interactive grid sort on real numbers). All this changes
+        is which of the two the *static* view prints.
+
+        It has to do two things, not one, and doing only the obvious half is
+        why a first attempt looks like it failed. Setting ``float_format``
+        alone changes nothing on a frame with a ``FORMATS`` entry, because an
+        explicit ``formatters`` mapping beats the house default. So the
+        per-column formats are dropped as well.
 
     Returns
     -------
@@ -286,6 +315,16 @@ def frame_spec(
         need naming.
     """
     flags = ROW_FLAGS.get(which or "")
+    if full_precision:
+        # Row emphasis is kept: which row is the total does not depend on how
+        # many digits it shows. Only the number formatting is set aside.
+        return TableSpec(
+            include_raw=list(df.columns),
+            max_rows=MAX_ROWS,
+            row_flags=(lambda pos, _row: flags(df, pos)) if flags else None,
+            formatters={},
+            float_format=FULL_PRECISION_FLOAT,
+        )
     chosen = FORMATS.get(formats or "")
     if isinstance(chosen, str):
         columns = {c: chosen for c in df.columns}
@@ -322,7 +361,8 @@ def frame_spec(
 
 
 def frame_document(
-    df: pd.DataFrame, which: str | None = None, formats: str | None = None
+    df: pd.DataFrame, which: str | None = None, formats: str | None = None,
+    full_precision: bool = False,
 ) -> tuple[bytes, str]:
     """Render a frame as canonical table-document JSON.
 
@@ -336,6 +376,12 @@ def frame_document(
         Frame name, for row emphasis. See ``ROW_FLAGS``.
     formats : str, optional
         Format-set key. See ``FORMATS``.
+    full_precision : bool, default False
+        Print every meaningful digit rather than the house formats. Changes
+        the rendered text only; the raw values were always in the document.
+        Note this changes the content hash, which is correct: the ETag has to
+        distinguish the two readings or a reader switching to full precision
+        would be served the rounded document from cache.
 
     Returns
     -------
@@ -357,7 +403,7 @@ def frame_document(
         # Naming the frame here beats surfacing a library error the caller
         # cannot place.
         raise ValueError("frame has duplicate column names")
-    doc = build(df, frame_spec(df, which, formats))
+    doc = build(df, frame_spec(df, which, formats, full_precision))
     return canonical_json(doc), doc.hash
 
 

@@ -1108,7 +1108,42 @@ let overviewChart = null;
 // which is the author's call and the right one: a per-table switch is a lot of
 // chrome for a preference nobody changes twice in a session. Sticky per browser,
 // static by default (the Overview is the landing demo).
+//
+// Three values since a59, not two: `precise` is the static view printing every
+// meaningful digit instead of the house formats. A third state of one
+// preference rather than a second preference, because it answers the same
+// question the other two do, how should a table read, and because the
+// interactive view is already exact. It fetches nothing extra; the raw values
+// travel in every document under `include_raw`, and this decides which of the
+// two the static walker prints.
 const TABLE_VIEW_KEY = 'aggapi.tableView';
+/** Is this table-view value one of the static readings? */
+function isStatic(mode) { return mode === 'static' || mode === 'precise'; }
+
+/** A frame document, at whatever precision the page preference asks for. */
+function frameDoc(which) {
+    return api.frameIr(state.id, which,
+                       _tableView === 'precise' ? 'full' : 'house');
+}
+
+/**
+ * Which business reading of an exhibit to serve, page-wide and sticky.
+ *
+ * The library owns the translation, so this is a passthrough on the exhibit
+ * route and nothing here knows what either perspective does to a frame.
+ *
+ * Note what it reaches, because the answer is "some of the page" and that is
+ * worth knowing before wondering why a table did not move: only the leaves on
+ * the exhibit route take a perspective, which is Economics Ledger, Ratios and
+ * Waterfall, plus More Tail behavior and Dependency. Everything else is served
+ * by the frame routes, which have no such parameter. Closing that gap is the
+ * `[Exhibits-App-Cleanup]` item in `dev/TODO.md`.
+ */
+const PERSPECTIVE_KEY = 'aggapi.perspective';
+let _perspective = (() => {
+    try { return localStorage.getItem(PERSPECTIVE_KEY) || 'insurer'; }
+    catch { return 'insurer'; }
+})();
 let _tableView = (() => {
     try {
         // `aggapi.overviewView` is the a26-a31 key, when the preference steered
@@ -1130,11 +1165,15 @@ let _tableView = (() => {
 const tableViewListeners = new Map();
 function onTableViewChange(key, fn, node) { tableViewListeners.set(key, { fn, node }); }
 
-function setTableView(mode) {
-    if (mode === _tableView) return;
-    _tableView = mode;
-    try { localStorage.setItem(TABLE_VIEW_KEY, mode); } catch { /* private mode */ }
-    syncTableViewMenu();
+/**
+ * Re-render everything registered, and drop what has left the page.
+ *
+ * Shared by both page-wide table preferences, because a preference change is a
+ * preference change: whichever moved, every live pane has to redraw. A pane
+ * that registered and was then replaced is dropped here rather than tracked,
+ * which is what keeps the map from growing across rebuilds.
+ */
+function notifyTableListeners() {
     for (const [key, entry] of [...tableViewListeners]) {
         if (entry.node && !entry.node.isConnected) {
             tableViewListeners.delete(key);
@@ -1144,18 +1183,46 @@ function setTableView(mode) {
     }
 }
 
-// The header dropdown's Tables section: the page-wide affordance for the same
-// value. Its tick follows the preference however it moved, including from the
-// Overview's pill row.
-function syncTableViewMenu() {
+function setTableView(mode) {
+    if (mode === _tableView) return;
+    _tableView = mode;
+    try { localStorage.setItem(TABLE_VIEW_KEY, mode); } catch { /* private mode */ }
+    syncPreferenceMenu();
+    // Full precision is served, not derived: the *values* are already local,
+    // but which of them the static walker prints is decided when the document
+    // is built. So moving to or from `precise` re-fetches, where the static /
+    // interactive flip never does. Panes hold their own fetch, so asking them
+    // to redraw is enough.
+    notifyTableListeners();
+}
+
+function setPerspective(mode) {
+    if (mode === _perspective) return;
+    _perspective = mode;
+    try { localStorage.setItem(PERSPECTIVE_KEY, mode); } catch { /* private mode */ }
+    syncPreferenceMenu();
+    notifyTableListeners();
+}
+
+// The header dropdown's Tables and Perspective sections. One sync for both,
+// since both are the same checked-item pattern and a tick that follows the
+// value however it moved is the whole contract. Tables has a second affordance
+// on the Overview, which is why this reads the value rather than the click.
+function syncPreferenceMenu() {
     for (const item of document.querySelectorAll('[data-table-view]')) {
         item.classList.toggle('active', item.dataset.tableView === _tableView);
+    }
+    for (const item of document.querySelectorAll('[data-perspective]')) {
+        item.classList.toggle('active', item.dataset.perspective === _perspective);
     }
 }
 for (const item of document.querySelectorAll('[data-table-view]')) {
     item.addEventListener('click', () => setTableView(item.dataset.tableView));
 }
-syncTableViewMenu();
+for (const item of document.querySelectorAll('[data-perspective]')) {
+    item.addEventListener('click', () => setPerspective(item.dataset.perspective));
+}
+syncPreferenceMenu();
 
 /**
  * Mount one table the way the preference asks, from a single source.
@@ -1185,7 +1252,7 @@ syncTableViewMenu();
  */
 function mountTable(paneId, host, source, gridOpts = GRID_FULL) {
     const { doc, frame } = source || {};
-    const wantStatic = _tableView === 'static';
+    const wantStatic = isStatic(_tableView);
 
     const asGrid = (f, opts) => {
         if (!host.isConnected) return;   // the pane moved on while we waited
@@ -1359,7 +1426,7 @@ async function loadOverviewFrames(specs) {
     clearGrids('pane-overview');
     empty(pane);
     const docs = await Promise.all(
-        specs.map(([which]) => api.frameIr(state.id, which).catch(() => null)));
+        specs.map(([which]) => frameDoc(which).catch(() => null)));
     const ir = {};
     specs.forEach(([, key], i) => { ir[key] = docs[i]; });
     if (!docs.some(Boolean)) {
@@ -1450,8 +1517,8 @@ function ledeFor(group, key) {
  */
 async function loadSharpenAudit() {
     const [score, full] = await Promise.all([
-        api.frameIr(state.id, 'sharpen_score').catch(() => null),
-        api.frameIr(state.id, 'sharpen_df').catch(() => null),
+        frameDoc('sharpen_score').catch(() => null),
+        frameDoc('sharpen_df').catch(() => null),
     ]);
     const draw = () => {
         const root = el('div', { className: 'overview-exhibits exhibit-blocks' });
@@ -1503,7 +1570,7 @@ async function loadSharpenAudit() {
  * @param {[string, string]} leaf `[group, key]`, for the lede.
  */
 async function loadExhibitLeaf(paneId, name, leaf) {
-    const envelope = await api.exhibit(state.id, name);
+    const envelope = await api.exhibit(state.id, name, _perspective);
     const blocks = envelope.blocks || [];
     const draw = () => {
         // `.exhibit-blocks`, not `.overview-exhibits`: the blocks here have no
@@ -1564,7 +1631,7 @@ async function replacePaneTable(paneId, which, opts = GRID_FULL, bulk = null,
                                 leaf = null) {
     let source = null;
     if (!bulk) {
-        const doc = await api.frameIr(state.id, which).catch(() => null);
+        const doc = await frameDoc(which).catch(() => null);
         if (doc && !docTruncated(doc)) source = { doc };
     }
     if (!source) {
@@ -1777,8 +1844,8 @@ async function loadReinsFrame(which, leaf = null) {
 async function loadReinsStats() {
     if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
     const [terms, moments] = await Promise.all([
-        api.frameIr(state.id, 'reins_stats_terms').catch(() => null),
-        api.frameIr(state.id, 'reins_stats_moments').catch(() => null),
+        frameDoc('reins_stats_terms').catch(() => null),
+        frameDoc('reins_stats_moments').catch(() => null),
     ]);
     const draw = () => {
         const root = el('div', { className: 'overview-exhibits exhibit-blocks' });
