@@ -78,10 +78,9 @@ def exhibits_for(obj: Any) -> list[dict]:
 def charts_for(obj: Any) -> list[str]:
     """The chart names this object can serve.
 
-    A passthrough of :func:`aggregate.charts.available_charts`. Sparse today:
-    the conversions have reached distortion, reins, severity and the joint
-    surface, so an aggregate or a portfolio still reports nothing and the app
-    draws those from its own two-panel path until the emitters land.
+    A passthrough of :func:`aggregate.charts.available_charts`. Complete as of
+    library a244: every first-class kind publishes its own chart, and the app
+    draws nothing it does not find here.
 
     Parameters
     ----------
@@ -93,6 +92,30 @@ def charts_for(obj: Any) -> list[str]:
         Registry names, in registration order.
     """
     return list(agg_charts.available_charts(obj))
+
+
+def primary_chart_for(obj: Any) -> str | None:
+    """The chart that is this object's own picture, or None.
+
+    :func:`charts_for` answers what *can* be drawn, which for a reinsured
+    aggregate is two things. This answers which one to draw when nothing else
+    has been asked for, which is exactly the Overview Plot leaf's question and
+    the one it used to answer with a per-kind table in the browser. A
+    passthrough of :func:`aggregate.charts.primary_chart`, so the answer moves
+    when the library's registrations move and never when this file does.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    str or None
+        None where no registered chart claims the object, which is the app's
+        cue to say the picture does not exist yet rather than to approximate
+        one.
+    """
+    return agg_charts.primary_chart(obj)
 
 
 def has_premium(obj: Any) -> bool:
@@ -510,6 +533,7 @@ def capability_for(obj: Any) -> dict:
     return {
         "exhibits": exhibits_for(obj),
         "charts": charts_for(obj),
+        "primary_chart": primary_chart_for(obj),
         "has_premium": has_premium(obj),
         "can_sharpen": can_sharpen(obj),
         "has_sharpen": has_sharpen(obj),

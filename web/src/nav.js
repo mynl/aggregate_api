@@ -52,6 +52,12 @@ export const NAV_GROUPS = {
         leaves: {
             plot: {
                 label: 'Plot',
+                // The object's own picture, whichever chart the library says
+                // that is. Not a name: an aggregate's is 'agg' and a
+                // bivariate's is 'joint_surface', and choosing between them
+                // here would be the per-kind table `primary_chart` retired.
+                primaryChart: true,
+                why: 'the library publishes no chart for this object yet',
                 hint: 'the distribution and its tail, linked on one cursor',
             },
             summary: {
@@ -92,8 +98,11 @@ export const NAV_GROUPS = {
         // the tables that quantify it. Key order is row order, and `activeLeaf`
         // lands on the first *live* leaf, so a reinsured aggregate now opens on
         // Plot. A reinsured portfolio still opens on Summary, because
-        // `chart_reins` is registered for `Aggregate` alone and Plot is dark
-        // there; that is the standing `replot` item, not a special case here.
+        // `chart_reins` is registered for `Aggregate` alone. That was logged as
+        // the `replot` item; library a244 settled it the other way, as the
+        // author's decision for 1.0: a book's units cede on different stages,
+        // so a portfolio-level gross / ceded / net triple would have to pretend
+        // they cede on the same one. So the leaf is dark there on purpose.
         leaves: {
             plot: {
                 label: 'Plot',
@@ -302,12 +311,13 @@ export function whyGroup(group) {
  * drifted (it greyed a bivariate's grid-sizing pane, which the object serves
  * perfectly well).
  *
- * @param {object} caps `{built, exhibits: Set, charts: Set, flags: object}`.
+ * @param {object} caps `{built, exhibits: Set, charts: Set, primaryChart, flags}`.
  */
 export function leafAvailable(caps, group, key) {
     const leaf = leafOf(group, key);
     if (!leaf || leaf.soon) return false;
     if (leaf.exhibit) return caps.exhibits.has(leaf.exhibit);
+    if (leaf.primaryChart) return Boolean(caps.primaryChart);
     if (leaf.chart) return caps.charts.has(leaf.chart);
     if (leaf.flag) return Boolean(caps.flags?.[leaf.flag]);
     return Boolean(caps.built);
@@ -351,6 +361,7 @@ export function capsFromResponse(capability, built = true) {
         built: built && Boolean(capability),
         exhibits: new Set((cap.exhibits || []).map((e) => e.name)),
         charts: new Set(cap.charts || []),
+        primaryChart: cap.primary_chart || null,
         flags: {
             canPrice: Boolean(cap.can_price),
             canEvaluate: Boolean(cap.can_evaluate),

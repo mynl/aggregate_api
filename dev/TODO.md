@@ -56,8 +56,9 @@ in; chips gray out, never hide; unknown-to-the-page exhibits list under
 More), deleting the migrated `ROW_FLAGS` / `FORMATS` entries and the
 `main.js` title and caption literals (pricing FORMATS stay), wiring
 `check-exhibits.py` into CI, and extending `capture_fixtures.py` to the
-envelopes (its output file is already named `dev/fixtures/exhibits.json`
-for the chart panel fixtures; settle that name collision first). The
+envelopes. *(The name collision that blocked the last of those is
+settled: a62 renamed the chart fixtures to `dev/fixtures/charts.json`,
+so `exhibits.json` is free for the library's exhibit envelopes.)* The
 `[Exhibits-App-Cleanup]` decision (retire `_drop_raw_moments` by
 re-pointing the frame routes at exhibit raw and insurer, or keep the frame
 routes as the raw CSV path forever) is taken during the endpoint phase
@@ -81,6 +82,22 @@ notes moved into that plan (item 7) alongside the chart-rendering items from
 against the app's own builders. `dev/graphs.md` was deleted once its content
 landed there. The plan also carries the deletion of the server-rendered
 matplotlib route and the adoption of the four converted emitters.
+
+**Most of that plan landed at a62**: the 2-D adapter, all seven documents
+adopted, the purist availability rule, and the control strip off the document.
+`exhibits.js` is gone. What is left of it is item 7's remaining punch items
+(7.1 zoom disorientation, 7.2 double-click reset, 7.4 the readout in the
+legend) and the heatmap declaration upstream.
+
+**Every chart on the page is a different picture now and nobody has seen one.**
+Ten documents replay clean through the real adapter in node
+(`dev/scripts/smoke-charts.mjs`), which proves they reach the renderer in a
+drawable shape and that each declared reading changes the drawing. It proves
+nothing about how any of them looks. Worth one browser pass, and there is more
+to look at than usual: a **portfolio** now draws a kappa panel instead of an
+exceedance panel, a **P&L** carries break-even marks in both panels, a
+**bivariate** draws flat and no longer square, and the four controls (log, full
+range, return period, invert) are new words in a new place.
 
 ### c) Fix what is shown where
 
@@ -164,8 +181,15 @@ and the standing REMINDER below about what is worth plotting.
         loses, same keyword.
       - `cession`, pricing a cession with a distortion; the library has no glue
         between reinsurance and distortions at all.
-      - `replot`, the Reinsurance Plot leaf on a reinsured **portfolio**, which
-        greys because `chart_reins` is registered for `Aggregate` alone.
+      - ~~`replot`, the Reinsurance Plot leaf on a reinsured **portfolio**,
+        which greys because `chart_reins` is registered for `Aggregate`
+        alone.~~ **Answered, not fixed.** Library a244 rewrote `chart_reins`
+        as the occurrence plot and states the restriction as the author's
+        decision for 1.0: a book's units cede on different stages, so a
+        portfolio-level gross / ceded / net triple would have to pretend they
+        cede on the same one, and the aggregate cover is a separate contract
+        with a separate picture. The leaf is dark there on purpose and
+        `nav.js` says so.
 
       Two things the round turned up that are the library's and are recorded
       here rather than acted on:
@@ -441,6 +465,7 @@ one version bump each.
       IR-based charts always, so there is one renderer and no second engine to
       weigh it against. `twoPanelData` is not lifted into an app-side IR, it is
       deleted as each emitter lands. See `dev/plan-plot-ir-api.md`.
+      *(Done at a62: it and the whole of `exhibits.js` are gone.)*
 
 - [x] **greater_tables alongside the current tables** (→ 1.0.0a31). One new
       `GET frame/{which}.html` route mirroring the `.csv` one, rendering server

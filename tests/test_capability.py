@@ -54,10 +54,15 @@ def test_every_kind_carries_a_capability_block(client, label):
     """Every build response carries the block, whatever the object can do."""
     _, body = _build(client, label)
     cap = body["capability"]
-    assert set(cap) == {"exhibits", "charts", "has_premium", "can_sharpen",
-                        "has_sharpen", "can_pnl", "can_reins", "can_views",
-                        "reins_bases", "can_price", "can_evaluate",
+    assert set(cap) == {"exhibits", "charts", "primary_chart", "has_premium",
+                        "can_sharpen", "has_sharpen", "can_pnl", "can_reins",
+                        "can_views", "reins_bases", "can_price", "can_evaluate",
                         "can_bounds", "can_allocate", "needs_premium"}
+    # Every first-class kind has its own picture as of library a244, and the
+    # Overview Plot leaf lights from this rather than from a per-kind table in
+    # the browser. It is one of the object's own `charts`, never a name from
+    # somewhere else.
+    assert cap["primary_chart"] in cap["charts"], f"{label}: {cap['primary_chart']}"
     for item in cap["exhibits"]:
         assert set(item) == {"name", "title", "perspectives"}
         assert item["perspectives"], "an unavailable exhibit is absent, not empty"

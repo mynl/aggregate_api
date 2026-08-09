@@ -33,7 +33,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..', '..');
 
 // `pathToFileURL`, not the bare path: a Windows absolute path reads as a URL
-// scheme (`t:`) to the ESM loader, which is the same trap `smoke-exhibits.mjs`
+// scheme (`t:`) to the ESM loader, which is the same trap `smoke-charts.mjs`
 // already sidesteps.
 const { NAV_GROUPS, leafAvailable, groupAvailable, activeLeaf, capsFromResponse } =
     await import(pathToFileURL(path.join(repo, 'web', 'src', 'nav.js')).href);

@@ -4,6 +4,97 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a62
+
+`dev/plan-plot-ir-api.md` items 2, 3, 4, 5, 6 and 8 together: the app stops
+drawing charts and starts realizing documents. Every picture on the page now
+comes from a library emitter, and the app-side chart semantics are gone.
+
+**The plan expected to meet the library halfway and found it finished.** It was
+written against a230, where four emitters existed and `chart_agg` had just
+landed; a244 ships all eight, so items 3 and 5 collapsed into one adoption pass
+and item 4's accepted consequence, Overview reading "not yet implemented" for an
+aggregate, a portfolio and a P&L until their emitters arrived, never had to
+happen. Nothing went dark.
+
+**`chartdoc-to-echarts.js` grew the 2-D path**, which was the long pole. Lattice
+coordinates expanded (IR version 2, and the two charts on the critical path both
+use it, so a reader without this draws an empty panel); multi-panel layout as a
+function of panel count, equal aspect and viewport width; the axis walker over
+`scale`, `scales`, `suggested_range` and `full_range`; marks with their label
+sides; bands; the atomic support ladder; and series paired across panels by
+**name**, retiring the emission-order arithmetic that assumed both panels
+carried the same series in the same order.
+
+**The ladder reads axis units, not series roles**, which is the library
+renderer's rule and the reason it is right: a reinsurance series is called gross
+or ceded in every panel it appears in, and only the axes know that one panel
+carries mass, another accumulated probability, and a third the same probability
+read back to an outcome. Probability on y is a right-continuous step,
+probability on x is the left-continuous one (a quantile function rises *before*
+its atom where F steps after it), and a mass with room to show its atoms is a
+stem. No pixel rung, deliberately: this chart zooms, so pixels per atom is a
+property of a gesture that has not happened yet.
+
+**Four controls, off the document.** `log`, `full range`, `return period` and
+`invert` appear when any axis or panel declares the reading and act on every one
+that does, which is the surfacing rule `plot_chartdoc` follows, so one
+instrument reads the same way in both renderers. `logY`, `rightLogY`, `xFull`,
+`epMode`, `refLines` and the per-kind `controls` arrays are all gone, and so is
+the split strip: every control governs the whole chart by construction now, so
+centered is the only layout it needs. Two of the four did not exist when the
+plan was written: `invert` arrived upstream at a240 and turns a Lee diagram into
+the distribution function under the name the document gives it.
+
+**`capability.primary_chart`** answers which chart is an object's own picture,
+which the Overview Plot leaf had been answering with a per-kind table in the
+browser. A passthrough of `charts.primary_chart`, so the answer moves when the
+library's registrations move.
+
+**`exhibits.js` deleted**, 2,310 lines, and with it `twoPanelData`, `twoPanel`,
+`densitySeries`, `rightSeries`, `anchorMarks`, `densityWindow`, `survivalRange`,
+`gapFree`, `heatmapData`, `axisNames`, `reinsSeries`, `mountReinsExhibit`, the
+per-kind `EXHIBITS` registry and the `twoPanelBox` / `squareBox` geometry pair.
+What is left is `mount.js`: the skeleton, the control strip, the ECharts
+lifecycle and the zoom. The rename is not cosmetic. An "exhibit" here is a
+library *table* envelope, and a module called `exhibits.js` that drew charts had
+been misleading since the exhibits endpoint arrived.
+
+Three consequences visible on screen, each the library's call rather than ours.
+A **portfolio** gains the kappa panel (`E[Xi | X = x]`, equal aspect, read
+against the diagonal) in place of its exceedance panel, and its units draw on
+their own native grids rather than on one resampled common one. A **severity**
+loses the server-side log-spaced survival inversion, which the emitter absorbed.
+And the **bivariate** heatmap is no longer square: the emitter says an
+anisotropic joint grid is deliberately free, and the app does not get a vote.
+
+**The bivariate draws flat for now**, per the author, while the final 3-D design
+is settled separately. The grid comes off the same document either way and the
+3-D chunk stays lazy behind the realization control; `chart_joint_surface`
+declares `kinds: ('surface',)` and nothing else, so there is one honest reading
+to offer until it declares two. That is the one place the plan assumed a
+declaration upstream has not made.
+
+**Fixtures and the acceptance gate.** `capture_fixtures.py` captures every chart
+document each kind publishes plus the bounds envelope, and writes
+`dev/fixtures/charts.json`, which settles the name collision `dev/TODO.md`
+flagged. `dev/scripts/smoke-charts.mjs` replays them through the real adapter
+with no DOM and no WebGL: ten documents, every declared reading switched on and
+checked to actually change the drawing, every mark placed, every window finite,
+and no typeset string reaching a canvas.
+
+Also fixed, found while moving the download button's source: `liveChart()`
+returned the mount handle rather than the ECharts instance, so Save chart had
+been throwing on Overview and Reinsurance since a60. Handles now expose the
+instance through a getter, which is what the 2-D to 3-D rebuild needs anyway.
+
+Two items from the plan fall out of this work rather than being separate jobs,
+and are done: **7.3**, the exact end labels on a scaled axis, now suppressed on
+every value axis in the adapter's walker; and **7.5**, reference-line label
+sides, which the plan expected to come off the document and does not, since
+`Mark` carries no side. It is a renderer decision and marks alternate sides so a
+pair of anchors opens away from each other.
+
 ## 1.0.0a61
 
 `dev/plan-ui-round-4.md` phase 6, the last of the round: the cession box grows a

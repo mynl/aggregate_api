@@ -31,6 +31,52 @@ architecture:
 * **The document carries both TeX and plain-text labels.** The renderer picks
   one; neither renderer derives the other.
 
+## Status, 2026-08-09 evening: items 2, 3, 4, 5, 6 and 8 landed at api a62
+
+Read this before the survey below, which is a54-era and is kept for its
+reasoning rather than for its facts.
+
+**Upstream finished first.** The plan was written against a230 and executed
+against **a244**, which ships all eight emitters: `agg`, `port`, `pnl`,
+`severity`, `distortion`, `reins`, `envelope` and `joint_surface`. So items 3
+and 5 were one adoption pass, and item 4's accepted consequence never happened.
+
+Landed: the 2-D adapter (item 2) with plain labels (item 8); adoption of all
+seven documents the app reaches, each app-side builder deleted with it (items 3
+and 5); the purist availability rule (item 4); the control strip off the
+document (item 6); and 7.3 and 7.5, which fell out of the adapter.
+
+Five things the plan did not know, all found while executing it:
+
+* **`Panel.invertible` and `inverse_title` (a240) are a fourth control family.**
+  Item 6 listed three axis readings plus heatmap/surface; `invert` is a panel
+  realization and appends after them per the plan's own ordering rule.
+* **`primary_chart(obj)` exists upstream** and is exactly the Overview Plot
+  leaf's question. It rides on the capability block, and the per-kind table the
+  app was going to keep for it is gone.
+* **The ladder is chosen from axis units, not series roles.** The library
+  renderer settled this and the reason is decisive: a reinsurance series is
+  called gross in every panel it appears in, so its role cannot say which panel
+  carries mass and which carries probability.
+* **Item 7.5 was wrong.** Mark label sides do not come off the document; `Mark`
+  carries `panel_id`, `orient`, `at`, `label`, `role`, `faint` and no side. It
+  is a renderer decision and stays one.
+* **`chart_reins` is Aggregate-only on purpose** (a244, the author's decision
+  for 1.0), so `TODO.md`'s `replot` item is answered rather than pending.
+
+Still open, and the only thing this plan is now waiting on:
+
+* **The heatmap declaration.** `chart_joint_surface` declares
+  `kinds: ('surface',)`, so the `heatmap | surface` control of items 5 and 6 has
+  nothing to read. Per the author, 2026-08-09, the app draws the grid **flat**
+  for now while the final 3-D design is settled separately; the flat reading
+  comes off the same document, so no app-side builder survives. When the emitter
+  declares both kinds the control lights up with no app change beyond deleting
+  one special case in `realization()`.
+* **Item 7.1, 7.2, 7.4 and 7.6.** The punch items that are not adapter work.
+  7.6 landed early, because the strip was being rewritten anyway and centering
+  it was less work than reproducing the split layout in order to remove it.
+
 ## Where we actually are (2026-08-09)
 
 Three pipelines run side by side.
@@ -184,7 +230,7 @@ Until then `WEB_OVERRIDES` moves into `bounds.py` rather than dying with
 `plotting.py`, and matplotlib stays an api dependency. It stops being one the day
 the bounds emitter arrives, and that is the last thing holding it.
 
-### 2. Grow the ECharts adapter: the 2-D path
+### 2. Grow the ECharts adapter: the 2-D path — **done at api a62**
 
 The critical path. `chartdocToEcharts` bails to `null` on any panel that is not
 `kind: 'surface'` (`chartdoc-to-echarts.js:88`), so no converted chart can be
@@ -220,7 +266,7 @@ heatmap is a 2-D drawing of the same grid the surface draws in 3-D, so it lands
 on the 2-D side of a bifurcation that a kind-based split would put with the
 surface. See item 5.
 
-### 3. Adopt the three emitters already shipped upstream
+### 3. Adopt the three emitters already shipped upstream — **done at api a62**
 
 The transition to IR-based charts. In the order the library landed them, one app
 commit each, each deleting its app-side builder in the **same** commit.
@@ -236,7 +282,7 @@ commit each, each deleting its app-side builder in the **same** commit.
   `serializers.severity_density_frame` log-spaced sf inversion, which the
   emitter absorbed.
 
-### 4. The availability contract: IR or a plain "not yet"
+### 4. The availability contract: IR or a plain "not yet" — **done at api a62**
 
 **Settled: purist.** The app loses its fallback drawing path entirely, in one
 commit, rather than keeping legacy builders alive on borrowed time. The author's
@@ -262,7 +308,7 @@ in parallel with `chart_agg` upstream, and item 4 lands when they meet.
 Charts unaffected, because their emitters exist: the bivariate surface (already
 on the IR), and distortion, reins and severity once item 3 lands.
 
-### 5. Adopt the remaining charts as they land upstream
+### 5. Adopt the remaining charts as they land upstream — **done at api a62**, bar the heatmap declaration
 
 Three object charts, one second view, and the bounds figure:
 
@@ -313,7 +359,7 @@ reserve-before-fetch discipline the current boxes have. The breakpoint rule the
 app already uses, side by side when wide and stacked when narrow, generalizes to
 the arrangement choice rather than being replaced by it.
 
-### 6. Toggles move into the document
+### 6. Toggles move into the document — **done at api a62**
 
 **Settled: the IR carries them.** The document declares which readings an axis
 supports; the app surfaces a control for each declared reading and holds only
@@ -452,7 +498,7 @@ is the third position it needs. Applies exactly as written in the new world,
 where item 6 makes every control a both-panels control by construction, so
 centered becomes the only layout the strip needs.
 
-### 8. Labels: ECharts takes the plain form
+### 8. Labels: ECharts takes the plain form — **done at api a62**
 
 **Settled: charts use the document's alternative text rendering, not TeX.** The
 document carries both forms (`[Chart-Plain-Text-Names]`, a209, added the

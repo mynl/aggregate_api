@@ -758,9 +758,6 @@ header .navbar { min-height: 56px; }
     animation: exhibit-skeleton-pulse 1.9s ease-in-out infinite;
 }
 .exhibit-skeleton-panel .bi { font-size: 1.5rem; color: var(--line); }
-.exhibit-skeleton-title {
-    position: absolute; font-size: 12px; font-weight: 600; color: var(--line);
-}
 /* Slow, and shallow. A skeleton that flashes competes with the page for
    attention, which is the opposite of the point. */
 @keyframes exhibit-skeleton-pulse {
@@ -771,13 +768,21 @@ header .navbar { min-height: 56px; }
     .exhibit-skeleton-panel { animation: none; }
 }
 
-/* ---- Exhibit toggle row (log y / survival / full x / reference lines) ----
-   Sits where the program disclosure used to, directly above the chart. State is
-   sticky per browser, so a chosen view survives a rebuild. */
+/* ---- The chart control strip (log / full range / return period / invert) ----
+   Sits directly above the chart. One button per reading the DOCUMENT declares,
+   so the strip is a function of what is on screen rather than of its kind, and
+   the pressed state is sticky per browser: a chosen reading survives a rebuild.
+*/
 .exhibit-controls {
     display: flex; flex-wrap: wrap; align-items: center; gap: 0;
     margin: 0 0 .45rem;
 }
+/* Centered under the panels, which is the only layout the strip needs now that
+   every control governs the whole chart by construction. It used to split
+   across the two panels, with each button over the panel it drove, because a
+   control belonged to one of them; a reading belongs to the document. */
+.exhibit-controls-center { justify-content: center; padding-left: 0; }
+.exhibit-controls-center .exhibit-group { padding-left: .7rem; }
 /* One group per panel, with a rule between adjacent groups so a button reads as
    belonging to the panel below it rather than to one undifferentiated row. */
 .exhibit-group {
@@ -794,11 +799,6 @@ header .navbar { min-height: 56px; }
    needs the same breathing room the group label has, and the group itself has
    to clear it. */
 #price-basis { align-items: center; gap: .5rem; margin-bottom: .5rem; }
-/* Side by side: push the exceedance-panel group into the right half so it sits
-   over the panel it drives. Whitespace separates it, so it drops its rule. */
-.exhibit-controls-split .exhibit-group-right {
-    margin-left: auto; border-left: 0; padding-right: 0;
-}
 /* Same corner as Build / Examples and every other button on the page. These are
    smaller, so they read as a lighter-weight control, but the *shape* is shared:
    a pill next to a rounded rectangle looks like a different kind of thing, and

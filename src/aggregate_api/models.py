@@ -93,6 +93,12 @@ class Capability(BaseModel):
 
     exhibits: list[ExhibitCapability] = []
     charts: list[str] = []
+    # Which of `charts` is the object's own picture, which is what the Overview
+    # Plot leaf draws. `charts` answers what *can* be drawn (a reinsured
+    # aggregate answers two things); this answers which one to draw with no
+    # other instruction. None where nothing claims the object, and the app then
+    # says the picture does not exist yet.
+    primary_chart: str | None = None
     # Flags for the leaves that are app behavior rather than a library
     # document; each names its consumer in ``capability.py``.
     has_premium: bool = False

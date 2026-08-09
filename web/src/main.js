@@ -23,9 +23,7 @@ import { api, ApiError } from './api.js';
 import { createEditor, emacsEnabledDefault } from './editor.js';
 import { mountExamples, mountPalette, loadExamples } from './examples.js';
 import { renderInfo } from './renderers.js';
-import { mountExhibit, mountReinsExhibit, showPlaceholder } from './charts/exhibits.js';
-import { chartdocToEcharts } from './charts/chartdoc-to-echarts.js';
-import { echarts, loadStyle } from './charts/theme.js';
+import { mountChart, mountChartDoc, notDrawable } from './charts/mount.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
 import { mountIrTable, irToGrid, docTruncated } from './tables.js';
 import { renderError, renderRateLimit } from './error-pane.js';
@@ -1391,29 +1389,33 @@ async function loadOverviewHeader() {
 }
 
 /**
- * Overview / Plot: the two linked panels, a g-curve for a distortion, a joint
- * heatmap for a bivariate.
+ * Overview / Plot: the object's own picture, whichever chart that is.
  *
- * `mountExhibit` owns the box: it draws the skeleton at the exhibit's final size
- * before fetching anything, and awaits `loadStyle()` behind it. Nothing to
- * reserve from out here, which is the point. Reserving from the call site meant
- * guessing the geometry, and the guess was the two-panel one for every kind, so
- * a distortion or a bivariate reserved the wrong box entirely.
+ * The app does not choose. `capability.primary_chart` names the chart the
+ * library says is this object's own (an aggregate's two panels, a distortion's
+ * unit square, a bivariate's joint grid), the document carries every semantic
+ * decision in it, and `mountChart` realizes it. There is no fallback: a kind
+ * the library publishes nothing for says so, rather than being approximated
+ * from a frame.
+ *
+ * `mountChart` owns the box too: it draws the skeleton at the chart's final
+ * size before fetching anything and awaits `loadStyle()` behind it.
  */
 async function loadOverviewPlot() {
     if (overviewChart) { overviewChart.dispose(); overviewChart = null; }
     const pane = $('pane-overview');
     clearGrids('pane-overview');
     empty(pane);
+    const chart = state.caps.primaryChart;
+    if (!chart) { pane.appendChild(notDrawable()); return; }
     const host = el('div', { className: 'overview-plot' });
     pane.appendChild(host);
     try {
-        overviewChart = await mountExhibit(host, state);
-    } catch { /* the exhibit is a bonus; the tables carry the story */ }
+        overviewChart = await mountChart(host, { id: state.id, chart });
+    } catch { /* the chart is a bonus; the tables carry the story */ }
     if (!overviewChart) {
         pane.removeChild(host);
-        pane.appendChild(el('div', { className: 'text-muted small' },
-            'No chart for this object.'));
+        pane.appendChild(notDrawable());
     }
 }
 
@@ -1705,17 +1707,16 @@ async function loadReinsDescription() {
 }
 
 /**
- * Reinsurance / Plot: the gross, ceded and net exhibit.
+ * Reinsurance / Plot: the occurrence program, per claim and in total.
  *
- * The Overview's two-panel instrument pointed at three views of one book, so
- * the same reading applies: the left panel is what the cession does to the
- * shape, the right is what it does to the tail, which is the question a
- * reinsurance structure exists to answer.
+ * The document's own two panels, and they answer two different questions:
+ * what the treaty does to a single claim, and what that does to the year. They
+ * share no axis, because a per-claim loss and an annual aggregate are not the
+ * same quantity and one window over both would say they were.
  *
- * A chart leaf, so the pill lights from `available_charts`. The library
- * registered `chart_reins` behind the same cession predicate, which makes this
- * the first leaf in the app whose availability comes from the chart registry
- * rather than the exhibit one.
+ * A chart leaf, so the pill lights from `available_charts`, behind the
+ * library's own cession predicate. Dark on a reinsured *portfolio* on purpose:
+ * `chart_reins` is registered for `Aggregate` alone (see `nav.js`).
  */
 async function loadReinsPlot() {
     if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
@@ -1724,27 +1725,12 @@ async function loadReinsPlot() {
     empty(pane);
     const host = el('div', { className: 'overview-plot' });
     pane.appendChild(host);
-    // `mountReinsExhibit` is synchronous and takes the frame already fetched, so
-    // unlike the Overview the box is reserved from here, and `loadStyle` still
-    // has to land before the build reads the colors.
-    showPlaceholder(host, 'reins', host.clientWidth || 0);
     try {
-        // Full resolution: this is a plot, and a ceded distribution is more
-        // atomic than a gross one, not less.
-        const [frame] = await Promise.all([
-            api.frameOf(state.id, 'reins_density_df'),
-            loadStyle().catch(() => null),
-        ]);
-        reinsChart = mountReinsExhibit(host, frame);
-    } catch { /* the exhibit is a bonus; the frames carry the numbers */ }
-    // `mountReinsExhibit` replaces the skeleton with its own tools row and
-    // canvas, each sized in themselves, so the height set on this node has to
-    // come back off or it would clamp them.
-    host.style.height = '';
+        reinsChart = await mountChart(host, { id: state.id, chart: 'reins' });
+    } catch { /* the chart is a bonus; the frames carry the numbers */ }
     if (!reinsChart) {
         empty(pane);
-        pane.appendChild(el('div', { className: 'text-muted small' },
-            'No reinsurance chart for this object.'));
+        pane.appendChild(notDrawable());
     }
 }
 
@@ -2376,18 +2362,14 @@ boundsBtn?.addEventListener('click', async () => {
             // src was the whole request. The reader gets a picture they can
             // zoom and read values off, and the api stopped rendering.
             const doc = await api.boundsEnvelope(state.id, { premium, assets });
-            const option = chartdocToEcharts(doc);
-            if (!option) {
-                replacePane('pane-bounds', el('div',
-                    { className: 'text-muted small fst-italic' },
-                    'This chart is not drawable yet.'));
-            } else {
-                const host = el('div', { className: 'bounds-figure' });
-                replacePane('pane-bounds', host);
-                if (boundsChart) boundsChart.dispose();
-                boundsChart = echarts.init(host);
-                boundsChart.setOption(option);
-            }
+            const host = el('div', { className: 'bounds-figure' });
+            replacePane('pane-bounds', host);
+            if (boundsChart) { boundsChart.dispose(); boundsChart = null; }
+            // The document is already in hand, since the premium the reader
+            // typed is what identifies it, so this takes the mount's
+            // already-fetched entry point rather than its fetching one.
+            boundsChart = mountChartDoc(host, doc);
+            if (!boundsChart) replacePane('pane-bounds', notDrawable());
         } else if (boundsWhich === 'allocation') {
             renderBoundsTable(await api.allocationBounds(state.id, { premium, assets }));
         } else {
@@ -2477,16 +2459,20 @@ evaluateBtn?.addEventListener('click', async () => {
 // ----------------------------------------------------------------------
 
 /**
- * The chart the reader is actually looking at, or null.
+ * The live ECharts instance the reader is looking at, or null.
  *
  * Three panes hold one each and only one pane is on screen, so "which chart"
- * is answered by which group is active rather than by tracking focus.
+ * is answered by which group is active rather than by tracking focus. Each
+ * pane holds a **mount handle**, not the instance, and the handle exposes the
+ * instance through a getter rather than a field: a reading that flips a panel
+ * between its 2-D and 3-D realizations disposes and rebuilds the instance, and
+ * a captured reference would go stale on that path.
  */
 function liveChart() {
     const group = activeTabName();
-    if (group === 'bounds') return boundsChart;
-    if (group === 'reinsurance') return reinsChart;
-    return overviewChart;
+    const handle = group === 'bounds' ? boundsChart
+        : (group === 'reinsurance' ? reinsChart : overviewChart);
+    return (handle && handle.chart) || null;
 }
 
 /**

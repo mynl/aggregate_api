@@ -58,15 +58,19 @@ export const api = {
     //
     // The *tables* no longer come through here: they take one `frameIr` fetch
     // and render either way off it (see `tables.js`). What is left reaching for
-    // a `FrameResponse` is the charts, which want numeric arrays rather than a
-    // document, plus the bulk densities via `frameOf`.
+    // a `FrameResponse` is the bulk densities via `frameOf`; the charts stopped
+    // needing one at a62, when every picture became a chart document.
+    //
+    // `unit_density_df` came off this list there too. It existed for the
+    // portfolio chart, which read per-unit columns off a common grid and drew
+    // them itself; the `port` document carries each unit on its own native
+    // grid, which a windowed book does not share with the portfolio's. The
+    // route stays, since it is a public api and a legitimate frame to fetch.
     info:         (id)              => _json('GET',  `/v1/objects/${id}/info`),
     meta_of:      (id)              => _json('GET',  `/v1/objects/${id}/meta`),
     tail_df:      (id)              => _json('GET',  `/v1/objects/${id}/tail_df`),
     stats_df:     (id)              => _json('GET',  `/v1/objects/${id}/stats_df`),
     density_df:   (id, p = {})      => _json('GET',  `/v1/objects/${id}/density_df?${qs(p)}`),
-    /** Portfolio only: per-unit p_<unit> / S_<unit> on the common grid. */
-    unit_density_df: (id)           => _json('GET',  `/v1/objects/${id}/unit_density_df`),
     /**
      * A frame as a table document (the IR) for the static view.
      *

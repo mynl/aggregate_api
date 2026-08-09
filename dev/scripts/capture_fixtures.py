@@ -1,10 +1,16 @@
-"""Capture one api payload set per first-class kind, for the offline chart test.
+"""Capture every chart document a first-class kind publishes, for the offline test.
 
     uv run python dev/scripts/capture_fixtures.py
 
-Writes ``dev/fixtures/exhibits.json``: for each kind, the build response plus
-the frames its Overview exhibit fetches. ``smoke-exhibits.mjs`` alongside replays
-that file, so the chart builders can be exercised without a running server.
+Writes ``dev/fixtures/charts.json``: for each case, the build response plus one
+chart document per name in its capability's ``charts`` list, exactly as the app
+fetches them. ``smoke-charts.mjs`` alongside replays that file through the real
+ECharts adapter, so every realization is exercised with no DOM, no WebGL and no
+server.
+
+The file was ``exhibits.json`` through a61, which collided with the name the
+library's own exhibit envelopes want (``dev/TODO.md`` flagged it). It holds
+chart documents and nothing else now, so it is called that.
 
 Uses FastAPI's ``TestClient``, which drives the ASGI app in-process. No port is
 bound and no server is started, deliberately: the author runs the server, this
@@ -19,7 +25,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-# One program per kind, matching what the exhibit registry has to handle.
+# One program per case. Between them they exercise every panel kind, every
+# declared reading and both ends of the drawing ladder.
 CASES = {
     "agg": "agg FIX.A 100 claims 1000 xs 0 sev lognorm 90 cv 1.5 poisson",
     "port": ("port FIX.P agg U1 80 claims 500 xs 0 sev lognorm 50 cv 1.2 poisson "
@@ -32,29 +39,20 @@ CASES = {
               "agg Wind dfreq [0 1] [.5 .5] sev lognorm 50 cv 1.5 "
               "agg Flood dfreq [0 1] [.5 .5] sev gamma 50 cv 1.0 poisson"),
     # A discrete book: small support on an integer grid, which is the case the
-    # step-drawn density exists for. Three dice sum to 3..18, so 16 points.
+    # stem rung of the ladder exists for. Three dice sum to 3..18, so 16 atoms.
     "discrete": "agg FIX.Dice dfreq [3] dsev [1:6]",
-    # A reinsured book, for the Reins tab's gross / ceded / net exhibit.
+    # A reinsured book, which publishes 'reins' alongside its own chart.
     "reins": ("agg FIX.Re 100 claims 1000 xs 0 sev lognorm 90 cv 1.5 "
               "occurrence net of 500 xs 500 poisson"),
 }
 
-# What each kind's exhibit asks for, mirroring EXHIBITS[kind].fetch.
-FRAMES = {
-    "agg": [("density", "density_df?cols=loss,p_total,F,S"), ("tail", "tail_df")],
-    "discrete": [("density", "density_df?cols=loss,p_total,F,S"), ("tail", "tail_df")],
-    "port": [("units", "unit_density_df"), ("tail", "tail_df")],
-    "sev": [("density", "density_df")],
-    "distortion": [("curve", "density_df")],
-    "pnl": [("density", "density_df?cols=loss,p_total,F,S")],
-    # `view=joint` is explicit: density_df answers a bivariate with its two
-    # marginals by default, which is what a table wants. The heatmap is the one
-    # consumer of the whole matrix; the 3-D surface reads the chart document,
-    # whose display reduction happens upstream in the library emitter.
-    "bvagg": [("joint", "density_df?view=joint"), ("stats", "stats_df"),
-              ("surface_doc", "chart/joint_surface")],
-    "reins": [("reins", "reins_density_df")],
-}
+# The bounds envelope is not on an object's chart list: it is a document about a
+# `Bounds`, reached through the bounds route with a premium. Captured under this
+# case so the band, the equal-aspect square and the value-carrying cloud are all
+# in the fixture set. The premium is a load on the object's own mean, which is
+# what makes the pricing question real; a flat number would be inside the book
+# on one case and outside it on the next.
+ENVELOPE = {"case": "port", "load": 1.25, "n_resamples": 5}
 
 
 def main() -> None:
@@ -63,21 +61,32 @@ def main() -> None:
 
     out: dict[str, dict] = {}
     with TestClient(create_app()) as client:
-        for kind, decl in CASES.items():
+        for case, decl in CASES.items():
             built = client.post("/v1/objects", json={"decl": decl})
             built.raise_for_status()
             body = built.json()
-            entry = {"build": body, "frames": {}}
-            for key, path in FRAMES[kind]:
-                r = client.get(f"/v1/objects/{body['id']}/{path}")
-                entry["frames"][key] = r.json() if r.status_code == 200 else None
-            out[kind] = entry
-            rows = {k: len((v or {}).get("rows", [])) for k, v in entry["frames"].items()}
-            print(f"{kind:11s} kind={body['kind']:<11s} {rows}")
+            oid = body["id"]
+            names = (body.get("capability") or {}).get("charts") or []
+            entry = {"build": body, "charts": {}}
+            for name in names:
+                r = client.get(f"/v1/objects/{oid}/chart/{name}")
+                entry["charts"][name] = r.json() if r.status_code == 200 else None
+            out[case] = entry
+            print(f"{case:11s} kind={body['kind']:<11s} charts={names}")
+
+        built = out[ENVELOPE["case"]]["build"]
+        premium = round(ENVELOPE["load"] * float(built["mean"]))
+        r = client.get(f"/v1/objects/{built['id']}/bounds/envelope",
+                       params={"premium": premium,
+                               "n_resamples": ENVELOPE["n_resamples"]})
+        out["envelope"] = {"build": built,
+                           "charts": {"envelope": r.json() if r.status_code == 200
+                                      else None}}
+        print(f"{'envelope':11s} premium={premium} status={r.status_code}")
 
     # dev/fixtures, one level up: the scripts live in dev/scripts, the data they
     # read and write does not.
-    target = Path(__file__).resolve().parent.parent / "fixtures" / "exhibits.json"
+    target = Path(__file__).resolve().parent.parent / "fixtures" / "charts.json"
     target.parent.mkdir(exist_ok=True)
     target.write_text(json.dumps(out), encoding="utf-8")
     size = target.stat().st_size / 1024

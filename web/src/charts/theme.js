@@ -153,7 +153,7 @@ export function lineWidth() { return style.line_width; }
  * whole multiples of that pair. It is a shape, not a size: the SPA panel is
  * measured in CSS pixels and only the ratio would cross over.
  *
- * Not currently what the exhibits use. `exhibits.PANEL_ASPECT` is 4:3.25, the
+ * Not currently what the charts use. `chartdoc-to-echarts.PANEL_ASPECT` is 4:3.25, the
  * author's number, and this is kept as the reference point that departure is
  * measured from: matplotlib's `FIG_W x FIG_H` is the whole figure including its
  * margins, so it is the honest comparison for a panel's *footprint* rather than
