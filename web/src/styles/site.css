@@ -279,6 +279,25 @@ header .navbar { min-height: 56px; }
 .status-strip.is-warn { --state: var(--warn); background: #fdf6ee; border-color: #f0dcc2; }
 .status-strip.is-fail { --state: var(--bad);  background: #fdf1f2; border-color: #f3ccd0; }
 
+/* One blink per adopted build, so pressing Build always shows something even
+   when the result is byte for byte what was already there.
+
+   It animates the LEFT BAR's width, not the strip's ground. The ground is
+   spoken for: it carries the verdict, and a flash that touched it would read
+   as the object having briefly changed state. The bar thickening and settling
+   is motion with no meaning of its own, which is what a receipt wants.
+
+   Respects `prefers-reduced-motion` by not running at all. That leaves those
+   readers where a55 left everyone, which is honest: the flash is a nicety, and
+   a jump with no easing is worse than no flash. */
+@keyframes strip-flash {
+    from { border-left-width: 10px; }
+    to   { border-left-width: 3px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .status-strip.is-flash { animation: strip-flash .45s ease-out 1; }
+}
+
 .summary { display: flex; align-items: baseline; gap: .4rem; }
 .summary-inner {
     flex: 1 1 auto; min-width: 0; font-size: var(--fs-meta); color: var(--ink-2);

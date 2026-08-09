@@ -4,6 +4,47 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a56
+
+`dev/plan-ui-round-4.md` phase 2, the status strip's verdict and its history.
+Three items, all client side.
+
+**A clean object under reinsurance no longer reads as a warning.** The library
+prefixes its verdict once a cession is present: a sound gross reports
+`reinsurance; subject not unreasonable`, because the realized net view has no
+independent theoretical to check against, so what it can honestly report is the
+status of the subject it was built from. `validationState` tested for the bare
+phrase, missed, tested for the word "mean", missed, and fell through to the
+amber state. So every reinsured object with a perfectly clean gross tinted the
+whole strip orange.
+
+It now strips the prefix and grades the remainder, which is right for a better
+reason than a second literal would have been: `reinsurance; subject fails agg
+mean` reaches the failure state because it names the mean, rather than because
+the substring happened to survive.
+
+**`DecL m/n` under the editor**, saying where Ctrl+Up and Ctrl+Down have you.
+Counted from the oldest so that stepping back counts down, which is the
+direction the reader feels. It says "in your history" rather than "this
+session", deliberately: the entries live in localStorage and outlive the tab, so
+a session count is a number the module cannot honestly produce.
+
+**The strip blinks once on every adopted build.** The readout does not answer
+the case that prompted it, building the *same* program twice, because history
+dedups against the most recent entry and both numbers hold; the strip then
+redraws with identical text and the press looks lost. The blink animates the
+left bar's width rather than the ground, since the ground carries the verdict
+and flashing it would read as the object briefly changing state. It fires for
+cached and computed builds alike, because the reader is asking whether the press
+registered and that has one answer either way. Suppressed under
+`prefers-reduced-motion`.
+
+**`cached` comes off the first row.** It said on line one what line two already
+says in words, in the middle of the object's own facts, where a property of this
+particular request does not belong. What it was incidentally doing, marking a
+rebuild as a no-op, is now the blink's job and is done for every build rather
+than only the cached ones.
+
 ## 1.0.0a55
 
 `dev/plan-ui-round-4.md` phase 1, the nav and its greying. Five items off the

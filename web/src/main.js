@@ -116,6 +116,27 @@ editor.view.dom.addEventListener('keydown', (ev) => {
 function navigateHistory(dir) {
     const text = dir === 'prev' ? history.prev() : history.next();
     if (text !== null) editor.setText(text);
+    renderHistoryPos();
+}
+
+/**
+ * The `DecL m/n` readout under the editor.
+ *
+ * Answers "did that do anything", which nothing on the page did before. Walking
+ * back with Ctrl+Up to a program you have built before and building it redraws
+ * the strip with the same words, so the only evidence the build happened was
+ * the timing line ticking over, which is not something anyone watches.
+ *
+ * It does **not** answer the same question for a build of the text already on
+ * screen: `history.record` dedups against the most recent entry, so m and n
+ * both hold. The strip flash in `renderSummary` is what covers that case, and
+ * the two together are the whole answer.
+ */
+function renderHistoryPos() {
+    const node = $('history-pos');
+    if (!node) return;
+    const { m, n } = history.position();
+    node.textContent = n ? `DecL ${m}/${n}` : '';
 }
 
 // Clear-X clears the editor and refocuses.
@@ -190,6 +211,7 @@ async function build() {
         const res = await api.build(decl, {});
         adoptBuild(res);
         history.record(decl);
+        renderHistoryPos();
         // A build from the editor is the program you are working on, so it is
         // what Reset comes back to. Recorded here and nowhere else: a
         // derivation deliberately does not move the mark, or Reset would only
@@ -401,11 +423,42 @@ function renderSummary(res) {
     } else {
         setStripState('ok');
     }
-    if (res.cached) add('cached');
+    // No `cached` marker here since a56. It said on line one what line two
+    // already says in words ("Loaded from cache"), and it said it in the middle
+    // of the object's own facts, where a property of *this request* does not
+    // belong. What it was incidentally doing, marking a rebuild of the same
+    // program as a no-op, is now the flash's job and done for every build
+    // rather than only for the cached ones.
     inner.append(...bits);
     clearNote();
     renderTiming(res);
     syncSummaryMore();
+    flashStrip();
+}
+
+/**
+ * Blink the strip once, on every adopted build.
+ *
+ * The answer to "I pressed Build and nothing happened". Building the same
+ * program twice is a cache hit that redraws the strip with identical text, so
+ * without this there is no evidence at all that the second press did anything.
+ * The `DecL m/n` readout does not cover it either, because history dedups
+ * against the most recent entry and both numbers hold.
+ *
+ * Fires for cached and computed builds alike, deliberately: the reader is
+ * asking whether the press registered, which has the same answer either way.
+ *
+ * Restarting a CSS animation needs the class off, a forced reflow, then the
+ * class on. Without the reflow the browser coalesces both changes into no
+ * change at all and the second build does not blink, which is exactly the bug
+ * this is here to fix.
+ */
+function flashStrip() {
+    const strip = $('status-strip');
+    if (!strip) return;
+    strip.classList.remove('is-flash');
+    void strip.offsetWidth;
+    strip.classList.add('is-flash');
 }
 
 /**
@@ -417,11 +470,27 @@ function renderSummary(res) {
  * distribution at all; everything else (cv, skew, a defective distribution) is
  * a warning about accuracy rather than about correctness.
  *
+ * Under a cession the library prefixes its verdict: an object whose gross is
+ * clean reports `reinsurance; subject not unreasonable`, and a failing one
+ * `reinsurance; subject fails agg mean`. The realized net view has no
+ * independent theoretical to check against, so what it can honestly report is
+ * the status of the subject it was built from, and that is what the prefix
+ * says.
+ *
+ * Through a55 none of that was recognized here, so every reinsured object with
+ * a perfectly clean gross turned the strip amber. Stripping the prefix and
+ * grading the remainder fixes it, and does so for the right reason rather than
+ * by adding a second literal: `reinsurance; subject fails agg mean` also grades
+ * `bad` because it names the mean, which it would previously have reached only
+ * because the substring happened to survive.
+ *
  * @param {string} text the `validation` field off the build response.
  * @returns {'ok'|'warn'|'bad'}
  */
+const REINS_VERDICT = /^reinsurance;\s*subject\s+/;
+
 function validationState(text) {
-    const s = String(text).trim().toLowerCase();
+    const s = String(text).trim().toLowerCase().replace(REINS_VERDICT, '');
     if (s === 'not unreasonable') return 'ok';
     return /\bmean\b/.test(s) ? 'bad' : 'warn';
 }

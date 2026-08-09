@@ -145,6 +145,12 @@
                         title="back to the program you built">Reset</button>
             </div>
 
+            <!-- Where Ctrl+↑↓ has you, as `DecL m/n`. Without it, stepping back
+                 and rebuilding a program you have built before looks like
+                 nothing happened, because the strip redraws to the same words.
+                 Empty until the first build. -->
+            <span class="fb-text" id="history-pos" aria-live="polite"></span>
+
             <!-- Two rows, split by kind rather than by how often each is
                  pressed: what you do to the program on top, where you go
                  underneath. Ctrl+K and Ctrl+Shift+↑↓ stay in the help panel

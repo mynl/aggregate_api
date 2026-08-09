@@ -61,6 +61,29 @@ export function next() {
     return state.entries[state.cursor];
 }
 
+/**
+ * Where the walk is, as `{m, n}`, for the `DecL m/n` readout.
+ *
+ * `n` is how many programs the history holds and `m` is which one is on
+ * screen, counted from the oldest so that stepping back with Ctrl+Up counts
+ * *down*, which is the direction the reader feels.
+ *
+ * `cursor` runs the other way, from the newest at 0, and `-1` means no walk is
+ * in progress, which is the same position as the newest entry. Both map to
+ * `m === n`.
+ *
+ * **In your history, not in this session.** The entries live in localStorage
+ * and outlive the tab, so a session-scoped count is a number this module
+ * cannot honestly produce. The label says what is really being counted.
+ *
+ * @returns {{m: number, n: number}} zeros when nothing has been built.
+ */
+export function position() {
+    const n = state.entries.length;
+    if (!n) return { m: 0, n: 0 };
+    return { m: n - Math.max(state.cursor, 0), n };
+}
+
 /** Reset the nav cursor (called after the user types a new char). */
 export function resetCursor() {
     if (state.cursor !== -1) {
