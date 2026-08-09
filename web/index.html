@@ -124,25 +124,57 @@
                 </ul>
             </div>
 
-            <!-- The three derivations. Each returns DecL that lands in the
-                 editor, so you read what was built and can edit it; none of
-                 them mutates an object behind a cached id. They are grouped
-                 behind one label because they are a family: five peer buttons
-                 in a row said they were five unrelated verbs.
+            <!-- Reformat sits outside the derive group, and before it, which
+                 is where the author asked for it. Outside because it is not a
+                 derivation: it rewrites the text in the box into
+                 `format_program` form and builds nothing, so filing it under
+                 "derive" would mislabel the one button in the row that leaves
+                 the object alone. -->
+            <button id="reformat-btn" class="btn btn-outline-secondary"
+                    title="rewrite the program in canonical form">Reformat</button>
+
+            <!-- The derivations. Each returns DecL that lands in the editor, so
+                 you read what was built and can edit it; none of them mutates
+                 an object behind a cached id. They are grouped behind one label
+                 because they are a family: five peer buttons in a row said they
+                 were five unrelated verbs.
 
                  They replaced the log2 and bs dropdowns that stood here, which
                  nobody used. Sharpen writes the `hints{}` clause those knobs
                  used to set, and writes it into a program you can keep, so the
                  grid is pinned by an audit that explains itself rather than by
-                 a menu choice that vanishes when you reload. -->
+                 a menu choice that vanishes when you reload.
+
+                 Reset used to close this group and came out at a58: Ctrl+↑ and
+                 Ctrl+↓ already walk back through the programs you built, and a
+                 button that undid exactly one derivation was a second, weaker
+                 way to do it. GCN took its place. -->
             <span class="derive-label">derive</span>
             <div class="btn-group" role="group" aria-label="derive a new program">
                 <button id="sharpen-btn" class="btn btn-outline-secondary"
                         title="audit the grid and move to a better one">Sharpen</button>
                 <button id="pnl-btn" class="btn btn-outline-secondary"
                         title="wrap this object in a P&amp;L">PnL</button>
-                <button id="reset-btn" class="btn btn-outline-secondary"
-                        title="back to the program you built">Reset</button>
+                <!-- GCN: read the program as a pair of views. The main button
+                     takes the default (gross / ceded) and the caret offers the
+                     other two, which is the split-button shape the author
+                     asked for: one press for the common case, a menu for the
+                     rest. Greys on `can_views`, which needs an OCCURRENCE
+                     cession, not merely any cession. -->
+                <button id="gcn-btn" class="btn btn-outline-secondary"
+                        title="read this program as a pair of views">GCN</button>
+                <button id="gcn-caret" type="button"
+                        class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split"
+                        data-bs-toggle="dropdown" aria-expanded="false"
+                        aria-label="choose which pair of views"></button>
+                <ul class="dropdown-menu shadow-sm">
+                    <li><button class="dropdown-item" type="button" data-views="grossceded">
+                        Gross / Ceded</button></li>
+                    <li><button class="dropdown-item" type="button" data-views="grossnet">
+                        Gross / Net</button></li>
+                    <li><button class="dropdown-item" type="button" data-views="netceded">
+                        Net / Ceded</button></li>
+                </ul>
             </div>
 
             <!-- Where Ctrl+↑↓ has you, as `DecL m/n`. Without it, stepping back

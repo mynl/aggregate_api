@@ -358,6 +358,7 @@ export function capsFromResponse(capability, built = true) {
             hasSharpen: Boolean(cap.has_sharpen),
             canPnl: Boolean(cap.can_pnl),
             canReins: Boolean(cap.can_reins),
+            canViews: Boolean(cap.can_views),
             reinsBases: cap.reins_bases || [],
             canBounds: Boolean(cap.can_bounds),
             canAllocate: Boolean(cap.can_allocate),

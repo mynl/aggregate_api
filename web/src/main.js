@@ -76,11 +76,6 @@ const state = {
     // while `check-nav.mjs` passed, because the checker called that function
     // and the app did not. A flag cannot be wired in one and not the other now.
     caps: capsFromResponse(null, false),
-    // The program you built yourself, and whether you have since derived from
-    // it. Together they are Reset: at any moment you are either on your own
-    // program or exactly one derivation away from it.
-    base: null,
-    derived: false,
     // Each group remembers its own last leaf, so stepping away from Pricing and
     // back returns you where you were rather than to its first leaf.
     leaf: {},
@@ -212,12 +207,6 @@ async function build() {
         adoptBuild(res);
         history.record(decl);
         renderHistoryPos();
-        // A build from the editor is the program you are working on, so it is
-        // what Reset comes back to. Recorded here and nowhere else: a
-        // derivation deliberately does not move the mark, or Reset would only
-        // ever undo the most recent of two derivations.
-        state.base = decl;
-        state.derived = false;
         renderActionRow();
     } catch (err) {
         forgetBuild();
@@ -238,21 +227,31 @@ async function build() {
 // Nothing is derived behind a cached id.
 const sharpenBtn = $('sharpen-btn');
 const pnlBtn = $('pnl-btn');
-const resetBtn = $('reset-btn');
+const reformatBtn = $('reformat-btn');
+const gcnBtn = $('gcn-btn');
+const gcnCaret = $('gcn-caret');
 
-/** Grey the derivation buttons the current object cannot answer. */
+/** Grey the action-row buttons the current object cannot answer. */
 function renderActionRow() {
     const off = (btn, disabled) => {
+        if (!btn) return;
         btn.classList.toggle('disabled', disabled);
         btn.toggleAttribute('disabled', disabled);
         btn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
     };
     off(sharpenBtn, !can('canSharpen'));
     off(pnlBtn, !can('canPnl'));
-    // Reset is the way back from a derivation, so it means nothing until one
-    // has happened. At any moment you are either on your own program or
-    // exactly one derivation away from it.
-    off(resetBtn, !state.derived);
+    // Both halves of the split button move together: a caret opening a menu
+    // whose every item is refused would be worse than a dark caret.
+    off(gcnBtn, !can('canViews'));
+    off(gcnCaret, !can('canViews'));
+    // Reformat is never greyed, and is the only control here that is not.
+    // It reads the text rather than the object, so it works before anything
+    // has been built, which is exactly when a pasted program is at its least
+    // readable. Greying it on an empty box would mean re-rendering this row on
+    // every keystroke to keep one button honest; Build already sets the
+    // precedent for the alternative, staying live and doing nothing when there
+    // is nothing to do.
 }
 
 /**
@@ -275,7 +274,6 @@ async function runDerivation(btn, busy, call, land) {
         // is still what you are looking at.
         editor.setText(res.program);
         adoptBuild(res);
-        state.derived = true;
         renderActionRow();
         if (res.description) noteDerivation(res.description);
         if (land) showTab(land);
@@ -340,32 +338,103 @@ pnlBtn?.addEventListener('click', () => runDerivation(
     pnlBtn, 'Wrapping…', (id) => api.pnl(id), 'economics'));
 
 /**
- * Back to the program you built yourself.
+ * Rewrite the program in the box in canonical form.
  *
- * Rebuilds from the text rather than restoring an id, because Sharpen consumes
- * the object it audits: its entry moves to the sharpened program's id, so the
- * base object may no longer be in the cache. After a PnL it still is, and this
- * is a cache hit. Paying the build only on the undo is the right way round.
+ * Builds nothing and touches no object: `format_program` parses, re-renders
+ * with the library's own clause order, spacing and line breaks, and hands the
+ * text back. Which is why this is not in the derive group.
  *
- * Distinct from history on Ctrl+Up and Ctrl+Down, which steps through programs
- * you built yourself.
+ * The server is best-effort by design and echoes the input on any failure
+ * (`routes/decl.py`), so a malformed program reformats to itself. Saying
+ * "unchanged" is what stops that reading as a dead button; it is also the
+ * honest answer for a program that was already canonical.
  */
-resetBtn?.addEventListener('click', async () => {
-    if (!state.base || resetBtn.hasAttribute('disabled')) return;
-    resetBtn.disabled = true;
-    resetBtn.textContent = 'Resetting…';
+reformatBtn?.addEventListener('click', async () => {
+    const before = editor.getText();
+    if (!before.trim() || reformatBtn.hasAttribute('disabled')) return;
+    reformatBtn.disabled = true;
     try {
-        editor.setText(state.base);
-        adoptBuild(await api.build(state.base, {}));
-        state.derived = false;
+        const { decl } = await api.formatDecl(before);
+        if (decl && decl !== before) editor.setText(decl);
+        else flashLabel(reformatBtn, 'unchanged');
+    } catch {
+        flashLabel(reformatBtn, 'unchanged');
+    } finally {
+        reformatBtn.disabled = false;
+        renderActionRow();
+    }
+});
+
+/**
+ * Say something on a button for a moment, then put its label back.
+ *
+ * Came out at a55 with the copy buttons, its only caller then. Back because
+ * Reformat needs it: its no-op case is indistinguishable from a broken button
+ * without a word.
+ */
+function flashLabel(btn, text) {
+    const original = btn.textContent;
+    btn.textContent = text;
+    setTimeout(() => { btn.textContent = original; }, 900);
+}
+
+/**
+ * GCN: read the program as a pair of {gross, ceded, net} views.
+ *
+ * A prefix on the program text, not a route: the grammar takes
+ * `GROSSCEDED agg_out` and an `agg_out` is a whole inline declaration, so
+ * this is `grossceded ` + what you already have. Reformatted on the way
+ * through, which is why a58 does Reformat first and reuses the call here.
+ *
+ * The result is a `BivariateAggregate`, so the object's kind changes and the
+ * navigation re-gates around it. That is why it lands on Overview: pressing
+ * this from the Reinsurance tab would otherwise leave you looking at a group
+ * that just went dark, since a bivariate cannot cede.
+ */
+const VIEW_LABEL = {
+    grossceded: 'Gross / Ceded', grossnet: 'Gross / Net', netceded: 'Net / Ceded',
+};
+
+async function applyViews(kw) {
+    if (!can('canViews') || gcnBtn.hasAttribute('disabled')) return;
+    const base = editor.getText().trim();
+    if (!base) return;
+    gcnBtn.disabled = true;
+    gcnCaret.disabled = true;
+    const label = gcnBtn.textContent;
+    gcnBtn.textContent = 'Reading…';
+    try {
+        // Strip a prefix already there, so pressing GCN twice swaps the pair
+        // rather than stacking `grossnet grossceded agg ...`, which does not
+        // parse and would report as a syntax error in a program the reader
+        // never typed.
+        const bare = base.replace(/^\s*(grossceded|grossnet|netceded)\s+/i, '');
+        let decl = `${kw} ${bare}`;
+        try {
+            const formatted = await api.formatDecl(decl);
+            if (formatted?.decl) decl = formatted.decl;
+        } catch { /* formatting is a courtesy; build the text either way */ }
+        editor.setText(decl);
+        adoptBuild(await api.build(decl, {}));
+        history.record(decl);
+        renderHistoryPos();
+        noteDerivation(`Read as ${VIEW_LABEL[kw] || kw}.`);
+        showTab('overview');
     } catch (err) {
         forgetBuild();
         renderBuildFailure(err);
     } finally {
-        resetBtn.disabled = false;
-        resetBtn.textContent = 'Reset';
+        gcnBtn.disabled = false;
+        gcnCaret.disabled = false;
+        gcnBtn.textContent = label;
         renderActionRow();
     }
+}
+
+// The main button takes the default pair; the menu offers all three.
+gcnBtn?.addEventListener('click', () => applyViews('grossceded'));
+document.querySelectorAll('[data-views]').forEach((item) => {
+    item.addEventListener('click', () => applyViews(item.dataset.views));
 });
 
 /**

@@ -55,12 +55,44 @@ def test_every_kind_carries_a_capability_block(client, label):
     _, body = _build(client, label)
     cap = body["capability"]
     assert set(cap) == {"exhibits", "charts", "has_premium", "can_sharpen",
-                        "has_sharpen", "can_pnl", "can_reins", "reins_bases",
-                        "can_price", "can_evaluate", "can_bounds",
-                        "can_allocate", "needs_premium"}
+                        "has_sharpen", "can_pnl", "can_reins", "can_views",
+                        "reins_bases", "can_price", "can_evaluate",
+                        "can_bounds", "can_allocate", "needs_premium"}
     for item in cap["exhibits"]:
         assert set(item) == {"name", "title", "perspectives"}
         assert item["perspectives"], "an unavailable exhibit is absent, not empty"
+
+
+def test_can_views_needs_an_occurrence_cession(client):
+    """``can_views`` gates the GCN control, and is narrower than ``has_reins``.
+
+    The three view prefixes (``grossceded`` / ``grossnet`` / ``netceded``) build
+    the joint **per-occurrence** aggregate of a pair, so they need an occurrence
+    cession specifically. A program carrying only an aggregate cession has
+    ``has_reins`` true and cannot answer them, and greying with a reason beats
+    failing on submit.
+
+    A portfolio is out for the other reason: the grammar's prefixes take an
+    ``agg_out``, and a portfolio cedes through its units rather than as a whole.
+    """
+    _, gross = _build(client, "agg")
+    assert gross["capability"]["can_views"] is False, "no cession, nothing to pair"
+
+    _, occ = _build(client, "agg_reins")
+    assert occ["has_reins"] is True
+    assert occ["capability"]["can_views"] is True
+
+    # Note the clause order: `occurrence net of` sits before the frequency and
+    # `aggregate net of` after it, per `agg_body` in the grammar.
+    agg_only = ("agg CAP.AggReins 10 claims sev lognorm 100 cv 1.5 poisson "
+                "aggregate net of 500 xs 500")
+    body = client.post("/v1/objects", json={"decl": agg_only, "log2": 12}).json()
+    assert body["has_reins"] is True, "it does cede, just not per occurrence"
+    assert body["capability"]["can_views"] is False, \
+        "an aggregate-only cession cannot be read as a per-occurrence pair"
+
+    _, port = _build(client, "port")
+    assert port["capability"]["can_views"] is False
 
 
 @pytest.mark.parametrize("label", list(DECLS))

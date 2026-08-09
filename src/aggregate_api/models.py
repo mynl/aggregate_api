@@ -103,6 +103,11 @@ class Capability(BaseModel):
     has_sharpen: bool = False
     can_pnl: bool = False
     can_reins: bool = False
+    # Can the program be re-read as a gross / ceded / net pair? Gates the action
+    # row's GCN control. Narrower than `can_reins` and than `has_reins`: the
+    # three view prefixes build the joint *per-occurrence* aggregate, so an
+    # occurrence cession is required, not merely some cession.
+    can_views: bool = False
     # Which calibration bases the reins pricing form may offer, known at build
     # time so the buttons the object cannot answer grey rather than 400. Empty
     # for an object with no cession.

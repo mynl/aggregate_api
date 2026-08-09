@@ -4,6 +4,60 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a58
+
+`dev/plan-ui-round-4.md` phase 4, the action row. Three items in a fixed order,
+because the third reuses the first.
+
+**Reformat**, before the derive group and outside it. It rewrites the program in
+the box into `format_program` form and builds nothing, so filing it under
+"derive" would mislabel the one button in the row that leaves the object alone.
+Both halves already existed, the `/v1/decl/format` route and its client wrapper;
+this is the button that was missing.
+
+The server is best-effort by design and echoes the input on any failure, so a
+malformed program reformats to itself. The button says "unchanged" in that case,
+which is also the honest answer for a program that was already canonical, and is
+what stops a no-op reading as a dead control. That brought back the transient
+label helper a55 removed along with the copy buttons, its only caller then.
+
+Reformat is the one control in the row that never greys. It reads the text
+rather than the object, so it works before anything is built, which is exactly
+when a pasted program is least readable.
+
+**Reset is gone.** Ctrl+↑ and Ctrl+↓ already walk back through the programs you
+built, and a button that undid exactly one derivation was a second and weaker
+way to do the same thing. `state.base` and `state.derived` went with it; they
+had no other consumer.
+
+**GCN took its place**, a split button defaulting to gross / ceded with gross /
+net and net / ceded on the caret. It reads the current program as a pair of
+views by **prefixing** it: the grammar takes `GROSSCEDED agg_out` and an
+`agg_out` is a whole inline declaration, so this is client-side text plus a
+rebuild, with no new route. The program goes through Reformat on the way, which
+is why that item lands first.
+
+Three details. Pressing GCN twice **swaps** the pair rather than stacking
+`grossnet grossceded agg …`, which does not parse and would have reported as a
+syntax error in a program the reader never typed. The result is a
+`BivariateAggregate`, so the object's kind changes and the navigation re-gates
+around it, which is why it lands on Overview: pressing this from Reinsurance
+would otherwise leave you looking at a group that had just gone dark, since a
+bivariate cannot cede. And a57's components block pays off here immediately, as
+the new object's status line reads `bs = (a, b)` with the halves named Gross and
+Ceded.
+
+**A new capability flag, `can_views`, gates it**, and it is deliberately
+narrower than `has_reins`. The view prefixes build the joint **per-occurrence**
+aggregate of a pair, so they need an occurrence cession specifically: a program
+carrying only an aggregate cession answers `has_reins` true and cannot serve
+them. Greying with a reason beats failing on submit. A portfolio is out for the
+other reason, that the prefixes take an `agg_out` and a portfolio cedes through
+its units.
+
+Still to come, recorded so it is not lost: adjusting the reinsurance from the
+GCN view, rather than going back to rebuild it.
+
 ## 1.0.0a57
 
 `dev/plan-ui-round-4.md` phase 3, the status strip's facts. Three items, all

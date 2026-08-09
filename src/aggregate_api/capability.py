@@ -311,6 +311,39 @@ def can_reins(obj: Any) -> bool:
     return hasattr(obj, "reins_program")
 
 
+def can_views(obj: Any) -> bool:
+    """Can this object be re-read as a gross / ceded / net view pair?
+
+    Consumer: the action row's GCN control, which prepends ``grossceded``,
+    ``grossnet`` or ``netceded`` to the program and rebuilds. The result is a
+    ``BivariateAggregate`` of the named pair.
+
+    Two conditions, and the second is the one that is easy to get wrong. The
+    grammar's three view prefixes take an ``agg_out``, so this is an
+    ``Aggregate`` question and a portfolio cannot answer it. And they build the
+    joint **per-occurrence** aggregate of the pair, so what they need is an
+    **occurrence** cession specifically: ``has_reins`` is the weaker test and
+    would light the control for a program carrying only an aggregate cession,
+    which then fails on submit. The house rule is that things grey with a
+    reason rather than fail when pressed, so the narrower test is the right one.
+
+    Read off ``occ_reins``, the cession spec itself, which is what
+    ``routes.objects._has_reinsurance`` reads for the same reason: it costs
+    nothing, where materializing ``reins_summary_df`` on every build would.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    bool
+    """
+    if not hasattr(obj, "reins_program"):
+        return False
+    return getattr(obj, "occ_reins", None) is not None
+
+
 def can_bounds(obj: Any) -> bool:
     """Can pricing bounds be computed for this object?
 
@@ -482,6 +515,7 @@ def capability_for(obj: Any) -> dict:
         "has_sharpen": has_sharpen(obj),
         "can_pnl": can_pnl(obj),
         "can_reins": can_reins(obj),
+        "can_views": can_views(obj),
         "reins_bases": reins_bases_for(obj),
         "can_price": can_price(obj),
         "can_evaluate": can_evaluate(obj),
