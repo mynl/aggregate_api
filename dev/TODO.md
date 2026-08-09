@@ -118,6 +118,35 @@ and the standing REMINDER below about what is worth plotting.
       (fixed at a48, below), and the rest of that first pass became
       `plan-ui-round-3`, immediately below.
 
+- [x] **plan-ui-round-4 — the second full pass** (a55 to a61, with a54 the
+      upstream catch-up that unblocked it). Eighteen items off
+      `dev/api-punchlist.md` Round 4, six phases: the nav and its greying; the
+      strip's verdict and history; the strip's facts; the action row; two
+      hamburger preferences; the cession box and Quick Re.
+
+      Three of the six were the page telling the truth rather than new
+      features. The greyed group tab had been unable to draw its own tooltip
+      since a48, because Bootstrap's `.disabled` class carries
+      `pointer-events: none`. A clean gross under reinsurance tinted the strip
+      amber. A bivariate's status line said nothing but its name, because its
+      `bs` is two numbers. And `BuildResponse.warnings` had been declared from
+      the start and never filled.
+
+      **a60 was not in the plan.** Upstream removed the `plot_envelope` keyword
+      the api was passing, and rather than repair a route already marked for
+      deletion the author's call was to take matplotlib out: the envelope is a
+      chart document now, drawn by a new 2-D path in the adapter, and
+      `plotting.py` and the `/plot` route are gone. That is
+      `plan-plot-ir-api.md` item 1 and the bounds half of item 5, landed early.
+      *(done; move the plan to `dev/done/` once the browser pass below is made)*
+
+      **Nobody has looked at any of it.** Every phase is proved by tests,
+      `check-nav.mjs` and a node run of the adapter over real documents, and
+      not one of the six has been seen in a browser. Worth one pass: a
+      `grossceded` object for the tooltips, a bivariate for the status line, a
+      reinsured aggregate for the green verdict and Quick Re, and the Bounds
+      envelope for the new 2-D chart.
+
 - [x] **plan-ui-round-3 — the first full pass over the running site**
       (a49 to a52). Roughly forty items off the author's punch list, taken after
       the first end-to-end run. Four phases: the shell and the status strip; the

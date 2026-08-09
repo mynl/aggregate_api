@@ -119,6 +119,30 @@ class Capability(BaseModel):
     needs_premium: bool = False
 
 
+class Quantile(BaseModel):
+    """One probability and the loss at it, exact and rounded.
+
+    Both, because they answer different questions. ``snapped`` is what the
+    reinsurance quick-edit form writes into a program a person then reads, and
+    a layer is quoted at three significant figures; ``q`` is what anyone
+    checking the arithmetic wants.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    p: float
+    q: float
+    snapped: float
+
+
+class QuantilesResponse(BaseModel):
+    """Quantiles at the requested probabilities, in the order asked."""
+
+    model_config = _RESPONSE_CFG
+
+    quantiles: list[Quantile]
+
+
 class Component(BaseModel):
     """One half of an object built from a pair: its grid and its moments.
 

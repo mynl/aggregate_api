@@ -111,7 +111,10 @@ editor.view.dom.addEventListener('keydown', (ev) => {
 
 function navigateHistory(dir) {
     const text = dir === 'prev' ? history.prev() : history.next();
-    if (text !== null) editor.setText(text);
+    if (text !== null) {
+        editor.setText(text);
+        clearCessionDraft();
+    }
     renderHistoryPos();
 }
 
@@ -1784,6 +1787,109 @@ function renderReinsEntry() {
 const reinsBtn = $('reins-btn');
 const reinsInput = $('reins-input');
 
+// ----------------------------------------------------------------------
+// Quick Re: one layer, written into the box above rather than applied
+// ----------------------------------------------------------------------
+
+/**
+ * Read one field of the layer form: a probability, or an amount.
+ *
+ * The form's whole trick, and the reason attach and limit each need one input
+ * rather than a pair. `50%` is a probability and `500` is currency, so there is
+ * no mode to be in and no second set of boxes to keep in step with the first.
+ *
+ * @returns {{kind: 'p'|'amount', value: number} | null} null when empty or
+ *   unreadable, which the caller reports rather than guessing at.
+ */
+function readLayerField(text) {
+    const s = String(text || '').trim().replace(/,/g, '');
+    if (!s) return null;
+    const pct = s.endsWith('%');
+    const n = Number.parseFloat(pct ? s.slice(0, -1) : s);
+    if (!Number.isFinite(n)) return null;
+    if (pct) {
+        const p = n / 100;
+        return p > 0 && p < 1 ? { kind: 'p', value: p } : null;
+    }
+    return n > 0 ? { kind: 'amount', value: n } : null;
+}
+
+/** Trim a number for a program someone will read: no trailing `.0`. */
+function layerNumber(v) {
+    return Number.isInteger(v) ? String(v) : String(Number(v.toPrecision(6)));
+}
+
+/**
+ * Turn the form into a DecL cession clause.
+ *
+ * Resolves each field on its own, so mixing is legal and needs no special case:
+ * `attach 50% limit 1000000` is a currency limit over a median attachment.
+ *
+ * **A percentage limit is a DETACHMENT probability**, so `attach 50% limit 99%`
+ * means attach at q(.5) with a limit of q(.99) - q(.5). That is the only
+ * reading under which a percentage limit means anything, and it is the
+ * formulation the form was asked for.
+ *
+ * Emits `<limit> xs <attach>`, or `<share> so <limit> xs <attach>` when the
+ * share is not 100%, per `reins_layer` in the grammar. **`so`, not the words**:
+ * the grammar's share token is the two-letter `so` (and `po` for part-of), and
+ * a spelled-out `share of` is a parse error, which is what the first cut of
+ * this emitted.
+ */
+async function composeCession() {
+    const basis = $('qr-basis').value;
+    const attach = readLayerField($('qr-attach').value);
+    const limit = readLayerField($('qr-limit').value);
+    if (!attach || !limit) throw new Error('attach and limit are both needed');
+
+    // Share is exempt from the dual reading: it is always a share, never a
+    // probability, which is why `100%` in that box means the whole layer.
+    const shareRaw = String($('qr-share').value || '100').trim().replace('%', '');
+    const sharePct = Number.parseFloat(shareRaw);
+    const share = Number.isFinite(sharePct) ? sharePct / 100 : 1;
+
+    // One request for both, in the order asked, so the pair is read off one
+    // grid rather than two.
+    const wanted = [attach, limit].filter((f) => f.kind === 'p').map((f) => f.value);
+    let at = {};
+    if (wanted.length) {
+        const { quantiles } = await api.quantiles(state.id, wanted);
+        at = Object.fromEntries(quantiles.map((row) => [row.p, row.snapped]));
+    }
+
+    const attachAmount = attach.kind === 'p' ? at[attach.value] : attach.value;
+    let limitAmount;
+    if (limit.kind === 'p') {
+        if (limit.value <= attach.value && attach.kind === 'p') {
+            throw new Error('the detachment probability must exceed the attachment');
+        }
+        limitAmount = at[limit.value] - attachAmount;
+    } else {
+        limitAmount = limit.value;
+    }
+    if (!(limitAmount > 0)) throw new Error('that gives a layer of zero width');
+
+    const layer = `${layerNumber(limitAmount)} xs ${layerNumber(attachAmount)}`;
+    const withShare = Math.abs(share - 1) < 1e-9
+        ? layer
+        : `${layerNumber(share)} so ${layer}`;
+    return `${basis} net of ${withShare}`;
+}
+
+$('qr-build')?.addEventListener('click', async () => {
+    const note = $('qr-note');
+    const btn = $('qr-build');
+    btn.disabled = true;
+    try {
+        reinsInput.value = await composeCession();
+        reinsInput.focus();
+    } catch (err) {
+        if (note) note.textContent = err.message;
+    } finally {
+        btn.disabled = false;
+    }
+});
+
 // The last cession, kept across a reload.
 //
 // Ceding is iterative: you try `250 xs 250`, look at what it did, and try
@@ -1792,10 +1898,32 @@ const reinsInput = $('reins-input');
 // stale. True, and it made every retry a retype of a clause the grammar accepts
 // no abbreviation for. The box is a *draft*, not a record: the editor is the
 // record, and a draft that survives is the point of a draft.
+// It clears when the program in the editor becomes a *different* program,
+// which is the distinction a51 was missing and a61 adds. Rebuilding what you
+// are working on keeps the draft, because that is the iteration the draft
+// exists for; loading an example or stepping history to another program throws
+// it away, because a cession written for one book is not a draft for another.
 const CESSION_KEY = 'aggapi.lastCession';
 if (reinsInput) {
     try { reinsInput.value = localStorage.getItem(CESSION_KEY) || ''; }
     catch { /* private mode */ }
+}
+
+/**
+ * Forget the cession draft, because the program it was written for has gone.
+ *
+ * Called where the editor's text is *replaced* by another program, never on a
+ * rebuild of the same one. The quick-edit fields go with it: an attachment in
+ * currency means nothing on a different book, and one in probability means
+ * something different, which is worse.
+ */
+function clearCessionDraft() {
+    if (reinsInput) reinsInput.value = '';
+    try { localStorage.removeItem(CESSION_KEY); } catch { /* private mode */ }
+    for (const id of ['qr-attach', 'qr-limit']) {
+        const node = $(id);
+        if (node) node.value = '';
+    }
 }
 
 async function cede() {
@@ -1808,10 +1936,46 @@ async function cede() {
 }
 
 reinsBtn?.addEventListener('click', cede);
-reinsInput?.addEventListener('keydown', (ev) => {
-    if (ev.key !== 'Enter') return;
+
+/**
+ * Ctrl+Space in the cession box: complete against the program, not the box.
+ *
+ * The completion endpoint takes a whole program and a cursor into it, and a
+ * bare `250 xs 250` is not a valid prefix of one, so asking about the box's own
+ * text would return nothing useful. The draft is spliced onto the end of the
+ * program in the editor and the cursor offset by the same amount, so the
+ * grammar sees the clause where it will actually sit.
+ *
+ * A plain `<input>` rather than a second CodeMirror: the datalist below it is
+ * the affordance for the two openers, and this fills the rest. The author's
+ * complaint was that Tab leaves the box; Ctrl+Space is what they asked for and
+ * costs no editor.
+ */
+reinsInput?.addEventListener('keydown', async (ev) => {
+    if (ev.key === 'Enter') {
+        ev.preventDefault();
+        cede();
+        return;
+    }
+    if (!(ev.key === ' ' && ev.ctrlKey)) return;
     ev.preventDefault();
-    cede();
+    const program = editor.getText().trim();
+    const draft = reinsInput.value.slice(0, reinsInput.selectionStart ?? undefined);
+    if (!program) return;
+    const context = `${program} ${draft}`;
+    try {
+        const { completions } = await api.complete(context, context.length);
+        const list = $('reins-openers');
+        if (!list || !completions?.length) return;
+        // Feed the datalist the grammar's own answer, so the dropdown that
+        // already opens on focus shows what can come next here rather than the
+        // two hard-coded openers.
+        empty(list);
+        for (const c of completions.slice(0, 20)) {
+            const value = typeof c === 'string' ? c : (c.text || c.label || '');
+            if (value) list.appendChild(el('option', { value: draft + value }));
+        }
+    } catch { /* completion is a courtesy; typing still works */ }
 });
 
 /** Reinsurance / Summary, Stats and Density: one per-layer frame. */
@@ -2366,6 +2530,8 @@ const exampleRing = { decls: [], cursor: -1 };
 // has to ride along here.
 function loadExample(decl, formatted = true) {
     editor.setText(decl);
+    // A different program, so the cession draft written for the last one goes.
+    clearCessionDraft();
     editor.focus();
     if (formatted) return;
     const at = exampleRing.cursor;

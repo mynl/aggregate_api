@@ -325,6 +325,59 @@ def test_bs_window_df_csv(client):
 
 
 # ----------------------------------------------------------------------
+# GET /v1/objects/{id}/quantiles
+# ----------------------------------------------------------------------
+
+def test_quantiles_answers_any_probability(client):
+    """``q(p)`` at any p, which nothing else served.
+
+    Quick Re lets attach and limit be written as probabilities, and there was no
+    way to ask for one: ``tail_df`` carries VaR by return period, so ``q(0.99)``
+    was reachable and ``q(0.5)`` was not.
+    """
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/quantiles", params={"p": "0.5,0.99"})
+    assert r.status_code == 200, r.text
+    rows = r.json()["quantiles"]
+    assert [row["p"] for row in rows] == [0.5, 0.99], "answered in the order asked"
+    assert rows[0]["q"] < rows[1]["q"], "a quantile function is non-decreasing"
+
+
+def test_quantiles_snap_to_something_writable(client):
+    """The snapped value is what goes into a program a person then reads.
+
+    A layer is quoted at three significant figures. Quantiles land on the FFT
+    grid and carry every digit of it, so unsnapped the form would produce
+    arithmetic rather than a program. Both values travel: the exact one is for
+    anyone checking.
+    """
+    decl = "agg SNAP 10 claims sev lognorm 100000 cv 1.5 poisson"
+    oid = client.post("/v1/objects", json={"decl": decl}).json()["id"]
+    row = client.get(f"/v1/objects/{oid}/quantiles",
+                     params={"p": "0.99"}).json()["quantiles"][0]
+    assert row["snapped"] != 0
+    assert f"{row['snapped']:.15g}".lstrip("-").replace(".", "").rstrip("0"), "no leading zeros"
+    # Three significant figures: the snapped value has at most 3 non-zero
+    # leading digits, and it sits within half a step of the exact one.
+    digits = f"{abs(row['snapped']):.15g}".replace(".", "").lstrip("0")
+    assert len(digits.rstrip("0")) <= 3, digits
+    assert abs(row["snapped"] - row["q"]) <= abs(row["q"]) * 0.005
+
+    raw = client.get(f"/v1/objects/{oid}/quantiles",
+                     params={"p": "0.99", "snap": "false"}).json()["quantiles"][0]
+    assert raw["snapped"] == raw["q"], "snap=false leaves it alone"
+
+
+def test_quantiles_refuses_a_probability_outside_the_unit_interval(client):
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    for bad in ("1.5", "0", "1", "-0.2"):
+        r = client.get(f"/v1/objects/{oid}/quantiles", params={"p": bad})
+        assert r.status_code == 422, f"{bad}: {r.status_code}"
+    assert client.get(f"/v1/objects/{oid}/quantiles",
+                      params={"p": "nonsense"}).status_code == 422
+
+
+# ----------------------------------------------------------------------
 # The plot endpoint, and its absence
 # ----------------------------------------------------------------------
 

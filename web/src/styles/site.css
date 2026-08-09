@@ -621,6 +621,35 @@ header .navbar { min-height: 56px; }
     .reins-entry .reins-cession input { font-size: 16px; }
 }
 
+/* ---- Quick Re's layer form ----
+   A disclosure, closed by default, so the typed box above stays the default
+   path and the page does not grow a form nobody asked for. The summary reads as
+   one of the sub-tab labels rather than as a control, because opening it is not
+   an action on the object. */
+.reins-quick { margin: -1.2rem 0 1.4rem; }
+.reins-quick > summary {
+    display: inline-block; cursor: pointer; list-style: none;
+    font-size: .72rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .1em; color: var(--mut); padding: .2rem 0;
+}
+.reins-quick > summary::-webkit-details-marker { display: none; }
+.reins-quick > summary::before { content: "\25B8"; margin-right: .35rem; }
+.reins-quick[open] > summary::before { content: "\25BE"; }
+.reins-quick > summary:hover { color: var(--ink); }
+.reins-quick-row {
+    display: flex; flex-wrap: wrap; gap: .5rem; align-items: end;
+    margin: .35rem 0 .1rem;
+}
+/* Narrow, because every one of them holds a number or a word. Left to the
+   form-field default they would each claim a text box's width and the row would
+   wrap on a laptop. */
+.reins-quick-row input { width: 6.5rem; font-family: var(--mono); font-size: .74rem; }
+.reins-quick-row select { font-size: .74rem; }
+.reins-quick .reins-entry-hint { margin-bottom: .2rem; }
+@media (max-width: 575.98px) {
+    .reins-quick-row input { font-size: 16px; }
+}
+
 /* ---- Rate-limit card (friendly HTTP 429 on the shared demo) ---- */
 .agg-ratelimit {
     display: flex; gap: 1rem; align-items: flex-start; max-width: 640px;

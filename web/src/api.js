@@ -107,6 +107,15 @@ export const api = {
     // Reinsurance
     reinsDescription: (id)          => _json('GET',  `/v1/objects/${id}/reins_description`),
     /**
+     * Loss at each probability, exact and rounded to three figures.
+     *
+     * For Quick Re, which lets attach and limit be written as probabilities.
+     * `tail_df` carries VaR by return period, so it reaches q(0.99) and not
+     * q(0.5); this reaches any of them.
+     */
+    quantiles:    (id, ps)          =>
+        _json('GET', `/v1/objects/${id}/quantiles?p=${ps.join(',')}`),
+    /**
      * Any named frame as a `FrameResponse`, by its route name.
      *
      * Generic despite where it started: the reinsurance frames were the first

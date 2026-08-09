@@ -1970,6 +1970,77 @@ def get_frame_document(
 
 
 # ----------------------------------------------------------------------
+# GET /v1/objects/{id}/quantiles -- q(p) for the reinsurance quick-edit form
+# ----------------------------------------------------------------------
+
+def _snap(value: float, digits: int = 3) -> float:
+    """Round to ``digits`` significant figures, for a number a person will type.
+
+    The quick-edit form turns probabilities into a layer, and a layer is
+    something an underwriter writes down: ``1000 xs 500``, not
+    ``1,234,567.8901 xs 987,654.3210``. Quantiles land on the FFT grid and carry
+    every digit of it, so without this the form produces arithmetic rather than
+    a program.
+
+    Three significant figures, which is the resolution a real layer is quoted
+    at. Exact zero and non-finite values pass through: there is no leading digit
+    to round to.
+    """
+    if not math.isfinite(value) or value == 0:
+        return value
+    exp = math.floor(math.log10(abs(value)))
+    factor = 10 ** (digits - 1 - exp)
+    return round(value * factor) / factor
+
+
+@router.get("/objects/{oid}/quantiles", response_model=models.QuantilesResponse)
+def get_quantiles(
+    oid: str,
+    p: str = Query(..., description="Comma-separated probabilities in (0, 1)."),
+    snap: bool = Query(True, description="Round to 3 significant figures."),
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """Quantiles at the given probabilities.
+
+    Exists for the reinsurance quick-edit form, which lets attach and limit be
+    written as probabilities (``50%``) as well as as amounts. There was no way
+    to ask for ``q(p)`` before it: ``tail_df`` carries VaR by return period, so
+    ``q(0.99)`` was reachable and ``q(0.5)`` was not.
+
+    Returns both the exact quantile and the snapped one, rather than choosing
+    for the caller: the form writes the snapped value into a program a person
+    then reads, and the exact value is what anyone checking the arithmetic
+    wants.
+    """
+    try:
+        ps = [float(v) for v in p.split(",") if v.strip()]
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail=f"p must be numbers: {exc}") from exc
+    if not ps:
+        raise HTTPException(status_code=422, detail="p is empty")
+    if not all(0 < v < 1 for v in ps):
+        raise HTTPException(
+            status_code=422, detail="every p must lie strictly inside (0, 1)")
+    q = getattr(entry.obj, "q", None)
+    if not callable(q):
+        raise HTTPException(
+            status_code=400,
+            detail=f"a {entry.kind!r} carries no quantile function",
+        )
+    out = []
+    for v in ps:
+        try:
+            exact = float(q(v))
+        except Exception as exc:  # noqa: BLE001 -- reported, not raised
+            raise HTTPException(
+                status_code=400, detail=f"q({v}) failed: {exc}") from exc
+        out.append({"p": v, "q": exact,
+                    "snapped": _snap(exact) if snap else exact})
+    return {"quantiles": out}
+
+
+# ----------------------------------------------------------------------
 # GET /v1/objects/{id}/chart/{name} -- the chart-document route
 # ----------------------------------------------------------------------
 

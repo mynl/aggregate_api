@@ -312,13 +312,56 @@
                      the gross object, so this pane needs no reset of its own. -->
                 <div class="tab-tools reins-entry" id="reins-entry">
                     <div class="reins-entry-row">
-                        <label class="price-field reins-cession">Adjust cession
+                        <label class="price-field reins-cession">Quick Re
                             <input id="reins-input" type="text" autocomplete="off"
                                    autocorrect="off" autocapitalize="off" spellcheck="false"
                                    list="reins-openers"
                                    placeholder="occurrence net of 500 xs 500"></label>
-                        <button id="reins-btn" class="btn btn-primary btn-sm">Add reinsurance</button>
+                        <button id="reins-btn" class="btn btn-primary btn-sm">Add re</button>
                     </div>
+                    <!-- The quick-edit form, closed by default. The typed box
+                         above stays the default path and the record of what
+                         will be built; this only writes into it, so you always
+                         see the clause before it is applied and can edit it.
+
+                         ONE layer, deliberately. A multi-layer program is typed
+                         in the big box, which is what that box is for. This is
+                         demo sugar and is worth having only while it stays
+                         small; a second layer here means it has failed.
+
+                         Attach and limit each take ONE field with two readings:
+                         `50%` is a probability and a bare number is currency,
+                         so there is no mode switch and no second set of boxes
+                         to keep in step. Share is exempt and is always a share.
+                         See `composeCession` in main.js. -->
+                    <details class="reins-quick" id="reins-quick">
+                        <summary>quick edit</summary>
+                        <div class="reins-quick-row">
+                            <label class="price-field">basis
+                                <select id="qr-basis">
+                                    <option value="occurrence">occurrence</option>
+                                    <option value="aggregate">aggregate</option>
+                                </select></label>
+                            <label class="price-field">share
+                                <input id="qr-share" type="text" inputmode="decimal"
+                                       autocomplete="off" spellcheck="false" value="100%"></label>
+                            <label class="price-field">attach
+                                <input id="qr-attach" type="text" inputmode="decimal"
+                                       autocomplete="off" spellcheck="false"
+                                       placeholder="50% or 500"></label>
+                            <label class="price-field">limit
+                                <input id="qr-limit" type="text" inputmode="decimal"
+                                       autocomplete="off" spellcheck="false"
+                                       placeholder="99% or 1000"></label>
+                            <button id="qr-build" class="btn btn-outline-secondary btn-sm"
+                                    type="button">Write clause</button>
+                        </div>
+                        <p class="reins-entry-hint" id="qr-note">A percentage is read as a
+                            probability, so <code>attach 50%</code> attaches at the median and
+                            <code>limit 99%</code> reaches the 99th percentile. A plain number is
+                            an amount. Quantiles are rounded to three figures, because a layer is
+                            something you write down.</p>
+                    </details>
                     <!-- The two openers, as a datalist rather than as buttons.
                          They are long to type and the grammar accepts no
                          abbreviation for either (`occ` and `agg` are not

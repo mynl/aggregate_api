@@ -4,6 +4,60 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a61
+
+`dev/plan-ui-round-4.md` phase 6, the last of the round: the cession box grows a
+form, a memory and a completion.
+
+**Quick Re**, the cession entry renamed and given a quick-edit disclosure. The
+typed box stays the default path and stays the record: the form *writes into*
+it rather than applying anything, so the clause is on screen and editable before
+Add re is pressed. Closed by default, so the page does not grow a form nobody
+asked for.
+
+**One layer, on purpose.** A multi-layer program is typed in the big box, which
+is what that box is for. This is demo sugar and is worth having only while it
+stays small.
+
+**One field per quantity, two readings**, which is the form's whole trick and
+the reason attach and limit each need one input rather than a pair: `50%` is a
+probability and `500` is currency, so there is no mode to be in and no second
+set of boxes to keep in step. Three consequences, each stated because each is a
+place it could be built wrong. Share is exempt and is always a share, defaulting
+to 100%. A percentage limit is a **detachment** probability, so `attach 50%
+limit 99%` attaches at q(.5) with a limit of q(.99) minus q(.5), which is the
+only reading under which a percentage limit means anything. And mixing is legal,
+because each field resolves on its own.
+
+**A quantile route**, `GET /objects/{id}/quantiles?p=…`, which the percentage
+reading needs and nothing else served: `tail_df` carries VaR by return period,
+so q(0.99) was reachable and q(0.5) was not. It answers with the exact quantile
+**and** one snapped to three significant figures, rather than choosing for the
+caller. The snapping is not cosmetic: quantiles land on the FFT grid and carry
+every digit of it, so unsnapped the form produces arithmetic where a layer
+should be.
+
+Caught by testing the composed clauses against the grammar rather than assuming
+them: the share form is `0.5 so 1000 xs 500`. The grammar's share token is the
+two-letter `so` (and `po` for part-of), and a spelled-out `share of` is a parse
+error, which is what the first cut emitted.
+
+**The draft clears when the program changes identity**, which is the
+distinction a51 was missing. Rebuilding what you are working on keeps the
+draft, because that is the iteration a draft exists for; loading an example or
+stepping history to another program throws it away, because a cession written
+for one book is not a draft for another, and an attachment given as a
+probability means something different on a different book, which is worse than
+meaning nothing.
+
+**Ctrl+Space completes in the cession box.** The completion endpoint takes a
+whole program and a cursor into it, and a bare `250 xs 250` is not a valid
+prefix of one, so the draft is spliced onto the end of the program in the editor
+and the cursor offset to match: the grammar sees the clause where it will
+actually sit. The answers feed the datalist that already opens on the box, so
+the two openers it used to hold are now whatever can follow. No second editor,
+and the Tab complaint goes with it.
+
 ## 1.0.0a60
 
 **Matplotlib leaves the api.** Nothing here renders a picture any more: every
