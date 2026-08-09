@@ -47,6 +47,56 @@ def test_build_summary_fields(client):
     # Fixed frequency -> agg CV = sd/mean = sqrt(3*Var(U[1..6]))/10.5.
     assert body["cv"] == pytest.approx(0.2817, rel=1e-2)
     assert body["validation"] == "not unreasonable"
+    # Loss is the default convention, so the strip is not told about it.
+    assert body["value_type"] is None
+    # A scalar object is not a pair, so there is nothing to enumerate.
+    assert body["components"] == []
+
+
+def test_build_reports_payoff_convention_only(client):
+    """``value_type`` reports the payoff convention and stays quiet on loss.
+
+    The asymmetry is the point. Loss is the default and the overwhelming case,
+    so reporting it would spend a word on the status strip's first line to say
+    "normal" on every build; payoff is the exception a reader has to know
+    about, because it flips which tail is the bad one.
+    """
+    loss = client.post("/v1/objects", json={"decl": _DICE}).json()
+    assert loss["value_type"] is None
+    decl = "agg PayoffCase 10 claims sev lognorm 50 cv 1 poisson payoff"
+    payoff = client.post("/v1/objects", json={"decl": decl}).json()
+    assert payoff["value_type"] == "payoff"
+
+
+def test_build_reports_library_warnings(client):
+    """What the library says on its way to the object reaches the response.
+
+    Two channels are captured, ``logger.warning`` and ``warnings.warn``, and
+    this program exercises the first: a reflected lognormal splice whose
+    support reaches below zero, so mass is clamped at 0.
+
+    The second assertion is the one that took a fix. ``catch_warnings`` is
+    process-wide, so a first cut reported the api's own sqlite
+    ``ResourceWarning`` as something the user's program had provoked. Warnings
+    are now kept only when raised from inside the ``aggregate`` package.
+    """
+    decl = "agg WarnCase dfreq[1] sev 10 - lognorm 1.5 splice[0 11]"
+    body = client.post("/v1/objects", json={"decl": decl}).json()
+    assert body["warnings"], "the library warns about this program"
+    assert any("clamps" in w for w in body["warnings"])
+    assert not any("sqlite" in w.lower() for w in body["warnings"]), \
+        "only the library's warnings, never the api's own"
+
+    # A warning describes the object, so a cache hit reports what the miss did.
+    again = client.post("/v1/objects", json={"decl": decl}).json()
+    assert again["cached"] is True
+    assert again["warnings"] == body["warnings"]
+
+
+def test_clean_build_warns_about_nothing(client):
+    """The common case: no warnings at all, so the strip's note stays empty."""
+    body = client.post("/v1/objects", json={"decl": _DICE}).json()
+    assert body["warnings"] == []
 
 
 def test_build_reports_resolved_log2(client):
@@ -663,6 +713,29 @@ _BV = (
 )
 
 
+def test_bivariate_reports_per_component_grid(client):
+    """A bivariate's facts are pairs, and they travel in ``components``.
+
+    Its ``bs`` is a two element list, one grid per axis, so every scalar
+    headline field coerces to ``None`` and the status strip had nothing to show
+    but a name and a kind. ``log2`` is not an attribute at all on this kind and
+    is derived from the axis length, which is what log2 means.
+
+    Asserted as a pair of plausible grids rather than as exact numbers: the
+    values are the library's bucket-sizing decision and are free to move.
+    """
+    body = client.post("/v1/objects", json={"decl": _BV}).json()
+    assert body["bs"] is None and body["log2"] is None, \
+        "the scalar fields stay null; the pair is the honest answer"
+    comps = body["components"]
+    assert [c["name"] for c in comps] == ["A", "B"]
+    for c in comps:
+        assert c["bs"] > 0
+        assert 4 <= c["log2"] <= 24
+        assert c["mean"] > 0
+        assert c["cv"] > 0
+
+
 def test_bivariate_builds_and_reports(client):
     """A BivariateAggregate builds as kind='bvagg' with the common surface.
 
@@ -703,7 +776,15 @@ def test_bivariate_chart_document(client):
     r1 = client.get(f"/v1/objects/{oid}/chart/joint_surface")
     assert r1.status_code == 200, r1.text
     doc = r1.json()
-    assert doc["ir_version"] == 1
+    # A deliberate canary on a literal, not a read of the library's own
+    # constant, which would make the assertion tautological. It has now fired
+    # twice and been right both times, so it earns its keep: version 2
+    # (aggregate 1.0.0a238) lets a series carry a coordinate as a lattice,
+    # `(start, step, count)`, which a reader that does not know the field
+    # cannot draw at all. When this fails, read the CHART_IR_VERSION note
+    # upstream and decide what the adapter owes the new version before
+    # changing the number.
+    assert doc["ir_version"] == 2
     assert doc["name"] == "joint_surface"
     assert [p["kind"] for p in doc["panels"]] == ["surface"]
     # Whether the height may be read on a log scale is declared by the z AXIS,

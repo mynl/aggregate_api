@@ -63,11 +63,15 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import threading
 import time
+import warnings
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
@@ -77,6 +81,7 @@ from fastapi.responses import Response
 
 from lark.exceptions import UnexpectedInput, VisitError
 
+import aggregate as _aggregate_pkg
 from aggregate import Distortion, Severity, build as _build_singleton
 from aggregate import charts as agg_charts
 from aggregate import exhibits as agg_exhibits
@@ -207,18 +212,127 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
+#: Where the ``aggregate`` package lives on disk, used to tell its warnings
+#: from everyone else's. Resolved once at import: the path cannot move while
+#: the process runs, and ``os.path.commonpath`` on every warning of every build
+#: would be work for an answer that never changes.
+_LIBRARY_ROOT = str(Path(_aggregate_pkg.__file__).resolve().parent)
+
+
+def _from_library(filename: str) -> bool:
+    """Was this warning raised from inside ``aggregate``?
+
+    Path containment, not a name test: ``aggregate_api`` contains the string
+    ``aggregate``, so a substring check would claim this service's own warnings
+    as the library's. Resolved on both sides so a junctioned or symlinked
+    checkout compares equal, which this repo's ``.venv`` arrangement makes a
+    live concern rather than a theoretical one.
+    """
+    if not filename:
+        return False
+    try:
+        return Path(filename).resolve().is_relative_to(_LIBRARY_ROOT)
+    except (OSError, ValueError):  # pragma: no cover -- unresolvable path
+        return False
+
+
+class _NoteCollector(logging.Handler):
+    """A logging handler that keeps formatted records in a list."""
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.WARNING)
+        self.notes: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        # Never let a bad format string in someone else's log call break a
+        # build: the notes are a courtesy, the object is the product.
+        try:
+            self.notes.append(record.getMessage())
+        except Exception:  # noqa: BLE001 -- see above
+            pass
+
+
+@contextmanager
+def _collecting_notes():
+    """Collect what ``aggregate`` says while a build runs, on both channels.
+
+    Yields a list that fills with the messages the library emitted at WARNING
+    and above. Empty is the common case and means the build had nothing to say.
+
+    Notes
+    -----
+    **Two channels, because the library uses two.** ``logger.warning`` is the
+    larger by far (``_aggregate``, ``underwriter`` and ``parser`` alone account
+    for most of it) and carries the messages a reader most wants, such as a
+    splice whose components do not meet. ``warnings.warn`` carries the rest,
+    including the library's own ``IgnoredDecLClauseWarning`` family. Capturing
+    only one of them would have looked like it worked, on whichever example was
+    tried first.
+
+    **Both mutate process-global state, and this runs on the build worker
+    thread.** That is safe here for a structural reason rather than a hopeful
+    one: ``_build_semaphore`` admits one build at a time and
+    ``_build_executor`` has a single worker, so there is exactly one writer to
+    the logger's handler list and to the warnings filters while this is open.
+    Entering the context *inside* the worker (rather than around
+    ``future.result()`` on the calling thread) is deliberate:
+    ``catch_warnings`` swaps module state that a warning raised on another
+    thread would not reliably see.
+
+    **Both channels are scoped to the library, and both need scoping.** The
+    handler goes on the ``aggregate`` logger rather than the root, so nothing
+    this service logs about itself is mistaken for something the model said.
+    The warnings half needs the same discipline for a less obvious reason:
+    ``catch_warnings`` is process-wide and ``simplefilter('always')`` lifts the
+    default suppressions, so a first cut of this reported
+    ``unclosed database in <sqlite3.Connection ...>`` on every build. That is
+    the api's own audit log, and telling a user their program provoked it would
+    be a lie. Each caught warning is therefore kept only if it was raised from
+    inside the ``aggregate`` package, tested by path rather than by category,
+    since a library ``UserWarning`` is indistinguishable from anyone else's.
+    """
+    collector = _NoteCollector()
+    lib_logger = logging.getLogger("aggregate")
+    lib_logger.addHandler(collector)
+    # A library logger with no handler and no propagation would drop records
+    # before ours ran; and one whose level is above WARNING would never emit
+    # them at all. Force both for the duration and restore after.
+    was_level = lib_logger.level
+    if was_level > logging.WARNING or was_level == logging.NOTSET:
+        lib_logger.setLevel(logging.WARNING)
+    try:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            yield collector.notes
+            for w in caught:
+                if _from_library(getattr(w, "filename", "")):
+                    collector.notes.append(str(w.message))
+    finally:
+        lib_logger.removeHandler(collector)
+        lib_logger.setLevel(was_level)
+
+
 def _run_build(decl: str, log2: int, bs: float):
-    """Invoke the underlying ``build()``.
+    """Invoke the underlying ``build()``, collecting what it says.
 
     Pulled into a helper so the thread-pool target is a plain
     function -- closures over ``log2=0`` / ``bs=0`` are the
     library's "let me pick" signal, so we forward the request's
     values verbatim.
+
+    Returns
+    -------
+    tuple
+        ``(obj, notes)``, the built object and the library's WARNING-and-above
+        messages. See :func:`_collecting_notes` for why the capture is opened
+        here, on the worker, rather than around the future.
     """
     # log2=0 / bs=0 are the underlying ``build()``'s "use defaults"
     # sentinels; pass them through when the request omitted those
     # knobs.
-    return _build_singleton(decl, log2=log2, bs=bs)
+    with _collecting_notes() as notes:
+        obj = _build_singleton(decl, log2=log2, bs=bs)
+    return obj, notes
 
 
 def _resolve_object(oid: str, cache: ObjectCache) -> CacheEntry:
@@ -364,6 +478,15 @@ def _summary_fields(obj: Any) -> dict:
     except (TypeError, ValueError):
         log2 = None
 
+    # The loss / payoff role, reported only when it is ``payoff``. Loss is the
+    # default and by far the common case, so printing it on every build would
+    # add a word to the strip's first line that is almost never news, on a line
+    # that has been trimmed twice for exactly that reason. ``value_type`` is the
+    # public getter; the role itself is the internal ``_is_loss_value``.
+    value_type = getattr(obj, "value_type", None)
+    if value_type is not None and str(value_type).strip().lower() == "loss":
+        value_type = None
+
     return {
         "bs": _num("bs"),
         "log2": log2,
@@ -371,7 +494,71 @@ def _summary_fields(obj: Any) -> dict:
         "cv": _num(*cv),
         "validation": validation,
         "has_reins": reinsured,
+        "value_type": str(value_type) if value_type is not None else None,
+        "components": _component_fields(obj),
     }
+
+
+def _component_fields(obj: Any) -> list[dict]:
+    """Per-component grid and moments, for an object built from a pair.
+
+    Returns
+    -------
+    list of dict
+        ``{"name", "bs", "log2", "mean", "cv"}`` per component, or ``[]`` for
+        an object that is not a pair.
+
+    Notes
+    -----
+    Only a ``BivariateAggregate`` answers this today, and it is the reason the
+    block exists: its ``bs`` is a **two element list**, one grid per axis, so
+    every scalar field in :func:`_summary_fields` comes back ``None`` for it
+    and its status line said nothing but a name and a kind. The pair is the
+    honest answer, not a scalar chosen from it.
+
+    Additive, deliberately. Widening ``bs`` / ``log2`` / ``mean`` / ``cv`` to
+    "scalar or pair" would change the response type every other kind is read
+    with, to describe one kind; a block that is empty everywhere else costs
+    those kinds nothing.
+
+    ``log2`` is derived rather than read: a bivariate carries no ``log2``
+    attribute, only the per-axis grids, and the axis length is what log2 means
+    (the library's own ``bs_description`` computes it the same way).
+    """
+    axis_xs = getattr(obj, "axis_xs", None)
+    names = getattr(obj, "unit_names", None)
+    units = getattr(obj, "units", None)
+    bss = getattr(obj, "bs", None)
+    if not axis_xs or not names or not isinstance(bss, (list, tuple)):
+        return []
+
+    def _moment(unit: Any, *candidates: str) -> float | None:
+        for name in candidates:
+            v = getattr(unit, name, None)
+            if v is None:
+                continue
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    out: list[dict] = []
+    for i, name in enumerate(names):
+        try:
+            n = len(axis_xs[i])
+            bs = float(bss[i])
+        except (IndexError, TypeError, ValueError):
+            continue
+        unit = units[i] if units is not None and i < len(units) else None
+        out.append({
+            "name": str(name),
+            "bs": bs,
+            "log2": int(round(math.log2(n))) if n > 0 else None,
+            "mean": _moment(unit, "actual_m", "est_m") if unit is not None else None,
+            "cv": _moment(unit, "actual_cv", "est_cv") if unit is not None else None,
+        })
+    return out
 
 
 # Raw-moment statistic labels (E[X], E[X^2], E[X^3]). The displayed stats /
@@ -656,7 +843,9 @@ def post_object(
             "id": oid,
             "kind": cached_entry.kind,
             "name": cached_entry.name,
-            "warnings": [],
+            # The build's warnings, not this request's: they belong to the
+            # object and were stored with it, so a hit says what the miss said.
+            "warnings": list(cached_entry.notes),
             "cached": True,
             "elapsed_ms": elapsed,
             **_summary_fields(cached_entry.obj),
@@ -674,7 +863,7 @@ def post_object(
     with _build_semaphore:
         future = _build_executor.submit(_run_build, req.decl, eff_log2, eff_bs)
         try:
-            obj = future.result(timeout=settings.build_timeout_s)
+            obj, build_notes = future.result(timeout=settings.build_timeout_s)
         except FuturesTimeout:
             elapsed = int((time.monotonic() - t0) * 1000)
             audit.record_build(
@@ -803,6 +992,7 @@ def post_object(
         kind=kind,
         name=getattr(obj, "name", "<anonymous>"),
         created_at=datetime.now(timezone.utc),
+        notes=build_notes,
     )
     cache.put(oid, entry)
     elapsed = int((time.monotonic() - t0) * 1000)
@@ -814,7 +1004,7 @@ def post_object(
         "id": oid,
         "kind": kind,
         "name": entry.name,
-        "warnings": [],
+        "warnings": build_notes,
         "cached": False,
         "elapsed_ms": elapsed,
         **_summary_fields(obj),

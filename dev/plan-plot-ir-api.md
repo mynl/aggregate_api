@@ -101,6 +101,42 @@ One caveat learned the hard way at a54: the canonical form **omits a field at
 its default**, so an axis drawn on linear carries no `scale` key at all. The
 adapter must read it as `axis.scale ?? 'linear'`, never as `axis.scale`.
 
+### Correction, same day (a238 upstream, found at api a57)
+
+`CHART_IR_VERSION` **is now 2**, so the paragraph above is right about the
+toggle declarations and wrong about the version staying put. The bump is for a
+different change and the library's own rule for when to bump is worth quoting,
+because it is the rule this plan should read the next one against: the version
+moves when a reader that ignores what it does not know would draw something
+*wrong*, never merely for a new field.
+
+**Version 2 is `ChartSeries.x_lattice` and `y_lattice`**: a coordinate carried
+as `(start, step, count)` instead of every value spelled out. An old reader sees
+a series with no coordinates and draws nothing, which is the wrong-drawing case,
+so the version moves and an old reader can refuse by name.
+
+Measured across every shipped emitter, which matters for sequencing:
+
+| chart | coordinate form |
+|---|---|
+| `joint_surface` | explicit `surface` grid, no lattice |
+| `agg` | `x_lattice` + `y` on the density panel, `x` + `y_lattice` on the Lee panel |
+| `reins` | `x_lattice` + `y`, all three series, both panels |
+| `severity`, `distortion` | explicit `x` + `y` |
+
+Two consequences. **Nothing in the app is broken today**, because the only chart
+the adapter realizes is the surface and it carries no lattice, so the running
+3-D view is unaffected. And **item 2 must expand lattices as its first job**,
+not as a refinement: the two charts this plan calls the critical path are
+exactly the two that use them, so an adapter that reads only `x` and `y` draws
+an empty panel for `chart_agg` and `chart_reins` and would look like a data bug
+rather than a missing feature. Expansion is `start + i * step` for `count`
+points, and the array form must stay supported, since half the emitters still
+use it.
+
+Also worth carrying into item 2: every series now declares `support`, and both
+panels of `chart_agg` declare `kinds: ['xy']`.
+
 ## Items
 
 ### 1. Delete the server-rendered figure route

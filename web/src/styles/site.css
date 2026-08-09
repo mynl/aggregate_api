@@ -323,6 +323,17 @@ header .navbar { min-height: 56px; }
     max-width: var(--measure); margin: .25rem 0 0;
 }
 .summary-note:empty { display: none; }
+/* Each tenant of the note slot on its own line, so a derivation's sentence and
+   two build warnings do not run together into one paragraph. */
+.summary-note > span { display: block; }
+/* A build warning: what the library said on its way to the object. Marked with
+   the warn hue and a leading rule rather than an icon, and it does NOT tint the
+   strip, because the strip's ground carries the validation verdict and two
+   claims on one surface is one too many. */
+.summary-note .note-warn {
+    color: var(--warn); border-left: 2px solid var(--warn);
+    padding-left: .45rem; margin-top: .2rem;
+}
 /* Timing sub-line, inside the strip and last. */
 .summary-timing {
     font-family: var(--mono); font-size: var(--fs-meta); color: var(--mut);

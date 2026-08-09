@@ -138,6 +138,13 @@ class CacheEntry:
     kind: str
     name: str
     created_at: datetime
+    # What the library said while building this object, at WARNING and above.
+    # Stored here rather than returned once and forgotten, because a warning
+    # ("this splice is coarse", "the grid clips the tail") describes the
+    # OBJECT, not the request that happened to build it. Kept on the entry, a
+    # cache hit reports the same warnings as the miss that made it, so
+    # rebuilding a program does not silently lose the reason to worry about it.
+    notes: list[str] = field(default_factory=list)
     # Guards reads *of the object*, not of this dataclass. See below.
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False,
                                  compare=False)

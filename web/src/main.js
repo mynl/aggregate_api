@@ -297,12 +297,41 @@ async function runDerivation(btn, busy, call, land) {
  * decided and why, was on screen for less time than it took to read.
  */
 function noteDerivation(text) {
+    _note.derivation = text || '';
+    renderNote();
+}
+
+/**
+ * The note slot's two tenants, and why they share one line.
+ *
+ * `derivation` is what Sharpen or PnL just did, in the library's own words.
+ * `warnings` is what the library said while building, at WARNING and above:
+ * a splice reaching below zero, a clause ignored, a grid clipping the tail.
+ *
+ * They share a slot because they are the same kind of thing, prose about this
+ * object rather than a reading off it, and a second strip line for something
+ * usually empty would cost the layout more than it returns. The derivation
+ * leads: it describes an action the reader just took, where a warning
+ * describes a standing property they can come back to.
+ */
+const _note = { derivation: '', warnings: [] };
+
+function renderNote() {
     const line = $('summary-note');
-    if (line) line.textContent = text || '';
+    if (!line) return;
+    empty(line);
+    if (_note.derivation) line.appendChild(el('span', {}, _note.derivation));
+    for (const w of _note.warnings) {
+        line.appendChild(el('span', { className: 'note-warn' }, w));
+    }
 }
 
 /** Clear the note slot. Called on every build: a note belongs to one object. */
-function clearNote() { noteDerivation(''); }
+function clearNote() {
+    _note.derivation = '';
+    _note.warnings = [];
+    renderNote();
+}
 
 sharpenBtn?.addEventListener('click', () => runDerivation(
     sharpenBtn, 'Sharpening…', (id) => api.sharpen(id)));
@@ -412,14 +441,42 @@ function renderSummary(res) {
     const bits = [el('span', { className: 'nm' }, res.name || '(anonymous)')];
     const add = (text) => bits.push(sep(), el('span', { className: 'mono' }, text));
     add(kindLabel);
-    if (res.bs != null)   add(`bs = ${fmtBs(res.bs)}`);
-    if (res.log2 != null) add(`log2 = ${res.log2}`);
-    if (res.mean != null) add(`mean ${fmt(res.mean)}`);
-    if (res.cv != null)   add(`CV ${fmt(res.cv)}`);
+
+    // An object built from a pair measures a grid per axis, so its facts are
+    // pairs and the scalar fields are all null. Reported as `(a, b)` in the
+    // same slots, rather than as a second line or a different vocabulary: it
+    // is the same five facts about a thing that happens to have two halves.
+    const parts = res.components || [];
+    if (parts.length) {
+        const pair = (fn, key) => `(${parts.map((c) => (c[key] == null ? '?' : fn(c[key]))).join(', ')})`;
+        add(`bs = ${pair(fmtBs, 'bs')}`);
+        add(`log2 = ${pair(String, 'log2')}`);
+        add(`mean ${pair(fmt, 'mean')}`);
+        add(`CV ${pair(fmt, 'cv')}`);
+    } else {
+        if (res.bs != null)   add(`bs = ${fmtBs(res.bs)}`);
+        if (res.log2 != null) add(`log2 = ${res.log2}`);
+        // Between log2 and mean, and present only when the object is read on
+        // the payoff convention; the server omits it for loss, which is the
+        // default and would otherwise put the word "loss" on every build.
+        if (res.value_type)   add(res.value_type);
+        if (res.mean != null) add(`mean ${fmt(res.mean)}`);
+        if (res.cv != null)   add(`CV ${fmt(res.cv)}`);
+    }
+
     if (res.validation) {
         const state = validationState(res.validation);
         bits.push(sep(), el('span', { className: `mono ${state}` }, res.validation));
         setStripState(state);
+    } else if (parts.length) {
+        // A bivariate has no `validation_description`: its correctness gate is
+        // the tail deficit, a mass-conservation check rather than the moment
+        // comparison every other kind reports. Saying `n/a` is the honest
+        // answer, and better than a silent gap that reads as a clean bill.
+        // Relabeling the deficit as a verdict would not be; that is asked for
+        // upstream instead, see `dev/TODO.md`.
+        add('validation n/a');
+        setStripState('ok');
     } else {
         setStripState('ok');
     }
@@ -431,6 +488,12 @@ function renderSummary(res) {
     // rather than only for the cached ones.
     inner.append(...bits);
     clearNote();
+    // Whatever the library said while building this object. Deliberately does
+    // NOT tint the strip: the ground carries the validation verdict, which is
+    // a narrower and more actionable statement, and letting a warning repaint
+    // it would put two claims on one surface.
+    _note.warnings = res.warnings || [];
+    renderNote();
     renderTiming(res);
     syncSummaryMore();
     flashStrip();

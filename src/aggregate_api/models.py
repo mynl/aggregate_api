@@ -114,6 +114,28 @@ class Capability(BaseModel):
     needs_premium: bool = False
 
 
+class Component(BaseModel):
+    """One half of an object built from a pair: its grid and its moments.
+
+    A ``BivariateAggregate`` measures a grid per axis, so ``bs`` and ``log2``
+    are two numbers rather than one and the scalar headline fields cannot
+    carry them. This is what the status strip reads to print
+    ``bs = (a, b) · log2 = (m, n)``.
+
+    Every field is optional because a component is an ordinary ``Aggregate``
+    read through ``getattr``, and a kind that does not carry a moment reports
+    ``None`` rather than raising.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    name: str
+    bs: float | None = None
+    log2: int | None = None
+    mean: float | None = None
+    cv: float | None = None
+
+
 class BuildResponse(BaseModel):
     """Slim response so the post-build page doesn't pay for unused data.
 
@@ -150,6 +172,18 @@ class BuildResponse(BaseModel):
     # gross / net basis selector. Cheap: read off the cession specs, never off
     # ``reins_summary_df``, which would materialize a frame on every build.
     has_reins: bool = False
+    # The loss / payoff sign convention, and **only when it is 'payoff'**.
+    # Loss is the default and the common case, so reporting it every time would
+    # spend a word on the status strip's first line to say "normal".
+    value_type: str | None = None
+    # Per-component grid and moments, for an object built from a pair. Empty
+    # for every kind but ``bvagg``, whose ``bs`` is genuinely two numbers (one
+    # grid per axis) and whose scalar fields above are therefore all ``None``.
+    #
+    # Additive on purpose: widening ``bs`` / ``log2`` / ``mean`` / ``cv`` to
+    # "scalar or pair" would change the shape every consumer reads, for one
+    # kind's benefit. See ``routes.objects._component_fields``.
+    components: list[Component] = []
     # What this object can answer. The SPA paints its navigation from this and
     # holds no per-kind table of its own.
     capability: Capability = Field(default_factory=Capability)

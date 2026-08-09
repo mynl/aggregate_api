@@ -4,6 +4,66 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a57
+
+`dev/plan-ui-round-4.md` phase 3, the status strip's facts. Three items, all
+through `_summary_fields` and `BuildResponse`, so this is the phase that moves
+the response schema. Both additions are additive; nothing existing changed
+shape.
+
+**A bivariate's status line said nothing but its name and its kind.** Its `bs`
+is a two element list, one grid per axis, so every scalar headline field
+coerced to `None` and vanished. The pair is the honest answer, so the response
+now carries a `components` block, `{name, bs, log2, mean, cv}` per half, and
+the strip prints `bs = (10, 8) · log2 = (11, 9)` in the same slots as everything
+else. `log2` is derived from the axis length, since this kind carries no such
+attribute and the axis length is what log2 means; the library's own
+`bs_description` computes it the same way.
+
+Additive rather than widening `bs` / `log2` / `mean` / `cv` to "scalar or pair",
+which would have changed the shape every consumer reads to describe one kind. A
+block that is empty everywhere else costs those kinds nothing.
+
+Validation reads **`n/a`** for a bivariate, because it has no
+`validation_description` at all. It does have a correctness gate, the tail
+deficit against 1e-5, but that is mass conservation rather than the moment
+comparison every other kind reports, so relabeling it as a verdict would be a
+lie. Asked upstream instead; see `dev/TODO.md`.
+
+**The loss / payoff convention now reports, and only when it is payoff.** Read
+off the public `value_type`, printed between `log2` and `mean`. Loss is the
+default and the overwhelming case, so reporting it every time would spend a word
+on the strip's first line to say "normal".
+
+**Warnings reach the page.** `BuildResponse.warnings` has existed since the
+beginning and was always empty: the field was declared and the capture was never
+written. Both channels are now collected for the duration of a build, since the
+library uses both and the larger one is logging, not warnings.
+
+Three details worth knowing, each of which was a bug first. The capture is
+opened **inside the build worker**, not around the future, because
+`catch_warnings` swaps module state a warning raised on another thread would not
+reliably see. It is safe to touch that global state because `_build_semaphore`
+admits one build at a time and the executor has a single worker, so there is
+exactly one writer. And each caught warning is kept only if it was raised from
+**inside the `aggregate` package**, tested by path: `catch_warnings` is
+process-wide and lifting the default suppressions made a first cut report
+`unclosed database in <sqlite3.Connection ...>`, which is the api's own audit
+log, on every single build.
+
+Warnings are stored on the cache entry, so a cache hit reports what the miss
+reported: a warning describes the object, not the request that happened to build
+it. They render in the strip's note slot beside a derivation's own account, and
+deliberately do **not** tint the strip, because the ground carries the
+validation verdict and two claims on one surface is one too many.
+
+**Caught in passing: the chart IR is at version 2.** `aggregate` a238 lets a
+series carry a coordinate as a lattice, `(start, step, count)`, which an old
+reader cannot draw at all, so the version moved. Nothing here is broken, because
+the only chart the adapter realizes is the surface and it still ships explicit
+coordinates. `chart_agg` and `chart_reins` do use lattices, which is recorded in
+`dev/plan-plot-ir-api.md` as the adapter's first job rather than a refinement.
+
 ## 1.0.0a56
 
 `dev/plan-ui-round-4.md` phase 2, the status strip's verdict and its history.
