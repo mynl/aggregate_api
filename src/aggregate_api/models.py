@@ -801,4 +801,3 @@ class MetaResponse(BaseModel):
     log2_default: int
     build_timeout_s: float
     cache_max: int
-    plot_default_format: str

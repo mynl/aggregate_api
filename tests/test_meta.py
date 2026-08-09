@@ -19,8 +19,9 @@ def test_meta(client):
     body = r.json()
     # log2_cap was set to 20 by the conftest fixture.
     assert body["log2_cap"] == 20
-    assert body["plot_default_format"] in ("svg", "png")
     assert body["cache_max"] >= 1
+    # `plot_default_format` left with the server-rendered figure route at a60.
+    assert "plot_default_format" not in body
 
 
 def test_meta_style_comes_from_aggregate(client):

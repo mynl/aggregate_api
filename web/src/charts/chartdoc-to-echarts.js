@@ -11,7 +11,9 @@
 // Panel kinds realized today: 'surface' (the pilot, dev/plan-chart-ir.md in
 // the library repo). The two-panel xy family joins as its conversions land.
 
-import { LOG_FLOOR } from './theme.js';
+import {
+    LOG_FLOOR, axisStyle, baseOption, fade, lineWidth, seriesColor,
+} from './theme.js';
 
 /**
  * Merge an override dict over a base option, one nested level deep.
@@ -84,7 +86,156 @@ function zRange(z) {
  *     The ECharts option, or null when the document carries no realizable
  *     panel.
  */
-export function chartdocToEcharts(doc, { logZ = false, overrides = null } = {}) {
+export function chartdocToEcharts(doc, opts = {}) {
+    const panels = (doc && doc.panels) || [];
+    if (!panels.length) return null;
+    // The bifurcation, split by RENDERER CAPABILITY rather than by panel kind.
+    // A heatmap is a 2-D drawing of the same grid a surface draws in relief, so
+    // a kind-based split would file it with the surface and it belongs here.
+    // One entry point, two paths, and no shared realization code below the
+    // split: only the panel walk, `merge`, and the axis helpers both sides read.
+    if (panels.some((p) => p.kind === 'surface')) return surfaceOption(doc, opts);
+    return xyOption(doc, opts);
+}
+
+/**
+ * Expand a coordinate that may be a lattice into a plain array.
+ *
+ * IR version 2 lets a series carry a coordinate as `(start, step, count)`
+ * rather than spelling every value out, which is most of the payload for a
+ * curve over an even grid. A reader that ignores the field sees a series with
+ * no coordinates at all and draws nothing, which is why the version moved.
+ *
+ * `chart_agg` and `chart_reins` both use it, so this is not an optimization to
+ * get to later: it is the difference between those charts drawing and drawing
+ * empty.
+ */
+function coords(series, key) {
+    const plain = series[key];
+    if (Array.isArray(plain)) return plain;
+    const lat = series[`${key}_lattice`];
+    if (!lat) return null;
+    const [start, step, count] = lat;
+    const out = new Array(count);
+    for (let i = 0; i < count; i++) out[i] = start + i * step;
+    return out;
+}
+
+/**
+ * One ECharts axis option from a `ChartAxis`.
+ *
+ * Reads `scale` through a default, never directly: the canonical form omits a
+ * field sitting at its default, so an axis drawn on linear carries no `scale`
+ * key at all and `axis.scale` is undefined rather than `'linear'`.
+ *
+ * `suggested_range` is honored as the initial window, which is what the
+ * document says it is: the emitter's own crop, computed from the data. The
+ * alternative reading, the full extent, arrives as `full_range` and is a
+ * control rather than a default, so it is not read here.
+ */
+function axisOption(axis, gridIndex) {
+    const a = axis || {};
+    const scale = a.scale || 'linear';
+    const opt = {
+        type: scale === 'log' ? 'log' : 'value',
+        name: a.label || '',
+        gridIndex,
+        ...axisStyle(),
+    };
+    const range = a.suggested_range;
+    if (Array.isArray(range) && range.length === 2) {
+        [opt.min, opt.max] = range;
+    }
+    return opt;
+}
+
+/**
+ * The 2-D path: `xy` panels, one grid each.
+ *
+ * Realized today: multi-panel layout, axes with their declared scale and
+ * window, line series from explicit or lattice coordinates, and the `y2` band.
+ * Not yet: marks, the atomic support ladder, and the per-axis reading toggles.
+ * A document asking for one of those still draws, without it, rather than
+ * failing; each is its own item in `dev/plan-plot-ir-api.md`.
+ */
+function xyOption(doc, { overrides = null } = {}) {
+    const panels = doc.panels || [];
+    const axes = Object.fromEntries((doc.axes || []).map((a) => [a.id, a]));
+    const byPanel = new Map(panels.map((p, i) => [p.id, i]));
+
+    const grid = [];
+    const xAxis = [];
+    const yAxis = [];
+    panels.forEach((panel, i) => {
+        grid.push({ containLabel: true });
+        xAxis.push(axisOption(axes[panel.x_axis], i));
+        yAxis.push(axisOption(axes[panel.y_axis], i));
+    });
+
+    const series = [];
+    for (const s of doc.series || []) {
+        const i = byPanel.get(s.panel_id);
+        if (i === undefined) continue;
+        const x = coords(s, 'x');
+        const y = coords(s, 'y');
+        if (!x || !y) continue;
+        const color = seriesColor(series.length);
+        const base = {
+            type: 'line',
+            name: s.name,
+            xAxisIndex: i,
+            yAxisIndex: i,
+            symbol: 'none',
+            lineStyle: { width: lineWidth(), color },
+            itemStyle: { color },
+            data: x.map((xv, k) => [xv, y[k]]),
+        };
+        const y2 = coords(s, 'y2');
+        if (!y2) {
+            series.push(base);
+            continue;
+        }
+        // A band, drawn as the lower bound plus the gap above it, stacked. The
+        // two share one x array by construction, so stacking by data index is
+        // exact rather than approximate. Both bounding lines stay visible: the
+        // fill says "somewhere in here" and the edges say where the limits are.
+        // Keyed by PANEL as well as by name. The envelope draws a band called
+        // "Envelope" on both of its panels, and a stack name is global across
+        // the series list, so keying on the name alone would invite ECharts to
+        // combine two bands that live on different grids.
+        const stack = `band-${i}-${s.name}`;
+        series.push(
+            { ...base, stack, areaStyle: { opacity: 0 } },
+            {
+                ...base,
+                name: `${s.name} (upper)`,
+                stack,
+                data: x.map((xv, k) => [xv, y2[k] - y[k]]),
+                areaStyle: { color: fade(color, 0.18) },
+                lineStyle: { width: 0 },
+                // The stacked half carries a delta, not a value, so it must not
+                // answer a hover: the number would be the gap and read as the
+                // bound. The lower series and the visible edges do the talking.
+                tooltip: { show: false },
+                silent: true,
+            },
+        );
+    }
+
+    const equalAspect = panels.some((p) => p.aspect === 'equal');
+    const base = merge(baseOption(), {
+        grid, xAxis, yAxis, series,
+        // An equal-aspect panel is a statement about the drawing (a unit square
+        // is square), so the renderer owns it; the document only declares it.
+        ...(equalAspect ? { aspect: 'equal' } : {}),
+    });
+    const ctx = { panels, axes, equalAspect };
+    const over = typeof overrides === 'function' ? overrides(ctx) : overrides;
+    return merge(base, over);
+}
+
+/** The 3-D path: one `surface` panel, the bivariate joint. */
+function surfaceOption(doc, { logZ = false, overrides = null } = {}) {
     const panel = (doc && doc.panels && doc.panels[0]) || null;
     if (!panel || panel.kind !== 'surface') return null;
     const axes = Object.fromEntries((doc.axes || []).map((a) => [a.id, a]));
@@ -92,7 +243,14 @@ export function chartdocToEcharts(doc, { logZ = false, overrides = null } = {}) 
     if (!series) return null;
     const { x, y, z } = series.surface;
 
-    const useLog = Boolean(logZ) && Boolean((doc.meta || {}).z_log_ok);
+    // Whether a log height is meaningful is the Z AXIS's declaration, as the
+    // scales it admits. It was `meta.z_log_ok` in the surface pilot, and the
+    // library generalized that into `ChartAxis.scales` for every axis; the flag
+    // is gone, so reading it here silently pinned the surface to linear however
+    // the toggle was set. A singleton `scales` means the axis has one honest
+    // reading and the control does not apply.
+    const zScales = (axes[panel.z_axis] || {}).scales || [];
+    const useLog = Boolean(logZ) && zScales.includes('log');
     const { max, min } = zRange(z);
     const zMin = useLog ? Math.floor(Math.log10(min)) : 0;
     const zMax = useLog ? Math.ceil(Math.log10(max)) : max;

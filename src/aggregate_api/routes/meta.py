@@ -156,7 +156,6 @@ def meta(settings: Settings = Depends(get_settings)) -> dict:
         "log2_default": settings.log2_default,
         "build_timeout_s": settings.build_timeout_s,
         "cache_max": settings.cache_max,
-        "plot_default_format": settings.plot_default_format,
     }
 
 

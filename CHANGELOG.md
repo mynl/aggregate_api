@@ -4,6 +4,57 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a60
+
+**Matplotlib leaves the api.** Nothing here renders a picture any more: every
+chart is a document, and the browser draws it. This is `dev/plan-plot-ir-api.md`
+item 1 and the bounds half of item 5, brought forward because `aggregate` a239
+removed the `plot_envelope` keyword the api was passing and there is no sense
+repairing a route about to be deleted.
+
+**The envelope is a chart document.** `GET /objects/{id}/bounds/envelope` served
+SVG or PNG from a matplotlib figure and now serves the document
+`charts.chart_envelope` emits, with the content hash as its ETag. The reader
+gets a picture they can zoom and read values off, and the two renderers cannot
+disagree about what the envelope is, because there is one document behind both.
+
+It arrives with **two panels where the figure had three**, which is upstream's
+call and the right one: the five calibrated distortions used to be split across
+the last two panels, an accident of the order they were added rather than a
+reading anyone wants, since the question is how the five compare. `bounds.py`
+loses `ENVELOPE_PANELS` and `_drop_empty_panels` with the figure, and
+`_envelope_overlay` becomes `_calibrate_for_envelope`, which still calibrates to
+the request's own premium (the emitter reads that off the priced object) but no
+longer has an opinion about which panel anything goes on.
+
+**The 2-D path in the ECharts adapter**, which is what makes the document
+drawable. `chartdocToEcharts` bifurcated at the top, by renderer capability
+rather than by panel kind, so a heatmap will land with the 2-D side where a
+kind-based split would file it with the surface. It realizes multi-panel
+layout, axes with their declared scale and window, line series, and the `y2`
+band, drawn as the lower bound plus the stacked gap above it with the stacked
+half silent, since that half carries a delta and would read as a bound if it
+answered a hover. Not yet: marks, the atomic ladder and the reading toggles,
+each its own item in the plan.
+
+Two things fixed on the way. The adapter read `meta.z_log_ok` for the surface's
+log height, a field the library generalized into `ChartAxis.scales`, so the
+toggle had silently stopped working; it reads the axis now. And lattice
+coordinates are expanded, which `chart_agg` and `chart_reins` both need.
+
+**The `/plot` route, `plotting.py` and `plot_default_format` are gone**, with
+the four legacy kinds (`density`, `cdf`, `qq`, `kappa`). `/v1/meta` loses its
+field. The Download plot item now exports the chart on screen through
+`getDataURL`, which is a better answer than the route was: it saves exactly what
+the reader is looking at, including their zoom, rather than a second rendering
+of the same object at whatever window the server chose, and it costs no round
+trip.
+
+Recorded upstream in `dev/TODO.md`: the emitter's bracketing curves are drawn
+with an unseeded `sample`, so a resampled envelope is not byte deterministic and
+its ETag cannot revalidate. The band is deterministic, so the api asserts
+revalidation at `n_resamples=0` and only there.
+
 ## 1.0.0a59
 
 `dev/plan-ui-round-4.md` phase 5, two page-wide preferences in the header menu.

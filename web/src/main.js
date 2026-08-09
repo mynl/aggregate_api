@@ -24,7 +24,8 @@ import { createEditor, emacsEnabledDefault } from './editor.js';
 import { mountExamples, mountPalette, loadExamples } from './examples.js';
 import { renderInfo } from './renderers.js';
 import { mountExhibit, mountReinsExhibit, showPlaceholder } from './charts/exhibits.js';
-import { loadStyle } from './charts/theme.js';
+import { chartdocToEcharts } from './charts/chartdoc-to-echarts.js';
+import { echarts, loadStyle } from './charts/theme.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
 import { mountIrTable, irToGrid, docTruncated } from './tables.js';
 import { renderError, renderRateLimit } from './error-pane.js';
@@ -754,6 +755,7 @@ function clearPanes() {
     empty($('head-overview'));
     if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
     if (overviewChart) { overviewChart.dispose(); overviewChart = null; }
+    if (boundsChart) { boundsChart.dispose(); boundsChart = null; }
 }
 
 function activeTabName() {
@@ -1088,10 +1090,12 @@ async function loadTab(group) {
     await loadLeaf(group);
 }
 
-// The live ECharts exhibit on the Overview tab, disposed before each re-render
-// so its canvas and ResizeObserver don't leak across builds. CsvGrid teardown
-// is keyed on the grid registry; the chart is not, so we track it ourselves.
+// The live ECharts instances, one per pane that can hold a chart, disposed
+// before each re-render so canvases and ResizeObservers do not leak across
+// builds. CsvGrid teardown is keyed on the grid registry; charts are not, so we
+// track them ourselves. `liveChart` reads these to answer "save what I can see".
 let overviewChart = null;
+let boundsChart = null;
 
 // ----------------------------------------------------------------------
 // How tables render: one preference, page-wide
@@ -2204,14 +2208,22 @@ boundsBtn?.addEventListener('click', async () => {
     boundsBtn.textContent = 'Computing…';
     try {
         if (boundsWhich === 'bounds') {
-            // An image identified entirely by its query, so it is a GET and the
-            // browser can cache it. No fetch: the <img> does the work.
-            const img = el('img', {
-                className: 'bounds-figure',
-                src: api.boundsEnvelopeUrl(state.id, { premium, assets }),
-                alt: 'pricing bounds envelope',
-            });
-            replacePane('pane-bounds', img);
+            // A chart document since a60, where this used to be an <img> whose
+            // src was the whole request. The reader gets a picture they can
+            // zoom and read values off, and the api stopped rendering.
+            const doc = await api.boundsEnvelope(state.id, { premium, assets });
+            const option = chartdocToEcharts(doc);
+            if (!option) {
+                replacePane('pane-bounds', el('div',
+                    { className: 'text-muted small fst-italic' },
+                    'This chart is not drawable yet.'));
+            } else {
+                const host = el('div', { className: 'bounds-figure' });
+                replacePane('pane-bounds', host);
+                if (boundsChart) boundsChart.dispose();
+                boundsChart = echarts.init(host);
+                boundsChart.setOption(option);
+            }
         } else if (boundsWhich === 'allocation') {
             renderBoundsTable(await api.allocationBounds(state.id, { premium, assets }));
         } else {
@@ -2300,9 +2312,40 @@ evaluateBtn?.addEventListener('click', async () => {
 // answer to the same question sitting in the more prominent spot.
 // ----------------------------------------------------------------------
 
+/**
+ * The chart the reader is actually looking at, or null.
+ *
+ * Three panes hold one each and only one pane is on screen, so "which chart"
+ * is answered by which group is active rather than by tracking focus.
+ */
+function liveChart() {
+    const group = activeTabName();
+    if (group === 'bounds') return boundsChart;
+    if (group === 'reinsurance') return reinsChart;
+    return overviewChart;
+}
+
+/**
+ * Save the chart on screen as a PNG.
+ *
+ * Client side since a60. It used to open the server's matplotlib SVG in a new
+ * tab, which was a *different picture* of the same object: a second rendering,
+ * at whatever window the server chose, ignoring the reader's zoom and toggles.
+ * `getDataURL` returns exactly what is on screen, including every interaction
+ * since it was drawn, and it costs no round trip.
+ *
+ * `pixelRatio: 2` so the file is worth pasting into a document rather than
+ * being a screenshot of a 400px canvas.
+ */
 document.querySelector('[data-plot-download]').addEventListener('click', () => {
-    if (!state.id) return;
-    window.open(api.plotUrl(state.id, { format: 'svg' }), '_blank');
+    const chart = liveChart();
+    if (!chart) return;
+    const url = chart.getDataURL({ type: 'png', pixelRatio: 2,
+                                   backgroundColor: '#fff' });
+    const a = el('a', { href: url, download: `${state.name || 'chart'}.png` });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
 });
 
 // ----------------------------------------------------------------------

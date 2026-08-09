@@ -69,23 +69,18 @@ proper.
 `plotly-panels.js`, the `draw` control, the dependency and the 535 kB chunk.
 `twoPanelData` stayed.
 
-a37 did item 5 of `dev/graphs.md`, the horizontal y-to-x readout, plus three
+a37 did item 5 of the a30 graph notes, the horizontal y-to-x readout, plus three
 things the first browser look turned up: `full x` widening only one panel, the
 return period capped at 1e5, and densities drawing as pyramids rather than steps.
 
-Left on the `dev/graphs.md` punch list:
-
-- **1. Zoom rescales the y axis.** Try `animationDurationUpdate: 0` before
-  touching `filterMode`; much of the disorientation is likely the tween.
-- **2. Double-click to reset the zoom.** `chart.getZr().on('dblclick')`, so it
-  catches blank canvas too, then a `dataZoom` action to 0..100.
-- **3. The odd tick on the left scale.** **Still needs the author to say which
-  reading was meant**: a stray end label and general thinning need different
-  options, and the note records both.
-- **4. The uPlot-style static legend readout.** The best idea on the list, and
-  a37's per-grid axis reading is the natural thing to build it on:
-  `chart.on('updateAxisPointer')` carries the axis value under the cursor, so the
-  legend strip can become the readout in ordinary page text.
+**Superseded, 2026-08-09, by `dev/plan-plot-ir-api.md`.** Configuring ECharts
+turned out to be the smaller half. The author's ruling is that the app assumes
+IR-based charts always, and purist about it, so the open items from the a30 graph
+notes moved into that plan (item 7) alongside the chart-rendering items from
+`dev/api-punchlist.md`, and they are done as part of the migration rather than
+against the app's own builders. `dev/graphs.md` was deleted once its content
+landed there. The plan also carries the deletion of the server-rendered
+matplotlib route and the adoption of the four converted emitters.
 
 ### c) Fix what is shown where
 
@@ -413,6 +408,11 @@ one version bump each.
       chart as the library conversions land; `twoPanelData` remains the app
       side seam until then.
 
+      **Closed 2026-08-09.** The engine comparison is moot: the app assumes
+      IR-based charts always, so there is one renderer and no second engine to
+      weigh it against. `twoPanelData` is not lifted into an app-side IR, it is
+      deleted as each emitter lands. See `dev/plan-plot-ir-api.md`.
+
 - [x] **greater_tables alongside the current tables** (→ 1.0.0a31). One new
       `GET frame/{which}.html` route mirroring the `.csv` one, rendering server
       side on the real DataFrame so the row index sparsifies. `renderExhibit`
@@ -446,8 +446,12 @@ one version bump each.
 - [ ] **Math in tables and titles.** The walker emits `\(...\)` for page MathJax
       unless a `katex` object is passed, and the SPA loads neither, so a `$...$`
       cell would render as literal delimiters. Nothing sends one today. It is the
-      same decision as the chart titles in `dev/graphs.md`, so make it once for
-      both.
+      same decision as the chart labels, so make it once for both; it is now
+      pressing on the chart side, because documents arrive carrying
+      `ChartDoc.tex` (library a209) and the adapter drops it. Held with the
+      chart half at `dev/plan-plot-ir-api.md`, item 8, where the ruling is that
+      the IR emits a TeX and a plain-text form of every label and the renderer
+      picks one.
 
 - [x] **Report to the greater-tables side**: its `requires-python = ">=3.13"`
       forced this repo's floor up from 3.11. *(Fixed upstream: 6.0.0a2 puts the
@@ -569,6 +573,31 @@ one version bump each.
       landing gallery.
 - [ ] `DefectivePareto` has no `topic:` tag, only `role:paper`; it is the sole
       occupant of the topic view's `other` bucket.
+- [ ] **`chart_envelope` resamples without a seed, so its document is not byte
+      deterministic.** `_emit_bounds._envelope` draws the bracketing curves with
+      `weight_df.sample(n=n_resamples, replace=True)` and no `random_state`, so
+      two identical requests produce different bytes and different content
+      hashes. That is at odds with what the chart IR's hash is for: the api
+      serves `doc.hash` as an ETag, and revalidation therefore never succeeds
+      whenever `n_resamples > 0`. The band itself is deterministic, so the api
+      asserts revalidation only at `n_resamples=0`
+      (`tests/test_bounds.py`). Ask: take a `random_state` / seed argument, or
+      derive one from the bounds state, so the document is reproducible. Raised
+      2026-08-09 while moving the envelope onto the IR.
+
+- [ ] **A `BivariateAggregate` has no `validation_description`**, so the api has
+      nothing to put in the status strip's verdict slot and prints `n/a` there
+      (`dev/api-punchlist.md` Round 4 item 3). There *is* a minimal validation
+      and it is already computed: the tail **deficit** against a 1e-5 gate,
+      surfaced in `bs_description` and `bs_explanation`. But it is a
+      mass-conservation check rather than the moment comparison every other kind
+      reports, so it is not a drop-in and the api should not fake one by
+      relabeling it. Ask: either a `validation_description` on the bv that grades
+      the deficit in the same terse vocabulary (`'not unreasonable'` /
+      `'pmf deficit 3.2e-04'`), or an explicit statement that a bv is validated
+      on mass alone, so consumers can say so in the reader's words rather than
+      guessing. Raised 2026-08-09 while triaging the status line.
+
 - [ ] `Recipe.decl` is `''` for `MinimumDistortion`: `spec_to_decl` has no case
       for a composite distortion whose spec holds constructed `Distortion`
       objects. Worked around with a stored-program fallback.

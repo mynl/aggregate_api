@@ -32,35 +32,24 @@ and nothing else.
 
 from __future__ import annotations
 
-import io
 from typing import Any
 
-import matplotlib.pyplot as plt
 from aggregate import Aggregate, Portfolio
+from aggregate import charts as agg_charts
 from aggregate.bounds import AllocationBounds, Bounds, PricingBounds
-
-from .plotting import WEB_OVERRIDES
 
 #: How many bracket columns the envelope overplots. Fifty is enough to read the
 #: band as a band rather than a boundary, and cheap for the reason in the module
 #: notes.
 DEFAULT_RESAMPLES = 50
 
-#: The two panels' worth of named distortions, in the library's own grouping:
-#: the two that pin an extreme against the three smooth ones.
-#:
-#: `plot_envelope` fills panels 2 and 3 only when it is handed a **list of
-#: dicts**. Its ``'ordered'`` shorthand builds exactly this list, but only from
-#: a ``Portfolio`` that already carries calibrated distortions, and it raises
-#: otherwise. The api used to pass ``'space'`` to dodge that raise, and
-#: ``'space'`` matches neither the dict branch nor the list branch inside the
-#: library, so the whole overlay block was skipped: the figure came back with
-#: three axes, one of them drawn and two of them blank. That is what "the Bounds
-#: plot only has one panel" was.
-#:
-#: Building the list here rather than asking for ``'ordered'`` also lifts the
-#: Portfolio-only restriction, since only that shorthand carries it.
-ENVELOPE_PANELS = (("ccoc", "tvar"), ("ph", "wang", "dual"))
+#: Gone at a60, with the figure it grouped: ``ENVELOPE_PANELS`` split the five
+#: named distortions two-and-three because the matplotlib compositor drew three
+#: panels, and a52 built that list here to work around ``plot_envelope``
+#: silently ignoring the ``'space'`` shorthand the api had been passing. Both
+#: problems left with the figure. The emitter puts all five on one band, which
+#: is the comparison the panel is for, and the api no longer has an opinion
+#: about panel contents at all.
 
 
 def _document(df, formats: str = "price") -> dict | None:
@@ -73,14 +62,19 @@ def _document(df, formats: str = "price") -> dict | None:
         return None
 
 
-def _envelope_overlay(obj: Any, premium: float, assets: float | None):
-    """The distortion set to overlay on panels 2 and 3, or ``None``.
+def _calibrate_for_envelope(obj: Any, premium: float, assets: float | None) -> bool:
+    """Calibrate the named distortions onto ``obj``, for the envelope's panel 2.
 
     Calibrated to **the premium the request already gave**, which is the whole
     point of the exhibit: panel 1 is every distortion consistent with that
-    premium, and panels 2 and 3 name five of them, so they have to be the same
-    five the calibration produces or the three panels are answering different
-    questions.
+    premium, and panel 2 names the ones the calibration produces, so they have
+    to be the same premium or the two panels answer different questions.
+
+    Returns ``True`` when the object came away carrying a calibration, which is
+    what decides whether the emitter has a second panel to draw. It does not
+    build or group anything itself: which distortions go on which panel is the
+    emitter's business now, and through a59 this function split them across two
+    panels because the matplotlib compositor drew three.
 
     ``calibrate_distortions`` takes a cost-of-capital rather than a premium, and
     the two are one identity apart at a fixed asset level::
@@ -94,8 +88,8 @@ def _envelope_overlay(obj: Any, premium: float, assets: float | None):
     mutually consistent ``(p, L, a)``, so the only api arithmetic here is the
     pentagon identity itself.
 
-    Returns ``None`` rather than raising, in three cases, and each leaves the
-    figure honestly one-panelled instead of falsely three:
+    Returns ``False`` rather than raising, in three cases, and each leaves the
+    document honestly one-panelled instead of falsely two:
 
     * **no asset cap.** Capital is unbounded, so there is no cost of capital to
       calibrate to. The envelope in panel 1 is still meaningful.
@@ -116,43 +110,22 @@ def _envelope_overlay(obj: Any, premium: float, assets: float | None):
     import math
 
     if assets is None or not math.isfinite(float(assets)):
-        return None
+        return False
     assets = float(assets)
     premium = float(premium)
     try:
         limited = obj.prob_loss_assets(a=assets)
     except Exception:  # noqa: BLE001 -- an object that cannot answer gets one panel
-        return None
+        return False
     margin = premium - float(limited.L)
     capital = assets - premium
     if not (margin > 0 and capital > 0):
-        return None
+        return False
     try:
         obj.calibrate_distortions(margin / capital, a=assets)
-    except Exception:  # noqa: BLE001 -- reported by the figure having one panel
-        return None
-    fitted = getattr(obj, "distortions", None) or {}
-    panels = [{k: fitted[k] for k in group if k in fitted}
-              for group in ENVELOPE_PANELS]
-    return panels if all(panels) else None
-
-
-def _drop_empty_panels(fig, axs) -> None:
-    """Remove the axes the overlay could not fill.
-
-    The library always builds a one by three grid, so without this an object
-    whose distortions would not calibrate shows one drawn panel beside two empty
-    boxes, which reads as a broken figure rather than as a smaller one. An axes
-    with no lines, collections or patches drew nothing.
-    """
-    empty = [ax for ax in axs if not (ax.lines or ax.collections or ax.patches)]
-    for ax in empty:
-        fig.delaxes(ax)
-    if empty and len(empty) < len(list(axs)):
-        # Give the survivors the width the removed ones were holding.
-        fig.set_size_inches(fig.get_size_inches()[0]
-                            * (len(list(axs)) - len(empty)) / len(list(axs)),
-                            fig.get_size_inches()[1])
+    except Exception:  # noqa: BLE001 -- reported by the document having one panel
+        return False
+    return bool(getattr(obj, "distortions", None))
 
 
 def _require_risk(obj: Any) -> None:
@@ -172,18 +145,34 @@ def run_envelope(
     premium: float,
     assets: float | None = None,
     n_resamples: int = DEFAULT_RESAMPLES,
-    fmt: str = "svg",
 ) -> tuple[bytes, str]:
-    """The three-panel envelope figure, as image bytes.
+    """The envelope as a chart document: canonical bytes and their hash.
 
-    Panel one is the cloud of sampled bracket columns shaded by weight, with the
-    min and max envelope drawn over it. Panels two and three put the five named
-    distortions, calibrated to this request's own premium, on the same band, so
-    you can see which part of the feasible space each one actually occupies.
+    Panel one is the band of admissible prices with the bracketing cloud inside
+    it. Panel two puts the named distortions, calibrated to this request's own
+    premium, on the same band, so you can see which part of the feasible space
+    each one occupies; it is absent rather than empty when the calibration does
+    not come off, and :func:`_calibrate_for_envelope` gives the three cases.
 
-    Two panels, or one, when the distortions will not calibrate: see
-    :func:`_envelope_overlay` for the three cases and :func:`_drop_empty_panels`
-    for why the figure shrinks rather than shipping blanks.
+    Notes
+    -----
+    **Nothing is drawn here any more.** Through a59 this rendered a matplotlib
+    figure and shipped SVG or PNG bytes, and it was the last thing in the api
+    importing matplotlib. The emitter ``charts.chart_envelope`` now publishes
+    the same picture as a document, so the api serves semantics and the browser
+    realizes them, which is the same split every other chart already keeps.
+
+    Two consequences worth stating. The reader can zoom and read values off the
+    band rather than squinting at a fixed raster. And the figure is no longer
+    two pictures maintained apart: the matplotlib compositor and the browser
+    now draw the same document, so they cannot disagree about what the envelope
+    is.
+
+    The document arrives with **two panels where the figure had three**. That is
+    upstream's decision and the right one: the five calibrated distortions used
+    to be split across the last two panels, which was an accident of the order
+    they were added rather than a reading anyone wants, since the question is
+    how the five compare and five curves on one band answer it.
 
     Parameters
     ----------
@@ -196,14 +185,13 @@ def run_envelope(
         Asset cap; the class then bounds prices of ``min(X, a)``. Unbounded when
         omitted.
     n_resamples : int
-        Bracket columns to overplot.
-    fmt : str
-        ``'svg'`` or ``'png'``.
+        Bracketing curves drawn inside the band.
 
     Returns
     -------
     (bytes, str)
-        Encoded image and its MIME type.
+        Canonical document JSON and its 12-hex content hash, the second so a
+        caller can set an ETag without parsing the body back.
 
     Raises
     ------
@@ -211,39 +199,19 @@ def run_envelope(
         Wrong kind of object, or a premium the library will not accept.
     """
     _require_risk(obj)
-    if fmt not in ("svg", "png"):
-        raise ValueError(f"unknown format {fmt!r}; expected 'svg' or 'png'")
-
-    import aggregate.style as agg_style
 
     kwargs = {"premium": float(premium)}
     if assets is not None:
         kwargs["a"] = float(assets)
     bounds = Bounds(obj, **kwargs)
 
-    buf = io.BytesIO()
-    # The style context restores prior rcParams on exit, so the api does not
-    # bleed style state across requests; the figure is always closed, since
-    # matplotlib holds figures in ``Gcf`` and would balloon the process.
-    overlay = _envelope_overlay(obj, premium, assets)
-    with agg_style.context(**WEB_OVERRIDES):
-        fig, axs = bounds.plot_envelope(
-            n_resamples=int(n_resamples),
-            # A list is the only form that fills panels 2 and 3. With nothing to
-            # overlay, `'space'`: it matches neither of the library's two
-            # branches so the whole block is skipped, which is what the api used
-            # to rely on unknowingly for *every* request. An empty list is not
-            # the same thing and is not safe, because the block's closing "Avg
-            # extreme" line indexes `distortions[-1]`.
-            distortions=overlay if overlay else "space",
-        )
-        try:
-            _drop_empty_panels(fig, axs)
-            fig.savefig(buf, format=fmt)
-        finally:
-            plt.close(fig)
+    # Before the document, not after: the emitter reads the calibration off the
+    # priced object, so panel two exists only if this has already run.
+    _calibrate_for_envelope(obj, premium, assets)
 
-    return buf.getvalue(), ("image/svg+xml" if fmt == "svg" else "image/png")
+    doc = agg_charts.build_chart_doc(bounds, "envelope",
+                                     n_resamples=int(n_resamples))
+    return agg_charts.canonical_json(doc), doc.hash
 
 
 def run_allocation(obj: Any, *, premium: float, assets: float | None = None,

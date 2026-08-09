@@ -94,7 +94,6 @@ from ..cache import CacheEntry, ObjectCache, canonicalize_decl, object_id
 from ..bounds import run_allocation, run_envelope, run_pricing_bounds
 from ..capability import can_sharpen, capability_for, narrative_for
 from ..config import Settings, get_settings
-from ..plotting import render_plot
 from ..pricing import (
     run_evaluate,
     run_price_pentagon,
@@ -2345,25 +2344,39 @@ def get_bounds_envelope(
     premium: float = Query(..., gt=0, description="Target premium."),
     assets: float | None = Query(None, gt=0, description="Asset cap."),
     n_resamples: int = Query(50, ge=0, le=500,
-                             description="Bracket columns to overplot."),
-    format: str = Query("svg", description="svg|png"),
+                             description="Bracketing curves inside the band."),
+    request: Request = None,
     entry: CacheEntry = Depends(_locked_entry),
 ) -> Response:
-    """The envelope figure: every distortion consistent with this premium.
+    """The envelope: every distortion consistent with this premium.
 
-    A GET because it is an image identified entirely by its query, which is
-    what makes it usable as an ``<img src>`` and cacheable by the browser.
+    A GET because the answer is identified entirely by its query, which is what
+    makes it cacheable and revalidatable.
+
+    Serves the **chart document** since a60, not a rendered image. It used to
+    ship SVG or PNG from a matplotlib figure and was the last thing in the api
+    importing matplotlib; the library's ``chart_envelope`` emitter publishes the
+    same picture as semantics, so this route serializes and the browser draws.
+    The reader gets a chart they can zoom and read values off, and the two
+    renderers cannot disagree about what the envelope is, because there is one
+    document behind both.
 
     See :mod:`aggregate_api.bounds` for why fifty resamples is cheap.
     """
     try:
-        payload, media_type = run_envelope(
+        body, doc_hash = run_envelope(
             entry.obj, premium=premium, assets=assets,
-            n_resamples=n_resamples, fmt=format)
+            n_resamples=n_resamples)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return Response(content=payload, media_type=media_type,
-                    headers={"Cache-Control": "no-cache"})
+    etag = f'"{doc_hash}"'
+    if request is not None and request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={"ETag": etag, "Cache-Control": "no-cache"},
+    )
 
 
 @router.post("/objects/{oid}/bounds/allocation", response_model=models.BoundsResponse)
@@ -2500,33 +2513,6 @@ def get_exhibit(
         media_type="application/json",
         headers={"ETag": etag, "Cache-Control": "no-cache"},
     )
-
-
-@router.get("/objects/{oid}/plot")
-def get_plot(
-    oid: str,
-    kind: str = Query("native", description="native|density|cdf|qq|kappa"),
-    format: str = Query("svg", description="svg|png"),
-    width: float | None = Query(None, gt=0, le=30),
-    height: float | None = Query(None, gt=0, le=30),
-    dpi: float | None = Query(None, gt=0, le=600),
-    entry: CacheEntry = Depends(_locked_entry),
-) -> Response:
-    """Render the requested plot.
-
-    Returns the image bytes directly (no JSON wrapper) with the
-    matching ``Content-Type``. Streamed as a single ``Response``
-    rather than ``StreamingResponse`` because plot bytes are
-    already in-memory.
-    """
-    try:
-        payload, media_type = render_plot(
-            entry.obj, kind, fmt=format, width=width, height=height, dpi=dpi,
-        )
-    except ValueError as exc:
-        # ValueError from render_plot is a 400 (bad request param).
-        raise HTTPException(status_code=400, detail=str(exc))
-    return Response(content=payload, media_type=media_type)
 
 
 # ----------------------------------------------------------------------

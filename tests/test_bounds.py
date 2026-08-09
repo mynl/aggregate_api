@@ -37,14 +37,39 @@ def _premium(body, factor=1.25):
 # The envelope figure
 # ----------------------------------------------------------------------
 
-def test_the_envelope_draws_for_both_risk_kinds(client):
+def test_the_envelope_serves_a_document_for_both_risk_kinds(client):
+    """The envelope is a chart document since a60, not a rendered image.
+
+    What it has to carry is the band: a series with ``y2``, which *is* the
+    region between the two edges rather than two curves a reader has to
+    associate. Asserted on structure, never on pixels.
+    """
     for decl in (AGG, PORT):
         body = _build(client, decl)
         r = client.get(f"/v1/objects/{body['id']}/bounds/envelope",
                        params={"premium": _premium(body), "n_resamples": 50})
         assert r.status_code == 200, r.text
-        assert r.headers["content-type"].startswith("image/svg+xml")
-        assert b"<svg" in r.content[:2048]
+        assert r.headers["content-type"] == "application/json"
+        doc = r.json()
+        assert doc["name"] == "envelope"
+        assert doc["panels"], "an envelope with no panel is not an envelope"
+        assert all(p["kind"] == "xy" for p in doc["panels"])
+        # A unit square, and the document says so rather than the app guessing.
+        assert any(p.get("aspect") == "equal" for p in doc["panels"])
+        assert any(s.get("y2") for s in doc["series"]), "the band is a y2 series"
+        assert r.headers["ETag"] == f'"{doc["hash"]}"'
+
+    # Revalidation, checked at `n_resamples=0` and only there. The bracketing
+    # curves are drawn with `weight_df.sample(replace=True)` and no seed
+    # upstream, so a resampled document is genuinely different bytes each time
+    # and its hash is *supposed* to move. The band itself is deterministic.
+    body = _build(client, AGG)
+    params = {"premium": _premium(body), "n_resamples": 0}
+    first = client.get(f"/v1/objects/{body['id']}/bounds/envelope", params=params)
+    assert first.status_code == 200, first.text
+    again = client.get(f"/v1/objects/{body['id']}/bounds/envelope", params=params,
+                       headers={"If-None-Match": first.headers["ETag"]})
+    assert again.status_code == 304
 
 
 def test_the_envelope_is_not_expensive(client):
@@ -75,62 +100,61 @@ def test_the_envelope_is_not_expensive(client):
         f"fifty resamples took {with_fifty:.2f}s against {without:.2f}s bare")
 
 
-def test_the_envelope_fills_all_three_panels_with_an_asset_cap(client):
-    """Three panels drawn and three panels *filled*, for either kind.
+def test_an_asset_cap_earns_the_second_panel(client):
+    """With a cost of capital to calibrate to, the document gains a panel.
 
-    The figure has always been a one by three grid. The api used to ask for
-    ``distortions='space'``, which matches neither of the library's two overlay
-    branches, so the block was skipped and panels 2 and 3 came back blank: the
-    reported "Bounds plot only has one panel" was two empty boxes beside a full
-    one. Passing the calibrated set as a list fills them, and it works for an
-    aggregate too, which the ``'ordered'`` shorthand refuses.
+    **Two panels where the figure had three.** The five calibrated distortions
+    used to be split across the last two, which was an accident of the order
+    they were added rather than a reading anyone wants: the question is how the
+    five compare, and five curves on one band answer it. Upstream made that
+    call and the api no longer has an opinion about panel contents.
 
-    Asserted on figure size rather than by parsing SVG: an empty axes is a
-    handful of path elements and a filled one is thousands, so the three-panel
-    figure is several times the one-panel figure. The one-panel case below is
-    the control.
+    Asserted on panel count rather than on rendered bytes. The old form compared
+    SVG sizes, because an empty axes is a handful of paths and a filled one is
+    thousands; a document says how many panels it has.
     """
-    from aggregate_api.bounds import _envelope_overlay
-
+    # A separate object per case, and that is load bearing rather than tidy:
+    # calibrating writes `distortions` onto the cached object and leaves it
+    # there, so asking the *same* object bare after asking it calibrated
+    # returns the calibrated answer. One object per question keeps each honest.
     for decl in (AGG, PORT):
+        bare_decl = decl.replace("BND.", "BNDX.", 1)
+        bare_body = _build(client, bare_decl)
+        one = client.get(f"/v1/objects/{bare_body['id']}/bounds/envelope",
+                         params={"premium": _premium(bare_body), "n_resamples": 0})
+        assert one.status_code == 200, one.text
+
         body = _build(client, decl)
         premium = _premium(body)
-        assets = round(premium * 2.5)
-        params = {"premium": premium, "n_resamples": 0}
-
         full = client.get(f"/v1/objects/{body['id']}/bounds/envelope",
-                          params={**params, "assets": assets})
+                          params={"premium": premium, "n_resamples": 0,
+                                  "assets": round(premium * 2.5)})
         assert full.status_code == 200, full.text
-        # No asset cap means no cost of capital to calibrate to, so the two
-        # panels come off rather than shipping blank.
-        one = client.get(f"/v1/objects/{body['id']}/bounds/envelope",
-                         params=params)
-        assert one.status_code == 200, one.text
-        assert len(full.content) > 2 * len(one.content), (
-            f"{decl.split()[1]}: three panels {len(full.content)} bytes "
-            f"against one panel {len(one.content)}")
+
+        # No asset cap means no cost of capital to calibrate to, so the second
+        # panel is absent rather than present and empty.
+        assert len(one.json()["panels"]) == 1
+        assert len(full.json()["panels"]) == 2, (
+            f"{decl.split()[1]}: calibrated {len(full.json()['panels'])} panels")
 
 
-def test_the_envelope_overlay_declines_rather_than_raising(client):
-    """No asset cap, no calibration, and that is a smaller figure not an error.
+def test_the_calibration_declines_rather_than_raising(client):
+    """No asset cap, no calibration, and that is a smaller document not an error.
 
     Capital is ``a - premium``, so an unbounded asset level leaves no cost of
-    capital for the distortion set to be fitted to. Panel 1, the envelope
-    itself, is unaffected and still worth drawing.
+    capital for the distortion set to be fitted to. The envelope itself is
+    unaffected and still worth drawing.
     """
     from aggregate import build as agg_build
-    from aggregate_api.bounds import _envelope_overlay
+    from aggregate_api.bounds import _calibrate_for_envelope
 
     obj = agg_build(AGG, log2=13)
     premium = float(obj.est_m) * 1.25
-    assert _envelope_overlay(obj, premium, None) is None
+    assert _calibrate_for_envelope(obj, premium, None) is False
     # And the boundary the Bounds class itself allows: premium equal to the cap
     # leaves zero capital.
-    assert _envelope_overlay(obj, premium, premium) is None
-    overlay = _envelope_overlay(obj, premium, premium * 2.5)
-    assert overlay is not None
-    assert [sorted(panel) for panel in overlay] == [
-        ["ccoc", "tvar"], ["dual", "ph", "wang"]]
+    assert _calibrate_for_envelope(obj, premium, premium) is False
+    assert _calibrate_for_envelope(obj, premium, premium * 2.5) is True
 
 
 def test_the_envelope_declines_a_kind_it_cannot_draw(client):

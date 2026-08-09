@@ -155,17 +155,17 @@ export const api = {
     style:        ()                => _json('GET',  '/v1/meta/style'),
     health:       ()                => _json('GET',  '/v1/health'),
 
-    /** Plot URL: handed straight to an <img>. Native multi-panel by default. */
-    plotUrl:      (id, p = {})      => `${API_BASE}/v1/objects/${id}/plot?${qs(p)}`,
+    // No `plotUrl`. The server-rendered figure route left with matplotlib at
+    // a60: every chart is a document, the browser draws it, and the export is
+    // the picture actually on screen rather than a second rendering of it.
 
     /** Everything the object says about itself in prose, in one payload. */
     narrative:    (id)              => _json('GET',  `/v1/objects/${id}/narrative`),
 
-    // Pricing bounds. The envelope is an image identified entirely by its
-    // query, so it is a URL rather than a fetch and the browser caches it; the
-    // other two are tables and come back as payloads.
-    boundsEnvelopeUrl: (id, p = {}) =>
-        `${API_BASE}/v1/objects/${id}/bounds/envelope?${qs(p)}`,
+    // Pricing bounds. All three are payloads: the envelope became a chart
+    // document at a60, where it had been an image identified by its query.
+    boundsEnvelope:   (id, p = {}) =>
+        _json('GET', `/v1/objects/${id}/bounds/envelope?${qs(p)}`),
     allocationBounds: (id, body)    =>
         _json('POST', `/v1/objects/${id}/bounds/allocation?ir=true`, body),
     pricingBounds:    (id, body)    =>

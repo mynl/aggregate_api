@@ -325,57 +325,23 @@ def test_bs_window_df_csv(client):
 
 
 # ----------------------------------------------------------------------
-# Plot endpoint
+# The plot endpoint, and its absence
 # ----------------------------------------------------------------------
 
-def test_plot_svg_default(client):
+def test_the_server_renders_no_figures(client):
+    """``GET /objects/{id}/plot`` is gone, and that is the assertion.
+
+    Six tests stood here through a59, covering the four legacy kinds, the two
+    image formats and the kappa guard. The route rendered matplotlib server
+    side and was the last thing in the api importing it; every chart is a
+    document now and the browser draws and exports it, so the picture is the
+    one on screen rather than a second rendering of the same object.
+
+    Kept as a test rather than deleted outright so the removal is stated
+    somewhere an implementer will meet it, instead of being invisible.
+    """
     oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    r = client.get(f"/v1/objects/{oid}/plot", params={"kind": "density"})
-    assert r.status_code == 200, r.text
-    assert r.headers["content-type"].startswith("image/svg+xml")
-    body = r.content.lstrip()
-    assert body.startswith(b"<?xml") or body.startswith(b"<svg")
-
-
-def test_plot_png_explicit(client):
-    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    r = client.get(
-        f"/v1/objects/{oid}/plot",
-        params={"kind": "density", "format": "png"},
-    )
-    assert r.headers["content-type"] == "image/png"
-    assert r.content[:8] == b"\x89PNG\r\n\x1a\n"
-
-
-def test_plot_native_default(client):
-    """No ``kind`` -> the object's own multi-panel .plot() (SVG)."""
-    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    r = client.get(f"/v1/objects/{oid}/plot")
-    assert r.status_code == 200, r.text
-    assert r.headers["content-type"].startswith("image/svg+xml")
-    body = r.content.lstrip()
-    assert body.startswith(b"<?xml") or body.startswith(b"<svg")
-
-
-def test_plot_kappa_rejects_aggregate(client):
-    """kappa needs a Portfolio; on an Aggregate it should return 400."""
-    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    r = client.get(f"/v1/objects/{oid}/plot", params={"kind": "kappa"})
-    assert r.status_code == 400
-
-
-def test_plot_kappa_portfolio(client):
-    """kappa renders for a Portfolio (guard keys off ``unit_names_ex``)."""
-    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
-    r = client.get(f"/v1/objects/{oid}/plot", params={"kind": "kappa"})
-    assert r.status_code == 200, r.text
-    assert r.headers["content-type"].startswith("image/svg+xml")
-
-
-def test_plot_unknown_kind_400(client):
-    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    r = client.get(f"/v1/objects/{oid}/plot", params={"kind": "nonsense"})
-    assert r.status_code == 400
+    assert client.get(f"/v1/objects/{oid}/plot").status_code == 404
 
 
 # ----------------------------------------------------------------------
@@ -881,7 +847,10 @@ def test_pnl_builds_and_reports(client):
     # Common reporting surface works (density exercises the dict->frame path).
     for which in ("info", "summary", "stats_df", "validation_df", "density_df"):
         assert client.get(f"/v1/objects/{oid}/{which}").status_code == 200, which
-    assert client.get(f"/v1/objects/{oid}/plot").status_code == 200
+    # The `/plot` line that stood here left with the route at a60. The modern
+    # form of "and it draws" is that every chart the object claims actually
+    # serves, which `test_capability.test_every_listed_chart_serves` asserts
+    # for this kind and the seven others, so it is not repeated here.
     # density CSV export goes through the grand-result synthesis, not a 500.
     csv = client.get(f"/v1/objects/{oid}/frame/density_df.csv")
     assert csv.status_code == 200
@@ -980,7 +949,8 @@ def test_sev_builds_and_reports(client):
     assert body["kind"] == "sev"
     oid = body["id"]
     assert client.get(f"/v1/objects/{oid}/info").status_code == 200
-    assert client.get(f"/v1/objects/{oid}/plot").status_code == 200
+    # See the note on the PnL case above: charts are asserted in
+    # `test_capability`, and the `/plot` route is gone.
     for which in ("summary", "stats_df", "validation_df",
                   "tail_df", "bs_window_df", "reins_summary_df"):
         got = client.get(f"/v1/objects/{oid}/{which}").status_code

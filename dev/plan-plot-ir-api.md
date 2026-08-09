@@ -139,7 +139,19 @@ panels of `chart_agg` declare `kinds: ['xy']`.
 
 ## Items
 
-### 1. Delete the server-rendered figure route
+### 1. Delete the server-rendered figure route — **done at api a60**
+
+Landed early, together with the bounds half of item 5 and the first slice of
+item 2, because upstream a239 removed the `plot_envelope` keyword `bounds.py`
+was passing and there was no sense repairing a route about to be deleted.
+`plotting.py`, the `/plot` route, `plot_default_format` and `api.plotUrl` are
+gone; the download button exports the live chart through `getDataURL`; the
+envelope is served as a document and drawn by the new 2-D path. Matplotlib is
+no longer imported anywhere in the api. It remains *installed*, since
+`aggregate` depends on it, which is the one thing the note below got wrong.
+
+The original item, kept for the reasoning:
+
 
 **Settled: delete, and ECharts exports the picture client side.**
 

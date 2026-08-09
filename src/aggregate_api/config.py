@@ -84,10 +84,10 @@ class Settings(BaseSettings):
     # directory is only created when an AuditLog is actually opened.
     audit_db: str = str(Path.home() / ".aggregate" / "api" / "audit.db")
 
-    # ------------------------------------------------------------------
-    # Plotting
-    # ------------------------------------------------------------------
-    plot_default_format: Literal["svg", "png"] = "svg"
+    # No plotting settings any more. `plot_default_format` chose svg or png for
+    # the server-rendered figure route, which left with matplotlib at a60: every
+    # chart is a document now and the browser decides how to draw and export it,
+    # so there is no server-side image format to have an opinion about.
 
     # ------------------------------------------------------------------
     # CORS

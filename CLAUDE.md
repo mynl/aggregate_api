@@ -123,7 +123,6 @@ the built SPA at `/` when present.
 | `completion.py` | DecL autocomplete over `aggregate.parser` |
 | `examples.py` | categorized example library from `test_suite.agg` |
 | `models.py` | Pydantic request/response models (one per endpoint) |
-| `plotting.py` | SVG/PNG plot rendering via `aggregate.style.context` |
 | `pricing.py` | distortion / constant-CoC pricing |
 | `serializers.py` | DataFrame → JSON (`FrameResponse`) |
 | `routes/` | `meta`, `objects`, `decl`, `examples` APIRouters, mounted `/v1` |
