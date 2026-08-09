@@ -4,6 +4,46 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a54
+
+Catching up with `aggregate` a230, which broke the chart route and shipped the
+two things `dev/plan-plot-ir-api.md` was waiting on. Not a plan item: the whole
+test suite was red on `main` before any of Round 4 started, and this is the
+green baseline the round is built on.
+
+**The chart route stops unpacking the registry.** `GET /objects/{id}/chart/{name}`
+read `emitter, _predicate = charts.CHARTS[name]`, and the registry value grew a
+third field (`primary`, backing the new `charts.primary_chart`), so a two-name
+unpack of a three-field record raised `ValueError` and every chart 500'd. Five
+tests red.
+
+Fixed by depending on the accessor rather than on the container: the route now
+calls `charts.build_chart_doc(obj, name)`, the library's one public entry point,
+which resolves the entry, checks the emitter's own availability predicate and
+stamps the hash. The next field added to `ChartEntry` is now a non-event here.
+Two things come free: a document on the wire carries `generator`, naming the
+`aggregate` version that produced it, and the emitter's predicate is enforced as
+a second, narrower gate behind the `available_charts` check that produces the
+404.
+
+**Two test premises had gone stale, both from emitters landing upstream.**
+`chart_agg` has shipped, so a plain aggregate reports `available_charts ==
+['agg']` and a test asserting `"available: []"` was asserting that no such chart
+existed yet. It now asserts what the route actually promises, the refusal plus
+the signpost, read off the object's own capability set, so the next emitter does
+not break it again.
+
+The other is the surface pilot's `meta['z_log_ok']`, which the library
+generalized into `ChartAxis.scales`, the tuple of readings an axis admits. That
+is the schema half of `plan-plot-ir-api.md` item 6 and it landed **at
+`ir_version` 1**, additively: `scale` remains the default reading, so a consumer
+that ignores `scales` still draws correctly. `full_range` (the zoom-out
+declaration), `reciprocal_of` (the return-period pairing) and a panel's `kinds`
+(the realization list) arrived on the same terms. Noted in that plan, where it
+unblocks the 2-D adapter.
+
+No SPA change, and no behavior change beyond charts working again.
+
 ## 1.0.0a53
 
 `dev/plan-chart-draw-styles.md`. A regression fixed, and two things that were

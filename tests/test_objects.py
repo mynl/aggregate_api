@@ -706,7 +706,18 @@ def test_bivariate_chart_document(client):
     assert doc["ir_version"] == 1
     assert doc["name"] == "joint_surface"
     assert [p["kind"] for p in doc["panels"]] == ["surface"]
-    assert doc["meta"]["z_log_ok"] is True
+    # Whether the height may be read on a log scale is declared by the z AXIS,
+    # as the scales it admits, not by a `meta['z_log_ok']` flag. The flag was
+    # the surface pilot's placeholder and the library generalized it into
+    # `ChartAxis.scales` while keeping `ir_version` at 1, since a consumer that
+    # ignores the field still draws the default reading correctly.
+    z_axis = next(a for a in doc["axes"] if a["id"] == doc["panels"][0]["z_axis"])
+    assert set(z_axis["scales"]) == {"linear", "log"}
+    # `.get`, because the canonical form omits a field sitting at its default:
+    # an axis drawn on 'linear' carries no `scale` key at all. That is the
+    # serializer's business, not the schema's, and reading it any other way
+    # makes this test assert the encoding rather than the meaning.
+    assert z_axis.get("scale", "linear") == "linear"
     # axes carry the resolved component names; the axisNames stats_df hack
     # is not needed on this route.
     labels = {a["id"]: a["label"] for a in doc["axes"]}
@@ -735,16 +746,29 @@ def test_bivariate_chart_document(client):
 
 
 def test_chart_document_unavailable_kind(client):
-    """A kind with no registered chart 404s with an empty capability set."""
+    """A chart this object cannot serve 404s, naming the ones it can.
+
+    Asserted as "the requested name is refused and the object's own set is
+    reported", never as a literal set. Through a53 this read
+    ``"available: []"``, which was true only while an ``Aggregate`` had no
+    registered chart at all; ``chart_agg`` upstream made it false and took
+    the test with it. What the route promises is the refusal and the
+    signpost, so that is what is checked, and the next emitter to land does
+    not break it.
+    """
     r = client.post(
         "/v1/objects",
         json={"decl": "agg CD.A 10 claims sev lognorm 50 cv 1 poisson"},
     )
     assert r.status_code == 200, r.text
     oid = r.json()["id"]
+    available = r.json()["capability"]["charts"]
+    assert "joint_surface" not in available
     r1 = client.get(f"/v1/objects/{oid}/chart/joint_surface")
     assert r1.status_code == 404
-    assert "available: []" in r1.json()["detail"]
+    detail = r1.json()["detail"]
+    assert "joint_surface" in detail
+    assert f"available: {available}" in detail
 
 
 # ----------------------------------------------------------------------

@@ -1786,6 +1786,21 @@ def get_chart_document(
     The body is ``canonical_json`` bytes rather than a Pydantic model,
     because the document's own content hash is the ETag and re-serializing
     would break the byte determinism that makes the hash mean anything.
+
+    Built through ``charts.build_chart_doc``, the library's one public entry
+    point, rather than by reaching into the ``CHARTS`` registry and calling
+    the emitter here. That is not a style preference: this route did the
+    latter and broke when ``CHARTS`` values grew a third field (``primary``,
+    for :func:`aggregate.charts.primary_chart`), because a two-name unpack
+    of a three-field record raises. Depending on the accessor instead of the
+    container is what makes the next field a non-event.
+
+    Two things come free with the move. ``build_chart_doc`` stamps
+    ``generator`` with the producing ``aggregate`` version, so a document on
+    the wire now says what built it; and it enforces the emitter's own
+    availability predicate, which is a second, narrower gate than the
+    ``available_charts`` check below. That check stays, because it is what
+    turns an unavailable name into a 404 that names what *is* available.
     """
     available = agg_charts.available_charts(entry.obj)
     if name not in available:
@@ -1793,8 +1808,7 @@ def get_chart_document(
             status_code=404,
             detail=f"no chart {name!r} for this object; available: {available}",
         )
-    emitter, _predicate = agg_charts.CHARTS[name]
-    doc = agg_charts.stamp(emitter(entry.obj))
+    doc = agg_charts.build_chart_doc(entry.obj, name)
     body = agg_charts.canonical_json(doc)
     etag = f'"{doc.hash}"'
     if request is not None and request.headers.get("if-none-match") == etag:
