@@ -219,6 +219,34 @@ function checkLayout(label, doc) {
     void rows;
 }
 
+/**
+ * The reading under the cursor is available as data, and names its coordinate.
+ *
+ * The mount writes it into a strip in ordinary page text rather than letting a
+ * box follow the pointer, so the model has to be complete without any markup:
+ * a head naming the interrogated quantity, and one row per series with the
+ * color its curve is drawn in.
+ */
+function checkReadout(label, doc, option) {
+    if (option.is3d || !option.series.length) return;
+    if (typeof option.readout !== 'function') {
+        // A grid panel answers per item and has no axis reading to strip.
+        if (doc.panels.every((p) => p.kind === 'xy')) fail(label, 'no readout model');
+        return;
+    }
+    // One synthetic hover, shaped as ECharts delivers it.
+    const first = option.series.findIndex((s) => points(s).length);
+    const [x, y] = points(option.series[first])[0];
+    const model = option.readout([{
+        seriesIndex: first, seriesName: option.series[first].name,
+        color: '#123456', marker: '', value: [x, y],
+    }]);
+    if (!model) { fail(label, 'readout answered nothing for a drawn point'); return; }
+    if (!model.head || /^\s*$/.test(model.head)) fail(label, 'readout head is empty');
+    if (!/[A-Za-z]/.test(model.head)) fail(label, `readout head names nothing: ${model.head}`);
+    if (!model.rows.length || !model.rows[0].value) fail(label, 'readout row has no value');
+}
+
 /** Zooming to a handful of atoms reaches the stem rung on a discrete book. */
 function checkLadder(label, doc, option) {
     if (!option.lossGrid || !option.rung) return null;
@@ -237,6 +265,7 @@ for (const [name, entry] of Object.entries(cases)) {
         if (!checkDrawable(label, doc, option)) continue;
         checkLabels(label, doc, option);
         checkLayout(label, doc);
+        checkReadout(label, doc, option);
         checkReadings(label, doc, option);
         const ladder = checkLadder(label, doc, option);
         const offered = readings(doc);

@@ -301,6 +301,13 @@ export function mountChartDoc(container, doc) {
 function draw(container, tools, host, doc) {
     if (!doc) { empty(container); return null; }
 
+    // The readout strip: where the values under the cursor are written, in
+    // ordinary page text. Created before the first render so it holds its own
+    // height from the start and nothing below the chart moves when a reader
+    // puts the cursor on it.
+    const readout = el('div', { className: 'chart-readout' });
+    container.appendChild(readout);
+
     let zoom = null;
     let renderer = null;
     let drawn = null;
@@ -326,10 +333,58 @@ function draw(container, tools, host, doc) {
         return next;
     }
 
+    /**
+     * Write the values under the cursor into the strip, and clear it.
+     *
+     * Normal page text, styled like the rest of the page, at a fixed place. The
+     * box that used to follow the cursor covered exactly the region being
+     * inspected whenever the reader went looking at the tail, which is the one
+     * place they most often are.
+     */
+    function writeReadout(model) {
+        empty(readout);
+        if (!model) {
+            readout.appendChild(el('span', { className: 'chart-readout-idle' },
+                'Point at the chart to read values off it.'));
+            return;
+        }
+        readout.appendChild(el('span', { className: 'chart-readout-head' }, model.head));
+        for (const row of model.rows) {
+            const chip = el('span', { className: 'chart-readout-item' });
+            chip.appendChild(el('i', {
+                className: 'chart-readout-swatch',
+                style: `background:${row.color}`, 'aria-hidden': 'true',
+            }));
+            chip.appendChild(el('span', { className: 'chart-readout-name' }, row.name));
+            chip.appendChild(el('b', {}, row.value));
+            readout.appendChild(chip);
+        }
+    }
+    writeReadout(null);
+
+    /**
+     * Point the option's reading at the strip instead of at a floating box.
+     *
+     * `showContent: false` keeps the axis pointer and the cross-hair and still
+     * calls the formatter, which is the hook this needs; the formatter writes
+     * the strip and returns nothing to draw. The adapter builds the reading as
+     * *data* (`option.readout`), so nothing about what the numbers say lives
+     * here and the model stays testable without a DOM.
+     */
+    function useStrip(option) {
+        if (!option.readout || !option.tooltip) return option;
+        option.tooltip = {
+            ...option.tooltip,
+            showContent: false,
+            formatter: (params) => { writeReadout(option.readout(params)); return ''; },
+        };
+        return option;
+    }
+
     function render() {
         const next = build();
         if (!next) return false;
-        drawn = next;
+        drawn = useStrip(next);
         host.style.height = `${next.hostHeight}px`;
         if (!renderer) {
             // `empty` clears the skeleton, which the chart would otherwise draw
@@ -341,23 +396,45 @@ function draw(container, tools, host, doc) {
         }
         // After every render, not only the first: switching a panel between its
         // 2-D and 3-D realizations disposes the instance and builds a new one,
-        // and the listener would be left on the dead one. `wireZoom` unbinds
-        // before it binds, so re-arming it costs nothing on the ordinary path.
-        wireZoom();
+        // and the listeners would be left on the dead one. Each unbinds before
+        // it binds, so re-arming costs nothing on the ordinary path.
+        wireGestures();
         return true;
     }
 
     /**
-     * Redraw when a zoom changes which rung of the drawing ladder applies.
+     * The two gestures: zoom, and double-click to undo it.
      *
-     * Guarded twice, because a wheel gesture fires continuously: the rung has
-     * to actually change, and the answer comes from a count rather than from a
-     * trial build. `chartdocToEcharts` then writes the held zoom back into the
-     * new dataZoom config, so the gesture survives its own consequence.
+     * **Zoom** redraws only when it changes which rung of the drawing ladder
+     * applies. Guarded twice, because a wheel gesture fires continuously: the
+     * rung has to actually change, and the answer comes from a count rather
+     * than from a trial build. `chartdocToEcharts` then writes the held zoom
+     * back into the new dataZoom config, so the gesture survives its own
+     * consequence.
+     *
+     * **Double-click** resets the view. On the zrender layer rather than on the
+     * chart, because `chart.on('dblclick')` fires only over a graphic element
+     * and the reader who has zoomed too far is usually over blank canvas.
+     * Preferred to `toolbox.feature.restore`, which ships a corner cluster of
+     * buttons and works against how hard a26 to a29 worked to keep the chrome
+     * down: the gesture costs no pixels.
      */
-    function wireZoom() {
+    function wireGestures() {
         const chart = renderer && renderer.chart;
-        if (!chart || !drawn || !drawn.lossWindow) return;
+        if (!chart) return;
+        chart.off('globalout');
+        chart.on('globalout', () => writeReadout(null));
+        const zr = chart.getZr();
+        zr.off('dblclick');
+        zr.on('dblclick', () => {
+            // Dropping the held zoom is the whole reset: the rebuilt option
+            // carries a dataZoom with no start or end, which is the component's
+            // own full-range default, and the redraw puts the drawing back on
+            // the rung a full window deserves.
+            zoom = null;
+            if (ready) render();
+        });
+        if (!drawn || !drawn.lossWindow) return;
         chart.off('dataZoom');
         chart.on('dataZoom', () => {
             const w = drawn && drawn.lossWindow;

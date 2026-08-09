@@ -73,9 +73,14 @@ Still open, and the only thing this plan is now waiting on:
   comes off the same document, so no app-side builder survives. When the emitter
   declares both kinds the control lights up with no app change beyond deleting
   one special case in `realization()`.
-* **Item 7.1, 7.2, 7.4 and 7.6.** The punch items that are not adapter work.
-  7.6 landed early, because the strip was being rewritten anyway and centering
-  it was less work than reproducing the split layout in order to remove it.
+* **Item 7.1 alone**, and it is a judgment rather than a job. 7.2 (double-click
+  reset) and 7.4 (the readout in the page) landed at a63; 7.6 landed at a62,
+  early, because the strip was being rewritten anyway and centering it was less
+  work than reproducing the split layout in order to remove it. 7.1's
+  recommended first move, `animationDurationUpdate: 0`, was already in place and
+  had been since the exhibits landed (`baseOption()` sets `animation: false`),
+  so the tween was never the cause and the only remaining lever is
+  `dataZoom.filterMode`. That trade needs a browser, not a guess.
 
 ## Where we actually are (2026-08-09)
 
@@ -420,7 +425,7 @@ Several change shape once the document carries the marks and the toggles. The
 surface and heatmap punch items are **not** here: that workstream owns them,
 including `api-punchlist.md` Punchups Round 4 item 6.
 
-#### 7.1 Zoom rescales the y axis and that is disorienting
+#### 7.1 Zoom rescales the y axis and that is disorienting — **open, and narrowed at a63**
 
 `dataZoom.filterMode`. Currently `'filter'`, which drops out-of-window points
 from the extent calculation so y refits what is visible. That is deliberate:
@@ -440,7 +445,7 @@ the tween rather than the rescale, since ECharts animates the axis change and th
 curve appears to breathe while scrolling. Snapping it makes the same rescale read
 as a step. Log y helps too, because whole decades stay put as landmarks.
 
-#### 7.2 Double-click to reset the view
+#### 7.2 Double-click to reset the view — **done at api a63**
 
 Not built in. `chart.getZr().on('dblclick', ...)` catches it anywhere on the
 canvas including blank areas (plain `chart.on('dblclick')` only fires on graphic
@@ -450,7 +455,7 @@ elements), then `chart.dispatchAction({type: 'dataZoom', start: 0, end: 100})`.
 this, but they add a corner cluster, which works against how hard a26 to a29
 worked to keep the chrome down. Prefer the gesture.
 
-#### 7.3 Drop the exact end labels on a scaled axis
+#### 7.3 Drop the exact end labels on a scaled axis — **done at api a62**
 
 **Settled:** the complaint is the end label, not general thinning. When an axis
 is zoomed, its lowest and highest values are exact rather than round, so they
@@ -462,7 +467,7 @@ ticks in place.
 Applies to every value axis on every chart, so it belongs in the adapter's axis
 walker rather than in any override dict.
 
-#### 7.4 The readout goes in the legend, not a floating box
+#### 7.4 The readout goes in the legend, not a floating box — **done at api a63**
 
 The best idea on the list. The author does not want the "rando popup mouse over
 box floating around"; uPlot puts values in a fixed strip and that is the model.
@@ -481,7 +486,7 @@ mostly empty. a37's per-grid axis reading is the natural thing to build it on.
 
 Prefer the second.
 
-#### 7.5 Reference-line labels sit wrong
+#### 7.5 Reference-line labels sit wrong — **done at api a62**
 
 Mean to the left of its line, 1-in-100 to the left, 1-in-200 to the right, all
 flush with the **top** of the plot. Today 1-in-200 renders *above* the plot area.
@@ -489,7 +494,7 @@ Under item 6 the marks and their label sides come off the document
 (`Mark.label`, and the label-side rule the inventory's J2 settled), so this is
 adapter work, not a per-chart patch.
 
-#### 7.6 Center the controls that govern both panels
+#### 7.6 Center the controls that govern both panels — **done at api a62**
 
 `full x` and `reference lines` govern both panels, so they sit centered under the
 pair rather than aligned to one of them. `renderControls` already splits the

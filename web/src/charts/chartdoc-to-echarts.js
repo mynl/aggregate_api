@@ -1071,6 +1071,9 @@ function xyOption(doc, opts, view, realized) {
             },
             formatter: (params) => tooltipText(params, seriesPanel, realizedPanels),
         };
+        // The same reading as data, for a caller that would rather write it
+        // into the page than let a box follow the cursor. Not an ECharts key.
+        base.readout = (params) => readoutModel(params, seriesPanel, realizedPanels);
     }
 
     const option = merge(base, resolveOverrides(opts.overrides, { doc, view, box }));
@@ -1087,38 +1090,63 @@ function xyOption(doc, opts, view, realized) {
     return option;
 }
 
+/** One number, said the way its axis measures things. */
+function readValue(v, unit) {
+    if (v == null) return '';
+    if (unit === 'probability') return Number(v).toExponential(3);
+    if (unit === 'return_period') return `1-in-${compactPeriod(v)}`;
+    if (unit === 'density') return Number(v).toExponential(3);
+    return fmt(v);
+}
+
 /**
- * The tooltip body: every series under the cursor, on the panel it belongs to.
+ * What the cursor is over, as data rather than as markup.
  *
- * The head names the coordinate the panel is interrogated on, which is not the
- * same axis in every panel: a density is read by loss and a Lee panel by
- * probability, so a single "loss ..." head would be wrong on half the chart.
+ * Pure, and the same answer whether the renderer puts it in a floating box or
+ * writes it into the page. That split is the point: `dev/plan-plot-ir-api.md`
+ * 7.4 replaces the box that follows the cursor with a fixed strip in ordinary
+ * page text, and the mount does the writing, so this stays testable.
+ *
+ * The head names the coordinate the panel is **interrogated on**, which is not
+ * the same axis in every panel: a density is read by loss and a Lee diagram at
+ * a chosen probability, so one "loss ..." head would be wrong on half the
+ * chart. Named rather than bare for the same reason.
+ *
+ * Returns
+ * -------
+ * object or null
+ *     `{head, rows: [{color, name, value}]}`, or null with nothing under the
+ *     cursor.
  */
-function tooltipText(params, seriesPanel, panels) {
+function readoutModel(params, seriesPanel, panels) {
     const rows = (Array.isArray(params) ? params : [params])
         .filter((p) => Array.isArray(p.value) && p.value[1] != null);
-    if (!rows.length) return '';
+    if (!rows.length) return null;
     const panel = panels[seriesPanel[rows[0].seriesIndex]] || {};
     const readY = panel.readAxis === 'y';
-    const value = (v, unit) => {
-        if (v == null) return '';
-        if (unit === 'probability') return Number(v).toExponential(3);
-        if (unit === 'return_period') return `1-in-${compactPeriod(v)}`;
-        if (unit === 'density') return Number(v).toExponential(3);
-        return fmt(v);
-    };
-    // Named, not bare. The head is a different quantity in each panel (a loss
-    // on a density, a probability on a Lee diagram), so an unlabeled number
-    // reads as whichever one the reader last looked at.
     const head = readY
-        ? `${panel.yName || ''} ${value(rows[0].value[1], panel.yUnit)}`.trim()
-        : `${panel.xName || ''} ${value(rows[0].value[0], panel.xUnit)}`.trim();
-    const body = rows.map((p) => {
-        const v = readY ? p.value[0] : p.value[1];
-        const unit = readY ? panel.xUnit : panel.yUnit;
-        return `${p.marker}${p.seriesName} <b>${value(v, unit)}</b>`;
-    }).join('<br>');
-    return `${head}<br>${body}`;
+        ? `${panel.yName || ''} ${readValue(rows[0].value[1], panel.yUnit)}`.trim()
+        : `${panel.xName || ''} ${readValue(rows[0].value[0], panel.xUnit)}`.trim();
+    return {
+        head,
+        rows: rows.map((p) => ({
+            color: (p.color && String(p.color)) || '#6c757d',
+            name: p.seriesName,
+            value: readValue(readY ? p.value[0] : p.value[1],
+                             readY ? panel.xUnit : panel.yUnit),
+        })),
+    };
+}
+
+/** The same reading as ECharts' own tooltip markup, for the floating box. */
+function tooltipText(params, seriesPanel, panels) {
+    const model = readoutModel(params, seriesPanel, panels);
+    if (!model) return '';
+    const body = model.rows
+        .map((r, i) => `${(Array.isArray(params) ? params : [params])[i].marker}`
+            + `${r.name} <b>${r.value}</b>`)
+        .join('<br>');
+    return `${model.head}<br>${body}`;
 }
 
 /**

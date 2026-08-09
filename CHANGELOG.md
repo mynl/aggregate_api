@@ -4,6 +4,51 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a63
+
+`dev/plan-plot-ir-api.md` item 7, the punch items that are not adapter work.
+Two land, one is answered without a change, and one landed early at a62.
+
+**7.4, the readout moves into the page.** The best idea on the list, in the
+author's words, and the argument against the floating box is not taste: it
+covers exactly the region being inspected whenever the reader goes looking at
+the tail, which is the one place they most often are. So the values under the
+cursor are written into a fixed strip under the chart, in ordinary page text,
+styled like the rest of the page. uPlot's strip is the model.
+
+Built on the split the plan called the right one, arrived at from the other
+end. The adapter answers **as data** (`option.readout`, a pure function of the
+hover returning `{head, rows}`), and the mount does the writing, so nothing
+about what the numbers say lives in the DOM code and the model is checked in
+node with no browser. `tooltip.showContent: false` is the hook: it keeps the
+axis pointer and the cross-hair and still calls the formatter, which is the
+only thing that had to be found.
+
+The head names the coordinate the panel is **interrogated on**, not a fixed
+axis. A density is read by loss and a Lee diagram at a chosen probability, so
+one "loss ..." head would have been wrong on half of every two-panel chart.
+
+**7.2, double-click resets the view.** On the zrender layer rather than on the
+chart, because `chart.on('dblclick')` fires only over a graphic element and the
+reader who has zoomed too far is usually over blank canvas. Dropping the held
+zoom is the whole reset: the rebuilt option carries a dataZoom with no start or
+end, which is the component's own full-range default. Preferred to
+`toolbox.feature.restore`, which ships a corner cluster of buttons and works
+against how hard a26 to a29 worked to keep the chrome down.
+
+**7.1 is answered, not fixed.** The plan's recommended first move,
+`animationDurationUpdate: 0`, on the theory that the disorientation is the tween
+rather than the rescale, turns out to be in place already and to have been since
+the exhibits landed: `baseOption()` sets `animation: false`. So the tween was
+never the cause, and the only remaining lever is `dataZoom.filterMode`, which
+trades the rescale for a flat line pinned near zero when you zoom into a tail.
+That is a judgment about how it feels, and it needs a browser rather than a
+guess, so it stays open and the mode stays `'filter'`.
+
+**7.6 landed at a62**, early, because the control strip was being rewritten
+anyway and centering it was less work than reproducing the split layout in order
+to remove it.
+
 ## 1.0.0a62
 
 `dev/plan-plot-ir-api.md` items 2, 3, 4, 5, 6 and 8 together: the app stops

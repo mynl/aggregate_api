@@ -758,6 +758,35 @@ header .navbar { min-height: 56px; }
     animation: exhibit-skeleton-pulse 1.9s ease-in-out infinite;
 }
 .exhibit-skeleton-panel .bi { font-size: 1.5rem; color: var(--line); }
+
+/* ---- The chart readout ----
+   Where the values under the cursor are written. A fixed strip in ordinary page
+   text, not a box that follows the pointer: the floating box covered exactly
+   the region being inspected whenever the reader went looking at the tail,
+   which is the one place they most often are. uPlot's strip is the model.
+
+   Fixed height, reserved from the first paint, so nothing below the chart moves
+   when a reader puts the cursor on it and nothing moves back when they take it
+   off. */
+.chart-readout {
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: .15rem 1rem; min-height: 1.5rem;
+    padding: .25rem 0 0 var(--tabpad);
+    font-size: .78rem; color: var(--ink);
+    border-top: 1px solid var(--line);
+}
+.chart-readout-idle { color: var(--mut); font-style: italic; }
+/* The interrogated coordinate leads and is the one thing in the strip that is
+   not a series, so it reads as the question the rest of the row answers. */
+.chart-readout-head { font-weight: 700; }
+.chart-readout-item { display: inline-flex; align-items: baseline; gap: .3rem; }
+.chart-readout-name { color: var(--mut); }
+/* The series color, matched to its curve. A 2px bar rather than a dot, so it
+   reads as the line it names; the same shape the ECharts legend uses. */
+.chart-readout-swatch {
+    display: inline-block; width: 14px; height: 2px;
+    border-radius: 1px; align-self: center;
+}
 /* Slow, and shallow. A skeleton that flashes competes with the page for
    attention, which is the opposite of the point. */
 @keyframes exhibit-skeleton-pulse {
