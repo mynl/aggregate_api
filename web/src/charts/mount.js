@@ -52,6 +52,7 @@ const VIEW_DEFAULTS = {
     fullRange: false,    // every axis that declares a full extent
     returnPeriod: false, // the paired reading of a probability axis
     invert: false,       // every panel that declares its axes exchange
+    refLines: true,      // the document's marks: mean, capital anchors
     kind: null,          // panel realization: a z grid flat or in relief
 };
 
@@ -99,6 +100,18 @@ const CONTROLS = [
         label: 'invert',
         title: 'Exchange the axes of a panel that says they exchange. A '
             + 'quantile plot inverted is the distribution function',
+    },
+    // Offered whenever the document publishes marks, and **on** by default: the
+    // mean and the capital anchors are what most readers came to see, and this
+    // is the button for taking them away rather than for asking for them. It
+    // existed before a62, did not survive the rewrite onto chart documents, and
+    // its absence is punch item G3.
+    {
+        key: 'refLines',
+        offer: 'marks',
+        label: 'reference lines',
+        title: 'Show the mean and the capital anchors the document marks, '
+            + 'drawn on the panels that carry them',
     },
 ];
 
@@ -188,7 +201,11 @@ function renderControls(doc, onChange) {
     const row = el('div', { className: 'exhibit-controls exhibit-controls-center' });
     const box = el('div', { className: 'exhibit-group' });
     for (const spec of CONTROLS) {
-        if (!offered[spec.key]) continue;
+        // `offer` names the declaration that decides whether the button exists,
+        // where it differs from the view key the button sets. Only reference
+        // lines needs it: it is gated on the document carrying marks at all,
+        // and there is no reading called `refLines` for it to read.
+        if (!offered[spec.offer || spec.key]) continue;
         const btn = el('button', {
             type: 'button',
             className: `exhibit-toggle${view[spec.key] ? ' active' : ''}`,
@@ -301,12 +318,21 @@ export function mountChartDoc(container, doc) {
 function draw(container, tools, host, doc) {
     if (!doc) { empty(container); return null; }
 
-    // The readout strip: where the values under the cursor are written, in
-    // ordinary page text. Created before the first render so it holds its own
-    // height from the start and nothing below the chart moves when a reader
-    // puts the cursor on it.
+    // The legend, which is also the readout. One strip carrying the swatch, the
+    // name and the value under the cursor, in ordinary page text, above the
+    // canvas where a legend belongs.
+    //
+    // a63 put the readout in a strip **below** the chart and left ECharts' own
+    // legend drawing above it, so the page grew a second thing where the author
+    // had asked for one. The ask was uPlot's: the legend is where the values
+    // live. So the built-in legend is declared and not drawn (it still owns
+    // series selection), and this takes both jobs.
+    //
+    // Inserted before the canvas rather than appended, and created before the
+    // first render, so it holds its own height from the start and nothing below
+    // the chart moves when a reader puts the cursor on it.
     const readout = el('div', { className: 'chart-readout' });
-    container.appendChild(readout);
+    container.insertBefore(readout, host);
 
     let zoom = null;
     let renderer = null;
@@ -333,49 +359,99 @@ function draw(container, tools, host, doc) {
         return next;
     }
 
+    // Which series the reader has switched off, by name, so a redraw does not
+    // silently switch them all back on. Series selection lives in the ECharts
+    // legend model, which a rebuild replaces, so the page holds the answer.
+    const hidden = new Set();
+
     /**
-     * Write the values under the cursor into the strip, and clear it.
+     * Draw the legend, with the values under the cursor filled in.
      *
-     * Normal page text, styled like the rest of the page, at a fixed place. The
-     * box that used to follow the cursor covered exactly the region being
-     * inspected whenever the reader went looking at the tail, which is the one
-     * place they most often are.
+     * Every series is always listed, whether the cursor is over it or not: this
+     * is a legend first, so the names and swatches are the standing content and
+     * the values are what arrives on hover. That is the difference between this
+     * and the a63 strip, which was empty until pointed at and therefore had to
+     * carry a "point at the chart" instruction to explain its own blankness.
+     *
+     * @param {object|null} model `{head, rows}` from the adapter, or null when
+     *   the cursor is off the chart, which leaves the names and blanks the
+     *   values rather than emptying the strip.
      */
     function writeReadout(model) {
         empty(readout);
-        if (!model) {
-            readout.appendChild(el('span', { className: 'chart-readout-idle' },
-                'Point at the chart to read values off it.'));
-            return;
-        }
-        readout.appendChild(el('span', { className: 'chart-readout-head' }, model.head));
-        for (const row of model.rows) {
-            const chip = el('span', { className: 'chart-readout-item' });
+        const items = (drawn && drawn.legendItems) || [];
+        if (!items.length) return;              // a grid panel keeps its own tooltip
+        // Rows arrive per hovered series; a stem is two series under one name,
+        // so keying by name is also what stops it being listed twice.
+        const byName = new Map((model ? model.rows : []).map((r) => [r.name, r.value]));
+        readout.appendChild(el('span', {
+            className: `chart-readout-head${model ? '' : ' is-idle'}`,
+        }, model ? model.head : 'hover to read'));
+        for (const item of items) {
+            const off = hidden.has(item.name);
+            const chip = el('button', {
+                type: 'button',
+                className: `chart-readout-item${off ? ' is-off' : ''}`,
+                title: `${off ? 'Show' : 'Hide'} ${item.name}`,
+                onClick: () => toggleSeries(item.name),
+            });
             chip.appendChild(el('i', {
                 className: 'chart-readout-swatch',
-                style: `background:${row.color}`, 'aria-hidden': 'true',
+                style: `background:${item.color}`, 'aria-hidden': 'true',
             }));
-            chip.appendChild(el('span', { className: 'chart-readout-name' }, row.name));
-            chip.appendChild(el('b', {}, row.value));
+            chip.appendChild(el('span', { className: 'chart-readout-name' }, item.name));
+            chip.appendChild(el('b', {}, byName.get(item.name) || ''));
             readout.appendChild(chip);
         }
     }
-    writeReadout(null);
+
+    /**
+     * Show or hide one series from the legend, as clicking it always did.
+     *
+     * `dev/graphs.md` records select-by-legend as one of three things the author
+     * liked unprompted at a30, so replacing the built-in legend without it would
+     * have traded a liked behavior for a chore. The ECharts legend component is
+     * still declared (drawn: false), which is what makes the action work.
+     */
+    function toggleSeries(name) {
+        const chart = renderer && renderer.chart;
+        if (!chart) return;
+        const off = hidden.has(name);
+        if (off) hidden.delete(name); else hidden.add(name);
+        chart.dispatchAction({
+            type: off ? 'legendSelect' : 'legendUnSelect', name,
+        });
+        writeReadout(null);
+    }
 
     /**
      * Point the option's reading at the strip instead of at a floating box.
      *
-     * `showContent: false` keeps the axis pointer and the cross-hair and still
-     * calls the formatter, which is the hook this needs; the formatter writes
-     * the strip and returns nothing to draw. The adapter builds the reading as
-     * *data* (`option.readout`), so nothing about what the numbers say lives
-     * here and the model stays testable without a DOM.
+     * The formatter is the hook: it is called with everything under the cursor,
+     * writes the strip, and returns nothing for ECharts to draw. The adapter
+     * builds the reading as *data* (`option.readout`), so nothing about what
+     * the numbers say lives here and the model stays testable without a DOM.
+     *
+     * **`showContent: false` is the one thing that cannot be used to hide the
+     * box, and a63 used it.** `TooltipView._showTooltipContent` reads
+     * `showContent` and returns *before* it reads the formatter
+     * (`echarts/lib/component/tooltip/TooltipView.js:539`), so the flag does not
+     * mean "call the formatter and draw nothing", it means "do nothing at all".
+     * The readout strip shipped at a63 therefore never displayed a single value:
+     * it sat under every chart saying "point at the chart to read values off
+     * it", and pointing at the chart did nothing. Found by hovering one,
+     * which is the whole argument for the browser pass this round added.
+     *
+     * So the content stays on and the **box** is hidden in CSS. The axis pointer
+     * and the highlighted symbol are unaffected either way; they are drawn by
+     * the axisPointer component, not by the tooltip's DOM.
      */
     function useStrip(option) {
         if (!option.readout || !option.tooltip) return option;
         option.tooltip = {
             ...option.tooltip,
-            showContent: false,
+            showContent: true,
+            extraCssText: 'display:none!important',
             formatter: (params) => { writeReadout(option.readout(params)); return ''; },
         };
         return option;
@@ -399,6 +475,13 @@ function draw(container, tools, host, doc) {
         // and the listeners would be left on the dead one. Each unbinds before
         // it binds, so re-arming costs nothing on the ordinary path.
         wireGestures();
+        // Re-apply what the reader switched off, for the same reason: a rebuilt
+        // option carries a fresh legend model with everything selected, so a
+        // hidden series would come back every time the log button was pressed.
+        for (const name of hidden) {
+            renderer.chart.dispatchAction({ type: 'legendUnSelect', name });
+        }
+        writeReadout(null);
         return true;
     }
 

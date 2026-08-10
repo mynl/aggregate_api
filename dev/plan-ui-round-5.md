@@ -544,8 +544,44 @@ The cost is that the plotted range widens slightly to the next round number,
 which is what matplotlib does by default and what makes its axes readable. Show
 the author a before and after on a density and a distortion before calling it.
 
-Effort **M**, up from L: the rule is more work than hiding two labels, and it is
-the right rule.
+**A second half, found on screen 2026-08-10 and measured rather than guessed.**
+The author, looking at a copula bivariate's joint density: "the y axis has way
+more ticks than the x, that's what we don't want". Counted off that picture, on
+one panel:
+
+| axis | labels | length | one label per |
+|---|--:|--:|--:|
+| x (Wind) | 13 | ~610 px | 47 px |
+| y (Flood) | 26 | ~370 px | 14 px |
+
+Four times the density on the shorter axis, in the same picture. The cause is
+not the value-axis pinning above; it is a different axis type. A grid panel
+draws as a heatmap, which ECharts requires **category** axes for, so
+`realizeGrid` hands both axes the full array of cell centers as `data`, with
+`hideOverlap: true` and no `interval` (`chartdoc-to-echarts.js:878-885`). A
+category axis then defaults to `interval: 'auto'`, meaning "as many labels as
+fit without colliding". A label is about 35 px wide and 12 px tall, so
+horizontally 13 fit and vertically 26 do. ECharts did exactly as it was told.
+
+"As many as fit" is a legibility rule, not a reading rule, and this is what it
+costs: the two axes of one picture get different lattices, and neither lattice
+is round, because the labels land on cell centers (300, 1,900, 3,500 stepping by
+1,600 against 60, 860, 1,660 stepping by 800).
+
+So G5 is one disease on two axis types, and the cure is one sentence on both:
+**put the labels on a round lattice, and put a comparable number on each axis
+whatever its length.** On a value axis that is the outward rounding above. On a
+category axis, keep `type: 'category'` (the heatmap needs it) and choose which
+categories carry a label: pick a round step in data units and label the cell
+nearest each multiple, targeting roughly six to eight per axis.
+
+The author's reading the same day, on the xy panels: the ticks "are at least
+nice round numbers now, which is better". So the value-axis half is in better
+shape than the note implies and the grid panel is the loud remaining case.
+Confirm both on screen before closing it.
+
+Effort **M**, up from L: the rule is more work than hiding two labels, and it
+now covers two axis types.
 
 ## Upstream asks, raise these first
 
@@ -683,6 +719,19 @@ worth putting on the new row. Then the row itself.
 of each, on both bases, and confirm each produces a clause the grammar accepts
 and a program that rebuilds. Tab in the cession box completes rather than leaving
 it. Every control on the row is the same height and the row is centered.
+
+## Execution log
+
+* **a64**, landed 2026-08-10. Items 15 and 23 (client half), 20, menu order.
+* **a65**, landed 2026-08-10. Items 7, 14, 17, plus the GCN pair's moments,
+  which was not on the list and was found by the acceptance walk.
+* **a67 landed as a66**, out of order, 2026-08-10. G1 to G5. Taken before the
+  exhibits phase because that one waits on upstream ask 1 and this waited on
+  nothing. **G2 turned out to be a non-working feature rather than a misplaced
+  one**: `tooltip.showContent: false` returns before the formatter is read, so
+  a63's readout never displayed a value. G4 closed with no change.
+* **The exhibits phase is next**, and keeps the number it is given at the time.
+  Blocked until `build_exhibit(spec_extra=)` lands in the library.
 
 ## Rulings, settled 2026-08-09
 

@@ -4,6 +4,96 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a66
+
+`dev/plan-ui-round-5.md` phase a67, taken out of order because a66 waits on a
+library change and this waits on nothing. The charts, and the discovery that one
+of a63's headline items had never worked at all.
+
+**The readout in the legend, and why the first attempt drew nothing** (G2). a63
+wrote the values under the cursor into a strip below the chart using
+`tooltip.showContent: false`, on the reading that the flag keeps the axis
+pointer and still calls the formatter. It does not.
+`TooltipView._showTooltipContent` tests `showContent` and returns **before** it
+reads the formatter (`echarts/lib/component/tooltip/TooltipView.js:539`), so the
+strip has sat under every chart since a63 saying "point at the chart to read
+values off it", and pointing at the chart did nothing. Found by hovering one,
+which is the whole argument for this round's browser rule.
+
+The content stays on now and the box is hidden in CSS, which leaves the
+formatter reachable. And the strip moves above the canvas and takes the
+legend's job as well as its own: ECharts' legend is declared and not drawn, so
+one row carries the swatches, the names, and the values as the cursor moves.
+That was the ask, in the author's words, "the mouse over legend should appear in
+the legend, rather than floating around with the pointer".
+
+**Clicking a legend entry still hides its series**, which is not incidental:
+`dev/graphs.md` records select-by-legend as one of three things the author liked
+unprompted at a30, so replacing the built-in legend without it would have traded
+a liked behavior for a chore. The declared-but-undrawn legend component is what
+`legendUnSelect` addresses, and the page holds the hidden set so a rebuild (a
+press of `log`) does not silently switch everything back on.
+
+**One tracking line, not a cross** (G1). Each panel already declares the
+coordinate it is interrogated on, and the strip prints that reading in words, so
+the second line was a line whose meaning had to be worked out. `axisPointer.type`
+goes to `'line'` and the per-panel `axis` picks which.
+
+**The reference lines come back as a control** (G3). It existed before a62 and
+did not survive the move onto chart documents, which is the whole of "we've lost
+the annotations option". Offered whenever the document publishes marks, and on
+by default: this is the button for taking the mean and the capital anchors away,
+not for asking for them.
+
+Their labels now run **vertically**, hang down from the top of the plot, and
+take a side by where the mark is: the outermost goes right and every other goes
+left, so `mean` and `1-in-100` open left and the capital anchor opens right and
+the two do not print on top of each other. a62 alternated on `index % 2`, which
+gives the right answer for two marks in document order and an arbitrary one
+otherwise. Worth recording because it reads backwards: under `rotate: 90` it is
+`verticalAlign` that puts a label left or right of its line, and `'top'` draws
+it to the **right**, which is the opposite of what the rotation direction
+suggests. Established by looking at it, after deriving it and getting it wrong.
+
+**Ticks sit on a round lattice, on every axis type** (G5). Three faults, one
+disease, and the author's rule settles all of them: "are the max and min in the
+grid of the other ticks?"
+
+* **Value axes** were pinned to the raw window at both ends, which defeats
+  ECharts' nice-number algorithm, because the interval then has to divide an
+  exact span. a62 answered by hiding the two end labels, which left the unround
+  interior ones and cost a distortion drawn on [0, 1] its 0 and its 1. The
+  window is rounded outward to a 1 / 2 / 5 step now and the interval set from
+  it, so every label including the ends is on the lattice and none is hidden.
+  Clamped to the axis's own `full_range` **before** rounding: a suggested window
+  carries the library's padding, so an outcome axis arrives as
+  `[-173.18, 8832.18]` and rounding that first turned 173 units of padding into
+  a 2,000 unit margin of empty axis below zero, labeled `-2,000`, on a quantity
+  that cannot be negative.
+* **Log axes** got the same treatment on their own lattice, decades. "ECharts
+  handles it" was the first cut and is not true: given exact ends it labels them
+  exactly, so a log loss axis ran `1e-1, 1e+0, 1e+1, 1e+2, 1e+3, 8.8e+3`.
+* **Category axes**, which a heatmap requires, labeled as many cells as fit
+  without colliding. That is a legibility rule, not a reading rule, and on one
+  joint density it produced 13 labels across 610 px and **26** down 370 px, four
+  times the density on the shorter axis of the same picture, none of them round
+  because they land on cell centers. The labeled cells are chosen now, on the
+  same round ladder, targeting a comparable count per axis: that panel reads 5
+  and 4.
+
+Two consequences of the wider labels, both taken here rather than left to be
+noticed later. The exponential formatter carried one significant figure, which
+was enough while the ticks fell where ECharts put them and is not enough on a
+lattice stepping by 5e-5, where it printed `1e-4` twice on two different
+gridlines. And the y axis name now clears its own labels (`nameGap` 26 to 46,
+with `AXIS_LEFT` and `GAP_X` following), because `2.5e-4` is wider than the old
+gap reserved.
+
+**G4 needed no change and is closed.** The author accepted the y rescale on
+zoom ("you need that, else with a big mass at 0 you never see the detail"), and
+the one remaining lever, `animationDurationUpdate: 0`, is already covered:
+`baseOption` has set `animation: false` throughout, so nothing tweens.
+
 ## 1.0.0a65
 
 `dev/plan-ui-round-5.md` phase a65, the strip and the action row. Three punch

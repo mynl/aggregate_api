@@ -780,18 +780,34 @@ header .navbar { min-height: 56px; }
    Fixed height, reserved from the first paint, so nothing below the chart moves
    when a reader puts the cursor on it and nothing moves back when they take it
    off. */
+/* The legend, which is also the readout. Above the canvas, where a legend
+   belongs; a63 had it below and left the ECharts legend drawing above it, which
+   is two things where the author asked for one. `min-height` holds the row so
+   nothing below the chart moves as values arrive and leave. */
 .chart-readout {
     display: flex; flex-wrap: wrap; align-items: baseline;
     gap: .15rem 1rem; min-height: 1.5rem;
-    padding: .25rem 0 0 var(--tabpad);
+    padding: 0 0 .35rem var(--tabpad);
     font-size: .78rem; color: var(--ink);
-    border-top: 1px solid var(--line);
 }
-.chart-readout-idle { color: var(--mut); font-style: italic; }
 /* The interrogated coordinate leads and is the one thing in the strip that is
-   not a series, so it reads as the question the rest of the row answers. */
+   not a series, so it reads as the question the rest of the row answers. Grey
+   and italic while nothing is under the cursor, which is the whole of the idle
+   state now that the names stand on their own. */
 .chart-readout-head { font-weight: 700; }
-.chart-readout-item { display: inline-flex; align-items: baseline; gap: .3rem; }
+.chart-readout-head.is-idle { font-weight: 400; color: var(--mut); font-style: italic; }
+/* A button, because clicking one shows or hides its series, which is what the
+   ECharts legend did and what `dev/graphs.md` records the author liking. Styled
+   back down to text: the affordance is the pointer and the dimming, not a box. */
+.chart-readout-item {
+    display: inline-flex; align-items: baseline; gap: .3rem;
+    background: none; border: 0; padding: 0; margin: 0;
+    font: inherit; color: inherit; cursor: pointer;
+}
+.chart-readout-item:hover .chart-readout-name { color: var(--ink); }
+.chart-readout-item:focus-visible { outline: 1px dotted var(--mut); outline-offset: 2px; }
+.chart-readout-item.is-off { opacity: .4; }
+.chart-readout-item.is-off .chart-readout-swatch { background: var(--mut) !important; }
 .chart-readout-name { color: var(--mut); }
 /* The series color, matched to its curve. A 2px bar rather than a dot, so it
    reads as the line it names; the same shape the ECharts legend uses. */

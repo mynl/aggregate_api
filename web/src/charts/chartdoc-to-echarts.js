@@ -70,11 +70,20 @@ const VALUE_RAMP_FLOOR = 0.3;
 // chrome around a plot area whose own size comes from the host width and the
 // house aspect, never hardcoded.
 
-const AXIS_LEFT = 58;      // y-axis name + tick labels
+// y-axis name + tick labels. 58 through a66, which fitted a `nameGap` of 26 and
+// the labels ECharts happened to choose. On the round lattice of a67 a density
+// axis prints `2.5e-4` where it used to print `2e-4`, and the wider label ran
+// under the rotated axis name. The name moves out to 46 (what the heatmap panel
+// already used) and this makes room for it.
+const AXIS_LEFT = 64;
 const AXIS_BOTTOM = 46;    // x-axis name + tick labels
 const PAD_RIGHT = 18;
 const PAD_TOP = 26;        // the panel title strip
-const GAP_X = 76;          // between side-by-side panels: the right one's axis
+// Between side-by-side panels: the right one's axis furniture lives here, so it
+// tracks `nameGap`. 76 through a66 for a gap of 26; +20 with the name, so the
+// right panel's rotated label keeps the same clearance from the left panel's
+// plot area as it always had.
+const GAP_X = 96;
 const GAP_Y = 30;          // between stacked panels, on top of AXIS_BOTTOM
 const LEGEND_H = 24;
 
@@ -277,6 +286,14 @@ export function readings(doc) {
         // read off the axis rather than off what is drawn.
         returnPeriod: axes.some((a) => a.reciprocal_of),
         invert: panels.some((p) => p.invertible),
+        // Not a *reading* in the sense the other four are: the document does not
+        // declare that its marks can be turned off, they are simply data it
+        // publishes. It rides here anyway because this is what the control strip
+        // is built from, and the honest gate is the same shape as the others,
+        // offer the button when there is something for it to act on. The strip
+        // lost this control entirely in the a62 rewrite, which is the whole of
+        // punch item G3's "we've lost the annotations option".
+        marks: ((doc && doc.marks) || []).length > 0,
         kinds: kinds.size > 1 ? [...kinds] : [],
     };
 }
@@ -442,48 +459,200 @@ function rampColor(t) {
 }
 
 /**
+ * Which cells of a category axis carry a label, and what it says.
+ *
+ * A heatmap needs category axes, so `realizeGrid` hands ECharts the whole array
+ * of cell centers as `data`. Left to itself a category axis then labels **as
+ * many cells as fit without colliding**, which is a legibility rule and not a
+ * reading rule, and it produced this, measured on one joint density:
+ *
+ * | axis | labels | length |
+ * |---|--:|--:|
+ * | x | 13 | 610 px |
+ * | y | 26 | 370 px |
+ *
+ * Four times the density on the shorter axis of the same picture, and neither
+ * lattice round, because the labels land on cell centers: 300, 1,900, 3,500
+ * against 60, 860, 1,660. The author's report, 2026-08-10, and the same
+ * complaint as the value axes above wearing different clothes.
+ *
+ * So the labeled cells are chosen rather than left to fit: a round step off the
+ * same 1 / 2 / 5 ladder, then the cell nearest each multiple of it. Both axes
+ * ask for the same count, so both get one whatever their length.
+ *
+ * **The label names the multiple, not the cell.** They differ by at most half a
+ * cell, and a heatmap axis is a binned axis, where naming the round value the
+ * bin sits under is what every binned axis does. Printing the cell center
+ * instead would put the count right and leave 1,987 on the axis, which is the
+ * half of the complaint that is about roundness.
+ *
+ * @param {Array<number|string>} values cell centers, ascending and evenly
+ *   spaced (they are a grid).
+ * @param {number} target roughly how many labels to place.
+ * @returns {object} `axisLabel` fragment: an `interval` predicate and a
+ *   `formatter`, or an empty object when the axis is too short to thin.
+ */
+function categoryTicks(values, target = 7) {
+    const n = values.length;
+    if (n <= target) return {};
+    const lo = Number(values[0]);
+    const hi = Number(values[n - 1]);
+    const step = niceStep((hi - lo) / target);
+    if (!step || !Number.isFinite(lo) || !Number.isFinite(hi)) return {};
+    // Cells are evenly spaced, so the index of the cell nearest a value is
+    // arithmetic rather than a search: one pass over the multiples, not one
+    // pass over the grid per multiple.
+    const at = new Map();
+    for (let t = Math.ceil(lo / step) * step; t <= hi + step / 2; t += step) {
+        const idx = Math.round(((t - lo) / (hi - lo)) * (n - 1));
+        if (idx >= 0 && idx < n) at.set(idx, t);
+    }
+    return {
+        interval: (index) => at.has(index),
+        formatter: (_v, index) => fmt(at.get(index)),
+    };
+}
+
+/**
+ * The 1 / 2 / 5 step at or just above `raw`, the standard nice-number ladder.
+ *
+ * @param {number} raw the step a naive division asks for.
+ * @returns {number} the round step to use instead.
+ */
+function niceStep(raw) {
+    if (!(raw > 0) || !Number.isFinite(raw)) return null;
+    const mag = 10 ** Math.floor(Math.log10(raw));
+    const norm = raw / mag;
+    if (norm <= 1) return mag;
+    if (norm <= 2) return 2 * mag;
+    if (norm <= 5) return 5 * mag;
+    return 10 * mag;
+}
+
+/**
+ * A window widened to round numbers, with the step that divides it.
+ *
+ * @returns {{min: number, max: number, interval: number}|null} null when the
+ *   window is degenerate or already spans nothing.
+ */
+function niceWindow(min, max, target = 5) {
+    if (!Number.isFinite(min) || !Number.isFinite(max) || !(max > min)) return null;
+    const interval = niceStep((max - min) / target);
+    if (!interval) return null;
+    return {
+        min: Math.floor(min / interval) * interval,
+        max: Math.ceil(max / interval) * interval,
+        interval,
+    };
+}
+
+/**
  * One ECharts axis option from a `ChartAxis`.
  *
  * Reads `scale` through a default, never directly: the canonical form omits a
  * field sitting at its default, so an axis drawn on linear carries no `scale`
  * key at all.
  *
- * The end labels are suppressed on every value axis. A window's endpoints are
- * exact rather than round, so they print with more decimals than their
- * neighbors and look silly beside them, and they carry nothing the neighbors
- * do not. `showMinLabel` / `showMaxLabel` drop exactly those two and leave the
- * ticks in place.
+ * **The ticks sit on a round lattice, and that is why the end labels are back.**
+ * a62 answered "the odd tick on the left scale" by hiding the two end labels
+ * with `showMinLabel` / `showMaxLabel`, on the reading that a window's endpoints
+ * are exact rather than round and so print with more decimals than their
+ * neighbors. Both halves of that were wrong. It hid the ends of an axis whose
+ * ends *are* round, so a distortion drawn on [0, 1] lost its 0 and its 1. And it
+ * left the interior labels alone, which are equally unround: pinning both `min`
+ * and `max` to raw window values defeats ECharts' own nice-number algorithm,
+ * because the interval then has to divide an exact span and comes out as
+ * 3,463.93.
+ *
+ * The author's rule, 2026-08-10: "are the max and min in the grid of the other
+ * ticks? 0, .25, .5, .75, 1 is good. 0.03132, .25, .5, .75, 1 is not." Rounding
+ * the window outward and setting the interval satisfies it by construction, so
+ * every label including the ends is on the lattice and none of them has to be
+ * hidden. The plotted range grows to the next round number, which is what
+ * matplotlib does and what makes its axes readable.
+ *
+ * **A log axis gets the same treatment on its own lattice, which is decades.**
+ * "ECharts handles it" was the first cut of this and it is not true: given an
+ * exact min and max it labels the ends exactly, so a log loss axis ran
+ * `1e-1, 1e+0, 1e+1, 1e+2, 1e+3, 8.8e+3`, five decades and then whatever the
+ * data happened to reach. Snapping both ends to whole powers of ten puts every
+ * label on the lattice for the same reason the linear case does.
+ *
+ * **Clamped to `full_range` before it is rounded, and the order matters.** A
+ * suggested window carries the library's own padding around the data, so an
+ * outcome axis whose data starts at zero arrives as `[-173.18, 8832.18]`.
+ * Rounding that outward turns 173 units of padding into a 2,000 unit margin of
+ * empty axis below zero, labeled `-2,000`, on a quantity that cannot be
+ * negative. Clamping to the axis's own full extent first drops the padding that
+ * reaches outside what the quantity can be, and rounding the clamped range then
+ * lands on zero. Rounding first and clamping after would leave the min off the
+ * lattice again, which is the whole thing this is for.
  */
-function axisOption(axis, gridIndex, { scale, window, floor, formatter }) {
+function axisOption(axis, gridIndex, { scale, window, floor, formatter, nameGap }) {
     const isLog = scale === 'log';
     let [min, max] = window || [];
     if (isLog && min != null && min <= 0) min = floor == null ? undefined : floor;
+    const extent = Array.isArray(axis.full_range) ? axis.full_range : null;
+    if (extent && min != null && max != null) {
+        // A log axis takes the upper clamp only: `full_range` routinely starts
+        // at zero, which has no position on a log scale, and the floor above
+        // has already settled the bottom end.
+        if (!isLog) min = Math.max(min, extent[0]);
+        max = Math.min(max, extent[1]);
+    }
+    let nice = null;
+    if (min != null && max != null) {
+        if (isLog) {
+            if (min > 0 && max > min) {
+                min = 10 ** Math.floor(Math.log10(min));
+                max = 10 ** Math.ceil(Math.log10(max));
+            }
+        } else {
+            nice = niceWindow(min, max);
+            if (nice) ({ min, max } = nice);
+        }
+    }
     return axisStyle({
         type: isLog ? 'log' : 'value',
         ...(isLog ? { logBase: 10 } : {}),
         name: axis.label || '',
         gridIndex,
+        ...(nameGap == null ? {} : { nameGap }),
         ...(min == null ? {} : { min }),
         ...(max == null ? {} : { max }),
+        ...(nice ? { interval: nice.interval } : {}),
         axisLabel: {
             fontSize: 10,
             color: '#6c757d',
             hideOverlap: true,
-            showMinLabel: false,
-            showMaxLabel: false,
             formatter,
         },
     });
 }
 
+/**
+ * An exponential with a mantissa digit only where one is needed.
+ *
+ * `1e-4` and `1.5e-4`, never `1.0e-4`, and never `1e-4` twice for two different
+ * ticks. One significant figure was enough while the ticks fell wherever
+ * ECharts put them; it is not enough on a lattice stepping by half a decade,
+ * where a 5e-5 interval prints 1e-4, 1.5e-4, 2e-4 and one digit collapses the
+ * middle one onto a neighbor. That showed up as a density axis reading
+ * `0, 5e-5, 1e-4, 1e-4, 2e-4, 3e-4`, two pairs of identical labels on six
+ * distinct gridlines.
+ */
+function expLabel(v) {
+    return Number(v).toExponential(1).replace(/\.0e/, 'e');
+}
+
 /** The tick formatter for an axis, by what it measures. */
 function labelFormatter(axis, scale) {
     if (axis.unit === 'probability') {
-        return (v) => (v >= 0.01 || v === 0 ? String(v) : Number(v).toExponential(0));
+        return (v) => (v >= 0.01 || v === 0 ? String(v) : expLabel(v));
     }
     if (axis.unit === 'return_period') return (v) => compactPeriod(v);
     if (axis.unit === 'density' || scale === 'log') {
-        return (v) => (v ? Number(v).toExponential(0) : '0');
+        return (v) => (v ? expLabel(v) : '0');
     }
     return (v) => fmt(v);
 }
@@ -719,9 +888,10 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
     }
 
     // Marks last, on the panel's first series, so they draw once. A mark names
-    // the axis it sits on, so exchanged axes exchange it too.
-    const marks = [];
-    for (const m of doc.marks || []) {
+    // the axis it sits on, so exchanged axes exchange it too. Suppressed whole
+    // when the reader turns the reference lines off.
+    const placed = [];
+    for (const m of view.refLines === false ? [] : doc.marks || []) {
         if (m.panel_id !== panel.id) continue;
         const orient = inverted ? (m.orient === 'v' ? 'h' : 'v') : m.orient;
         const how = orient === 'v' ? xMap : yMap;
@@ -730,8 +900,21 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
             [at] = returnPeriods([at], how);
             if (at == null) continue;
         }
-        marks.push(markLineEntry(m, orient, at, marks.length));
+        placed.push({ m, orient, at });
     }
+    // **Which side each label takes, by where the mark is and not by its order
+    // in the document.** The author's rule is mean and 1-in-100 to the left of
+    // their lines, the capital anchor to the right, so the two do not print on
+    // top of each other. Expressed as "the outermost mark opens outward": the
+    // largest `at` on a panel takes the right, every other takes the left. a62
+    // alternated on `index % 2`, which happens to give the same answer for two
+    // marks in document order and an arbitrary one for any other number, and is
+    // why the item came back.
+    const rightmost = placed.reduce(
+        (best, p, i) => (p.orient === 'v' && (best < 0 || p.at > placed[best].at) ? i : best),
+        -1,
+    );
+    const marks = placed.map((p, i) => markLineEntry(p.m, p.orient, p.at, i === rightmost));
     if (marks.length && series.length) series[0].markLine = markLine(marks);
 
     const xFormatter = labelFormatter(xAxis, xScale);
@@ -742,8 +925,13 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
         xAxis: axisOption(xAxis, i, {
             scale: xScale, window: xOnly, floor: xFloor, formatter: xFormatter,
         }),
+        // The y name clears its own tick labels: they run out from the axis
+        // line toward it, and `2.5e-4` is wider than the 26 the shared default
+        // reserves. 46 is what the heatmap panel already uses, so both kinds of
+        // panel now hold their name at the same distance.
         yAxis: axisOption(yAxis, i, {
             scale: yScale, window: yWindow, floor: yFloor, formatter: yFormatter,
+            nameGap: 46,
         }),
         // Which axis the reader interrogates, per grid. A density is read by
         // loss; a Lee panel is read at a chosen probability and answers with an
@@ -780,28 +968,64 @@ function panelTitle(doc, panel, inverted) {
  * One mark as a markLine entry.
  *
  * The label side is the renderer's: the document says where a mark sits and
- * what it reads, not which way its text runs. Marks alternate sides so a pair
- * of capital anchors near each other opens away from each other rather than
- * printing on top of one another.
+ * what it reads, not which way its text runs.
+ *
+ * **A vertical mark's label runs vertically**, down from the top of the plot,
+ * which is the author's layout and also the only one that fits: a horizontal
+ * `1-in-200` beside a line two thirds of the way along a density is a word laid
+ * across the curve it is annotating.
+ *
+ * Getting the side right under `rotate: 90` is the fiddly part, and it is worth
+ * writing down because it reads backwards. Rotation is counterclockwise, so the
+ * text's own +x axis points **up** the screen and its +y points **left**.
+ * Therefore, anchored at the top of the line:
+ *
+ * * `align: 'right'` puts the text's end at the anchor, so it hangs **down**
+ *   from the top of the plot, which is the "aligned up to the top" in the ask.
+ * * `verticalAlign` is what puts the label to one side of its line or the
+ *   other, which is not a thing anyone guesses, and the sense is the opposite
+ *   of the one the geometry suggests: **`'top'` draws to the right of the line
+ *   and `'bottom'` to the left**. Established by looking at it, after the
+ *   derivation from the rotation direction gave the answer backwards and put
+ *   `1-in-200` on the wrong side of its own line.
+ *
+ * `distance` is left at zero on the shared chrome for the same reason: it acts
+ * along the rotated frame and moving a label with it lands somewhere unrelated
+ * to the side it was meant to shift. Padding does the clearance instead.
+ *
+ * @param {boolean} right whether this mark's label opens to the right of its
+ *   line. One per panel, the outermost; see the caller.
  */
-function markLineEntry(m, orient, at, index) {
-    const align = index % 2 === 0 ? 'right' : 'left';
+function markLineEntry(m, orient, at, right) {
+    const line = {
+        color: '#6c757d',
+        type: 'dashed',
+        width: 1,
+        opacity: m.faint ? 0.45 : 1,
+    };
+    if (orient !== 'v') {
+        // A horizontal mark's label reads horizontally: there is no curve for it
+        // to lie across and no pair of them to collide.
+        return {
+            yAxis: at,
+            name: m.label || '',
+            lineStyle: line,
+            label: { position: 'insideStartTop', align: 'left', padding: [0, 0, 0, 5] },
+        };
+    }
     return {
-        [orient === 'v' ? 'xAxis' : 'yAxis']: at,
+        xAxis: at,
         name: m.label || '',
-        lineStyle: {
-            color: '#6c757d',
-            type: 'dashed',
-            width: 1,
-            opacity: m.faint ? 0.45 : 1,
-        },
+        lineStyle: line,
         label: {
-            // Inside the plot at the top, not above it: for a vertical
-            // markLine "end" is the top, and outside it collides with the
-            // panel title.
-            position: orient === 'v' ? 'insideEndTop' : 'insideStartTop',
-            align: orient === 'v' ? align : 'left',
-            padding: align === 'right' ? [0, 5, 0, 0] : [0, 0, 0, 5],
+            // Inside the plot at the top, not above it: for a vertical markLine
+            // "end" is the top, and outside it collides with the panel title.
+            // This is the "1-in-200 renders above the plot" of the punch list.
+            position: 'insideEndTop',
+            rotate: 90,
+            align: 'right',
+            verticalAlign: right ? 'top' : 'bottom',
+            padding: [0, 4, 0, 4],
         },
     };
 }
@@ -812,7 +1036,10 @@ function markLine(entries) {
         symbol: 'none',
         silent: true,
         label: {
-            show: true, fontSize: 10, color: '#6c757d', distance: 3,
+            // `distance: 0`: see `markLineEntry`. It offsets along the rotated
+            // text frame, so any non-zero value moves a vertical label in a
+            // direction unrelated to the side it was placed on.
+            show: true, fontSize: 10, color: '#6c757d', distance: 0,
             formatter: (p) => p.name,
         },
         lineStyle: { color: '#6c757d', type: 'dashed', width: 1 },
@@ -868,6 +1095,8 @@ function heatmapPanel(doc, panel, i, axes, view, box) {
         formatter: (v) => fmt(Number(v)),
     };
     const zLabel = zAxis.label || 'z';
+    const xTicks = categoryTicks(x);
+    const yTicks = categoryTicks(y);
     return {
         series: [{
             type: 'heatmap', name: s.name, data: cells,
@@ -877,11 +1106,13 @@ function heatmapPanel(doc, panel, i, axes, view, box) {
         legend: [],
         xAxis: axisStyle({
             type: 'category', gridIndex: i, name: (axes[panel.x_axis] || {}).label || '',
-            data: x, splitLine: { show: false }, axisLabel: label,
+            data: x, splitLine: { show: false },
+            axisLabel: { ...label, ...xTicks },
         }),
         yAxis: axisStyle({
             type: 'category', gridIndex: i, name: (axes[panel.y_axis] || {}).label || '',
-            data: y, nameGap: 46, splitLine: { show: false }, axisLabel: label,
+            data: y, nameGap: 46, splitLine: { show: false },
+            axisLabel: { ...label, ...yTicks },
         }),
         visualMap: {
             min, max: Number.isFinite(max) ? max : min + 1, seriesIndex: null,
@@ -993,6 +1224,15 @@ function xyOption(doc, opts, view, realized) {
         for (const s of p.series) { series.push(s); seriesPanel.push(i); }
     });
     const legend = [...new Set(realizedPanels.flatMap((p) => p.legend))];
+    // The legend as the page will draw it: a name and the color it is drawn in.
+    // Derived here rather than pushed alongside the names at each of the three
+    // `legend.push` sites, so there is one place that knows a legend entry is a
+    // name plus a swatch. A stem is two ECharts series under one name and the
+    // first carries the color, which is why this takes the first match.
+    const legendItems = legend.map((name) => {
+        const s = series.find((entry) => entry.name === name);
+        return { name, color: (s && s.itemStyle && s.itemStyle.color) || '#6c757d' };
+    });
 
     // Panels naming the same axis id share it: that is what makes a density
     // and its tail one reading of one book rather than two pictures that
@@ -1045,7 +1285,12 @@ function xyOption(doc, opts, view, realized) {
         })).filter((t) => t.text),
         xAxis: realizedPanels.map((p) => p.xAxis),
         yAxis: realizedPanels.map((p) => p.yAxis),
-        legend: { ...baseOption().legend, show: legend.length > 1, data: legend },
+        // Declared and never drawn. The component has to exist, because it is
+        // what owns series selection and what `legendToggleSelect` addresses,
+        // and the page draws its own legend instead: the mount's strip carries
+        // the names, the swatches **and** the values under the cursor, which is
+        // the one thing ECharts' own legend cannot be made to do.
+        legend: { ...baseOption().legend, show: false, data: legend },
         series,
         ...(dataZoom.length ? { dataZoom } : {}),
     });
@@ -1060,13 +1305,18 @@ function xyOption(doc, opts, view, realized) {
     } else {
         base.tooltip = {
             ...base.tooltip,
-            // Cross, not a bare vertical: on a Lee panel the y value *is* the
-            // answer, so a horizontal tracking line reading it off the axis is
-            // worth as much as the vertical one reading the probability.
+            // **One line, not a cross.** a50 chose `'cross'` reasoning that on a
+            // Lee panel the y value is the answer, so a horizontal tracking line
+            // reading it off the axis is worth as much as the vertical one. True
+            // as far as it goes, and the author's ruling is that the second line
+            // is clutter either way: the panel already declares which coordinate
+            // it is interrogated on, `grid[i].tooltip.axisPointer.axis` above
+            // sets the pointer to it per panel, and the strip prints the reading
+            // in words. So the line that tracks is the one the panel is read by,
+            // and there is no second line to work out the meaning of.
             axisPointer: {
-                type: 'cross',
+                type: 'line',
                 lineStyle: { color: '#adb5bd', width: 1, type: 'dashed' },
-                crossStyle: { color: '#adb5bd', width: 1, type: 'dashed' },
                 label: { show: false },
             },
             formatter: (params) => tooltipText(params, seriesPanel, realizedPanels),
@@ -1077,6 +1327,9 @@ function xyOption(doc, opts, view, realized) {
     }
 
     const option = merge(base, resolveOverrides(opts.overrides, { doc, view, box }));
+    // What the page's own legend is built from. Empty on a grid panel, which
+    // has no series to name and keeps ECharts' item tooltip.
+    option.legendItems = grids.length ? [] : legendItems;
     option.hostHeight = box.hostHeight;
     option.panelFootprint = box.footprint;
     option.is3d = false;
