@@ -660,11 +660,10 @@ def _resolve_frame(obj: Any, name: str):
 
 
 def _bs_window_frame(obj: Any):
-    """The grid-sizing frame, private raw form preferred over the public view.
+    """The grid-sizing frame, as the library publishes it.
 
     One resolution shared by the JSON route and the CSV download so the two
-    cannot answer differently. See :func:`get_bs_window_df` for why both
-    attributes are read.
+    cannot answer differently.
 
     Parameters
     ----------
@@ -673,9 +672,20 @@ def _bs_window_frame(obj: Any):
     Returns
     -------
     pandas.DataFrame or None
+
+    Notes
+    -----
+    **The published frame, not the private one.** This read
+    ``obj._bs_window_df`` first through a70 and fell back to the public
+    attribute, because the private probe frame is two columns wider (``W``, the
+    window width, and ``coverage``) and those two are the diagnostic the pane
+    exists for. Preferring it meant this service had decided that the library's
+    published view of its own grid search was the wrong one, which is not a
+    decision it gets to make: the app draws the ``bs_window`` exhibit now, and
+    if two columns are missing from it they are missing upstream. Asked for in
+    ``aggregate_REFACTOR/dev/note-from-aggregate-api-round-6.md``.
     """
-    df = _resolve_frame(obj, "_bs_window_df")
-    return df if df is not None else _resolve_frame(obj, "bs_window_df")
+    return _resolve_frame(obj, "bs_window_df")
 
 
 def _sharpen_score_frame(obj: Any):
@@ -715,71 +725,12 @@ def _sharpen_score_frame(obj: Any):
 #: The three moments the reins stats tables report, in reading order.
 _REINS_MOMENTS = ["mean", "cv", "skew"]
 
-#: The aggregate frame's non-moment components, in reading order. `meta` is the
-#: layer terms; the other three are the moment blocks.
-_REINS_COMPONENTS = ["freq", "sev", "agg"]
-
-
-def _reins_stats_transposed(obj: Any):
-    """``reins_stats_df`` with the layers down the rows, as two frames.
-
-    The library builds this frame with the *measures* down the rows and the
-    layers across, which is the transpose of how it is read: a reinsurance
-    reader compares gross against ceded against net, so those belong on the rows
-    where the eye runs down them, with the measures across as columns.
-
-    Two frames rather than one, because the frame holds two different kinds of
-    thing and stacking them in one table gave seventeen rows of mixed units.
-    The **terms** are the layer's own contract, its share, limit, attachment and
-    the probabilities of hitting it. The **moments** are what that layer does to
-    the frequency, severity and aggregate distributions. One table each.
-
-    Two input shapes, because the two kinds do not carry the same frame:
-
-    * ``Aggregate``: rows ``(component, measure)`` with component one of
-      ``meta``, ``freq``, ``sev``, ``agg``; columns ``(view, layer)``. A plain
-      transpose puts it right, then it splits on the component level.
-    * ``Portfolio``: rows ``(view, measure)``, columns the unit names, and no
-      layer terms at all. Stacking the units and unstacking the measures gives
-      view by unit down the rows.
-
-    Raw moments (``ex1``, ``ex2``, ``ex3``) are dropped here rather than by
-    ``_drop_raw_moments``, which works on rows and would no longer find them:
-    after the reshape they are columns.
-
-    Parameters
-    ----------
-    obj : Any
-
-    Returns
-    -------
-    (pandas.DataFrame or None, pandas.DataFrame or None)
-        ``(terms, moments)``. Terms is ``None`` for a portfolio, which carries
-        none, and both are ``None`` with no reinsurance on the object.
-    """
-    df = _resolve_frame(obj, "reins_stats_df")
-    if df is None or df.empty:
-        return None, None
-    levels = list(df.index.names or [])
-
-    if "component" in levels:
-        t = df.T
-        terms = t["meta"].dropna(axis=1, how="all") if "meta" in t.columns.get_level_values(0) else None
-        present = [c for c in _REINS_COMPONENTS if c in t.columns.get_level_values(0)]
-        moments = t.loc[:, (present, _REINS_MOMENTS)] if present else None
-        return terms, moments
-
-    if "measure" in levels:
-        # A portfolio: units across, so stack them under the row index and put
-        # the measures back across.
-        wide = df.stack().unstack("measure")
-        keep = [m for m in _REINS_MOMENTS if m in wide.columns]
-        # The stacked unit level arrives unnamed; say what it is, since it
-        # becomes a visible stub column.
-        wide.index = wide.index.set_names("unit", level=-1)
-        return None, (wide[keep] if keep else None)
-
-    return None, None
+# `_reins_stats_transposed` and `_REINS_COMPONENTS` came out at a71, with the
+# `reins_stats_terms` and `reins_stats_moments` routes they fed. They turned
+# the library's layering analysis on its side and split it in two, which was
+# this service deciding how a table it does not own should be read. The
+# library serves that analysis as the `reins` exhibit's first block and the
+# app draws what it is given; if the orientation is wrong it is wrong there.
 
 
 def collapse_program(decl: str) -> str:
@@ -1684,20 +1635,17 @@ def get_bs_window_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> di
     (``bs`` / ``log2`` / ``x_min``); the ``selected`` row marks the method
     actually used.
 
-    Two attributes carry it and the route reads both, private first. The
-    private ``_bs_window_df`` is the raw probe frame, two columns wider (``W``
-    and ``coverage``), and those two are the pane's whole diagnostic value, so
-    where it exists it wins. The public ``bs_window_df`` is the library's
-    display view of the same rows, and it is what the ``bs_window`` exhibit
-    serves.
-
-    Reading only the private one is what this route used to do, and the
-    capability payload caught it: a ``BivariateAggregate`` carries the public
-    frame and not the private one, so the library reported the exhibit as
-    available while this route answered 400. A leaf lit by the capability list
-    has to be a leaf that serves, or the derivation is worth nothing. A kind
-    carrying neither (a P&L, a severity, a distortion) still gets the clean
-    400.
+    **The published frame.** Two attributes carry a version of this, and this
+    route read the private ``_bs_window_df`` in preference from a45 to a70, on
+    the grounds that it is two columns wider (``W``, the window width, and
+    ``coverage``). Both readings were wrong. Reading *only* the private one
+    404'd on a ``BivariateAggregate``, which carries the public frame alone,
+    while the capability list reported the exhibit as available; preferring it
+    was this service ruling that the library's published view of its own grid
+    search is the wrong one. The app draws the ``bs_window`` exhibit now, the
+    two columns are asked for upstream, and this route serves what the library
+    publishes. A kind carrying neither (a P&L, a severity, a distortion) gets a
+    clean 400.
     """
     df = _bs_window_frame(entry.obj)
     if df is None:
@@ -1849,8 +1797,6 @@ _CSV_FRAMES = {
     # split into the layer's own terms and what it does to the moments. The
     # untransposed frame stays reachable under its own name for the CSV
     # download, which is the "give me exactly what the library built" export.
-    "reins_stats_terms": lambda o: _reins_stats_transposed(o)[0],
-    "reins_stats_moments": lambda o: _reins_stats_transposed(o)[1],
     "reins_stats_df": lambda o: _drop_raw_moments(_resolve_frame(o, "reins_stats_df")),
     "reins_density_df": lambda o: _resolve_frame(o, "reins_density_df"),
 }

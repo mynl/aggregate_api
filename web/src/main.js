@@ -830,36 +830,36 @@ function showTab(name) {
 // moving a leaf onto that route would have traded a working table for a broken
 // one. See `dev/plan-ui-round-5.md` item 21.
 //
-// Reinsurance Summary followed at a70, off the `reins` exhibit's second block.
+// Reinsurance Summary followed at a70, and Reinsurance Stats and More Window at
+// a71. **Every published exhibit is now drawn as published.**
 //
-// **What is left on the frame route, and why, one line each.** The author's
-// standing rule is that there are no exceptions to this, so each of these is a
-// ticket rather than a decision, and `dev/plan-ui-round-6.md` phase C is the
-// board they are on. Nobody should have to re-derive this list by reading
-// loaders.
+// The a71 pair are worth a sentence because both had been recorded as decisions
+// and neither was one. Reins Stats fetched two frames the *api* built by turning
+// the library's layering analysis on its side and splitting it; More Window
+// fetched the library's *private* probe frame in preference to its published
+// one. Nobody had weighed the library's version and rejected it: the leaves
+// predate the registry, and when exhibits arrived nobody came back for them. The
+// author's ruling, and it is the standing rule: publish what the library says,
+// and if it is wrong, change the library.
 //
-//   Reins Stats     the `reins` exhibit's first block is the same numbers the
-//                   other way up, measures down and layers across. The api
-//                   transposes and splits it, which is round 3's punch item.
-//                   Blocked on the library turning the frame over; the author
-//                   is pushing that change.
-//   More Window     the `bs_window` exhibit serves the *published* frame, which
-//                   is two columns narrower than the private `_bs_window_df`
-//                   this fetches. The two missing ones are `W` and `coverage`,
-//                   which are the pane's whole diagnostic value. Blocked on the
-//                   library publishing the wider frame.
-//   More Sharpen    there is no `sharpen` exhibit at all. `sharpen_df` and
-//                   `sharpen_score` are not in the registry. Blocked on one
-//                   being registered.
+// **What is left, and none of it is a table the library publishes.**
+//
+//   More Sharpen    the library registers no `sharpen` exhibit. The registry is
+//                   eleven entries and sharpen is not one, so there is nothing
+//                   to draw; `register_simple_exhibit` makes it a one-liner
+//                   upstream. Until then this holds the two ledes and the last
+//                   two `FORMATS` entries in `tables.py`.
 //   Pricing (2)     computed from what the reader typed, so not keyed on the
-//   Bounds (3)      object and not registry exhibits in the current sense. The
-//                   documents are built here, from pandas, which is the last of
-//                   that in the table pipeline. Needs a library entry point
-//                   that takes the inputs and answers with an exhibit; a design
-//                   question rather than a missing registration.
-//   both densities  bulk, permanently the grid's, and the agreed exception.
-//                   A table of thousands of rows is not a reading experience
-//                   and a document of one is not worth building.
+//   Bounds (2)      object and not registry exhibits in the current sense. The
+//                   author is adding a bounds summary upstream. The documents
+//                   are built here meanwhile, which is the last pandas in the
+//                   table pipeline.
+//   both densities  bulk, permanently the grid's, and the one agreed exception,
+//                   scoped out by the author. A table of thousands of rows is
+//                   not a reading experience.
+//
+// Nothing else is allowed on the frame route. If a leaf here starts fetching a
+// DataFrame and formatting it, that is the bug.
 const LOADERS = {
     'overview:plot': () => loadOverviewPlot(),
     'overview:summary': () => loadExhibitLeaf('pane-overview', 'summary',
@@ -887,7 +887,10 @@ const LOADERS = {
     // library's caption and, on a portfolio, its row flags. Byte-identical
     // otherwise, so this moved at a70 with nothing to weigh.
     'reinsurance:summary': () => loadReinsExhibit(1, ['reinsurance', 'summary']),
-    'reinsurance:stats': () => loadReinsStats(),
+    // The `reins` exhibit's first block, the layering analysis, in the
+    // library's own orientation. The api transposed it and split it in two
+    // from round 3 to a71.
+    'reinsurance:stats': () => loadReinsExhibit(0, ['reinsurance', 'stats']),
     'reinsurance:density': () => loadReinsFrame('reins_density_df',
         ['reinsurance', 'density']),
     'reinsurance:plot': () => loadReinsPlot(),
@@ -931,8 +934,8 @@ const LOADERS = {
     // historical reasons rather than good ones.
     'more:behavior': () => loadExhibitLeaf('pane-more', 'tail_behavior',
         ['more', 'behavior']),
-    'more:window': () => replacePaneTable('pane-more', 'bs_window_df', GRID_FULL,
-        null, ['more', 'window']),
+    'more:window': () => loadExhibitLeaf('pane-more', 'bs_window',
+        ['more', 'window']),
     'more:dependency': () => loadExhibitLeaf('pane-more', 'dependency',
         ['more', 'dependency']),
     'more:sharpen': () => loadSharpenAudit(),
@@ -1219,13 +1222,12 @@ function frameDoc(which) {
  * The library owns the translation, so this is a passthrough on the exhibit
  * route and nothing here knows what either perspective does to a frame.
  *
- * Note what it reaches, because the answer is "most of the page" and that is
- * worth knowing before wondering why a table did not move. Only the leaves on
- * the exhibit route take a perspective: Overview Summary, Tail and Validation,
- * Economics Ledger, Ratios and Waterfall, Reinsurance Summary, and More Stats,
- * Tail behavior and Dependency. Ten of the seventeen table leaves. What is left
- * is served by the frame routes, which have no such parameter, and the list of
- * those with the reason each is still there is above `LOADERS`.
+ * Twelve of the nineteen table leaves take one, which is every leaf drawing a
+ * published exhibit: Overview Summary, Tail and Validation; Economics Ledger,
+ * Ratios and Waterfall; Reinsurance Summary and Stats; More Stats, Tail
+ * behavior, Window and Dependency. The other seven are the two densities, More
+ * Sharpen, and the four Pricing and Bounds tables, and the reason each is still
+ * on a frame route is above `LOADERS`.
  */
 const PERSPECTIVE_KEY = 'aggapi.perspective';
 let _perspective = (() => {
@@ -2228,62 +2230,13 @@ async function loadReinsExhibit(block, leaf) {
     await loadExhibitLeaf('pane-reinsurance', 'reins', leaf, block);
 }
 
-/**
- * Reinsurance \ Stats: the layering analysis, read the way round it is used.
- *
- * Two tables, from one library frame that holds two different kinds of thing.
- * The **terms** are the layer's own contract, share, limit, attachment and the
- * probabilities of reaching it; the **moments** are what that layer does to the
- * frequency, severity and aggregate distributions. Both run gross, ceded, net
- * down the rows, because that is the comparison a reinsurance reader makes and
- * the eye makes it down a column, not across a row.
- *
- * The library builds the frame the other way up, measures down and layers
- * across, which is right for the library (a layer is a natural column of an
- * analysis) and wrong on a page. The transpose and the split are the api's, at
- * `_reins_stats_transposed`.
- *
- * A portfolio has no layer terms, so its `reins_stats_terms` comes back 400 and
- * only the moments block draws. That is a shape difference, not a failure,
- * which is why both fetches are caught rather than either being required.
- */
-async function loadReinsStats() {
-    if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
-    const [terms, moments] = await Promise.all([
-        frameDoc('reins_stats_terms').catch(() => null),
-        frameDoc('reins_stats_moments').catch(() => null),
-    ]);
-    const draw = () => {
-        const root = el('div', { className: 'overview-exhibits exhibit-blocks' });
-        replacePane('pane-reinsurance', root);
-        const lede = ledeFor('reinsurance', 'stats');
-        if (lede) root.appendChild(lede);
-        if (!terms && !moments) {
-            root.appendChild(el('div', { className: 'text-muted small' },
-                'No layering analysis on this object.'));
-            return;
-        }
-        const block = (doc, title, gloss) => {
-            root.appendChild(el('p', { className: 'exhibit-lede' },
-                el('b', {}, title), `: ${gloss}`));
-            const host = el('div');
-            root.appendChild(host);
-            mountTable('pane-reinsurance', host, { doc }, GRID_FULL);
-        };
-        if (terms) {
-            block(terms, 'Layer terms',
-                'share, limit and attachment, with the probability of reaching '
-                + 'and of exhausting each layer');
-        }
-        if (moments) {
-            block(moments, 'Moments',
-                'what each layer does to the frequency, severity and aggregate '
-                + 'distributions');
-        }
-        onTableViewChange('pane-reinsurance', draw, root);
-    };
-    draw();
-}
+// `loadReinsStats` came out at a71 with the transpose it existed to draw. It
+// fetched `reins_stats_terms` and `reins_stats_moments`, two frames the *api*
+// made by turning the library's layering analysis on its side and splitting it,
+// and it wrote a title and a gloss for each. The library serves that analysis
+// as the `reins` exhibit's first block with its own caption, so all of that was
+// this repo's second opinion on a table it does not own. If the orientation is
+// wrong, it is wrong in the library.
 
 /**
  * Pricing / Determine and Pricing / Evaluate: show one form, hide the other.

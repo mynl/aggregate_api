@@ -4,6 +4,49 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a71
+
+**Every table the library publishes is now drawn as published.** The author's
+ruling of 2026-08-10: publish what the library says, and if it is wrong, change
+the library. The two leaves that were not doing that are, and neither of them
+was a decision anybody had taken. They predate the exhibit registry, and when
+exhibits arrived nobody came back for them.
+
+**More / Window** fetched the library's **private** `_bs_window_df` in
+preference to its published `bs_window_df`, because the private probe frame is
+two columns wider (`W`, the window width, and `coverage`). It draws the
+`bs_window` exhibit now, with the library's own caption, which says what a
+clipped row is and where aliasing comes from: a sentence the app's hand-written
+lede did not carry. The two columns are asked for upstream. `_bs_window_frame`
+serves the published frame, so the route and the exhibit cannot disagree.
+
+**Reinsurance / Stats** fetched two frames the *api* manufactured by transposing
+the library's layering analysis and splitting it in two, and wrote a title and a
+gloss for each half. It draws the `reins` exhibit's first block.
+`_reins_stats_transposed`, `_REINS_COMPONENTS`, the `reins_stats_terms` and
+`reins_stats_moments` routes and `loadReinsStats` all delete.
+
+**`tables.py` loses most of what was left in it.** `ROW_FLAGS` is empty and
+`FORMATS` is down to the pricing frames and the two sharpen ones. The five
+entries that went (`summary`, `tail_df`, `validation_df`, `reins_summary_df`,
+`bs_window_df`) each declared how a published exhibit's numbers print, and had
+been dead for the leaves that moved at a68 and a70 without anybody noticing.
+`_is_anchor` went with them, and it is the clearest case for the rule: which
+return periods a book is capitalized at is a fact about the practice, and this
+repo had 200 and 250 written down as a literal. The library flags exactly the
+same rows under the insurer perspective, so nothing moved on screen. The library
+does **not** agree about formats, and does not have to: it writes a VaR in the
+tens of millions as `41.864M` where this repo said `41,864,000.00`.
+
+Five tests that pinned the old behavior now pin the new rule, including one that
+asserts those five keys stay out of `FORMATS`.
+
+**What is left, and none of it is a table the library publishes.** More /
+Sharpen, because the registry is eleven entries and `sharpen` is not one of
+them; Pricing and Bounds, which are computed from what the reader typed and so
+cannot be keyed on the object; and the two densities, which are bulk and are the
+one exception the author scoped out.
+
 ## 1.0.0a70
 
 `dev/plan-ui-round-6.md`, phases B and C: the P&L premium, and the exceptions.

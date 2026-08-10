@@ -64,14 +64,20 @@ re-pointing the frame routes at exhibit raw and insurer, or keep the frame
 routes as the raw CSV path forever) is taken during the endpoint phase
 proper.
 
-**Ten of the seventeen table leaves are on the exhibit route as of a70**, and
-the author's ruling is that there are no exceptions to the rule: what the
-library serves, the app draws. The six that are not, with what blocks each, are
-listed above `LOADERS` in `main.js` and written up for the library as
-`aggregate_REFACTOR/dev/note-from-aggregate-api-round-6.md`. Four are library
-asks (Reins Stats orientation, the wider `bs_window_df`, a `sharpen` exhibit,
-and a shape for a computed pricing exhibit); the two densities are the agreed
-bulk exception and are not outstanding.
+**Settled at a71: every table the library publishes is drawn as published.**
+Twelve of the nineteen table leaves take the exhibit route, which is all of them
+that can. `ROW_FLAGS` is empty and `FORMATS` holds only frames no exhibit
+serves. The `[Exhibits-App-Cleanup]` decision above is therefore taken: the
+migrated entries are deleted, and the frame routes stay as the raw / CSV api
+path, rendered by inference.
+
+What is left, and none of it is a published table: **More Sharpen** (the library
+registers no `sharpen` exhibit; `register_simple_exhibit` makes it a one-liner
+upstream), **Pricing and Bounds** (computed from the reader's input, so not
+keyed on the object; the author is adding a bounds summary upstream), and the
+**two densities**, bulk and the one exception the author scoped out. The asks
+are written up as
+`aggregate_REFACTOR/dev/note-from-aggregate-api-round-6.md`.
 
 ### b) Consolidate the graphs on ECharts, and fix the options
 

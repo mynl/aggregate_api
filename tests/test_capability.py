@@ -196,17 +196,36 @@ def test_bivariate_serves_its_grid_sizing_frame(client):
     assert client.get(f"/v1/objects/{oid}/frame/bs_window_df.csv").status_code == 200
 
 
-def test_bs_window_keeps_the_richer_frame_where_there_is_one(client):
-    """An aggregate still gets the raw probe frame, not the display view.
+def test_bs_window_serves_the_published_frame(client):
+    """The library's published grid-sizing frame, not its private probe frame.
 
-    ``W`` and ``coverage`` are the pane's whole diagnostic value and only the
-    private frame carries them, so the public fallback must not take over where
-    the private one exists.
+    This asserted the opposite from a45 to a70: the route read
+    ``obj._bs_window_df`` in preference, because the private frame is two
+    columns wider (``W``, the window width, and ``coverage``) and those two are
+    the diagnostic the More / Window pane exists for.
+
+    The author's ruling of 2026-08-10 retires that whole class of decision. What
+    the library publishes is what gets drawn, and if two columns are missing
+    they are missing upstream, where the fix belongs. The pane draws the
+    ``bs_window`` exhibit now and this route follows it, so the two cannot
+    disagree about what the grid search said.
+
+    Pinned by the private attribute's **absence** from the answer rather than by
+    a column list, so this keeps meaning the same thing on the day the library
+    adds ``W`` and ``coverage`` to the published frame.
     """
     oid, _ = _build(client, "agg")
     r = client.get(f"/v1/objects/{oid}/bs_window_df")
     assert r.status_code == 200
-    assert {"W", "coverage"} <= set(r.json()["columns"])
+    served = set(r.json()["columns"])
+    # The exhibit is built from the published frame, so the route's columns are
+    # a subset of the exhibit's. `level_0` is the unnamed index level the frame
+    # route resets out and the exhibit keeps as a stub.
+    exh = client.get(f"/v1/objects/{oid}/exhibit/bs_window").json()
+    head = exh["blocks"][0]["head"][0]
+    published = {c["text"] if isinstance(c, dict) else c for c in head}
+    assert served <= published | {"level_0"}, (
+        f"the route serves columns the exhibit does not: {served - published}")
 
 
 def test_kinds_without_a_grid_still_answer_cleanly(client):

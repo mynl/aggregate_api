@@ -74,47 +74,27 @@ def level_value(df: pd.DataFrame, row: int, name: str) -> Any:
     return label[names.index(name)]
 
 
-def _is_total(df: pd.DataFrame, row: int) -> bool:
-    """The portfolio total row, which is the "what is my number" line."""
-    return level_value(df, row, "unit") == "total"
+# `_is_total`, `_is_anchor`, `_summary_flags` and `_tail_flags` came out at
+# a71 with the ROW_FLAGS entries they served. Between them they decided which
+# of the library's rows a reader should look at hardest, off a hard-coded
+# 1-in-200 and 1-in-250. See ROW_FLAGS below.
 
 
-def _is_anchor(df: pd.DataFrame, row: int) -> bool:
-    """A capital anchor: 1-in-200 (Solvency II) or 1-in-250 (US)."""
-    try:
-        return int(level_value(df, row, "T")) in (200, 250)
-    except (TypeError, ValueError):
-        return False
-
-
-def _summary_flags(df: pd.DataFrame, row: int) -> list[str]:
-    """Total row, and each unit's aggregate line as that unit's subtotal."""
-    flags = []
-    if _is_total(df, row):
-        flags.append("total")
-    if level_value(df, row, "X") == "Agg":
-        flags.append("subtotal")
-    return flags
-
-
-def _tail_flags(df: pd.DataFrame, row: int) -> list[str]:
-    """Total row, and the two capital anchors, which are what gets read."""
-    flags = []
-    if _is_total(df, row):
-        flags.append("total")
-    if _is_anchor(df, row):
-        flags.append("emphasis")
-    return flags
-
-
-#: Per-frame row emphasis. Frames absent from this map build unflagged, which
-#: is most of them: a stats or validation frame has no line that carries more
-#: weight than its neighbors.
-ROW_FLAGS: dict[str, Callable[[pd.DataFrame, int], Sequence[str]]] = {
-    "summary": _summary_flags,
-    "tail_df": _tail_flags,
-    "reins_summary_df": _summary_flags,
-}
+#: Per-frame row emphasis. Frames absent from this map build unflagged.
+#:
+#: **Empty since a71, and it should stay that way.** It held `summary`, `tail_df`
+#: and `reins_summary_df`, deciding which of the library's rows carry weight: the
+#: total, the subtotals, and the two capital anchors on the return-period ladder.
+#: Every one of those tables is a published exhibit that ships its own flags, and
+#: the anchors are the clearest case of why this was the wrong place to hold it:
+#: which return periods a book is capitalized at is the library's choice, this
+#: repo had 1-in-200 and 1-in-250 written down as a fact about it, and the copy
+#: had already gone stale by a68 without anybody noticing.
+#:
+#: The mechanism stays because `frame_document` takes a key and the pricing
+#: frames still go through it. Nothing should be added here for a frame the
+#: library publishes an exhibit for; that is what the exhibit is.
+ROW_FLAGS: dict[str, Callable[[pd.DataFrame, int], Sequence[str]]] = {}
 
 #: Per-frame column formats, for the columns whose dtype does not say enough.
 #:
@@ -146,8 +126,7 @@ ROW_FLAGS: dict[str, Callable[[pd.DataFrame, int], Sequence[str]]] = {
 #: read across than one that is slightly over-precise in places.
 MONEY = ",.2f"
 
-#: A probability that has to separate 0.99 from 0.995 from 0.999.
-PROBABILITY = ".4f"
+# `PROBABILITY` came out at a71 with the `tail_df` entry that was its only user.
 
 FORMATS: dict[str, dict[str, object] | str] = {
     # The pricing pentagon, whose columns are the statistics themselves.
@@ -170,53 +149,28 @@ FORMATS: dict[str, dict[str, object] | str] = {
     "stat_P": MONEY,
     "stat_PQ": ".3f",
     "stat_ROE": ".1%",
-    # ---- the generic display frames --------------------------------------
+    # ---- what is left, and why each is left -------------------------------
     #
-    # These reach the client through the one `frame/{which}` route, which passed
-    # no format key at all until a51, so every one of them was pure dtype
-    # inference and the same 20,000 rule flattened the money columns on any book
-    # worth pricing. The route now passes the frame's own name, so an entry here
-    # is all it takes.
-    "summary": {
-        "Mean": MONEY, "SD": MONEY, "P01": MONEY, "Median": MONEY, "P99": MONEY,
-        "CV": ".3f", "Skew": ".3f",
-    },
-    "tail_df": {
-        "p": PROBABILITY, "VaR": MONEY, "TVaR": MONEY, "xsVaR": MONEY,
-        "VaR/Mean": ".3f",
-    },
-    # Gross / net moments either side of a cession, with the relative change
-    # between them. The changes are proportions, not money.
-    "validation_df": {
-        "Gross EX": MONEY, "Net EX": MONEY, "Gross CV": ".3f", "Net CV": ".3f",
-        "Gross Sk": ".3f", "Net Sk": ".3f",
-        "Change EX": ".1%", "Change CV": ".1%",
-    },
-    "reins_summary_df": {
-        "EX": MONEY, "Est EX": MONEY, "CV": ".3f", "Est CV": ".3f",
-        "Sk": ".3f", "Est Sk": ".3f",
-        "Change EX": ".1%", "Change CV": ".1%",
-    },
-    # The grid-window estimator. Its numeric columns arrive as `object` dtype,
-    # because the frame mixes bools, floats and strings down one column, and an
-    # object column gives inference nothing to work from: that is why `x_max`
-    # and `W` printed at full float width. Naming them is the fix.
+    # `summary`, `tail_df`, `validation_df`, `reins_summary_df` and
+    # `bs_window_df` came out at a71. Each named the formats for a frame whose
+    # table the library publishes as an exhibit, which ships its formats
+    # resolved, so every one of them was this repo asserting how the library's
+    # own numbers print. The `frame/{which}` route still serves those frames for
+    # direct api use; it renders them by dtype inference now, and if that reads
+    # badly the answer is to fetch the exhibit, which is what the app does.
     #
-    # `W` is the window width, `x_max - x_min`, and the api serves the library's
-    # private `_bs_window_df` in preference to the public one, which is where it
-    # comes from. Formatted the same as the two endpoints it is the difference
-    # of, since a width read against a window it does not visibly match is worse
-    # than no width at all.
-    "bs_window_df": {
-        "x_min": MONEY, "x_max": MONEY, "W": MONEY, "bs": ",.4g",
-        "log2_need": ".0f", "clipped": ".0f",
-    },
     # The grid audit's per-cell detail. The `u_*` columns are relative errors
     # against the analytic moments and run from about 1e-7 to a few percent, so
     # they need a scientific format rather than a fixed one: at `.4f` a good cell
     # and a perfect cell both print 0.0000, which is exactly the comparison the
     # table exists to support. `score` is the number that decides, and gets the
     # digits to separate two cells that are close.
+    #
+    # **The last two entries in this table**, and they are here only because the
+    # library registers no `sharpen` exhibit. Every other leaf draws a document
+    # the library built, formats included. When that exhibit lands, these two go
+    # and `FORMATS` is `price` and the bounds frames alone, which are computed
+    # from the reader's own input and have no exhibit to come from.
     "sharpen_df": {
         "score": ".5f", "extent": MONEY, "x_min": MONEY, "bs": ",.4g",
         "u_sev_mean": ".2e", "u_sev_cv": ".2e", "u_sev_skew": ".2e",
@@ -226,23 +180,6 @@ FORMATS: dict[str, dict[str, object] | str] = {
     # The score grid, whose columns are steps in log2 rather than statistics, so
     # one spec covers all of them.
     "sharpen_score": ".5f",
-    # The layering analysis, transposed. Its terms block mixes three kinds of
-    # number in one row, which is why it needed declaring: a share and three
-    # probabilities are proportions, a limit and an attachment are money, and
-    # loss-on-line is a rate. Inference sees eight float columns and formats
-    # them all the same way.
-    "reins_stats_terms": {
-        "share": ".1%", "limit": MONEY, "attach": MONEY,
-        "pr_attach": ".3%", "pr_detach": ".3%", "pr_loss": ".1%",
-        "lol": ".3f", "output": ".0f",
-    },
-    # Moments. On an aggregate the columns are a (component, measure)
-    # MultiIndex, so these keys are the measure alone and `frame_spec` matches
-    # them against the innermost level: one declaration covers freq, sev and agg
-    # alike, which is right, because the format belongs to the measure. On a
-    # portfolio the columns are the three measures flat, and the same keys match
-    # directly.
-    "reins_stats_moments": {"mean": MONEY, "cv": ".4f", "skew": ".4f"},
 }
 
 

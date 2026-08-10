@@ -565,80 +565,84 @@ def test_reins_frames_present(client):
         assert len(body["rows"]) > 0
 
 
-def test_reins_stats_reads_layers_down_the_rows(client):
-    """The layering analysis, transposed, and split into terms and moments.
+def test_reins_stats_is_served_as_the_library_publishes_it(client):
+    """The layering analysis comes from the `reins` exhibit, unaltered.
 
-    The library builds `reins_stats_df` with the measures down and the layers
-    across, which is right for a library and wrong on a page: the comparison a
-    reinsurance reader makes is gross against ceded against net, and the eye
-    makes it down a column. The two blocks are the two kinds of thing the one
-    frame holds, the layer's own contract and what it does to the moments.
+    Two tests stood here from round 3 to a71 and both pinned the opposite. The
+    api resolved `reins_stats_df`, transposed it so the layers ran down the rows
+    rather than across the columns, split it into a terms block and a moments
+    block, and served the halves as `reins_stats_terms` and
+    `reins_stats_moments`. The reasoning was that a reinsurance reader compares
+    gross against ceded against net and the eye makes that comparison down a
+    column.
+
+    That reasoning may even be right, and it was still the wrong place to act on
+    it. Turning a table on its side is a decision about what the table means,
+    the library owns what its tables mean, and this service had quietly taken
+    that decision for one frame out of eleven. The author's ruling of
+    2026-08-10: publish what the library says, and if the orientation is wrong,
+    change the library.
+
+    So both routes are gone with `_reins_stats_transposed`, and the leaf draws
+    the `reins` exhibit's first block. This pins the exhibit as the only path.
     """
     oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
 
-    terms = client.get(f"/v1/objects/{oid}/frame/reins_stats_terms?format=ir")
-    assert terms.status_code == 200, terms.text
-    head = [h["text"] for h in terms.json()["head"][-1]]
-    assert "layer" in head, head
-    for term in ("share", "limit", "attach"):
-        assert term in head, f"{term} missing from {head}"
+    # The api no longer manufactures either half.
+    for gone in ("reins_stats_terms", "reins_stats_moments"):
+        r = client.get(f"/v1/objects/{oid}/frame/{gone}?format=ir")
+        assert r.status_code == 404, f"{gone} should not resolve: {r.status_code}"
 
-    moments = client.get(f"/v1/objects/{oid}/frame/reins_stats_moments?format=ir")
-    assert moments.status_code == 200, moments.text
-    doc = moments.json()
-    # Two header levels: the component spans (freq / sev / agg) over the three
-    # measures. Raw moments are gone, and they are columns now, so the drop had
-    # to move with them.
-    assert len(doc["head"]) == 2, doc["head"]
-    spans = {h["text"] for h in doc["head"][0] if h.get("text")}
-    assert {"freq", "sev", "agg"} <= spans, spans
-    measures = [h["text"] for h in doc["head"][-1]]
-    assert measures.count("mean") == 3, measures
-    assert not any(m.startswith("ex") for m in measures), measures
+    # The exhibit answers, and its first block is the layering analysis with the
+    # library's own caption on it.
+    exh = client.get(f"/v1/objects/{oid}/exhibit/reins").json()
+    assert len(exh["blocks"]) == 2, exh["blocks"]
+    layering = exh["blocks"][0]
+    assert layering["caption"], "the library's sentence about the block travels with it"
+    assert layering["body"], "and it carries rows"
 
 
-def test_reins_stats_terms_are_an_aggregate_thing(client):
-    """A portfolio carries no layer terms, and says so rather than inventing them.
+def test_the_library_formats_its_own_numbers(client):
+    """A served exhibit arrives with its formats resolved, so this repo has none.
 
-    Its `reins_stats_df` is a different frame: view by measure down, units
-    across, with nothing about limits or attachments in it. The moments block
-    still answers, view by unit down the rows.
+    This test used to assert the opposite: that `tables.FORMATS` reached the
+    generic frame route, because the route passed no format key through a50 and
+    every frame it served was pure dtype inference. Inference drops the decimals
+    once a column's mean reaches 20,000, so a book worth pricing reported its
+    money as whole units, and naming the columns here was the fix.
+
+    Naming them here was the fix to the wrong problem. A format is a statement
+    about what a number *is*, the library knows that and the app does not, and
+    the entries this repo held (`summary`, `tail_df`, `validation_df`,
+    `reins_summary_df`, `bs_window_df`) were five second opinions that had to be
+    kept in step with frames they did not own. They came out at a71 with the
+    author's ruling. Note that the library does not agree with what was here,
+    and does not have to: it writes a VaR in the tens of millions as `41.864M`
+    where this repo said `41,864,000.00`. Its call.
+
+    What is left in `FORMATS` is `price` / `reins_price` / the `stat_*` slices,
+    computed from the reader's own input so no exhibit can serve them, and the
+    two `sharpen` frames, which have no exhibit registered.
     """
-    port = ("port RS.P "
-            "agg RS.A 10 claims 1000 xs 0 sev lognorm 90 cv 1.5 "
-            "occurrence net of 500 xs 500 poisson "
-            "agg RS.B 5 claims 500 xs 0 sev lognorm 60 cv 1.2 poisson")
-    oid = client.post("/v1/objects", json={"decl": port, "log2": 12}).json()["id"]
+    from aggregate_api.tables import FORMATS, ROW_FLAGS
 
-    # 400, the route's "known frame, this object has none" answer.
-    assert client.get(
-        f"/v1/objects/{oid}/frame/reins_stats_terms?format=ir").status_code == 400
+    assert not ROW_FLAGS, f"row emphasis belongs to the library: {sorted(ROW_FLAGS)}"
+    for gone in ("summary", "tail_df", "validation_df", "reins_summary_df",
+                 "bs_window_df"):
+        assert gone not in FORMATS, f"{gone} is a published exhibit; it formats itself"
 
-    moments = client.get(f"/v1/objects/{oid}/frame/reins_stats_moments?format=ir")
-    assert moments.status_code == 200, moments.text
-    head = [h["text"] for h in moments.json()["head"][-1]]
-    assert head[:2] == ["view", "unit"], head
-    assert head[2:] == ["mean", "cv", "skew"], head
-
-
-def test_the_frame_route_applies_declared_formats(client):
-    """`tables.FORMATS` reaches the generic frame route, which it did not.
-
-    The route passed no format key at all through a50, so every frame it served
-    was pure dtype inference; inference reads a column's magnitude and drops the
-    decimals once its mean reaches 20,000, so a book worth pricing reported its
-    money as whole units. This book's VaR is in the tens of millions.
-    """
     big = "agg FMT.Big 5000 claims 100000 xs 0 sev lognorm 9000 cv 2.5 poisson"
     oid = client.post("/v1/objects", json={"decl": big, "log2": 16}).json()["id"]
-    doc = client.get(f"/v1/objects/{oid}/frame/tail_df?format=ir").json()
+    block = client.get(
+        f"/v1/objects/{oid}/exhibit/tail?perspective=insurer").json()["blocks"][0]
 
-    head = [h["text"] for h in doc["head"][-1]]
-    cells = doc["body"][0]["cells"]
+    head = [h["text"] for h in block["head"][-1]]
+    cells = block["body"][0]["cells"]
     var = cells[head.index("VaR")]
-    assert "," in var["text"], f"VaR unseparated: {var['text']}"
-    assert var["text"].endswith(".00") or "." in var["text"], var["text"]
-    # The probability column needs enough digits to tell 0.99 from 0.995.
+    # Formatted, not a bare float: the point is that somebody decided, and that
+    # somebody is upstream. The raw value rides alongside for the grid.
+    assert var["text"] != str(var["raw"]), var
+    # The probability column still separates 0.99 from 0.995 from 0.999.
     p = cells[head.index("p")]
     assert len(p["text"].split(".")[1]) >= 4, p["text"]
 
@@ -1742,20 +1746,35 @@ def test_frame_ir_sparsifies_the_row_index(client):
     assert named[0]["rowspan"] == 10
 
 
-def test_frame_ir_flags_the_capital_anchors(client):
-    """Row emphasis rides in the document rather than being stamped onto markup.
+def test_the_library_flags_the_capital_anchors(client):
+    """Row emphasis rides in the document, and the library is what puts it there.
 
-    This is what deleted the positional BeautifulSoup pass the 5.x path needed.
     The flags are semantic (the total row is a ``total``, the 1-in-200 and
-    1-in-250 lines carry ``emphasis``), so the SPA decides how they look.
+    1-in-250 lines carry ``emphasis``) so the SPA decides how they look, which
+    is what deleted the positional BeautifulSoup pass the 5.x path needed.
+
+    **Which lines those are is the library's to say**, and that is why the api's
+    copy came out at a71. Which return periods a book is capitalized at is a
+    fact about the practice, not about this service, and this repo had 200 and
+    250 written into `_is_anchor` as a literal. The library flags exactly the
+    same rows, so nothing moved on screen.
+
+    Under the **insurer** perspective, which is the app's default and the point
+    of the distinction: raw is the frame as computed and carries no emphasis,
+    because emphasis is a reading.
     """
     oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
-    doc = client.get(f"/v1/objects/{oid}/frame/tail_df?format=ir").json()
+    url = f"/v1/objects/{oid}/exhibit/tail"
 
-    flags = [row.get("flags") or [] for row in doc["body"]]
+    block = client.get(f"{url}?perspective=insurer").json()["blocks"][0]
+    flags = [row.get("flags") or [] for row in block["body"]]
     # Two anchors per unit, and PF has A, B and total.
     assert sum("emphasis" in f for f in flags) == 6
     assert sum("total" in f for f in flags) == 10     # every row of the total unit
+
+    raw = client.get(f"{url}?perspective=raw").json()["blocks"][0]
+    assert not any(r.get("flags") for r in raw["body"]), \
+        "raw is the frame as computed; emphasis is a reading of it"
 
 
 def test_frame_ir_carries_raw_values_beside_the_text(client):
