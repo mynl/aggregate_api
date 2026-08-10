@@ -44,24 +44,30 @@
                                  something nobody changes twice in a session. The Overview carries a
                                  second affordance for the same value, next to the tables it steers. -->
                             <li><h6 class="dropdown-header">Tables</h6></li>
+                            <!-- The two statics adjacent, Interactive last
+                                 (author, Round 5 item 15). Full precision is a
+                                 third state of the one preference rather than a
+                                 second preference: it answers the same question
+                                 the other two do, how should a table read, and
+                                 the interactive view is already exact. Reading
+                                 the menu top to bottom now goes printed, printed
+                                 with all the digits, then the instrument.
+
+                                 It is the one of the three that costs a fetch.
+                                 Every document carries the exact values under
+                                 include_raw, but which of the two the static
+                                 walker prints is decided when the document is
+                                 built, so `setTableView` refetches across that
+                                 boundary and only across it. -->
                             <li><button type="button" class="dropdown-item menu-check-item" data-table-view="static">
                                 <i class="bi bi-check2"></i><span>Static</span>
                                 <small class="text-muted">book-quality, printed</small></button></li>
-                            <li><button type="button" class="dropdown-item menu-check-item" data-table-view="interactive">
-                                <i class="bi bi-check2"></i><span>Interactive</span>
-                                <small class="text-muted">sort, filter, search</small></button></li>
-                            <!-- Full precision is a third state of the same
-                                 preference rather than a fourth section: it
-                                 changes how the static table prints, and the
-                                 interactive view already shows raw values, so
-                                 it reads as "static, all the digits". Nothing
-                                 is refetched that was not already on the wire;
-                                 every document carries the exact values under
-                                 include_raw and this decides which the static
-                                 view prints. -->
                             <li><button type="button" class="dropdown-item menu-check-item" data-table-view="precise">
                                 <i class="bi bi-check2"></i><span>Static, full precision</span>
                                 <small class="text-muted">every meaningful digit</small></button></li>
+                            <li><button type="button" class="dropdown-item menu-check-item" data-table-view="interactive">
+                                <i class="bi bi-check2"></i><span>Interactive</span>
+                                <small class="text-muted">sort, filter, search</small></button></li>
                             <li><hr class="dropdown-divider"></li>
                             <!-- Perspective: which business reading of an
                                  exhibit to serve. The library owns the

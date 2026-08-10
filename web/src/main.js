@@ -1173,10 +1173,10 @@ function onTableViewChange(key, fn, node) { tableViewListeners.set(key, { fn, no
 /**
  * Re-render everything registered, and drop what has left the page.
  *
- * Shared by both page-wide table preferences, because a preference change is a
- * preference change: whichever moved, every live pane has to redraw. A pane
- * that registered and was then replaced is dropped here rather than tracked,
- * which is what keeps the map from growing across rebuilds.
+ * The **redraw** path, for a preference the panes can honor from the document
+ * they already hold. A pane that registered and was then replaced is dropped
+ * here rather than tracked, which is what keeps the map from growing across
+ * rebuilds.
  */
 function notifyTableListeners() {
     for (const [key, entry] of [...tableViewListeners]) {
@@ -1188,17 +1188,63 @@ function notifyTableListeners() {
     }
 }
 
+/**
+ * Throw away every pane's contents and load the group on screen again.
+ *
+ * The **refetch** path, for a preference that changes what the *server* builds:
+ * full precision and perspective both do, and no amount of redrawing a document
+ * already in hand can honor either.
+ *
+ * Two things have to give way together, which is why this exists rather than the
+ * listeners simply being asked twice. A loader awaits its document **outside**
+ * the closure it registers with `onTableViewChange`, so the registered redraw
+ * re-renders the bytes it already has. And `loadLeaf` declines to re-run a
+ * loader for the leaf already on screen (`state.rendered`), so even walking away
+ * and back would not have fetched again. Clearing the record is what makes the
+ * loader run.
+ *
+ * Cleared for **every** group, not only the one in view: the panes behind the
+ * other tabs are also holding documents built at the old setting, and they must
+ * reload when the reader next reaches them rather than showing yesterday's
+ * digits under today's tick.
+ *
+ * a59 shipped both preferences without this, and both were inert until the next
+ * build. See `dev/plan-ui-round-5.md`, items 15 and 23.
+ */
+function refetchTables() {
+    if (!state.id) return;
+    // `clearPanes` rather than clearing `state.rendered` by hand: it is already
+    // the one place that tears down the CsvGrid and ECharts instances a pane
+    // holds, and doing half of it here would leak a grid per flip of the switch.
+    // The identity blocks it also clears are refilled by `loadTab`, for this
+    // group now and for the others when they are next opened, which is the same
+    // path a rebuild takes.
+    //
+    // It takes the charts with it, so flipping a *table* preference while the
+    // reader is on a plot leaf costs that chart's document again. Accepted, and
+    // cheap in practice: every document route answers with its content hash as
+    // an ETag under `Cache-Control: no-cache`, so a re-request revalidates to a
+    // 304 rather than sending the payload. The alternative, teaching this which
+    // panes hold tables, is a second map to keep in step with the loaders for a
+    // saving on an action nobody takes twice in a minute.
+    clearPanes();
+    tableViewListeners.clear();
+    loadActiveTab();
+}
+
 function setTableView(mode) {
     if (mode === _tableView) return;
+    // Full precision is served, not derived. The exact values ride in every
+    // document under `include_raw`, but *which* of the two the static walker
+    // prints is decided when the document is built, so moving to or from
+    // `precise` needs new bytes. The plain static / interactive flip does not:
+    // both views come off the one document, which is what makes that flip free.
+    const refetch = (_tableView === 'precise') !== (mode === 'precise');
     _tableView = mode;
     try { localStorage.setItem(TABLE_VIEW_KEY, mode); } catch { /* private mode */ }
     syncPreferenceMenu();
-    // Full precision is served, not derived: the *values* are already local,
-    // but which of them the static walker prints is decided when the document
-    // is built. So moving to or from `precise` re-fetches, where the static /
-    // interactive flip never does. Panes hold their own fetch, so asking them
-    // to redraw is enough.
-    notifyTableListeners();
+    if (refetch) refetchTables();
+    else notifyTableListeners();
 }
 
 function setPerspective(mode) {
@@ -1206,7 +1252,9 @@ function setPerspective(mode) {
     _perspective = mode;
     try { localStorage.setItem(PERSPECTIVE_KEY, mode); } catch { /* private mode */ }
     syncPreferenceMenu();
-    notifyTableListeners();
+    // Always a refetch: the library owns the translation, so the other reading
+    // of a frame exists only on the server.
+    refetchTables();
 }
 
 // The header dropdown's Tables and Perspective sections. One sync for both,

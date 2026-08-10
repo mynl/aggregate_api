@@ -4,6 +4,58 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a64
+
+`dev/plan-ui-round-5.md` phase a64. Two preferences that shipped at a59 and have
+never once worked start working, and the grid stops formatting the numbers you
+take away.
+
+**Full precision and Perspective were both inert until the next build.** Not
+partly, not subtly: flipping either switch changed the tick in the menu and
+nothing else on the page. Two things held it, and either alone was enough.
+
+Every loader `await`s its document **outside** the closure it registers with
+`onTableViewChange`, so the registered redraw re-rendered bytes already in hand.
+`setTableView`'s own comment claimed the opposite, that "panes hold their own
+fetch, so asking them to redraw is enough", which is the comment that made the
+bug look like a design. And `loadLeaf` declines to re-run a loader for the leaf
+already on screen (`state.rendered[group] === key`), so even walking to another
+tab and back would not have fetched again.
+
+The fix separates the two kinds of preference change rather than making
+everything refetch. A **redraw** is right for the static / interactive flip:
+both views come off one document, which is what makes that flip free, and it
+stays free. A **refetch** is the only thing that can honor a change to what the
+*server* builds, which is what full precision (the static walker prints the
+house formats or the raw values, decided at build time) and perspective (the
+library owns the translation) both are. `refetchTables` goes through
+`clearPanes`, which is already the one place that tears down the CsvGrid and
+ECharts instances a pane holds, and clears every group rather than the one in
+view: the panes behind the other tabs were also built at the old setting.
+
+It takes the charts with it, so flipping a table preference on a plot leaf costs
+that chart's document again. Accepted: every document route answers with its
+content hash as an ETag under `Cache-Control: no-cache`, so the re-request
+revalidates to a 304.
+
+**Menu order.** The two statics are adjacent and Interactive is last, so the
+list reads printed, printed with all the digits, then the instrument. Full
+precision is a third state of one preference, not a second preference.
+
+**Copy and Save hand over the raw values.** A grid is where you go to take
+numbers away, and a copied `17,319.66` has to be cleaned by hand before anything
+can compute with it when the exact value was sitting right there. Both export
+controls, not just Copy: a Copy that differs from a Save is a surprise nobody
+asked for. CsvGrid 3.9.0 hard codes its "Formatted values" checkbox to checked
+and reads it live at export time, so there is no option to pass and `mountGrid`
+clears the boxes after construction. An `exportValues` option is asked for
+upstream and this deletes the day it lands.
+
+Verified in a browser, which is the point of the round: 27.18 becomes
+27.1831742436421 under the cursor with no rebuild, the static to interactive
+flip issues zero requests, Economics Ratios goes from three blocks to two and
+back as Perspective moves, and both checkboxes come up clear.
+
 ## 1.0.0a63
 
 `dev/plan-plot-ir-api.md` item 7, the punch items that are not adapter work.

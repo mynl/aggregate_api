@@ -99,6 +99,30 @@ export function mountGrid(paneId, host, frame, opts = {}) {
         expandButtons: columns.length > 10,
         ...opts,
     });
+    unformattedExport(host);
     registerPaneTeardown(paneId, grid);
     return grid;
+}
+
+/**
+ * Default Copy and Save to the raw values rather than the rendered text.
+ *
+ * A grid is where you go to take numbers away, and a copied `17,319.66` has to
+ * be cleaned by hand before anything can compute with it, where the exact value
+ * was sitting right there. The author's call, Round 5 item 20, and it applies to
+ * **both** export controls: a Copy that differs from a Save is a surprise nobody
+ * asked for.
+ *
+ * Reaching into the widget's DOM, which is not how this should be done. CsvGrid
+ * 3.9.0 builds the "Formatted values" checkbox with `checked = true` hard coded
+ * and reads it live at export time, so there is no constructor option to pass
+ * and no export default to set. Both controls are built by `_buildScaffold` in
+ * the constructor, so they are present by the time this runs. An
+ * `exportValues: 'raw' | 'formatted'` option is asked for upstream; the day it
+ * lands this function deletes and the option takes its place.
+ */
+function unformattedExport(host) {
+    for (const box of host.querySelectorAll('.csvgrid-export-formatted')) {
+        box.checked = false;
+    }
 }

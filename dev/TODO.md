@@ -655,3 +655,32 @@ one version bump each.
 - [ ] `Recipe.decl` is `''` for `MinimumDistortion`: `spec_to_decl` has no case
       for a composite distortion whose spec holds constructed `Distortion`
       objects. Worked around with a stored-program fallback.
+
+- [ ] **Round 5's four asks, written up in full for the library agent** at
+      `T:\worktrees\aggregate_REFACTOR\dev\note-from-aggregate-api-round-5.md`.
+      In the order they block work here:
+      1. `build_exhibit(..., spec_extra=)`, merged into each block's
+         `TableSpec` kwargs and accepting a callable so `include_raw` can be
+         computed per block. **Blocks a66.** Without it every exhibit-route pane
+         (Economics x3, More Tail behavior, More Dependency) is unrenderable in
+         the interactive view, because `irToGridInput` refuses a document with no
+         raw values, and full precision cannot reach them either.
+      2. Round the premium in `_pnl_consideration`, which currently writes
+         `pnl X_PnL 7037.883281186453 premium` into a program a person reads.
+      3. `PnL.value_type` as a constant `payoff`. The app asserts it locally at
+         a65 on the author's ruling ("PnLs are ALWAYS payoff") and deletes the
+         special case when this lands.
+      4. The `agg` chart's density panel to carry the mean, 1-in-100 and
+         1-in-200 marks; 1-in-250 comes off both panels. Chart marks only, not
+         `CAPITAL_ANCHOR_PERIODS`.
+
+## Raised with `csv-grid` (not fixed here)
+
+- [ ] **No way to default the export to raw values.** CsvGrid 3.9.0 builds the
+      "Formatted values" checkbox with `checked = true` hard coded
+      (`csv-grid.es.js:824`) and `_runExport` reads it live, so there is no
+      constructor option and no export default to set. `mountGrid` clears both
+      boxes (Copy and Save) by reaching into the widget's DOM after
+      construction, which works only because `_buildScaffold` builds them in the
+      constructor. Ask: an `exportValues: 'raw' | 'formatted'` option. The
+      workaround deletes the day it lands. Raised 2026-08-10, a64.
