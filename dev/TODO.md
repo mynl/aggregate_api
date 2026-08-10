@@ -593,10 +593,11 @@ one version bump each.
 - [ ] **Replace the lede.** `web/index.html` carries placeholder copy where the
       hero row was, sized at two lines. The author's to write.
 
-- [ ] **Retire or repoint the hamburger's "Example source…" placeholder.**
-      Shipped greyed-out in a17 for a source switcher that a159 made moot (the
-      three shipped libraries are one). The live axis is
-      `?group=topic|kind|role`.
+- [x] **Retire or repoint the hamburger's "Example source…" placeholder.**
+      *(retired at a69. Shipped greyed-out in a17 for a source switcher that
+      a159 made moot: the three shipped libraries are one. The live axis is
+      `?group=topic|kind|role`, reachable from the Examples menu, so there was
+      nothing left to repoint it at.)*
 - [x] **plan-more-tab — More as a tab, Bounds, Reins exhibit** (→ 1.0.0a25).
       More is a pill whose pane carries a Reins-style sub-button row (Validation
       / Stats / Density / bs window / Info); Bounds ships greyed out; Reins gains

@@ -45,10 +45,10 @@ import { fmt } from './utils/format.js';
 // ----------------------------------------------------------------------
 // CsvGrid option presets (see grid.js)
 // ----------------------------------------------------------------------
-// Every grid gets the full chrome (fzf search, per-column filters, status bar,
-// copy / save export). Expand/Contract is auto: mountGrid shows it only from 6
-// columns up (see grid.js). GRID_FULL stays as an explicit "defaults" marker at
-// call sites; frame-specific tweaks (formats, maxRows) spread over it.
+// Every grid gets the same chrome, on every tab: fzf search, per-column filters,
+// status bar, copy / save export, and no Expand/Contract (see grid.js).
+// GRID_FULL stays as an explicit "defaults" marker at call sites;
+// frame-specific tweaks (formats, maxRows) spread over it.
 const GRID_FULL = {};
 
 // ----------------------------------------------------------------------
@@ -268,6 +268,19 @@ function renderActionRow() {
  * @param {function} call       returns the derived response
  * @param {string} [land]       group to show afterwards, when the result belongs
  *                              somewhere other than where you are
+ *
+ * Notes
+ * -----
+ * **The derived program is recorded**, exactly as a typed one is. It has to be:
+ * the whole design here is that a derivation answers with DecL rather than
+ * hiding behind a cached id, so what lands in the editor is a program you own,
+ * and a program you own that Ctrl+Up cannot get back to is not one you own.
+ * Ceding three layers one at a time and wanting the second of them back is the
+ * ordinary case, and through a68 it was unreachable.
+ *
+ * All three derivations behind this were missing it, not only the reported one
+ * (Reins). GCN records its own because it composes its program here rather than
+ * fetching one, which is why the gap read as arbitrary from the outside.
  */
 async function runDerivation(btn, busy, call, land) {
     if (!state.id || btn.hasAttribute('disabled')) return;
@@ -279,6 +292,8 @@ async function runDerivation(btn, busy, call, land) {
         // The editor first: if adopting the object threw, the text that made it
         // is still what you are looking at.
         editor.setText(res.program);
+        history.record(res.program);
+        renderHistoryPos();
         adoptBuild(res);
         renderActionRow();
         if (res.description) noteDerivation(res.description);
@@ -1313,6 +1328,62 @@ function syncPreferenceMenu() {
         item.classList.toggle('active', item.dataset.perspective === _perspective);
     }
 }
+/**
+ * Ctrl+Shift+U: flip between the instrument and the page.
+ *
+ * The one preference worth a keystroke, because it is the one you change while
+ * reading rather than while deciding: a table you want to sort is a table you
+ * are already looking at, and going up to the header menu and back loses your
+ * place on the page.
+ *
+ * It toggles against the static reading you last had rather than against
+ * `'static'`, so a reader living in full precision keeps it. It therefore never
+ * *enters* full precision either, which is the author's "not the full prec
+ * version": the third state stays a deliberate choice from the menu.
+ *
+ * **Capture phase, and `stopPropagation`, and this is the whole trick.**
+ * CodeMirror drops the Shift when it matches a character key held with Ctrl, so
+ * inside the editor `Ctrl+Shift+U` matches the `Mod-u` in `historyKeymap`,
+ * which is `undoSelection`, which pops the last *document* change when there is
+ * no selection-only event to pop. The first cut of this bound the shortcut on
+ * the bubble phase: the view flipped, and the program you had typed vanished,
+ * because CM had already handled the keystroke on the way up.
+ *
+ * That is not a fact about U. The same collision waits for every
+ * `Ctrl+Shift+<letter>` whose plain `Ctrl+<letter>` CM binds, which is most of
+ * them once `Mod-z/y/u/a/d/f/g` and our emacs `Ctrl-a/e/k/y/b/f/n/p/d/h/o/t/v`
+ * are counted, and the failure is silent. Taking the event on the way *down*
+ * and stopping it is the fix that does not depend on picking a lucky letter.
+ *
+ * **Why U anyway.** Of the right-hand letters the author asked for, the browser
+ * claims I and J (devtools), M (profiles), N (private window), O (bookmarks)
+ * and P (print). U is free in Chrome, Edge and Firefox on Windows, which is all
+ * that is left to check once the editor can no longer see it.
+ *
+ * On the document rather than in the editor's keymap: it is a page-wide
+ * preference and the reader is usually in a pane, not in the editor, when they
+ * want it.
+ */
+let _lastStaticView = isStatic(_tableView) ? _tableView : 'static';
+function toggleTableView() {
+    if (isStatic(_tableView)) {
+        _lastStaticView = _tableView;
+        setTableView('interactive');
+    } else {
+        setTableView(_lastStaticView);
+    }
+}
+document.addEventListener('keydown', (ev) => {
+    if (!ev.ctrlKey || !ev.shiftKey || ev.altKey) return;
+    // `ev.code`, not `ev.key`: with Shift held the key is 'U' on a US layout and
+    // something else on others, where the physical key is the thing the author
+    // asked for ("a letter you type with your right hand").
+    if (ev.code !== 'KeyU') return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    toggleTableView();
+}, true);       // capture: see above, the editor must never see this
+
 for (const item of document.querySelectorAll('[data-table-view]')) {
     item.addEventListener('click', () => setTableView(item.dataset.tableView));
 }
@@ -1927,12 +1998,18 @@ const _quantileCache = new Map();
  * detachment probability and a bare number was a width, so one box meant two
  * different things depending on how it was typed.
  *
- * The **share** box takes the same dual reading, which is what lets the operator
- * beside it be a real DecL token rather than a label: a percentage is a share
- * (`so`) and a bare number is an amount part-of (`po`), exactly as the grammar's
- * `reins_layer` spells them. A whole-layer share emits neither, since
- * `100% so` is a clause saying nothing. **`so`, not the words**: a spelled-out
- * `share of` is a parse error, which is what the first cut of this emitted.
+ * The **share** box takes the same dual reading: a percentage is a share (`so`)
+ * and a bare number is an amount part-of (`po`), exactly as the grammar's
+ * `reins_layer` spells them. A whole-layer share emits neither, since `100% so`
+ * is a clause saying nothing. **`so`, not the words**: a spelled-out `share of`
+ * is a parse error, which is what the first cut of this emitted.
+ *
+ * The label on the row says `part of` in both cases and no longer tracks which
+ * token this picks. That is the author's ruling, not drift: the `%` is what
+ * carries the share reading, `share of` is going away upstream, and one fixed
+ * English phrase reads better than a two-letter token that changes under you.
+ * The preview line below the row is where the clause itself is shown, so
+ * nothing is hidden by the label having stopped mirroring it.
  *
  * @returns {Promise<string>} `occurrence net of 5000 xs 2500`, ready to cede.
  */
@@ -1978,19 +2055,6 @@ async function composeCession() {
 }
 
 /**
- * Keep the operator between share and attach honest as the box is typed.
- *
- * `so` for a share, `po` for an amount, which is the grammar's own pair and is
- * why the row reads as the clause it will write rather than as a form.
- */
-function renderShareOperator() {
-    const node = $('qr-op');
-    if (!node) return;
-    const share = readLayerField($('qr-share')?.value);
-    node.textContent = share && share.kind === 'amount' ? 'po' : 'so';
-}
-
-/**
  * The clause this row would write, under the row, kept current as you type.
  *
  * Debounced, because a percentage costs a quantile lookup and a keystroke is
@@ -2018,7 +2082,6 @@ let _previewTicket = 0;
 async function renderCessionPreview() {
     const node = $('qr-preview');
     if (!node) return;
-    renderShareOperator();
     if (!state.id || !can('canReins')) {
         node.textContent = '';
         node.classList.remove('is-pending');

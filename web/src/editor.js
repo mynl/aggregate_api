@@ -102,10 +102,21 @@ const editorTheme = EditorView.theme({
     '.cm-content': {
         fontFamily: '"Cascadia Mono", Menlo, Consolas, monospace',
         padding: '12px 10px',
-        // Floor of ~3 text lines; CM grows past this with content (capped by
+        // Floor of six text lines; CM grows past this with content (capped by
         // the scroller's maxHeight below). `em` so it tracks the font size,
         // including the 16px mobile bump.
-        minHeight: '4.5em',
+        //
+        // The number is the border box, which is what made the previous one
+        // wrong about itself: the line box is 1.4em and the padding is 12px on
+        // each side, so the `4.5em` that claimed a floor of three lines was
+        // really 63px, or two. Six is 6 x 1.4em + 24px, which is 10.1em at
+        // 14px; 10.2em rounds it up so the sixth line is never a hair short.
+        //
+        // Six rather than three because the box is scrolled through as much as
+        // it is typed in: stepping the history or the example library past
+        // programs of different lengths resized the editor on every press, and
+        // everything below it moved.
+        minHeight: '10.2em',
     },
     '.cm-scroller': { overflow: 'auto', maxHeight: '40vh' },
     '.cm-gutters': {

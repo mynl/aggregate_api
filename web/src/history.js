@@ -64,13 +64,21 @@ export function next() {
 /**
  * Where the walk is, as `{m, n}`, for the `[m/n]` readout under the editor.
  *
- * `n` is how many programs the history holds and `m` is which one is on
- * screen, counted from the oldest so that stepping back with Ctrl+Up counts
- * *down*, which is the direction the reader feels.
+ * `n` is how many programs the history holds and `m` is which one is on screen,
+ * counted **from the newest**: the program you just built is `[1/20]` and the
+ * oldest one you can reach is `[20/20]`. So the first press of Ctrl+Up takes
+ * you to 2, and `m` is the number of steps back you have taken plus one.
  *
- * `cursor` runs the other way, from the newest at 0, and `-1` means no walk is
- * in progress, which is the same position as the newest entry. Both map to
- * `m === n`.
+ * It read the other way round through a68, on the argument that a walk
+ * *backwards* should count down. The author reads it as a stack, where the
+ * thing in your hand is the first one, and a counter whose current position
+ * changes every time you build (`[19/19]`, then `[20/20]`, then `[20/20]`
+ * again once the cap bites) is telling you about the pile rather than about
+ * where you are in it.
+ *
+ * `cursor` already runs this way, from the newest at 0; `-1` means no walk is
+ * in progress, which is the same position as the newest entry, so both map to
+ * `m === 1`.
  *
  * **In your history, not in this session.** The entries live in localStorage
  * and outlive the tab, so a session-scoped count is a number this module
@@ -81,7 +89,7 @@ export function next() {
 export function position() {
     const n = state.entries.length;
     if (!n) return { m: 0, n: 0 };
-    return { m: n - Math.max(state.cursor, 0), n };
+    return { m: Math.max(state.cursor, 0) + 1, n };
 }
 
 /** Reset the nav cursor (called after the user types a new char). */

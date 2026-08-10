@@ -488,7 +488,7 @@ header .navbar { min-height: 56px; }
     font-size: .7rem; font-weight: 400; line-height: 1.35;
     text-transform: none; letter-spacing: 0;
     padding: .3rem .55rem; border-radius: .35rem;
-    width: max-content; max-width: 230px; text-align: center;
+    width: max-content; max-width: 230px; text-align: left;
     pointer-events: none;
 }
 .nav-off[data-why]:hover::before, .nav-off[data-why]:focus-visible::before {
@@ -642,9 +642,11 @@ header .navbar { min-height: 56px; }
     outline: none; border-color: var(--primary);
     box-shadow: 0 0 0 .15rem rgba(168, 19, 19, .10);
 }
-/* The operator words carry the DecL the row is writing (`so` / `po`, then
-   `attach` and `detach`), so they are set in the code face and not as labels:
-   the line reads as a clause rather than as a form. */
+/* The operator words are what make the line read as a clause rather than as a
+   form, so they are set in the code face and not as labels. Three of the four
+   are DecL the row is writing (`attach`, `detach`, and the `xs` implied between
+   them); `part of` is the row's English for the share box and is deliberately
+   not the token, see the comment in index.html. */
 .qr-op {
     font-family: var(--mono); font-size: .74rem; color: var(--mut);
     padding: 0 .1rem;
@@ -656,6 +658,12 @@ header .navbar { min-height: 56px; }
     font-size: .7rem; line-height: 1; cursor: help;
 }
 .qr-help:hover { color: var(--ink); border-color: var(--mut); }
+/* Every tooltip on the page reads left, the author's standing rule. Bootstrap
+   centers `.tooltip-inner`, which is fine for three words and wrong for the
+   paragraph the Quick Re `?` carries: centered prose gives both margins a
+   ragged edge and the eye loses the line it is on. The `data-why` tooltips on
+   the greyed tabs and leaves take the same treatment, further up this file. */
+.tooltip-inner { text-align: left; }
 .reins-entry-hint {
     font-size: var(--fs-meta); color: var(--mut); line-height: 1.45;
     max-width: var(--measure); margin: .4rem 0 1.6rem;

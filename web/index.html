@@ -107,8 +107,6 @@
                                  having, so it sits with the other downloads. -->
                             <li><button type="button" class="dropdown-item" data-plot-download>Download plot (.svg)</button></li>
                             <li><button type="button" class="dropdown-item" data-bs-toggle="offcanvas" data-bs-target="#aboutPanel">About</button></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item disabled" aria-disabled="true" tabindex="-1">Example source… (soon)</a></li>
                         </ul>
                     </div>
                 </div>
@@ -236,7 +234,7 @@
                  choice. -->
             <span class="fb-right d-none d-sm-flex">
                 <span class="fb-text">Ctrl+Enter build<span class="sep">·</span>Ctrl+Space complete</span>
-                <span class="fb-text">Ctrl+↑↓ history<span class="sep">·</span>Alt+1…6 groups</span>
+                <span class="fb-text">Ctrl+↑↓ history<span class="sep">·</span>Alt+1…6 groups<span class="sep">·</span>Ctrl+Shift+U tables</span>
             </span>
         </div>
 
@@ -340,11 +338,20 @@
                      Attach and detach each take ONE field with two readings:
                      `50%` is a probability and a bare number is currency, so
                      there is no mode switch and no second set of boxes to keep
-                     in step. The share box reads the same way, and the operator
-                     between it and attach says which it took: `so` for a share,
-                     `po` for an amount part-of. No stepper arrows, per the
-                     author: `<input type=number>` refuses the `%` and the dual
-                     reading is worth more than the arrows.
+                     in step. The share box reads the same way. No stepper
+                     arrows, per the author: `<input type=number>` refuses the
+                     `%` and the dual reading is worth more than the arrows.
+
+                     The row reads as a sentence, which is what the comma after
+                     `attach` is for: 100% part of 50% attach, 95% detach. -->
+                <!-- `part of` is FIXED, and is no longer the DecL token it used
+                     to mirror. It showed `so` over a percentage and `po` over
+                     an amount, which is what the grammar takes today; the
+                     author's ruling is that the `%` is what carries the share
+                     reading and `share of` is going away upstream, so the row
+                     says the one thing in English and `composeCession` keeps
+                     emitting whichever token parses. Do not "fix" this back
+                     into sync with the clause.
 
                      See `composeCession` in main.js. -->
                 <div class="tab-tools reins-entry" id="reins-entry">
@@ -364,11 +371,11 @@
                         <input id="qr-share" class="qr-field" type="text" inputmode="decimal"
                                autocomplete="off" spellcheck="false" value="100%"
                                aria-label="share or part of">
-                        <span class="qr-op" id="qr-op">so</span>
+                        <span class="qr-op">part of</span>
                         <input id="qr-attach" class="qr-field" type="text" inputmode="decimal"
                                autocomplete="off" spellcheck="false" value="50%"
                                aria-label="attachment">
-                        <span class="qr-op">attach</span>
+                        <span class="qr-op">attach,</span>
                         <input id="qr-detach" class="qr-field" type="text" inputmode="decimal"
                                autocomplete="off" spellcheck="false" value="95%"
                                aria-label="detachment">
@@ -509,6 +516,8 @@
                 <span><kbd>Ctrl</kbd>+<kbd>Space</kbd></span><span>autocomplete</span>
                 <span><kbd>Ctrl</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span><span>step through history</span>
                 <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span><span>step through the example library (loads, does not build)</span>
+                <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd></span><span>flip every table between static and interactive</span>
+                <span><kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>6</kbd></span><span>jump to an output group</span>
                 <span><kbd>✕</kbd></span><span>clear the editor</span>
             </div>
 

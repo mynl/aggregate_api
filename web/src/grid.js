@@ -84,19 +84,22 @@ export function mountGrid(paneId, host, frame, opts = {}) {
     // clashing with the rest of the page. Forcing data-theme="light" on the
     // host (CsvGrid adds its .csvgrid class to this element) opts the grid out.
     host.setAttribute('data-theme', 'light');
-    // Full chrome by default -- fzf global search, per-column filters, status
-    // bar, and the copy / save export controls are all CsvGrid defaults, and they
-    // are what make the grid useful (filter to narrow, copy / download to take
-    // the data away).
+    // Full chrome by default: fzf global search, per-column filters, status bar,
+    // and the copy / save export controls are all CsvGrid defaults, and they are
+    // what make the grid useful (filter to narrow, copy / download to take the
+    // data away).
     //
-    // Expand/Contract is the exception, and the threshold is 10 columns, not the
-    // 6 this shipped with. Below that the table already fits, so the buttons are
-    // chrome that does nothing: every frame on the Price tab (the pentagon, the
-    // calibrated distortions, each per-stat slice) is under 10 columns wide and
-    // carried a pair of dead controls. Callers override via opts.
+    // Expand/Contract is off, always. It was `columns.length > 10` through a68,
+    // on the reasoning that a narrow table already fits so the buttons would be
+    // chrome that does nothing. What that produced is worse than either answer
+    // on its own: Reinsurance Summary is 11 columns and grew the pair, Pricing
+    // is under 10 and did not, so the same widget wore two different toolbars on
+    // two tabs of one page and the reader had to notice a column count to
+    // predict which. The author's call is one toolbar everywhere. Callers can
+    // still override via opts, and nothing does.
     const grid = new CsvGrid(host, { columns, records: rows }, {
         worker: false,
-        expandButtons: columns.length > 10,
+        expandButtons: false,
         ...opts,
     });
     unformattedExport(host);

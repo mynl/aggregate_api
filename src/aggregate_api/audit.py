@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -81,7 +82,7 @@ class AuditLog:
         # doesn't exist on a fresh install.
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         # Trigger initial schema creation, set WAL mode.
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.executescript(_SCHEMA)
 
     def _connect(self) -> sqlite3.Connection:
@@ -92,6 +93,21 @@ class AuditLog:
         ``check_same_thread=False`` is *not* set: each call
         produces a fresh connection that lives only for the
         duration of the caller's ``with`` block.
+
+        Notes
+        -----
+        **Every caller wraps this in** :func:`contextlib.closing`, and the
+        wrapper is not decoration. ``with sqlite3.connect(...) as conn`` is
+        sqlite3's *transaction* context manager: it commits on a clean exit and
+        rolls back on an exception, and it does **not** close the connection.
+        So the plain form, which is what this class used through a70, leaked one
+        connection per build and one per read, each of them held until the
+        garbage collector got to it. The finalizer is what then printed
+        ``ResourceWarning: unclosed database in <sqlite3.Connection ...>``, and
+        because ``pricing.py`` was capturing warnings unscoped at the time, that
+        line reached the reader's status strip as though their program had
+        provoked it. Both halves are fixed; this is the half that stops the
+        connection leaking in the first place.
         """
         conn = sqlite3.connect(self.db_path)
         # WAL gives readers a stable snapshot while writes proceed,
@@ -140,7 +156,7 @@ class AuditLog:
         """
         # ISO 8601 with UTC; chosen for sortability and unambiguous TZ.
         ts = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
-        with self._lock, self._connect() as conn:
+        with self._lock, closing(self._connect()) as conn:
             conn.execute(
                 """INSERT INTO builds
                    (ts, ip, object_id, kind, decl, log2, bs, status, error_msg, elapsed_ms)
@@ -151,7 +167,7 @@ class AuditLog:
 
     def recent(self, n: int = 100) -> list[dict]:
         """Most recent ``n`` rows, newest first."""
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             rows = conn.execute(
                 "SELECT * FROM builds ORDER BY ts DESC LIMIT ?", (n,)
             ).fetchall()
@@ -159,7 +175,7 @@ class AuditLog:
 
     def by_ip(self, ip: str, n: int = 100) -> list[dict]:
         """Recent rows from a specific client."""
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             rows = conn.execute(
                 "SELECT * FROM builds WHERE ip = ? ORDER BY ts DESC LIMIT ?",
                 (ip, n),

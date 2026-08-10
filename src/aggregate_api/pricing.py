@@ -23,6 +23,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .library_notes import library_warnings
+
 
 def _document(df, formats: str = "price") -> dict | None:
     """One frame as a table document, or None if it cannot be built.
@@ -201,9 +203,7 @@ def run_price_pentagon(
         docs["pentagon"] = _document(pent)
 
     # Calibrate to the pentagon's own cost of capital at the same anchor. Both
-    # steps are best-effort -- collect warnings, don't 500.
-    import warnings as _warnings
-
+    # steps are best effort: collect warnings, don't 500.
     warns: list[str] = []
     roe = coc if coc is not None else _scalar(pent["ROE"].iloc[0])
     # Both of these take either anchor, so the caller's choice threads all the
@@ -239,10 +239,9 @@ def run_price_pentagon(
         out["ir"] = docs or None
         return out
 
-    with _warnings.catch_warnings(record=True) as caught:
-        _warnings.simplefilter("always")
+    with library_warnings() as caught:
         ad = obj.analyze_distortions(**anchor)
-        warns.extend(str(w.message) for w in caught)
+    warns.extend(caught)
 
     pdf = ad.pricing_df
     dist: dict = {}
@@ -614,8 +613,6 @@ def run_evaluate(
     so the warning is what tells the reader which of the two they are looking
     at, and it travels in ``warnings``.
     """
-    import warnings as _warnings
-
     from .serializers import frame_to_payload, reset_index_safe
 
     if not hasattr(obj, "evaluate"):
@@ -629,10 +626,9 @@ def run_evaluate(
             "argument and evaluate it as it stands")
 
     warns: list[str] = []
-    with _warnings.catch_warnings(record=True) as caught:
-        _warnings.simplefilter("always")
+    with library_warnings() as caught:
         panel = obj.evaluate() if is_pnl else obj.evaluate(premium)
-        warns.extend(str(w.message) for w in caught)
+    warns.extend(caught)
 
     return {
         "kind": "pnl" if is_pnl else ("port" if type(obj).__name__ == "Portfolio"

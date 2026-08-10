@@ -4,6 +4,60 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a69
+
+`dev/plan-ui-round-6.md`, phase A: the author's punch-ups off a68, plus the one
+backend fault they exposed.
+
+**The sqlite line in the status strip was ours twice over.** `AuditLog` handed
+each connection to `with self._connect() as conn`, which is sqlite3's
+*transaction* context manager: it commits and it does not close. So every build
+leaked a connection until the collector got to it, and the finalizer printed
+`ResourceWarning: unclosed database in <sqlite3.Connection ...>`. Three call
+sites now go through `contextlib.closing`. The second fault is why the reader
+ever saw it: `_collecting_notes` in the build route scopes caught warnings to
+the `aggregate` package by path, and names this exact warning as the reason, but
+`pricing.py` opened two more `catch_warnings` blocks and kept everything they
+caught, so a collection landing inside a pricing call was reported as something
+the reader's program had provoked. The rule lives in one place now,
+`library_notes.py`, and both use it.
+
+**The history readout counts from the newest.** `[1/20]` is the program on
+screen and `[20/20]` is the oldest one Ctrl+Up can reach. It ran the other way
+through a68.
+
+**A shortcut for the table view**, Ctrl+Shift+U, flipping between the static
+reading you last had and the interactive grid. It never enters full precision
+and it does not throw it away if you are in it. Taken on the **capture** phase
+and stopped there, which is the whole of why it works: CodeMirror drops the
+Shift when it matches a character key held with Ctrl, so on the bubble phase
+this matched `Mod-u` in `historyKeymap`, which is `undoSelection`, which pops
+the last document change. The first cut flipped the view and silently deleted
+the program you had typed. That collision waits for every `Ctrl+Shift+<letter>`
+whose plain `Ctrl+<letter>` the editor binds, so the fix is the phase, not the
+letter.
+
+**One CsvGrid toolbar everywhere.** Expand/Contract was conditional on a
+10-column threshold, so Reinsurance Summary (11 columns) carried the pair and
+every frame on the Price tab did not: one widget, two toolbars, on two tabs of
+one page. It is off unconditionally now. Raw rather than formatted copy and save
+is unchanged.
+
+**Derived programs enter the history.** `runDerivation` wrote its program into
+the editor and never recorded it, so Sharpen, PnL and a Quick Re cession were
+all unreachable by Ctrl+Up. Ceding three layers one at a time and wanting the
+second back is the ordinary case. GCN already recorded its own, which is why the
+gap read as arbitrary.
+
+Also: the editor's floor is six lines rather than the two the old `4.5em`
+actually bought (the comment claimed three), so stepping through programs of
+different lengths stops resizing the page; Quick Re reads
+`100% part of 50% attach, 95% detach`, with `part of` fixed as the row's English
+rather than the DecL token it used to mirror; every tooltip is left-aligned,
+both Bootstrap's and the `data-why` notes on greyed tabs; and the hamburger's
+"Example source… (soon)" placeholder, dead since a159 merged the three shipped
+libraries into one, is gone.
+
 ## 1.0.0a68
 
 `dev/plan-ui-round-5.md`, the exhibits phase, and the close of Round 5. Item 21

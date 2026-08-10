@@ -71,7 +71,6 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
@@ -81,7 +80,6 @@ from fastapi.responses import Response
 
 from lark.exceptions import UnexpectedInput, VisitError
 
-import aggregate as _aggregate_pkg
 from aggregate import Distortion, Severity, build as _build_singleton
 from aggregate import charts as agg_charts
 from aggregate import exhibits as agg_exhibits
@@ -94,6 +92,7 @@ from ..cache import CacheEntry, ObjectCache, canonicalize_decl, object_id
 from ..bounds import run_allocation, run_envelope, run_pricing_bounds
 from ..capability import can_sharpen, capability_for, narrative_for
 from ..config import Settings, get_settings
+from ..library_notes import from_library
 from ..pricing import (
     run_evaluate,
     run_price_pentagon,
@@ -211,30 +210,6 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
-#: Where the ``aggregate`` package lives on disk, used to tell its warnings
-#: from everyone else's. Resolved once at import: the path cannot move while
-#: the process runs, and ``os.path.commonpath`` on every warning of every build
-#: would be work for an answer that never changes.
-_LIBRARY_ROOT = str(Path(_aggregate_pkg.__file__).resolve().parent)
-
-
-def _from_library(filename: str) -> bool:
-    """Was this warning raised from inside ``aggregate``?
-
-    Path containment, not a name test: ``aggregate_api`` contains the string
-    ``aggregate``, so a substring check would claim this service's own warnings
-    as the library's. Resolved on both sides so a junctioned or symlinked
-    checkout compares equal, which this repo's ``.venv`` arrangement makes a
-    live concern rather than a theoretical one.
-    """
-    if not filename:
-        return False
-    try:
-        return Path(filename).resolve().is_relative_to(_LIBRARY_ROOT)
-    except (OSError, ValueError):  # pragma: no cover -- unresolvable path
-        return False
-
-
 class _NoteCollector(logging.Handler):
     """A logging handler that keeps formatted records in a list."""
 
@@ -281,14 +256,18 @@ def _collecting_notes():
     **Both channels are scoped to the library, and both need scoping.** The
     handler goes on the ``aggregate`` logger rather than the root, so nothing
     this service logs about itself is mistaken for something the model said.
-    The warnings half needs the same discipline for a less obvious reason:
-    ``catch_warnings`` is process-wide and ``simplefilter('always')`` lifts the
-    default suppressions, so a first cut of this reported
-    ``unclosed database in <sqlite3.Connection ...>`` on every build. That is
-    the api's own audit log, and telling a user their program provoked it would
-    be a lie. Each caught warning is therefore kept only if it was raised from
-    inside the ``aggregate`` package, tested by path rather than by category,
-    since a library ``UserWarning`` is indistinguishable from anyone else's.
+    The warnings half needs the same discipline, and
+    :mod:`aggregate_api.library_notes` is where that rule now lives, because
+    this was not the only capture site: ``pricing.py`` held two more and kept
+    everything they caught, which is how the audit log's own
+    ``unclosed database in <sqlite3.Connection ...>`` reached a reader's status
+    strip through the Price tab while this route filtered it out correctly.
+    Both use :func:`~aggregate_api.library_notes.from_library` now.
+
+    The loop below is spelled out rather than using
+    :func:`~aggregate_api.library_notes.library_warnings`, because this one has
+    to interleave with the logging collector: the notes from both channels land
+    in one list, in the order they were said.
     """
     collector = _NoteCollector()
     lib_logger = logging.getLogger("aggregate")
@@ -304,7 +283,7 @@ def _collecting_notes():
             warnings.simplefilter("always")
             yield collector.notes
             for w in caught:
-                if _from_library(getattr(w, "filename", "")):
+                if from_library(getattr(w, "filename", "")):
                     collector.notes.append(str(w.message))
     finally:
         lib_logger.removeHandler(collector)
