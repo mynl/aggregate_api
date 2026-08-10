@@ -2071,20 +2071,43 @@ def get_quantiles(
     oid: str,
     p: str = Query(..., description="Comma-separated probabilities in (0, 1)."),
     snap: bool = Query(True, description="Round to 3 significant figures."),
+    basis: str = Query(
+        "aggregate",
+        description="Which distribution to read: aggregate|occurrence."),
     entry: CacheEntry = Depends(_locked_entry),
 ) -> dict:
-    """Quantiles at the given probabilities.
+    """Quantiles at the given probabilities, on the annual or the per-claim law.
 
-    Exists for the reinsurance quick-edit form, which lets attach and limit be
-    written as probabilities (``50%``) as well as as amounts. There was no way
-    to ask for ``q(p)`` before it: ``tail_df`` carries VaR by return period, so
-    ``q(0.99)`` was reachable and ``q(0.5)`` was not.
+    Exists for Quick Re, which lets attach and detach be written as
+    probabilities (``50%``) as well as as amounts. There was no way to ask for
+    ``q(p)`` before it: ``tail_df`` carries VaR by return period, so ``q(0.99)``
+    was reachable and ``q(0.5)`` was not.
 
     Returns both the exact quantile and the snapped one, rather than choosing
     for the caller: the form writes the snapped value into a program a person
     then reads, and the exact value is what anyone checking the arithmetic
     wants.
+
+    Notes
+    -----
+    **The basis is not a convenience, it is the difference between a layer and a
+    no-op.** An occurrence cession applies to a single claim and an aggregate
+    cession to the year, so a percentage means a different number on each tier.
+    Reading both off the annual distribution produced exactly the failure you
+    would expect and this route was shipped with: on
+    ``100 claims 1000 xs 0 sev lognorm 50 cv 2``, the annual median is 4,847
+    while no single claim can exceed 1,000, so ``occurrence net of 1830 xs 4850``
+    is a treaty that can never attach. It builds, it validates, and it cedes
+    nothing.
+
+    ``q_sev`` is the per-claim quantile function and is aggregate level, so it
+    answers for a mixture too, where the individual ``sevs`` components cannot.
+    A kind carrying neither function gets a clean 400 rather than a wrong number.
     """
+    if basis not in ("aggregate", "occurrence"):
+        raise HTTPException(
+            status_code=422,
+            detail=f"unknown basis {basis!r}; expected 'aggregate' or 'occurrence'")
     try:
         ps = [float(v) for v in p.split(",") if v.strip()]
     except ValueError as exc:
@@ -2095,11 +2118,12 @@ def get_quantiles(
     if not all(0 < v < 1 for v in ps):
         raise HTTPException(
             status_code=422, detail="every p must lie strictly inside (0, 1)")
-    q = getattr(entry.obj, "q", None)
+    name = "q_sev" if basis == "occurrence" else "q"
+    q = getattr(entry.obj, name, None)
     if not callable(q):
         raise HTTPException(
             status_code=400,
-            detail=f"a {entry.kind!r} carries no quantile function",
+            detail=f"a {entry.kind!r} carries no {basis} quantile function",
         )
     out = []
     for v in ps:
@@ -2107,7 +2131,7 @@ def get_quantiles(
             exact = float(q(v))
         except Exception as exc:  # noqa: BLE001 -- reported, not raised
             raise HTTPException(
-                status_code=400, detail=f"q({v}) failed: {exc}") from exc
+                status_code=400, detail=f"{name}({v}) failed: {exc}") from exc
         out.append({"p": v, "q": exact,
                     "snapped": _snap(exact) if snap else exact})
     return {"quantiles": out}

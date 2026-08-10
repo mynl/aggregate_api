@@ -22,6 +22,8 @@ are flagged in the plan as a v1.1 enhancement.
 
 from __future__ import annotations
 
+import re
+
 from lark.exceptions import UnexpectedInput
 
 # Reuse the parser instance already constructed by ``parser.py`` so
@@ -63,22 +65,63 @@ def _classify(terminal: str) -> str:
     return "keyword"
 
 
-def _label(terminal: str) -> str:
-    """Human label for ``terminal``.
+#: A curated label that **starts with a quoted token**, and whatever follows it.
+#: The three shapes in the table, in the order they matter here:
+#:
+#: * ``"'agg'"``, a bare token;
+#: * ``"'approximate' (or 'approx')"``, a token and a parenthesized gloss;
+#: * ``"'**' or '^'"``, a token and an unparenthesized alternative.
+#:
+#: A fourth shape has no quoted token at all and is a **description** rather
+#: than a literal: ``"a builtin aggregate (agg.X)"``, ``"a frequency name
+#: (poisson, binomial, ...)"``. Those name a category the static pool cannot
+#: enumerate, so there is nothing to insert and :func:`complete` drops them.
+_LABEL_TOKEN = re.compile(r"^'(?P<token>[^']*)'\s*(?P<rest>.*)$")
 
-    Pulled from Plan B's curated table when available, otherwise
-    the terminal's lowercased name in single quotes. Anonymous
-    terminals (``__ANON_*``) collapse to the empty string -- the
-    editor filters those out.
+
+def _split_label(terminal: str) -> tuple[str, str | None]:
+    """Split a curated label into the token to insert and its gloss.
+
+    Parameters
+    ----------
+    terminal : str
+        Lark terminal name.
+
+    Returns
+    -------
+    (str, str or None)
+        The bare token, and the gloss with any wrapping parentheses removed.
+        The token is ``''`` when there is nothing insertable, which is an
+        anonymous terminal (``__ANON_*``) or a descriptive label; callers drop
+        those rather than offering a phrase as if it were DecL.
+
+    Notes
+    -----
+    This used to be ``_TERMINAL_LABELS[terminal].strip("'")``, and ``strip``
+    cannot do the job: it removes matching characters from the **ends** of a
+    string, so a label ending in ``)`` kept its interior quote and
+    ``'after' (profit-commission allowance)`` came back as
+    ``after' (profit-commission allowance)``. That string was then handed to
+    editors as the text to insert, so accepting the completion put a stray
+    apostrophe and a parenthetical into the program. It reads as a formatting
+    slip and it was a correctness one.
+
+    Where a label offers alternatives (``'**' or '^'``) the **first** is the
+    token and the rest becomes the gloss: both spellings parse, so either is a
+    defensible insertion, and the one the label leads with is the house form.
     """
-    if terminal in _TERMINAL_LABELS:
-        # Strip the surrounding quotes on keyword labels because the
-        # editor wants the bare token to insert at the cursor; the
-        # label is mostly for tooltip/menu display.
-        return _TERMINAL_LABELS[terminal].strip("'")
     if terminal.startswith("__"):
-        return ""
-    return terminal.lower()
+        return "", None
+    raw = _TERMINAL_LABELS.get(terminal)
+    if raw is None:
+        return terminal.lower(), None
+    m = _LABEL_TOKEN.match(raw.strip())
+    if m is None:
+        return "", None          # a description, not a token
+    rest = m.group("rest").strip()
+    if rest.startswith("(") and rest.endswith(")"):
+        rest = rest[1:-1].strip()
+    return m.group("token"), rest or None
 
 
 # Lark's ``parse_interactive`` is LALR-only; DecL uses Earley + dynamic
@@ -114,8 +157,16 @@ def complete(decl: str, cursor: int) -> list[dict]:
     Returns
     -------
     list[dict]
-        Sorted list of ``{label, terminal, kind}`` dicts. Empty only
-        when no keyword starts with the current prefix.
+        Sorted list of ``{text, label, detail, terminal, kind}`` dicts. Empty
+        only when no keyword starts with the current prefix.
+
+    Notes
+    -----
+    ``text`` is the bare token and is what an editor inserts; ``label`` is the
+    same token (they differ only in that ``label`` is what a menu shows) and
+    ``detail`` carries the gloss where the terminal has one. Matching is on the
+    **token**, never on the gloss, so typing ``pr`` offers ``premium`` and does
+    not also offer everything whose parenthetical happens to contain a ``pr``.
     """
     prefix = decl[:cursor]
     # Identify the word the cursor is currently inside (or at the
@@ -127,12 +178,13 @@ def complete(decl: str, cursor: int) -> list[dict]:
 
     out: list[dict] = []
     for term in _STATIC_KEYWORDS:
-        label = _label(term)
-        if not label:
+        text, detail = _split_label(term)
+        if not text:
             continue
-        if word and not label.lower().startswith(word):
+        if word and not text.lower().startswith(word):
             continue
-        out.append({"label": label, "terminal": term, "kind": _classify(term)})
+        out.append({"text": text, "label": text, "detail": detail,
+                    "terminal": term, "kind": _classify(term)})
     return out
 
 

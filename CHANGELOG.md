@@ -4,6 +4,75 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a67
+
+`dev/plan-ui-round-5.md` phase a68, Quick Re. Taken before the exhibits phase
+because that one waits on a library change and this waits on nothing.
+
+**One row, and the text box goes.** Round 5 item 11, to the author's layout:
+
+```
+QUICK RE  [Occ|Agg]  [100%] so  [50%] attach  [95%] detach  [Add re] (?)
+```
+
+Everything on one baseline at one height, reading left to right as the clause it
+writes. Through a66 the row wrote a clause into a local input which was then
+ceded, so the same string was carried twice before anything happened; the
+author's ruling is that Add re composes and cedes in one press and the program
+that comes back is where the clause is read and edited. The editor upstairs is
+that box, and it has real completion, so a second and worse one beside it was
+earning nothing. Both hint paragraphs fold into a tooltip on the `(?)`.
+
+**The third box is a detachment now**, in both readings: `95%` is `q(.95)` and
+`1000` is 1000, and the width follows as `detach - attach`. It was a limit, where
+a percentage meant a detachment probability and a bare number meant a width, so
+one box meant two different things depending on how it was typed. The **share**
+box takes the same dual reading, which is what lets the operator beside it be a
+real DecL token rather than a label: a percentage is a share (`so`) and a bare
+number is an amount part-of (`po`), and it changes as you type. No stepper
+arrows, per the author: `<input type=number>` refuses the `%`, and the dual
+reading is worth more than the arrows.
+
+**A live preview** under the row, debounced, showing the clause the row would
+write and updating as any box changes. Populated from the defaults before
+anything is touched, so the row explains itself without being used first. It
+dims rather than blanks while a quantile lookup is in flight: a preview still
+showing the *previous* clause while the boxes say something else is the same
+kind of lie as everything else this round, and blanking would flicker on every
+keystroke. Quantiles are cached per object and probability, so typing `95%` one
+character at a time does not ask the server three times.
+
+**The quantile route grew a `basis`, and this is a correctness fix rather than a
+feature.** An occurrence cession applies to a single claim and an aggregate
+cession to the year, so a percentage means a different number on each tier.
+Reading both off the annual law is what the route did, and on
+`100 claims 1000 xs 0 sev lognorm 50 cv 2` that put the occurrence attachment at
+the annual median of 4,850 when no single claim can exceed 1,000: Quick Re's own
+defaults wrote `occurrence net of 1830 xs 4850`, a treaty that builds, validates
+and can never attach. Found by pressing the button and watching the mean not
+move. `q_sev` is the per-claim quantile function and is aggregate level, so it
+answers for a mixture too, where the individual `sevs` components cannot.
+
+**Completion offers a token again** (item 10's surviving half; its widget half
+went with the text box). `_label` was
+`_TERMINAL_LABELS[terminal].strip("'")`, and `strip` removes matching characters
+from the **ends** of a string, so a label ending in `)` kept its interior quote:
+38 of the 105 terminals carry a gloss, and accepting one of those completions
+wrote `after' (profit-commission allowance)` into the program. The payload now
+carries `text` (the bare token, what an editor inserts) beside `label` and a
+separate `detail` for the gloss, and CM6 shows the gloss without inserting it.
+Three label shapes are handled and the fourth is dropped: a bare `'agg'`, a
+glossed `'approximate' (or 'approx')`, an alternative `'**' or '^'` where the
+first spelling wins, and a *description* like `a frequency name (poisson,
+binomial, ...)`, which names a category with no literal to insert and is no
+longer offered as though it were one.
+
+Walked in a browser: the row writes `occurrence net of 157.5 xs 22.5` on the
+per-claim law and `aggregate net of 1830 xs 4850` on the annual one, ceding drops
+the mean from 4,926 to 2,430, and a second press on the other tier composes both
+clauses into one program with the occurrence cession before the frequency clause
+and the aggregate one after it.
+
 ## 1.0.0a66
 
 `dev/plan-ui-round-5.md` phase a67, taken out of order because a66 waits on a

@@ -39,6 +39,7 @@ import {
 } from './nav.js';
 import * as history from './history.js';
 import { $, el, empty } from './utils/dom.js';
+import { debounce } from './utils/debounce.js';
 import { fmt } from './utils/format.js';
 
 // ----------------------------------------------------------------------
@@ -1826,6 +1827,10 @@ function renderReinsEntry() {
     box.classList.toggle('is-off', off);
     for (const control of box.querySelectorAll('input, button')) {
         control.disabled = off;
+        // The help button owns its own `title`, which is its tooltip, so it is
+        // exempt: overwriting it would trade the explanation for the reason the
+        // row is grey, and the row already says that underneath.
+        if (control.id === 'qr-help') continue;
         if (off) control.setAttribute('title', why);
         else control.removeAttribute('title');
     }
@@ -1838,19 +1843,36 @@ function renderReinsEntry() {
     } else if (!off && note) {
         note.remove();
     }
+    // The preview reads the object, so it is redrawn whenever the object moves.
+    // This runs on every adopted build (through `applyCapability`), which is
+    // also what makes the row show its defaults resolved against the new book
+    // rather than the previous one's quantiles.
+    renderCessionPreview();
 }
 
 const reinsBtn = $('reins-btn');
-const reinsInput = $('reins-input');
 
 // ----------------------------------------------------------------------
-// Quick Re: one layer, written into the box above rather than applied
+// Quick Re: one row, one layer, straight into the editor
 // ----------------------------------------------------------------------
+//
+// Three boxes, a tier switch and a button. There is no text box holding the
+// clause, and its removal is the point of a68: through a67 this row wrote a
+// clause into a local input which was then ceded, so the same string was
+// carried twice before anything happened. Now Add re composes and cedes, and
+// the program that comes back is where the clause is read and edited. The
+// editor upstairs is that box, and it has real completion.
+//
+// The clause is still shown before it is applied, in the preview line under the
+// row, which is what the local box was actually providing.
+
+const QR_FIELDS = ['qr-share', 'qr-attach', 'qr-detach'];
+const QR_DEFAULTS = { 'qr-share': '100%', 'qr-attach': '50%', 'qr-detach': '95%' };
 
 /**
- * Read one field of the layer form: a probability, or an amount.
+ * Read one field of the row: a probability, or an amount.
  *
- * The form's whole trick, and the reason attach and limit each need one input
+ * The row's whole trick, and the reason attach and detach each need one input
  * rather than a pair. `50%` is a probability and `500` is currency, so there is
  * no mode to be in and no second set of boxes to keep in step with the first.
  *
@@ -1875,164 +1897,209 @@ function layerNumber(v) {
     return Number.isInteger(v) ? String(v) : String(Number(v.toPrecision(6)));
 }
 
+/** Which tier the segmented control is on. */
+function qrBasis() {
+    return $('qr-basis-agg')?.checked ? 'aggregate' : 'occurrence';
+}
+
 /**
- * Turn the form into a DecL cession clause.
+ * `q(p)` already asked for, keyed by object and probability.
+ *
+ * The preview recomposes on every settled keystroke and a probability costs a
+ * round trip, so without this, typing `95%` one character at a time asks the
+ * server for `q(.9)` and then `q(.95)` and then asks again for both the moment
+ * anything else in the row moves. Keyed by object id, so it cannot serve one
+ * book's quantile for another; never invalidated within an id, because an id is
+ * a hash of the program and the same program has the same quantiles.
+ */
+const _quantileCache = new Map();
+
+/**
+ * Turn the row into a DecL cession clause.
  *
  * Resolves each field on its own, so mixing is legal and needs no special case:
- * `attach 50% limit 1000000` is a currency limit over a median attachment.
+ * `attach 50% detach 1000000` is a currency detachment over a median attachment.
  *
- * **A percentage limit is a DETACHMENT probability**, so `attach 50% limit 99%`
- * means attach at q(.5) with a limit of q(.99) - q(.5). That is the only
- * reading under which a percentage limit means anything, and it is the
- * formulation the form was asked for.
+ * **The third box is a DETACHMENT, in both readings**, which is the author's
+ * ruling of 2026-08-09 and the reason it is no longer called a limit. `95%` is
+ * `q(.95)` and `1000` is 1000; either way it names a point on the loss axis and
+ * the width follows as `detach - attach`. Through a67 a percentage was a
+ * detachment probability and a bare number was a width, so one box meant two
+ * different things depending on how it was typed.
  *
- * Emits `<limit> xs <attach>`, or `<share> so <limit> xs <attach>` when the
- * share is not 100%, per `reins_layer` in the grammar. **`so`, not the words**:
- * the grammar's share token is the two-letter `so` (and `po` for part-of), and
- * a spelled-out `share of` is a parse error, which is what the first cut of
- * this emitted.
+ * The **share** box takes the same dual reading, which is what lets the operator
+ * beside it be a real DecL token rather than a label: a percentage is a share
+ * (`so`) and a bare number is an amount part-of (`po`), exactly as the grammar's
+ * `reins_layer` spells them. A whole-layer share emits neither, since
+ * `100% so` is a clause saying nothing. **`so`, not the words**: a spelled-out
+ * `share of` is a parse error, which is what the first cut of this emitted.
+ *
+ * @returns {Promise<string>} `occurrence net of 5000 xs 2500`, ready to cede.
  */
 async function composeCession() {
-    const basis = $('qr-basis').value;
     const attach = readLayerField($('qr-attach').value);
-    const limit = readLayerField($('qr-limit').value);
-    if (!attach || !limit) throw new Error('attach and limit are both needed');
+    const detach = readLayerField($('qr-detach').value);
+    if (!attach || !detach) throw new Error('attach and detach are both needed');
+    const share = readLayerField($('qr-share').value);
+    const basis = qrBasis();
 
-    // Share is exempt from the dual reading: it is always a share, never a
-    // probability, which is why `100%` in that box means the whole layer.
-    const shareRaw = String($('qr-share').value || '100').trim().replace('%', '');
-    const sharePct = Number.parseFloat(shareRaw);
-    const share = Number.isFinite(sharePct) ? sharePct / 100 : 1;
-
-    // One request for both, in the order asked, so the pair is read off one
-    // grid rather than two.
-    const wanted = [attach, limit].filter((f) => f.kind === 'p').map((f) => f.value);
-    let at = {};
+    // **On the tier's own distribution.** An occurrence cession applies to one
+    // claim and an aggregate cession to the year, so a percentage means a
+    // different number on each. Read both off the annual law and the occurrence
+    // defaults write a treaty that can never attach: see the route's own note.
+    const key = (p) => `${state.id}:${basis}:${p}`;
+    const wanted = [attach, detach]
+        .filter((f) => f.kind === 'p')
+        .map((f) => f.value)
+        .filter((p) => !_quantileCache.has(key(p)));
     if (wanted.length) {
-        const { quantiles } = await api.quantiles(state.id, wanted);
-        at = Object.fromEntries(quantiles.map((row) => [row.p, row.snapped]));
-    }
-
-    const attachAmount = attach.kind === 'p' ? at[attach.value] : attach.value;
-    let limitAmount;
-    if (limit.kind === 'p') {
-        if (limit.value <= attach.value && attach.kind === 'p') {
-            throw new Error('the detachment probability must exceed the attachment');
+        const { quantiles } = await api.quantiles(state.id, wanted, basis);
+        for (const row of quantiles) {
+            _quantileCache.set(key(row.p), row.snapped);
         }
-        limitAmount = at[limit.value] - attachAmount;
-    } else {
-        limitAmount = limit.value;
     }
-    if (!(limitAmount > 0)) throw new Error('that gives a layer of zero width');
+    const resolve = (f) => (f.kind === 'p' ? _quantileCache.get(key(f.value)) : f.value);
 
-    const layer = `${layerNumber(limitAmount)} xs ${layerNumber(attachAmount)}`;
-    const withShare = Math.abs(share - 1) < 1e-9
-        ? layer
-        : `${layerNumber(share)} so ${layer}`;
-    return `${basis} net of ${withShare}`;
-}
-
-$('qr-build')?.addEventListener('click', async () => {
-    const note = $('qr-note');
-    const btn = $('qr-build');
-    btn.disabled = true;
-    try {
-        reinsInput.value = await composeCession();
-        reinsInput.focus();
-    } catch (err) {
-        if (note) note.textContent = err.message;
-    } finally {
-        btn.disabled = false;
+    const attachAmount = resolve(attach);
+    const detachAmount = resolve(detach);
+    if (!(detachAmount > attachAmount)) {
+        throw new Error('the detachment has to sit above the attachment');
     }
-});
+    const layer = `${layerNumber(detachAmount - attachAmount)} xs `
+        + `${layerNumber(attachAmount)}`;
 
-// The last cession, kept across a reload.
-//
-// Ceding is iterative: you try `250 xs 250`, look at what it did, and try
-// `500 xs 500`. Through a51 the box cleared on success, on the argument that
-// the clause is now in the program in the editor and a second copy would go
-// stale. True, and it made every retry a retype of a clause the grammar accepts
-// no abbreviation for. The box is a *draft*, not a record: the editor is the
-// record, and a draft that survives is the point of a draft.
-// It clears when the program in the editor becomes a *different* program,
-// which is the distinction a51 was missing and a61 adds. Rebuilding what you
-// are working on keeps the draft, because that is the iteration the draft
-// exists for; loading an example or stepping history to another program throws
-// it away, because a cession written for one book is not a draft for another.
-const CESSION_KEY = 'aggapi.lastCession';
-if (reinsInput) {
-    try { reinsInput.value = localStorage.getItem(CESSION_KEY) || ''; }
-    catch { /* private mode */ }
+    let head = '';
+    if (share && share.kind === 'p' && Math.abs(share.value - 1) > 1e-9) {
+        head = `${layerNumber(share.value)} so `;
+    } else if (share && share.kind === 'amount') {
+        head = `${layerNumber(share.value)} po `;
+    }
+    return `${basis} net of ${head}${layer}`;
 }
 
 /**
- * Forget the cession draft, because the program it was written for has gone.
+ * Keep the operator between share and attach honest as the box is typed.
  *
- * Called where the editor's text is *replaced* by another program, never on a
- * rebuild of the same one. The quick-edit fields go with it: an attachment in
- * currency means nothing on a different book, and one in probability means
- * something different, which is worse.
+ * `so` for a share, `po` for an amount, which is the grammar's own pair and is
+ * why the row reads as the clause it will write rather than as a form.
  */
-function clearCessionDraft() {
-    if (reinsInput) reinsInput.value = '';
-    try { localStorage.removeItem(CESSION_KEY); } catch { /* private mode */ }
-    for (const id of ['qr-attach', 'qr-limit']) {
-        const node = $(id);
-        if (node) node.value = '';
+function renderShareOperator() {
+    const node = $('qr-op');
+    if (!node) return;
+    const share = readLayerField($('qr-share')?.value);
+    node.textContent = share && share.kind === 'amount' ? 'po' : 'so';
+}
+
+/**
+ * The clause this row would write, under the row, kept current as you type.
+ *
+ * Debounced, because a percentage costs a quantile lookup and a keystroke is
+ * not a question. Populated from the defaults before anything is touched, so
+ * the row explains itself without being used first, which is the author's
+ * "initially: preview the default values".
+ *
+ * Reports the composer's own complaint on a bad field rather than going blank:
+ * "the detachment has to sit above the attachment" is the whole message, and it
+ * belongs where the reader is looking rather than after they press the button.
+ *
+ * Guarded against the answer arriving out of order. A quantile lookup is a
+ * round trip and the boxes can move while it is in flight, so each run takes a
+ * ticket and a stale one throws its answer away instead of overwriting a newer
+ * reading with an older one.
+ *
+ * **Dimmed while a lookup is in flight**, rather than blanked. A round trip on
+ * an unseen probability is long enough to read, and a preview still showing the
+ * *previous* clause while the boxes say something else is the same kind of lie
+ * this whole round has been about. Dimming keeps the last good reading on screen
+ * and says it is not current yet; blanking would make the line flicker on every
+ * keystroke. Cached probabilities resolve without a round trip and never dim.
+ */
+let _previewTicket = 0;
+async function renderCessionPreview() {
+    const node = $('qr-preview');
+    if (!node) return;
+    renderShareOperator();
+    if (!state.id || !can('canReins')) {
+        node.textContent = '';
+        node.classList.remove('is-pending');
+        return;
+    }
+    const ticket = ++_previewTicket;
+    const pending = setTimeout(() => {
+        if (ticket === _previewTicket) node.classList.add('is-pending');
+    }, 120);
+    const settle = (text) => {
+        clearTimeout(pending);
+        if (ticket !== _previewTicket) return;
+        node.textContent = text;
+        node.classList.remove('is-pending');
+    };
+    try {
+        settle(`Preview: ${await composeCession()}`);
+    } catch (err) {
+        settle(err.message);
     }
 }
 
+const previewSoon = debounce(renderCessionPreview, 350);
+
+for (const id of QR_FIELDS) {
+    $(id)?.addEventListener('input', previewSoon);
+}
+for (const id of ['qr-basis-occ', 'qr-basis-agg']) {
+    // The tier switch changes only the first word, so it redraws at once rather
+    // than through the debounce that exists to absorb typing.
+    $(id)?.addEventListener('change', renderCessionPreview);
+}
+
+/**
+ * Put the row back to its defaults, because the program it described has gone.
+ *
+ * Called where the editor's text is *replaced* by another program, never on a
+ * rebuild of the same one: ceding is iterative, and a row that reset itself
+ * every time you pressed Build would make each retry a retype. An attachment in
+ * currency means nothing on a different book, and one in probability means
+ * something different, which is worse, so both go back to the defaults.
+ */
+function clearCessionDraft() {
+    for (const id of QR_FIELDS) {
+        const node = $(id);
+        if (node) node.value = QR_DEFAULTS[id];
+    }
+    renderCessionPreview();
+}
+
+/** Compose the clause and cede it, in one press. */
 async function cede() {
-    const cession = reinsInput.value.trim();
-    if (!cession || !can('canReins')) return;
-    try { localStorage.setItem(CESSION_KEY, cession); }
-    catch { /* private mode */ }
+    if (!state.id || !can('canReins') || reinsBtn.hasAttribute('disabled')) return;
+    let cession;
+    try {
+        cession = await composeCession();
+    } catch (err) {
+        const node = $('qr-preview');
+        if (node) node.textContent = err.message;
+        return;
+    }
     await runDerivation(reinsBtn, 'Ceding…', (id) => api.reins(id, cession),
         'reinsurance');
+    renderCessionPreview();
 }
 
 reinsBtn?.addEventListener('click', cede);
 
-/**
- * Ctrl+Space in the cession box: complete against the program, not the box.
- *
- * The completion endpoint takes a whole program and a cursor into it, and a
- * bare `250 xs 250` is not a valid prefix of one, so asking about the box's own
- * text would return nothing useful. The draft is spliced onto the end of the
- * program in the editor and the cursor offset by the same amount, so the
- * grammar sees the clause where it will actually sit.
- *
- * A plain `<input>` rather than a second CodeMirror: the datalist below it is
- * the affordance for the two openers, and this fills the rest. The author's
- * complaint was that Tab leaves the box; Ctrl+Space is what they asked for and
- * costs no editor.
- */
-reinsInput?.addEventListener('keydown', async (ev) => {
-    if (ev.key === 'Enter') {
+// Enter anywhere in the row cedes, which is the shortcut the text box used to
+// carry and the one thing about it worth keeping.
+for (const id of QR_FIELDS) {
+    $(id)?.addEventListener('keydown', (ev) => {
+        if (ev.key !== 'Enter') return;
         ev.preventDefault();
         cede();
-        return;
-    }
-    if (!(ev.key === ' ' && ev.ctrlKey)) return;
-    ev.preventDefault();
-    const program = editor.getText().trim();
-    const draft = reinsInput.value.slice(0, reinsInput.selectionStart ?? undefined);
-    if (!program) return;
-    const context = `${program} ${draft}`;
-    try {
-        const { completions } = await api.complete(context, context.length);
-        const list = $('reins-openers');
-        if (!list || !completions?.length) return;
-        // Feed the datalist the grammar's own answer, so the dropdown that
-        // already opens on focus shows what can come next here rather than the
-        // two hard-coded openers.
-        empty(list);
-        for (const c of completions.slice(0, 20)) {
-            const value = typeof c === 'string' ? c : (c.text || c.label || '');
-            if (value) list.appendChild(el('option', { value: draft + value }));
-        }
-    } catch { /* completion is a courtesy; typing still works */ }
-});
+    });
+}
+
+// The help tooltip. Bootstrap tooltips are opt-in per element, and this is the
+// only one on the page, so it is initialized here rather than by a sweep.
+if ($('qr-help')) bootstrap.Tooltip.getOrCreateInstance($('qr-help'));
 
 /** Reinsurance / Summary, Stats and Density: one per-layer frame. */
 async function loadReinsFrame(which, leaf = null) {

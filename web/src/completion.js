@@ -38,8 +38,14 @@ export async function declCompletionSource(context) {
         try {
             const res = await api.complete(decl, cursor);
             if (res && Array.isArray(res.completions)) {
+                // `text`, not `label`: CM6 inserts `label`, and until a67 the
+                // server's label for a glossed terminal was the whole phrase,
+                // so accepting one wrote `after' (profit-commission allowance)`
+                // into the program. The gloss now travels separately as
+                // `detail`, which CM6 shows beside the entry and never inserts.
                 serverOptions = res.completions.map(c => ({
-                    label: c.label,
+                    label: c.text || c.label,
+                    detail: c.detail || undefined,
                     type: c.kind || 'keyword',
                     // boost server-supplied entries so they outrank the
                     // local fallback in mixed lists.

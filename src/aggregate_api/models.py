@@ -672,7 +672,16 @@ class DeclCompleteRequest(BaseModel):
 class Completion(BaseModel):
     model_config = _RESPONSE_CFG
 
+    #: What to **insert**: the bare token, always valid DecL on its own.
+    #:
+    #: Added at a67. Editors were inserting ``label``, which for the 38 of 105
+    #: terminals carrying a gloss is a whole phrase and not a token, so
+    #: accepting a completion could put ``after' (profit-commission allowance)``
+    #: into a program. Nothing consuming this should insert anything else.
+    text: str
     label: str
+    #: The gloss, where the terminal has one: ``or 'approx'``. Display only.
+    detail: str | None = None
     terminal: str
     kind: Literal["keyword", "identifier", "literal"]
 

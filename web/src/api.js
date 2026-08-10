@@ -113,12 +113,19 @@ export const api = {
     /**
      * Loss at each probability, exact and rounded to three figures.
      *
-     * For Quick Re, which lets attach and limit be written as probabilities.
+     * For Quick Re, which lets attach and detach be written as probabilities.
      * `tail_df` carries VaR by return period, so it reaches q(0.99) and not
      * q(0.5); this reaches any of them.
+     *
+     * @param {string} basis `'aggregate'` (the annual law) or `'occurrence'`
+     *   (the per-claim one). Not a convenience: an occurrence cession applies
+     *   to a single claim, so a percentage means a different number on each
+     *   tier, and reading both off the annual law writes layers that can never
+     *   attach.
      */
-    quantiles:    (id, ps)          =>
-        _json('GET', `/v1/objects/${id}/quantiles?p=${ps.join(',')}`),
+    quantiles:    (id, ps, basis = 'aggregate') =>
+        _json('GET',
+              `/v1/objects/${id}/quantiles?p=${ps.join(',')}&basis=${basis}`),
     /**
      * Any named frame as a `FrameResponse`, by its route name.
      *

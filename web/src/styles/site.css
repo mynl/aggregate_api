@@ -601,65 +601,84 @@ header .navbar { min-height: 56px; }
     #bounds-form .bounds-against input { font-size: 16px; }
 }
 
-/* ---- Reinsurance entry ----
-   A cession clause is prose, not a number, so its box gets room to show one
-   rather than the 5rem the pricing fields want. It grows with the pane and
-   stops before the button, which stays reachable at every width.
+/* ---- Quick Re: one row ----
+   Reads left to right as the clause it writes: tier, share, operator, attach,
+   detach, then the button that applies it. Everything on one baseline and at one
+   height, which is the author's ask and is what stops a row of five different
+   controls reading as five unrelated things.
 
-   The description sits UNDER the box and its button rather than trailing the
-   button on the same line: it is two sentences about how the clause is folded
-   into the program, and a paragraph running off to the right of a control reads
-   as a caption on the whole tab. So the row is its own flex line and the hint
-   is a block below it, with real space beneath the pair. */
-.reins-entry { display: block; }
-.reins-entry-row {
-    display: flex; flex-wrap: wrap; gap: .5rem; align-items: center;
+   `--qr-h` is that height, set once and taken by the inputs, the segmented
+   control and the button alike. Bootstrap's `btn-sm` and our `.price-field
+   input` disagreed by three pixels, which is exactly the kind of difference the
+   eye reads as a mistake without being able to name it. */
+.reins-entry { display: block; --qr-h: 1.8rem; }
+.reins-row {
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    margin-bottom: .35rem;
 }
+.reins-lede {
+    font-size: .72rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .1em; color: var(--mut); margin-right: .2rem;
+}
+.reins-row .btn-group .btn {
+    height: var(--qr-h); display: inline-flex; align-items: center;
+    padding: 0 .6rem; font-size: .74rem;
+}
+.reins-row > .btn {
+    height: var(--qr-h); display: inline-flex; align-items: center;
+    padding: 0 .8rem; font-size: .78rem;
+}
+/* Narrow on purpose: each holds a percentage or a round number, and left to the
+   form-field default they would each claim a text box's width and wrap the row
+   on a laptop. Mono so the digits line up as they are typed. */
+.qr-field {
+    width: 5.4rem; height: var(--qr-h);
+    font-family: var(--mono); font-size: .74rem;
+    padding: 0 .45rem;
+    border: 1px solid var(--line); border-radius: .375rem;
+    background: #fff; color: var(--ink);
+}
+.qr-field:focus {
+    outline: none; border-color: var(--primary);
+    box-shadow: 0 0 0 .15rem rgba(168, 19, 19, .10);
+}
+/* The operator words carry the DecL the row is writing (`so` / `po`, then
+   `attach` and `detach`), so they are set in the code face and not as labels:
+   the line reads as a clause rather than as a form. */
+.qr-op {
+    font-family: var(--mono); font-size: .74rem; color: var(--mut);
+    padding: 0 .1rem;
+}
+.qr-help {
+    width: 1.15rem; height: 1.15rem; padding: 0; margin-left: .15rem;
+    border: 1px solid var(--line); border-radius: 50%;
+    background: none; color: var(--mut);
+    font-size: .7rem; line-height: 1; cursor: help;
+}
+.qr-help:hover { color: var(--ink); border-color: var(--mut); }
 .reins-entry-hint {
     font-size: var(--fs-meta); color: var(--mut); line-height: 1.45;
     max-width: var(--measure); margin: .4rem 0 1.6rem;
 }
+/* The clause the row will write, in the code face because that is what it is.
+   Holds its line height when empty so the row above does not move as it fills. */
+.reins-preview {
+    font-family: var(--mono); min-height: 1.2em; margin-bottom: 1.4rem;
+    transition: opacity .12s;
+}
+/* Waiting on a quantile the object has not been asked for yet. The last good
+   reading stays put and says it is not current, rather than blanking and
+   flickering on every keystroke. */
+.reins-preview.is-pending { opacity: .35; }
 /* Greyed by color rather than opacity, for the same reason the nav is: opacity
    creates a stacking context over the whole subtree and a faded control just
-   looks broken. The label goes muted and the controls carry their own
-   `:disabled` styling. */
-.reins-entry.is-off .price-field { color: var(--mut); }
-.reins-entry.is-off input { background: var(--soft); cursor: not-allowed; }
-.reins-entry .reins-cession { flex: 1 1 22rem; min-width: 12rem; }
-.reins-entry .reins-cession input {
-    width: 100%; font-family: var(--mono); font-size: .74rem;
-}
+   looks broken. */
+.reins-entry.is-off .reins-lede,
+.reins-entry.is-off .qr-op { color: var(--line); }
+.reins-entry.is-off .qr-field { background: var(--soft); cursor: not-allowed; }
 @media (max-width: 575.98px) {
-    .reins-entry .reins-cession input { font-size: 16px; }
-}
-
-/* ---- Quick Re's layer form ----
-   A disclosure, closed by default, so the typed box above stays the default
-   path and the page does not grow a form nobody asked for. The summary reads as
-   one of the sub-tab labels rather than as a control, because opening it is not
-   an action on the object. */
-.reins-quick { margin: -1.2rem 0 1.4rem; }
-.reins-quick > summary {
-    display: inline-block; cursor: pointer; list-style: none;
-    font-size: .72rem; font-weight: 600; text-transform: uppercase;
-    letter-spacing: .1em; color: var(--mut); padding: .2rem 0;
-}
-.reins-quick > summary::-webkit-details-marker { display: none; }
-.reins-quick > summary::before { content: "\25B8"; margin-right: .35rem; }
-.reins-quick[open] > summary::before { content: "\25BE"; }
-.reins-quick > summary:hover { color: var(--ink); }
-.reins-quick-row {
-    display: flex; flex-wrap: wrap; gap: .5rem; align-items: end;
-    margin: .35rem 0 .1rem;
-}
-/* Narrow, because every one of them holds a number or a word. Left to the
-   form-field default they would each claim a text box's width and the row would
-   wrap on a laptop. */
-.reins-quick-row input { width: 6.5rem; font-family: var(--mono); font-size: .74rem; }
-.reins-quick-row select { font-size: .74rem; }
-.reins-quick .reins-entry-hint { margin-bottom: .2rem; }
-@media (max-width: 575.98px) {
-    .reins-quick-row input { font-size: 16px; }
+    /* 16px stops iOS zooming the page on focus. */
+    .qr-field { font-size: 16px; width: 4.8rem; }
 }
 
 /* ---- Rate-limit card (friendly HTTP 429 on the shared demo) ---- */

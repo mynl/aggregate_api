@@ -397,6 +397,56 @@ def test_quantiles_refuses_a_probability_outside_the_unit_interval(client):
                       params={"p": "nonsense"}).status_code == 422
 
 
+def test_quantiles_read_the_tier_they_are_asked_for(client):
+    """The occurrence basis reads the per-claim law, not the annual one.
+
+    Not a convenience. An occurrence cession applies to a single claim and an
+    aggregate cession to the year, so a percentage means a different number on
+    each tier. This program is the case that made the point: severity is capped
+    at 1,000 by its own limit, while a hundred claims a year put the annual
+    median near 4,850. Read the occurrence attachment off the annual law and
+    Quick Re writes ``occurrence net of 1830 xs 4850``, a treaty no claim can
+    ever reach. It builds, it validates, and it cedes nothing.
+    """
+    decl = "agg TIER 100 claims 1000 xs 0 sev lognorm 50 cv 2 poisson"
+    oid = client.post("/v1/objects", json={"decl": decl}).json()["id"]
+
+    def q(basis):
+        r = client.get(f"/v1/objects/{oid}/quantiles",
+                       params={"p": "0.5", "basis": basis})
+        assert r.status_code == 200, r.text
+        return r.json()["quantiles"][0]["q"]
+
+    annual = q("aggregate")
+    per_claim = q("occurrence")
+    assert per_claim <= 1000, "a claim cannot exceed the policy limit"
+    assert annual > 1000, "a hundred such claims a year can"
+    assert q("aggregate") == annual, "aggregate is the default basis"
+    assert client.get(f"/v1/objects/{oid}/quantiles",
+                      params={"p": "0.5"}).json()["quantiles"][0]["q"] == annual
+    assert client.get(f"/v1/objects/{oid}/quantiles",
+                      params={"p": "0.5", "basis": "nonsense"}).status_code == 422
+
+
+def test_quantiles_occurrence_basis_handles_a_mixture(client):
+    """``q_sev`` answers for a mixture, where the components cannot.
+
+    An Aggregate's `sevs` is one entry per mixture component, so a two-component
+    severity has no single component to ask. The aggregate-level `q_sev` is the
+    per-claim quantile of the mixture itself, which is why the route reads that
+    rather than reaching into `sevs[0]`.
+    """
+    decl = ("agg MIXTIER 100 claims 1000 xs 0 "
+            "sev [lognorm gamma] [50 60] cv [2 1] wts [.5 .5] poisson")
+    oid = client.post("/v1/objects", json={"decl": decl}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/quantiles",
+                   params={"p": "0.5,0.95", "basis": "occurrence"})
+    assert r.status_code == 200, r.text
+    rows = r.json()["quantiles"]
+    assert rows[0]["q"] < rows[1]["q"], "a quantile function is non-decreasing"
+    assert rows[1]["q"] <= 1000
+
+
 # ----------------------------------------------------------------------
 # The plot endpoint, and its absence
 # ----------------------------------------------------------------------

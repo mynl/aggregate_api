@@ -319,79 +319,74 @@
             <div class="tab-pane fade" id="t-reinsurance">
                 <div class="sub-tabs" id="sub-reinsurance"></div>
                 <div class="reins-desc" id="reins-desc"></div>
-                <!-- Cede a layer. One box and one button, because the editor is
-                     the preview: the derived program goes straight into it and
-                     builds, so a separate copy control would be a second
-                     control for a thing already on screen. One clause per tier,
-                     since a clause is authoritative for its own tier and leaves
-                     the other alone. Reset on the action row is the way back to
-                     the gross object, so this pane needs no reset of its own. -->
+                <!-- Quick Re: one row, one layer, straight into the editor.
+                     Author's layout, Round 5 item 11.
+
+                     There is **no text box for the clause**. Through a67 the
+                     row wrote a clause into a local input and that input was
+                     then ceded, so the same string was transferred twice before
+                     anything happened. The author's ruling: press Add re and it
+                     goes into the program above, which is where you read it and
+                     where you adjust it. That box is a full editor with real
+                     completion, so a second, worse one beside it earned nothing.
+
+                     ONE layer, deliberately. Multi-layer programs are typed
+                     upstairs, which is what that box is for. This is demo sugar
+                     and is worth having only while it stays small; a second
+                     layer here means it has failed. Two *tiers* is different and
+                     is supported: cede on Occ, then switch to Agg and cede
+                     again, each clause authoritative for its own tier.
+
+                     Attach and detach each take ONE field with two readings:
+                     `50%` is a probability and a bare number is currency, so
+                     there is no mode switch and no second set of boxes to keep
+                     in step. The share box reads the same way, and the operator
+                     between it and attach says which it took: `so` for a share,
+                     `po` for an amount part-of. No stepper arrows, per the
+                     author: `<input type=number>` refuses the `%` and the dual
+                     reading is worth more than the arrows.
+
+                     See `composeCession` in main.js. -->
                 <div class="tab-tools reins-entry" id="reins-entry">
-                    <div class="reins-entry-row">
-                        <label class="price-field reins-cession">Quick Re
-                            <input id="reins-input" type="text" autocomplete="off"
-                                   autocorrect="off" autocapitalize="off" spellcheck="false"
-                                   list="reins-openers"
-                                   placeholder="occurrence net of 500 xs 500"></label>
-                        <button id="reins-btn" class="btn btn-primary btn-sm">Add re</button>
-                    </div>
-                    <!-- The quick-edit form, closed by default. The typed box
-                         above stays the default path and the record of what
-                         will be built; this only writes into it, so you always
-                         see the clause before it is applied and can edit it.
-
-                         ONE layer, deliberately. A multi-layer program is typed
-                         in the big box, which is what that box is for. This is
-                         demo sugar and is worth having only while it stays
-                         small; a second layer here means it has failed.
-
-                         Attach and limit each take ONE field with two readings:
-                         `50%` is a probability and a bare number is currency,
-                         so there is no mode switch and no second set of boxes
-                         to keep in step. Share is exempt and is always a share.
-                         See `composeCession` in main.js. -->
-                    <details class="reins-quick" id="reins-quick">
-                        <summary>quick edit</summary>
-                        <div class="reins-quick-row">
-                            <label class="price-field">basis
-                                <select id="qr-basis">
-                                    <option value="occurrence">occurrence</option>
-                                    <option value="aggregate">aggregate</option>
-                                </select></label>
-                            <label class="price-field">share
-                                <input id="qr-share" type="text" inputmode="decimal"
-                                       autocomplete="off" spellcheck="false" value="100%"></label>
-                            <label class="price-field">attach
-                                <input id="qr-attach" type="text" inputmode="decimal"
-                                       autocomplete="off" spellcheck="false"
-                                       placeholder="50% or 500"></label>
-                            <label class="price-field">limit
-                                <input id="qr-limit" type="text" inputmode="decimal"
-                                       autocomplete="off" spellcheck="false"
-                                       placeholder="99% or 1000"></label>
-                            <button id="qr-build" class="btn btn-outline-secondary btn-sm"
-                                    type="button">Write clause</button>
+                    <div class="reins-row">
+                        <span class="reins-lede">Quick Re</span>
+                        <!-- The same segmented control as CoC / LR on Pricing,
+                             which is what the author asked it to look like. -->
+                        <div class="btn-group btn-group-sm" role="group"
+                             aria-label="which tier to cede">
+                            <input type="radio" class="btn-check" name="qr-basis"
+                                   id="qr-basis-occ" value="occurrence" checked>
+                            <label class="btn btn-outline-secondary" for="qr-basis-occ">Occ</label>
+                            <input type="radio" class="btn-check" name="qr-basis"
+                                   id="qr-basis-agg" value="aggregate">
+                            <label class="btn btn-outline-secondary" for="qr-basis-agg">Agg</label>
                         </div>
-                        <p class="reins-entry-hint" id="qr-note">A percentage is read as a
-                            probability, so <code>attach 50%</code> attaches at the median and
-                            <code>limit 99%</code> reaches the 99th percentile. A plain number is
-                            an amount. Quantiles are rounded to three figures, because a layer is
-                            something you write down.</p>
-                    </details>
-                    <!-- The two openers, as a datalist rather than as buttons.
-                         They are long to type and the grammar accepts no
-                         abbreviation for either (`occ` and `agg` are not
-                         accepted in this position), which is exactly why the
-                         typing is long. A datalist offers them on focus and
-                         still lets you type over the top. -->
-                    <datalist id="reins-openers">
-                        <option value="occurrence net of "></option>
-                        <option value="aggregate net of "></option>
-                    </datalist>
-                    <p class="reins-entry-hint">One clause per tier, each opening
-                        <code>occurrence</code> or <code>aggregate</code>. The clause is
-                        folded into the program in the editor, so an occurrence cession
-                        lands before the frequency clause and an aggregate one after it.</p>
+                        <input id="qr-share" class="qr-field" type="text" inputmode="decimal"
+                               autocomplete="off" spellcheck="false" value="100%"
+                               aria-label="share or part of">
+                        <span class="qr-op" id="qr-op">so</span>
+                        <input id="qr-attach" class="qr-field" type="text" inputmode="decimal"
+                               autocomplete="off" spellcheck="false" value="50%"
+                               aria-label="attachment">
+                        <span class="qr-op">attach</span>
+                        <input id="qr-detach" class="qr-field" type="text" inputmode="decimal"
+                               autocomplete="off" spellcheck="false" value="95%"
+                               aria-label="detachment">
+                        <span class="qr-op">detach</span>
+                        <button id="reins-btn" class="btn btn-primary btn-sm">Add re</button>
+                        <!-- Both hint paragraphs folded into one tooltip, per the
+                             author: the row explains itself on demand rather than
+                             carrying two paragraphs nobody reads twice. -->
+                        <button type="button" class="qr-help" id="qr-help"
+                                data-bs-toggle="tooltip" data-bs-placement="top"
+                                aria-label="how Quick Re reads these boxes"
+                                title="A percentage is read as a probability, so attach 50% attaches at the median and detach 95% reaches the 95th percentile; a plain number is an amount, and the two mix freely. Quantiles are rounded to three figures, because a layer is something you write down. One clause per tier: the clause is folded into the program above, so an occurrence cession lands before the frequency clause and an aggregate one after it. Edit more complex structures directly in the program edit box.">?</button>
+                    </div>
+                    <!-- The clause this row will write, kept current as you type.
+                         Debounced, because a percentage costs a quantile lookup.
+                         Populated from the defaults before anything is touched,
+                         so the row says what it does without being used. -->
+                    <p class="reins-entry-hint reins-preview" id="qr-preview"></p>
                 </div>
                 <div id="pane-reinsurance" class="pane"></div>
             </div>
