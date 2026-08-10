@@ -220,6 +220,46 @@ Left open pending the author saying which object was on screen.
 
 ---
 
+## As executed
+
+Three phases, two commits: A landed as **a69**, B and C together as **a70**
+(the P&L rounding is four lines and did not deserve a version of its own).
+Everything below was watched in a browser before it was recorded.
+
+**One defect, and it was mine.** The first cut of the Ctrl+Shift+U binding
+flipped the view and **silently deleted the program in the editor**. CodeMirror
+drops the Shift when it matches a character key held with Ctrl, so on the bubble
+phase the keystroke matched `Mod-u` in `historyKeymap`, which is
+`undoSelection`, which pops the last document change when there is no
+selection-only event to pop. `preventDefault` does not help: the editor had
+already handled it on the way up. Fixed by taking the event on the **capture**
+phase and calling `stopPropagation`, which is the fix that does not depend on
+picking a lucky letter, since the same collision waits for every
+`Ctrl+Shift+<letter>` whose plain `Ctrl+<letter>` the editor binds.
+
+Worth naming because of *how* it was found. It is invisible to a unit test, it
+is invisible to a screenshot of the feature working (the view really did flip),
+and it only shows up if you look at the part of the page the change was not
+about. That is the third round in a row where the browser rule has earned its
+place, and the pattern is the same each time: the feature works and something
+beside it broke.
+
+**Two smaller corrections.** The plan said the editor floor was three lines and
+the code's comment agreed; measured, `4.5em` was 63px against a 19.6px line box
+and 24px of padding, which is two. And the P&L rewrite is re-rendered
+downstream: `spread` re-parses the program, so `10.50` comes back `10.5`. The
+value is rounded, which is what the route owes; the trailing zero is the
+library's rendering and not worth fighting the writer over. The test asserts the
+value.
+
+**Phase C came in smaller than the question deserved.** One leaf moved. The
+useful output was the board: six leaves off the exhibit route, four of them
+library asks now written up as
+`aggregate_REFACTOR/dev/note-from-aggregate-api-round-6.md`, and the fifth and
+sixth (the two densities) agreed as bulk. The point of the exercise was that
+"three sentences of justification in a comment" and "three tickets" look
+identical from the outside until someone asks.
+
 ## Also carried forward
 
 - `uv sync` still fails with `os error 32` on `Scripts/aggregate-api.exe`: a
