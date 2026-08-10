@@ -1616,50 +1616,47 @@ def test_pricing_at_ccoc_portfolio(client):
 # ----------------------------------------------------------------------
 
 
-def test_frame_ir_full_precision_shows_the_digits_it_already_had(client):
-    """``precision=full`` reprints, it does not refetch or recompute.
+def test_frame_ir_carries_the_numbers_it_formatted(client):
+    """Every document ships the exact value beside the rendered string.
 
-    The exact values are in every document already, under ``include_raw``,
-    which is what lets the interactive grid sort on real numbers. So the
-    assertion that matters is the pair: the rendered **text** gains digits
-    while the **raw** values are untouched, which is what proves nothing about
-    the data changed and only the reading did.
+    This is what full precision is made of, and since a68 it is **all** it is
+    made of: the route had a ``precision=full`` that rebuilt the document with
+    the per-column formats dropped, and that existed only because the exhibit
+    route once served documents with their numbers thrown away, leaving a client
+    nothing local to reprint. Both routes carry raw now (here through
+    ``include_raw``, there through the library's ``INCLUDE_RAW``), so reprinting
+    is the client's and costs no round trip.
 
-    The ETag has to move with it, or a reader switching to full precision would
-    be handed the rounded document out of cache.
+    So the property to hold is the one the app depends on: for every data cell,
+    the raw value is present and it is the number the text was rendered from.
     """
     oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/frame/summary?format=ir")
+    assert r.status_code == 200, r.text
+    doc = r.json()
+    # Stub cells serialize as bare strings, data cells as mappings, so the walk
+    # has to say which it wants rather than assume every cell is a mapping.
+    cells = [c for row in doc["body"] for c in row["cells"] if isinstance(c, dict)]
+    assert cells, "the document has data cells at all"
+    assert all("raw" in c for c in cells), "every data cell carries its number"
 
-    def read(precision):
-        r = client.get(
-            f"/v1/objects/{oid}/frame/summary?format=ir&precision={precision}")
-        assert r.status_code == 200, r.text
-        doc = r.json()
-        # Stub cells serialize as bare strings, data cells as objects, so the
-        # walk has to say which it wants rather than assume every cell is a
-        # mapping.
-        cells = [c for row in doc["body"] for c in row["cells"]
-                 if isinstance(c, dict)]
-        return (
-            [c["text"] for c in cells if c.get("text") is not None],
-            [c["raw"] for c in cells if c.get("raw") is not None],
-            r.headers["ETag"],
-        )
+    numeric = [c for c in cells
+               if isinstance(c.get("raw"), (int, float))
+               and not isinstance(c.get("raw"), bool)]
+    assert numeric, "and some of those numbers are numbers"
+    for c in numeric:
+        # The text is a rounded reading of the raw value, not a different value.
+        shown = c["text"].replace(",", "")
+        if shown in ("", "—"):
+            continue
+        assert abs(float(shown) - c["raw"]) <= max(abs(c["raw"]), 1) * 0.01, c
 
-    house_text, house_raw, house_etag = read("house")
-    full_text, full_raw, full_etag = read("full")
-
-    assert house_raw == full_raw, "the numbers are the same numbers"
-    assert house_text != full_text, "the rendering is not the same rendering"
-    assert full_etag != house_etag, "the two readings must not share a cache slot"
-    # Something, somewhere, prints more digits than the house format allowed.
-    assert max(len(t) for t in full_text) > max(len(t) for t in house_text)
-    # And no float dust: .15g rather than .17g, so a clean value stays clean.
-    assert not any("000000000" in t for t in full_text)
-
-    bad = client.get(f"/v1/objects/{oid}/frame/summary?format=ir&precision=nope")
-    assert bad.status_code == 422
-    assert "precision" in bad.json()["detail"]
+    # The parameter is gone, and an unknown query parameter is simply ignored
+    # rather than being an error, which is FastAPI's behavior and is fine: the
+    # point is that it no longer changes anything.
+    again = client.get(f"/v1/objects/{oid}/frame/summary?format=ir&precision=full")
+    assert again.status_code == 200
+    assert again.headers["ETag"] == r.headers["ETag"], "one document per frame"
 
 
 def test_frame_ir_sparsifies_the_row_index(client):

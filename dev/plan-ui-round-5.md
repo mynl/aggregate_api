@@ -791,3 +791,52 @@ Per `CLAUDE.md`, repeated because five commits is enough to drift.
 * **New this round**: no phase is written up as done until its acceptance
   paragraph has been walked in a browser. Three of this round's items are here
   because that did not happen last time.
+
+## As executed, 2026-08-10
+
+Five phases, four of them in plan order and one moved.
+
+| version | phase | items |
+|---|---|---|
+| a64 | the preference switches take effect | 15, 23 (client half), 20, menu order |
+| a65 | the strip and the action row | 7, 14, 17, plus the GCN pair's moments |
+| a66 | the charts | G1 to G5 |
+| a67 | Quick Re | 11, 10 |
+| a68 | the exhibits | 21, and the server half of 15 and 23 |
+
+**Two reorderings, both for the same reason.** The charts phase went before the
+exhibits phase and Quick Re went before it too, because the exhibits work was
+blocked on the library and neither of those was blocked on anything. The plan's
+own ordering was by risk, which is the right default and the wrong one when a
+dependency lands mid-round.
+
+**The browser rule earned its place.** Four defects were found by walking a page
+and could not have been found by reading one, and two of them were features that
+had shipped as non-working:
+
+* the readout strip a63 wired to `tooltip.showContent: false`, a flag that
+  returns before the formatter it needed is read, so it had never once displayed
+  a value;
+* Quick Re's percentages resolving against the annual law on both tiers, so the
+  occurrence defaults composed a treaty no claim could reach;
+* a GCN pair printing `mean (?, ?)`, because a57 read the per-axis moments off
+  `units`, which is populated on a copula bivariate (so its test passed) and
+  `None` on the kind the button actually makes;
+* the y axis carrying four times the label density of the x on the same picture.
+
+**What the library answered.** Three of the four asks landed while the round ran
+(1.0.0a246 raw values, a247 the row cap, a248 `PnL.value_type`), and ask 1 came
+back better than it was asked: raw became a property of a served block rather
+than a caller passthrough, which is why nothing here had to adopt it and why
+full precision could leave the server altogether.
+
+**Open, and carried forward rather than closed:**
+
+* Ask 2, rounding the P&L premium. The only Round 5 item not delivered.
+* Three leaves still on the frame route with reasons recorded in `LOADERS`:
+  More Window (the private frame is two columns wider), Reins Stats (the api
+  transposes and splits it), and Pricing and Bounds (computed from user input,
+  so not keyed on the object).
+* The formats question the library agent raised: a column spanning magnitudes
+  infers one digit count and rounds a small premium to `18`. Now purely an
+  on-screen default rather than a precision problem, since the numbers travel.

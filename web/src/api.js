@@ -81,13 +81,13 @@ export const api = {
      * `tables.js`.
      */
     /**
-     * @param {string} precision `'house'` (the presentation formats) or
-     *   `'full'` (every meaningful digit). Costs no extra data either way:
-     *   the exact values already ride in the document under `include_raw`,
-     *   and this only decides which of the two the static walker prints.
+     * One document per frame, at house precision. There is no `precision`
+     * parameter since a68: the exact values ride in every document under
+     * `include_raw`, so full precision is a rendering the client does with
+     * `atFullPrecision` and it costs no round trip.
      */
-    frameIr:      (id, which, precision = 'house') =>
-        _json('GET', `/v1/objects/${id}/frame/${which}?format=ir&precision=${precision}`),
+    frameIr:      (id, which) =>
+        _json('GET', `/v1/objects/${id}/frame/${which}?format=ir`),
     /**
      * A library exhibit as its envelope: title, then one table document per
      * block. The library owns the business translation per perspective

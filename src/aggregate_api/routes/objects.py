@@ -100,7 +100,7 @@ from ..pricing import (
     run_pricing,
     run_reins_price,
 )
-from ..tables import frame_document
+from ..tables import MAX_ROWS, frame_document
 from ..serializers import (
     bin_density,
     bivariate_marginal_frame,
@@ -432,28 +432,17 @@ def _value_type(obj: Any) -> str | None:
     2026-08-10, is that the convention is worth a word on every build, which is
     what asking for it in the first place meant.
 
-    **A P&L is stated here rather than read off the object**, and that is a
-    deliberate exception with a short life. ``PnL`` exposes neither
-    ``value_type`` nor the internal ``_is_loss_value``, yet it is the one kind
-    whose reading genuinely depends on the convention: the library's own ledger
-    caption explains that its kappa columns run "payoff convention, left tail
-    bad". The author's ruling is that a P&L is always payoff, "implied by the
-    name, profit (positive) and loss (negative)". So the app asserts it, which is
-    the app holding a fact about a library class from outside it. ``PnL.value_type``
-    is asked for upstream (``dev/TODO.md``) and this branch deletes the day it
-    lands.
+    **Read off the object, never asserted about it.** a65 carried a special
+    case here: a ``PnL`` exposed neither ``value_type`` nor the internal
+    ``_is_loss_value``, and it is the one kind whose reading genuinely depends
+    on the convention, so the app stated ``payoff`` on the author's ruling
+    ("implied by the name, profit positive and loss negative") while knowing
+    that was the app holding a fact about a library class from outside it. It
+    came out at a68: ``aggregate`` 1.0.0a248 states the convention on the class,
+    which is where it belongs, and this is a plain read again.
     """
     declared = getattr(obj, "value_type", None)
-    if declared is not None:
-        return str(declared)
-    # The one asserted case. Matched on the class name rather than by importing
-    # PnL, in keeping with `_classify_object` and `_has_reinsurance` above: this
-    # module names library types by string throughout so an import cycle is
-    # impossible and a kind the installed library does not carry is simply never
-    # matched.
-    if type(obj).__name__ == "PnL":
-        return "payoff"
-    return None
+    return str(declared) if declared is not None else None
 
 
 def _summary_fields(obj: Any) -> dict:
@@ -1969,13 +1958,6 @@ def get_frame_document(
     oid: str,
     which: str,
     format: str = Query("ir", description="ir"),
-    precision: str = Query(
-        "house",
-        description=(
-            "'house' = the presentation formats; 'full' = every meaningful "
-            "digit, for reading an exact value off the static table."
-        ),
-    ),
     request: Request = None,
     entry: CacheEntry = Depends(_locked_entry),
 ) -> Response:
@@ -1999,21 +1981,19 @@ def get_frame_document(
     the document's notes. The SPA still sends anything over a few hundred rows to
     the interactive grid, which is the honest instrument for them.
 
-    ``precision='full'`` prints every meaningful digit instead of the house
-    formats. It fetches nothing extra: the exact values ride in every document
-    already, under ``include_raw``, which is what lets the interactive grid sort
-    on real numbers. The flag only decides which of the two the static view
-    shows, and it changes the content hash, so the two readings cannot collide
-    in a cache.
+    **``precision`` came out at a68**, and nothing replaced it server side. It
+    reprinted the document with the per-column formats dropped, which existed
+    because the *exhibit* route served documents that had thrown their numbers
+    away and a client had nothing local to reprint. Every served document now
+    carries the exact value beside the formatted string, here through
+    ``include_raw`` and on the exhibit route through the library's own
+    ``INCLUDE_RAW`` (``aggregate`` 1.0.0a246), so full precision is a rendering
+    choice the client makes without asking. Two implementations of one idea, one
+    of which cost a round trip, is worse than one that costs nothing.
     """
     if format != "ir":
         raise HTTPException(
             status_code=422, detail=f"unknown format {format!r}; expected 'ir'"
-        )
-    if precision not in ("house", "full"):
-        raise HTTPException(
-            status_code=422,
-            detail=f"unknown precision {precision!r}; expected 'house' or 'full'",
         )
     df = _named_frame(entry, which)
     try:
@@ -2024,8 +2004,7 @@ def get_frame_document(
         # decimals on anything averaging over 20,000, so a book worth pricing
         # showed its money as whole units. A name with no `tables.FORMATS` entry
         # resolves to nothing and behaves exactly as before.
-        body, doc_hash = frame_document(df, which, formats=which,
-                                        full_precision=precision == "full")
+        body, doc_hash = frame_document(df, which, formats=which)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -2666,7 +2645,12 @@ def get_exhibit(
                     f"available: {sorted(available)}"),
         )
     try:
-        exhibit = agg_exhibits.build_exhibit(entry.obj, name, perspective)
+        # The same row cap the api's own documents take, so a reader cannot
+        # meet two different truncation points depending on which route a leaf
+        # happens to use. The library's own default is 200; ``tables.MAX_ROWS``
+        # is 500 and is the number this service has been serving all along.
+        exhibit = agg_exhibits.build_exhibit(entry.obj, name, perspective,
+                                             max_rows=MAX_ROWS)
     except (NotImplementedError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     body = json.dumps(

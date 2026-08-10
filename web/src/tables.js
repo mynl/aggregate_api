@@ -31,6 +31,64 @@ export function docTruncated(doc) {
     return Boolean(doc && (doc.notes || []).some((n) => /^Showing first /.test(n)));
 }
 
+/**
+ * One number with every digit that means anything, as `%.15g` writes it.
+ *
+ * 15, not 17. Seventeen significant digits is what round-trips a double exactly
+ * and it is the wrong answer here: it prints the float's dust, so a mean the
+ * model computed as 1234.5 reads `1234.5000000000002` and the reader learns
+ * about IEEE 754 rather than about their book. 15 is the most a double carries
+ * reliably.
+ */
+function fullPrecision(value) {
+    if (!Number.isFinite(value)) return String(value);
+    if (value === 0) return '0';
+    let s = value.toPrecision(15);
+    if (!s.includes('e')) s = s.includes('.') ? s.replace(/\.?0+$/, '') : s;
+    return s;
+}
+
+/**
+ * The same document with every number printed at full precision.
+ *
+ * **Client side, and that is the point.** Full precision was a server round trip
+ * from a59 to a67: the api rebuilt the document with the per-column formats
+ * dropped, because the exhibit route served documents that had thrown their
+ * numbers away and there was nothing local to reprint. Since the library ships
+ * `include_raw` on every served block (`aggregate` 1.0.0a246) every document the
+ * app holds carries the exact value beside the formatted string, so this is a
+ * rewrite of what is already in hand. The preference costs no fetch, applies to
+ * both routes by one mechanism, and takes effect on the flip rather than on the
+ * next build.
+ *
+ * Only cells whose raw value **is a number** are touched. Raw travels as a
+ * string on object-dtype columns, so the coercion is what selects them, and
+ * booleans are excluded explicitly: `Number(true)` is 1, and rewriting `True` to
+ * `1` would be losing a reading rather than sharpening one.
+ *
+ * Returns a copy. The original is what the interactive grid derives from and
+ * what the walker draws at house precision, and both have to survive a flip
+ * back.
+ */
+export function atFullPrecision(doc) {
+    if (!doc || !Array.isArray(doc.body)) return doc;
+    const redo = (cell) => {
+        if (!cell || typeof cell !== 'object' || !('raw' in cell)) return cell;
+        const { raw } = cell;
+        if (typeof raw === 'boolean' || raw === null || raw === '') return cell;
+        const n = Number(raw);
+        if (!Number.isFinite(n)) return cell;
+        return { ...cell, text: fullPrecision(n) };
+    };
+    return {
+        ...doc,
+        body: doc.body.map((row) => ({ ...row, cells: (row.cells || []).map(redo) })),
+        ...(Array.isArray(doc.foot)
+            ? { foot: doc.foot.map((row) => ({ ...row, cells: (row.cells || []).map(redo) })) }
+            : {}),
+    };
+}
+
 let walkerPromise = null;
 
 /** Add the walker's stylesheet once, pointing at the served copy. */

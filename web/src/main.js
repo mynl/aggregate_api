@@ -25,7 +25,7 @@ import { mountExamples, mountPalette, loadExamples } from './examples.js';
 import { renderInfo } from './renderers.js';
 import { mountChart, mountChartDoc, notDrawable } from './charts/mount.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
-import { mountIrTable, irToGrid, docTruncated } from './tables.js';
+import { mountIrTable, irToGrid, docTruncated, atFullPrecision } from './tables.js';
 import { renderError, renderRateLimit } from './error-pane.js';
 import {
     NAV_GROUPS,
@@ -802,20 +802,41 @@ function showTab(name) {
 // leaf actually renders, keyed `group:leaf`. A leaf named in `nav.js` with no
 // loader here draws nothing, which is what the Bounds leaves do until they are
 // built.
+// Four of these moved onto the exhibit route at a68: Overview Summary, Tail and
+// Validation, and More Stats. Each was fetching a DataFrame and having the api
+// build a document from it, with the api holding that frame's formats and row
+// emphasis in `tables.py` and its title and caption as literals in this file.
+// All four are published exhibits, so all four of those copies were a second
+// opinion about a table the library already has one about. What the library
+// serves now, the app draws.
+//
+// The move was blocked until `aggregate` 1.0.0a246: an exhibit block carried no
+// raw values, so it could not be handed to the interactive grid at all, and
+// moving a leaf onto that route would have traded a working table for a broken
+// one. See `dev/plan-ui-round-5.md` item 21.
+//
+// Three leaves did **not** move and the reasons are worth keeping. More Window
+// reads the *private* `_bs_window_df`, two columns wider than the published
+// frame (`W`, `coverage`) and those two are the pane's whole diagnostic value.
+// Reins Stats is transposed and split in two by the api, which is round 3's
+// punch item; the `reins` exhibit serves the frame the other way up. And
+// Pricing and Bounds are computed from what the reader typed, so they are not
+// keyed on the object and cannot be registry exhibits at all.
 const LOADERS = {
     'overview:plot': () => loadOverviewPlot(),
-    'overview:summary': () => loadOverviewFrames([['summary', 'summary']]),
+    'overview:summary': () => loadExhibitLeaf('pane-overview', 'summary',
+        ['overview', 'summary']),
     // The return-period ladder, and only that. It was paired with
     // `tail_behavior_df` through a50 on the grounds that both are about the
     // tail; they are not the same question, and in any case the pairing never
-    // drew, because this loader takes the frame route and that name is not in
-    // `_CSV_FRAMES`. Tail behavior is its own leaf under More now, off the
-    // exhibit the library registers for it.
-    'overview:tail': () => loadOverviewFrames([['tail_df', 'tail']]),
-    // Moved here from More at a55. Same frame and same options; only the pane
-    // changed, because Overview's leaves share `pane-overview`.
-    'overview:validation': () => replacePaneTable('pane-overview', 'validation_df',
-        { columnFilters: false }, null, ['overview', 'validation']),
+    // drew, because that loader took the frame route and the name is not in
+    // `_CSV_FRAMES`. Tail behavior is its own leaf under More, off its own
+    // exhibit.
+    'overview:tail': () => loadExhibitLeaf('pane-overview', 'tail',
+        ['overview', 'tail']),
+    // Moved to Overview from More at a55, onto the exhibit route at a68.
+    'overview:validation': () => loadExhibitLeaf('pane-overview', 'validation',
+        ['overview', 'validation']),
 
     'economics:ledger': () => loadExhibitLeaf('pane-economics', 'economic',
         ['economics', 'ledger']),
@@ -838,8 +859,7 @@ const LOADERS = {
     'bounds:pricing': () => showBoundsLeaf('pricing'),
     'bounds:allocation': () => showBoundsLeaf('allocation'),
 
-    'more:stats': () => replacePaneTable('pane-more', 'stats_df', GRID_FULL,
-        null, ['more', 'stats']),
+    'more:stats': () => loadExhibitLeaf('pane-more', 'stats', ['more', 'stats']),
     'more:density': () => {
         // `resolution: 'display'` here and nowhere else. The *plots* take every
         // grid point, because a binned atom is a lie; a *table* of 65,536 rows
@@ -1148,10 +1168,9 @@ const TABLE_VIEW_KEY = 'aggapi.tableView';
 /** Is this table-view value one of the static readings? */
 function isStatic(mode) { return mode === 'static' || mode === 'precise'; }
 
-/** A frame document, at whatever precision the page preference asks for. */
+/** A frame document. One per frame: the precision is decided at render time. */
 function frameDoc(which) {
-    return api.frameIr(state.id, which,
-                       _tableView === 'precise' ? 'full' : 'house');
+    return api.frameIr(state.id, which);
 }
 
 /**
@@ -1214,9 +1233,11 @@ function notifyTableListeners() {
 /**
  * Throw away every pane's contents and load the group on screen again.
  *
- * The **refetch** path, for a preference that changes what the *server* builds:
- * full precision and perspective both do, and no amount of redrawing a document
- * already in hand can honor either.
+ * The **refetch** path, for a preference that changes what the *server* builds.
+ * Perspective alone since a68: the library owns the business translation, so the
+ * other reading of a frame exists only on the server. Full precision was here
+ * too and is not any more, because the numbers travel with every document and
+ * the app reprints them itself.
  *
  * Two things have to give way together, which is why this exists rather than the
  * listeners simply being asked twice. A loader awaits its document **outside**
@@ -1257,17 +1278,17 @@ function refetchTables() {
 
 function setTableView(mode) {
     if (mode === _tableView) return;
-    // Full precision is served, not derived. The exact values ride in every
-    // document under `include_raw`, but *which* of the two the static walker
-    // prints is decided when the document is built, so moving to or from
-    // `precise` needs new bytes. The plain static / interactive flip does not:
-    // both views come off the one document, which is what makes that flip free.
-    const refetch = (_tableView === 'precise') !== (mode === 'precise');
     _tableView = mode;
     try { localStorage.setItem(TABLE_VIEW_KEY, mode); } catch { /* private mode */ }
     syncPreferenceMenu();
-    if (refetch) refetchTables();
-    else notifyTableListeners();
+    // A redraw, for all three readings. Every document carries the exact values
+    // beside the formatted ones, so static, interactive and full precision are
+    // three ways of printing bytes already in hand and none of them needs the
+    // server. Full precision cost a refetch from a59 to a67 only because the
+    // exhibit route served documents with their numbers dropped, and there was
+    // nothing local left to reprint; `aggregate` 1.0.0a246 ships raw on every
+    // served block and that is what makes this line honest.
+    notifyTableListeners();
 }
 
 function setPerspective(mode) {
@@ -1339,8 +1360,11 @@ function mountTable(paneId, host, source, gridOpts = GRID_FULL) {
         if (!host.isConnected) return;
         host.className = '';
         empty(host);
+        // No mention of a CSV download. Three of the exhibit-route panes have no
+        // frame route behind them at all, so offering one was pointing at a way
+        // out that does not exist for the reader most likely to be reading this.
         host.appendChild(el('div', { className: 'text-muted small fst-italic' },
-            'Table renderer unavailable. The CSV download still has the data.'));
+            'This table could not be rendered.'));
     };
 
     if (!doc) {                          // bulk path, unchanged
@@ -1349,7 +1373,9 @@ function mountTable(paneId, host, source, gridOpts = GRID_FULL) {
     }
     // The adapter's formats and align come out of the document, so the grid
     // renders the same numbers the walker would. Caller options still win, since
-    // a call site may know something the frame does not carry.
+    // a call site may know something the frame does not carry. Always the
+    // *unmodified* document: the grid sorts and filters on the raw values and
+    // formats them itself, so full precision is a static-view question only.
     const toGrid = () => irToGrid(doc).then(
         (g) => (g ? asGrid(g.frame, { formats: g.formats, align: g.align, ...gridOpts })
                   : unavailable()));
@@ -1361,50 +1387,20 @@ function mountTable(paneId, host, source, gridOpts = GRID_FULL) {
     host.className = 'gt-host';
     // Async, but the host is already in the DOM and holds its place, so the
     // table lands without moving anything around it.
-    mountIrTable(paneId, host, doc).then((handle) => { if (!handle) toGrid(); });
+    const shown = _tableView === 'precise' ? atFullPrecision(doc) : doc;
+    mountIrTable(paneId, host, shown).then((handle) => { if (!handle) toGrid(); });
 }
 
 
-// Render the summary_df + tail_df exhibits into `box` per the current view mode.
-// Everything mounted registers under 'pane-overview', so clearGrids tears down
-// the previous mode before each (re-)render.
-function renderOverviewExhibits(box, ir = {}) {
-    clearGrids('pane-overview');
-    empty(box);
-    if (ir.summary) renderOneExhibit(box, ir.summary, {
-        title: 'Summary',
-        gloss: 'mean, SD, CV, skewness and key percentiles, by component',
-        caption: 'CV blank for signed or near break even rows. Freq percentiles '
-            + 'blank by design, the PGF carries no quantiles.',
-    });
-    if (ir.tail) renderOneExhibit(box, ir.tail, {
-        title: 'Return periods',
-        gloss: 'VaR, TVaR and xsVaR by return period',
-        caption: '1 in 200 (Solvency II) and 1 in 250 (US) are the capital anchors. '
-            + 'Exact from the FFT grid, not simulated.',
-    });
-}
-
-// One exhibit: the static table walked from its document, or the interactive
-// CsvGrid derived from the same one. Title and caption are the SPA's own either
-// way, so the two views differ in the table and in nothing else.
-function renderOneExhibit(box, doc, opts) {
-    // Title and gloss on one line, bold then explanation. Through a46 this was
-    // a heading over a separate hint line, and on Overview / Summary the pair
-    // said "Summary" twice, at two sizes and two alignments, a few pixels
-    // apart. One line, one idea, and the gloss now sits on the table it
-    // describes rather than in the menu above it.
-    if (opts.title) {
-        const lede = el('p', { className: 'exhibit-lede' },
-            el('b', {}, opts.title));
-        if (opts.gloss) lede.appendChild(document.createTextNode(`: ${opts.gloss}`));
-        box.appendChild(lede);
-    }
-    const host = el('div');
-    box.appendChild(host);
-    mountTable('pane-overview', host, { doc }, GRID_FULL);
-    if (opts.caption) box.appendChild(el('div', { className: 'exhibit-caption' }, opts.caption));
-}
+// `renderOverviewExhibits` and `renderOneExhibit` came out at a68 with the two
+// leaves they served. Between them they carried four literals: a title, a gloss
+// and a caption for Summary and for Return periods, written here because the
+// frame route ships a frame and nothing about it. The library publishes both as
+// exhibits with their own captions, so those literals were the app's second
+// opinion on a sentence it did not own, and one of them was wrong in a way
+// nobody had noticed: the Return periods caption named 1-in-200 and 1-in-250 as
+// the capital anchors, which is the library's own choice and is exactly the sort
+// of fact that goes stale in a copy.
 
 /**
  * The object's own header block: its tags, and its note.
@@ -1488,36 +1484,6 @@ async function loadOverviewPlot() {
         pane.removeChild(host);
         pane.appendChild(notDrawable());
     }
-}
-
-/**
- * Overview / Summary and Overview / Tail: one or more frame documents in a pane.
- *
- * One document each, feeding both table views: the walker draws it, and
- * `irToGridInput` derives the grid's input from the same bytes. So flipping the
- * preference costs no round trip and the two views cannot disagree about a
- * number.
- *
- * @param {Array<[string, string]>} specs `[frame route name, exhibit key]` pairs.
- */
-async function loadOverviewFrames(specs) {
-    if (overviewChart) { overviewChart.dispose(); overviewChart = null; }
-    const pane = $('pane-overview');
-    clearGrids('pane-overview');
-    empty(pane);
-    const docs = await Promise.all(
-        specs.map(([which]) => frameDoc(which).catch(() => null)));
-    const ir = {};
-    specs.forEach(([, key], i) => { ir[key] = docs[i]; });
-    if (!docs.some(Boolean)) {
-        pane.appendChild(el('div', { className: 'text-muted small' },
-            'Not available for this object.'));
-        return;
-    }
-    const box = el('div', { className: 'overview-exhibits' });
-    pane.appendChild(box);
-    renderOverviewExhibits(box, ir);
-    onTableViewChange('pane-overview', () => renderOverviewExhibits(box, ir), box);
 }
 
 /**
@@ -1667,17 +1633,51 @@ async function loadExhibitLeaf(paneId, name, leaf) {
             return;
         }
         for (const block of blocks) {
+            // The caption comes out of the document and is drawn by the page.
+            //
+            // It rides *inside* the block, so the walker printed it and the
+            // interactive grid did not, and flipping the switch silently
+            // dropped the library's own sentence about what the frame means.
+            // That sentence is most of why the exhibit route exists, so it
+            // belongs to the block rather than to one of its two renderings.
+            // Lifted rather than copied, or the static view would show it twice.
+            const { caption, ...doc } = block;
             const host = el('div');
             root.appendChild(host);
-            mountTable(paneId, host, { doc: block }, GRID_FULL);
+            mountTable(paneId, host, { doc }, GRID_FULL);
+            if (caption) {
+                root.appendChild(el('div', { className: 'exhibit-caption' }, caption));
+            }
         }
         onTableViewChange(paneId, draw, root);
     };
     draw();
 }
 
+/**
+ * Dispose the ECharts instance a pane is holding, if it is holding one.
+ *
+ * Charts are tracked here rather than in the grid registry (they are not
+ * `destroy()`ables), so emptying a pane leaves its instance alive over a
+ * detached canvas: a live ResizeObserver, and a `liveChart` the download button
+ * would happily save a picture of. Each chart loader already disposed its own
+ * before drawing, which covered plot-to-plot and missed plot-to-table. That gap
+ * mattered for one leaf before a68 and for four after it, so the disposal moved
+ * to the one place every pane replacement goes through.
+ */
+function disposePaneChart(paneId) {
+    if (paneId === 'pane-overview' && overviewChart) {
+        overviewChart.dispose(); overviewChart = null;
+    } else if (paneId === 'pane-reinsurance' && reinsChart) {
+        reinsChart.dispose(); reinsChart = null;
+    } else if (paneId === 'pane-bounds' && boundsChart) {
+        boundsChart.dispose(); boundsChart = null;
+    }
+}
+
 function replacePane(paneId, node) {
     clearGrids(paneId);          // tear down any CsvGrid that lived here
+    disposePaneChart(paneId);    // and any chart, for the same reason
     const pane = $(paneId);
     empty(pane);
     if (node) pane.appendChild(node);

@@ -4,6 +4,75 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a68
+
+`dev/plan-ui-round-5.md`, the exhibits phase, and the close of Round 5. Item 21
+and the half of items 15 and 23 that had been waiting on the library.
+
+**Five panes that could not draw at all now draw.** Economics Ledger, Ratios and
+Waterfall, More Tail behavior and More Dependency were dead in the interactive
+table view from a62 to a67: the exhibit route served blocks built without
+`include_raw`, so `irToGridInput` refused them and the pane printed a grey
+apology instead. `aggregate` 1.0.0a246 makes raw values a property of a served
+block rather than a caller option, which is the right call and a stronger one
+than the passthrough this repo asked for. Nothing changed here to adopt it.
+
+**Full precision moves into the browser and stops costing a round trip.** It was
+a server rebuild with the per-column formats dropped, and that only existed
+because a document could arrive with its numbers thrown away. Every document
+carries the exact value beside the formatted string now, on both routes, so
+`atFullPrecision` reprints what is already in hand. Three consequences: the
+preference takes effect on the flip rather than on the next fetch, the
+`?precision=` query parameter comes off `/frame/{which}` along with
+`frame_spec(full_precision=)` and `FULL_PRECISION_FLOAT`, and the refetch a64
+introduced now fires for Perspective alone, which is the one preference the
+server really does own.
+
+**Four leaves move onto the exhibit route**: Overview Summary, Tail and
+Validation, and More Stats. Each had been fetching a DataFrame and having the
+api build a document from it, with this repo holding that frame's formats and
+row emphasis in `tables.py` and its title and caption as literals in `main.js`.
+All four are published exhibits, so every one of those copies was a second
+opinion about a table the library already has one about, and one had already
+gone stale: the Return periods caption named the capital anchors, which is the
+library's choice to make. `renderOverviewExhibits` and `renderOneExhibit` delete.
+
+Three leaves deliberately did **not** move, and the reasons are in the code.
+More Window reads the *private* `_bs_window_df`, two columns wider than the
+published frame (`W`, `coverage`), and those two are the pane's whole diagnostic
+value. Reins Stats is transposed and split in two by the api, which is a round 3
+punch item; the `reins` exhibit serves that frame the other way up. And Pricing
+and Bounds are computed from what the reader typed rather than read off the
+object, so they cannot be registry exhibits at all without parameterized
+exhibits, which is a design question and not a migration.
+
+**Captions come out of the document and are drawn by the page.** A caption rode
+*inside* the block, so the walker printed it and the interactive grid did not,
+and flipping the switch silently dropped the library's own sentence about what
+the frame means. Lifted rather than copied, or the static view would show it
+twice.
+
+Smaller, all found while doing the above:
+
+* The exhibit route passes `max_rows`, so a reader cannot meet two different
+  truncation points depending on which route a leaf happens to use.
+* `_value_type` loses its `PnL` special case. a65 asserted `payoff` from outside
+  the class on the author's ruling, knowing that was the wrong side of the wall;
+  `aggregate` 1.0.0a248 states it on the class and this is a plain read again.
+* The pane that cannot render a table no longer offers a CSV download. Three of
+  the five exhibit panes have no frame route behind them, so it was pointing at
+  a way out that does not exist for the reader most likely to be reading it.
+* `replacePane` disposes the chart its pane was holding. Chart instances are
+  tracked outside the grid registry, so emptying a pane left one alive over a
+  detached canvas, with a live ResizeObserver and a `liveChart` the download
+  button would have saved a picture of. Each chart loader disposed its own before
+  drawing, which covered plot-to-plot and missed plot-to-table: one leaf before
+  this phase, four after it.
+
+Still outstanding upstream and not blocking anything here: the P&L premium is
+still written at full float width (`12740.358597431476 premium`), which is Round
+5 item 19 and ask 2 of the library note.
+
 ## 1.0.0a67
 
 `dev/plan-ui-round-5.md` phase a68, Quick Re. Taken before the exhibits phase
