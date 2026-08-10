@@ -4,6 +4,39 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a70
+
+`dev/plan-ui-round-6.md`, phases B and C: the P&L premium, and the exceptions.
+
+**The P&L premium is a number someone would write down.** `1324 premium` where
+it was `1324.2716561855557 premium`: no decimals above 100, two at or below,
+which is the author's rule. Anchored at the head of the program, because the
+same text ends `0.25 premium expenses` and the obvious pattern matches that too,
+where rewriting it to `0` would silently change the object rather than only how
+it reads. This belongs in `aggregate._program._pnl_consideration`, is asked for
+there, and is idempotent, so the day it lands upstream this rounds an
+already-round number and deletes.
+
+**Reinsurance Summary moves onto the exhibit route**, off the `reins` exhibit's
+second block, which is `reins_summary_df` with the library's own caption and,
+on a portfolio, its row flags. Byte-identical otherwise, so there was nothing to
+weigh. `loadExhibitLeaf` takes a block index for it, which is also the shape
+Stats needs the day the library turns that frame over.
+
+**The remaining exceptions are a board, not a paragraph.** a68 recorded three
+leaves that had stayed on the frame route as three sentences of justification,
+which read as settled decisions; the author's ruling is that there are no
+exceptions to the rule that the library owns what a table means, so each is a
+ticket. The list above `LOADERS` now names all six with what blocks each:
+Reins Stats (the library serves the layering analysis measures-down rather than
+layers-down), More Window (the published `bs_window_df` is two columns narrower
+than the private one, missing `W` and `coverage`), More Sharpen (no exhibit is
+registered at all), and Pricing and Bounds, five leaves that are computed from
+what the reader typed and so are not keyed on the object, which is a design
+question rather than a missing registration. The densities stay bulk and are the
+agreed exception. All of it is written up for the library as
+`aggregate_REFACTOR/dev/note-from-aggregate-api-round-6.md`.
+
 ## 1.0.0a69
 
 `dev/plan-ui-round-6.md`, phase A: the author's punch-ups off a68, plus the one

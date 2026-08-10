@@ -64,6 +64,15 @@ re-pointing the frame routes at exhibit raw and insurer, or keep the frame
 routes as the raw CSV path forever) is taken during the endpoint phase
 proper.
 
+**Ten of the seventeen table leaves are on the exhibit route as of a70**, and
+the author's ruling is that there are no exceptions to the rule: what the
+library serves, the app draws. The six that are not, with what blocks each, are
+listed above `LOADERS` in `main.js` and written up for the library as
+`aggregate_REFACTOR/dev/note-from-aggregate-api-round-6.md`. Four are library
+asks (Reins Stats orientation, the wider `bs_window_df`, a `sharpen` exhibit,
+and a shape for a computed pricing exhibit); the two densities are the agreed
+bulk exception and are not outstanding.
+
 ### b) Consolidate the graphs on ECharts, and fix the options
 
 **Most of the way (a36, a37).** a36 took the Plotly path out: `engine.js`,

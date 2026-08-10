@@ -2309,6 +2309,77 @@ def post_sharpen(
     }
 
 
+#: The P&L consideration, as ``pnl_program`` writes it: the wrapping keyword,
+#: the derived name, then the number and the word it qualifies. Anchored at the
+#: start of the program on purpose, see :func:`_round_pnl_premium`.
+_PNL_PREMIUM = re.compile(
+    r"\A(pnl\s+\S+\s+)(\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)(\s+premium\b)")
+
+
+def _round_pnl_premium(program: str) -> str:
+    """Print the P&L's premium as a number someone would write down.
+
+    Parameters
+    ----------
+    program : str
+        The program ``Aggregate.pnl_program`` / ``Portfolio.pnl_program``
+        returned.
+
+    Returns
+    -------
+    str
+        The same program with the consideration rounded: no decimals above 100,
+        two at or below it. Unchanged when the premium is inherited, or when the
+        text does not start the way the library writes it.
+
+    Notes
+    -----
+    The library sizes an uninherited premium as expected loss over the loss
+    ratio and does not round it, so the derivation dropped
+    ``1428.5840984231345 premium`` into the editor: sixteen digits of a number
+    whose input was "about 70 percent", in a program the reader is meant to
+    read, keep and edit. The author's rule is the one here.
+
+    **The threshold is the author's and the split is not arbitrary.** Above 100
+    the cents are noise against a premium quoted in whole currency units; at or
+    below it they are the number. Nothing scales it to the magnitude beyond
+    that, because a rule with more than one joint in it stops being predictable
+    from the outside.
+
+    **Anchored at the start of the string.** The obvious regex, a number
+    followed by ``premium``, also matches the ``0.25 premium expenses`` trailer
+    that the very same program ends with, and rewriting the expense ratio to
+    ``0`` would be a silent and material change to the object. The consideration
+    is the only one of the two that follows ``pnl <name>``, so that is what this
+    matches, and ``\\A`` rather than ``^`` so no amount of multiline content can
+    move the anchor. ``\\s`` spans the newline the library writes after the
+    name.
+
+    **The rewritten text is re-rendered downstream, and that is fine.** The
+    route runs the program through ``collapse_program`` and then
+    :func:`spread`, which re-parses it, so what reaches the reader is the
+    library's rendering of the *value* this wrote rather than this string. Both
+    arms survive the trip in the sense that matters: ``1428.5840984231345``
+    comes back ``1429``. What does not survive is a trailing zero, so a premium
+    of 10.5 is written ``10.50`` here and printed ``10.5`` there. Rounding is
+    what this route owes the reader; how a float prints is the library's call
+    and is not worth fighting the writer over.
+
+    This belongs upstream in ``aggregate._program._pnl_consideration``, which is
+    where the unrounded number is produced, and it is asked for there. It is
+    done here because the author wanted it now. It is idempotent, so the day the
+    library rounds, this rewrites an already-round number and can delete.
+    """
+    m = _PNL_PREMIUM.match(program)
+    if not m:
+        # `inherit premium` when the exposure states one, which is a keyword and
+        # not a number, so there is nothing to round and nothing to warn about.
+        return program
+    value = float(m.group(2))
+    shown = f"{value:.0f}" if value > 100 else f"{value:.2f}"
+    return f"{m.group(1)}{shown}{m.group(3)}{program[m.end():]}"
+
+
 @router.post("/objects/{oid}/pnl", response_model=models.DerivedResponse)
 def post_pnl(
     oid: str,
@@ -2325,7 +2396,8 @@ def post_pnl(
     own body inlined as the engine, so the text is self-contained and builds
     anywhere rather than only in the session that wrote it. The premium is
     ``inherit premium`` when the exposure states one, and otherwise expected
-    loss over ``loss_ratio``.
+    loss over ``loss_ratio``, rounded for reading by
+    :func:`_round_pnl_premium`.
 
     Notes
     -----
@@ -2348,6 +2420,9 @@ def post_pnl(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    # Before `collapse_program`, so the pattern sees the shape the library
+    # writes rather than whatever collapsing does to the whitespace.
+    program = _round_pnl_premium(program)
     program = collapse_program(program)
     built = post_object(models.BuildRequest(decl=program), request,
                         settings, cache, audit)

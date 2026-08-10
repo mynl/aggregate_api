@@ -11,6 +11,8 @@ default ``uv run pytest`` path.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from aggregate_api.serializers import display_log2_for
@@ -86,6 +88,62 @@ def test_pnl_reports_the_payoff_convention(client):
     derived = client.post(f"/v1/objects/{built['id']}/pnl", json={}).json()
     assert derived["kind"] == "pnl"
     assert derived["value_type"] == "payoff"
+
+
+def _pnl_premium(program: str) -> str:
+    """The consideration as the derived program prints it."""
+    head = re.match(r"\Apnl\s+\S+\s+(\S+)\s+premium\b", program)
+    assert head, f"unexpected program shape: {program[:80]!r}"
+    return head.group(1)
+
+
+def test_pnl_premium_is_rounded_for_reading(client):
+    """The derived premium is a number someone would write down.
+
+    The library sizes an uninherited consideration as expected loss over the
+    loss ratio and does not round it, so this route used to drop
+    ``1428.5840984231345 premium`` into the editor: sixteen digits of a number
+    whose input was "about 70 percent". The author's rule is no decimals above
+    100 and two at or below.
+
+    The second assertion is the one worth having. The same program ends
+    ``0.25 premium expenses``, which the obvious "number then ``premium``"
+    pattern also matches, and rewriting *that* to ``0`` would silently change
+    the object rather than only how it reads. The rounding is anchored at the
+    head of the program for exactly that reason, and this is what says so.
+    """
+    decl = "agg RoundMe 10 claims sev lognorm 100 cv 2 poisson"
+    built = client.post("/v1/objects", json={"decl": decl}).json()
+    program = client.post(
+        f"/v1/objects/{built['id']}/pnl", json={}).json()["program"]
+
+    premium = _pnl_premium(program)
+    assert float(premium) > 100, "the fixture has to exercise the whole-number arm"
+    assert "." not in premium, f"a premium over 100 prints whole, got {premium}"
+
+    assert "0.25 premium expenses" in " ".join(program.split()), \
+        "the expense ratio is not the consideration and must not be rounded"
+
+
+def test_pnl_premium_keeps_the_cents_when_small(client):
+    """At or below 100 the cents are the number, so they survive.
+
+    A dice roll at a loss ratio of 1 is a premium of 10.5, and rounding that to
+    ``10`` would be a five percent error in the thing the P&L is about. Which is
+    the whole reason the rule has two arms.
+
+    Asserted as a **value**, not as the string ``10.50``. The rewrite does write
+    two decimals, and ``spread`` then re-renders the program through the
+    library's own writer, which normalizes a trailing zero away. That is the
+    library's call about how a float prints and not something to pin here; what
+    this route owes the reader is a premium rounded to the cent, and 10.5 is
+    that number.
+    """
+    built = client.post("/v1/objects", json={"decl": _DICE}).json()
+    program = client.post(f"/v1/objects/{built['id']}/pnl",
+                          json={"loss_ratio": 1.0}).json()["program"]
+    premium = float(_pnl_premium(program))
+    assert premium == round(premium, 2) and premium == 10.5, program[:80]
 
 
 def test_build_reports_library_warnings(client):

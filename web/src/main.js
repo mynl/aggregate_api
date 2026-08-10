@@ -830,13 +830,36 @@ function showTab(name) {
 // moving a leaf onto that route would have traded a working table for a broken
 // one. See `dev/plan-ui-round-5.md` item 21.
 //
-// Three leaves did **not** move and the reasons are worth keeping. More Window
-// reads the *private* `_bs_window_df`, two columns wider than the published
-// frame (`W`, `coverage`) and those two are the pane's whole diagnostic value.
-// Reins Stats is transposed and split in two by the api, which is round 3's
-// punch item; the `reins` exhibit serves the frame the other way up. And
-// Pricing and Bounds are computed from what the reader typed, so they are not
-// keyed on the object and cannot be registry exhibits at all.
+// Reinsurance Summary followed at a70, off the `reins` exhibit's second block.
+//
+// **What is left on the frame route, and why, one line each.** The author's
+// standing rule is that there are no exceptions to this, so each of these is a
+// ticket rather than a decision, and `dev/plan-ui-round-6.md` phase C is the
+// board they are on. Nobody should have to re-derive this list by reading
+// loaders.
+//
+//   Reins Stats     the `reins` exhibit's first block is the same numbers the
+//                   other way up, measures down and layers across. The api
+//                   transposes and splits it, which is round 3's punch item.
+//                   Blocked on the library turning the frame over; the author
+//                   is pushing that change.
+//   More Window     the `bs_window` exhibit serves the *published* frame, which
+//                   is two columns narrower than the private `_bs_window_df`
+//                   this fetches. The two missing ones are `W` and `coverage`,
+//                   which are the pane's whole diagnostic value. Blocked on the
+//                   library publishing the wider frame.
+//   More Sharpen    there is no `sharpen` exhibit at all. `sharpen_df` and
+//                   `sharpen_score` are not in the registry. Blocked on one
+//                   being registered.
+//   Pricing (2)     computed from what the reader typed, so not keyed on the
+//   Bounds (3)      object and not registry exhibits in the current sense. The
+//                   documents are built here, from pandas, which is the last of
+//                   that in the table pipeline. Needs a library entry point
+//                   that takes the inputs and answers with an exhibit; a design
+//                   question rather than a missing registration.
+//   both densities  bulk, permanently the grid's, and the agreed exception.
+//                   A table of thousands of rows is not a reading experience
+//                   and a document of one is not worth building.
 const LOADERS = {
     'overview:plot': () => loadOverviewPlot(),
     'overview:summary': () => loadExhibitLeaf('pane-overview', 'summary',
@@ -860,8 +883,10 @@ const LOADERS = {
     'economics:waterfall': () => loadExhibitLeaf('pane-economics', 'economic_waterfall',
         ['economics', 'waterfall']),
 
-    'reinsurance:summary': () => loadReinsFrame('reins_summary_df',
-        ['reinsurance', 'summary']),
+    // The `reins` exhibit's second block, which is `reins_summary_df` with the
+    // library's caption and, on a portfolio, its row flags. Byte-identical
+    // otherwise, so this moved at a70 with nothing to weigh.
+    'reinsurance:summary': () => loadReinsExhibit(1, ['reinsurance', 'summary']),
     'reinsurance:stats': () => loadReinsStats(),
     'reinsurance:density': () => loadReinsFrame('reins_density_df',
         ['reinsurance', 'density']),
@@ -1194,12 +1219,13 @@ function frameDoc(which) {
  * The library owns the translation, so this is a passthrough on the exhibit
  * route and nothing here knows what either perspective does to a frame.
  *
- * Note what it reaches, because the answer is "some of the page" and that is
- * worth knowing before wondering why a table did not move: only the leaves on
- * the exhibit route take a perspective, which is Economics Ledger, Ratios and
- * Waterfall, plus More Tail behavior and Dependency. Everything else is served
- * by the frame routes, which have no such parameter. Closing that gap is the
- * `[Exhibits-App-Cleanup]` item in `dev/TODO.md`.
+ * Note what it reaches, because the answer is "most of the page" and that is
+ * worth knowing before wondering why a table did not move. Only the leaves on
+ * the exhibit route take a perspective: Overview Summary, Tail and Validation,
+ * Economics Ledger, Ratios and Waterfall, Reinsurance Summary, and More Stats,
+ * Tail behavior and Dependency. Ten of the seventeen table leaves. What is left
+ * is served by the frame routes, which have no such parameter, and the list of
+ * those with the reason each is still there is above `LOADERS`.
  */
 const PERSPECTIVE_KEY = 'aggapi.perspective';
 let _perspective = (() => {
@@ -1685,10 +1711,16 @@ async function loadSharpenAudit() {
  * into pure-unit blocks rather than one frame with mixed measures.
  *
  * @param {[string, string]} leaf `[group, key]`, for the lede.
+ * @param {number} [block] draw only this block of the exhibit, by index. For
+ *   `reins`, whose two blocks are two different leaves of the Reinsurance
+ *   group: the layering analysis is Stats and the per-stage cession impact is
+ *   Summary. One envelope answers both, so a reader stepping between them pays
+ *   one fetch and the second is a 304.
  */
-async function loadExhibitLeaf(paneId, name, leaf) {
+async function loadExhibitLeaf(paneId, name, leaf, block = null) {
     const envelope = await api.exhibit(state.id, name, _perspective);
-    const blocks = envelope.blocks || [];
+    const all = envelope.blocks || [];
+    const blocks = block === null ? all : all.slice(block, block + 1);
     const draw = () => {
         // `.exhibit-blocks`, not `.overview-exhibits`: the blocks here have no
         // lede of their own between them, so the spacing has to come from the
@@ -2164,16 +2196,36 @@ for (const id of QR_FIELDS) {
 // only one on the page, so it is initialized here rather than by a sweep.
 if ($('qr-help')) bootstrap.Tooltip.getOrCreateInstance($('qr-help'));
 
-/** Reinsurance / Summary, Stats and Density: one per-layer frame. */
+/**
+ * Reinsurance / Density: the one leaf here still on the frame route.
+ *
+ * The bulk path, permanently. `reins_density_df` is thousands of rows even
+ * binned to the display grid, so it never becomes a document, exactly as More /
+ * Density never does. The plot leaf is what wants every point.
+ *
+ * It was Summary's loader too until a70, and Summary is on the exhibit route
+ * now. See `loadReinsExhibit`.
+ */
 async function loadReinsFrame(which, leaf = null) {
     if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
-    // The density is the bulk one: the table takes the binned grid, and only
-    // the plot leaf wants every point.
-    const bulk = which === 'reins_density_df'
-        ? () => api.frameOf(state.id, which, { resolution: 'display' })
-        : null;
+    const bulk = () => api.frameOf(state.id, which, { resolution: 'display' });
     await replacePaneTable('pane-reinsurance', which,
         { ...GRID_FULL, renderCap: 8192 }, bulk, leaf);
+}
+
+/**
+ * One block of the `reins` exhibit in the Reinsurance pane.
+ *
+ * The chart disposal is why this exists rather than `loadExhibitLeaf` being
+ * called directly from `LOADERS`: every loader in this group has to drop the
+ * ECharts instance the plot leaf may have left, and doing it in the shared
+ * loader would put a Reinsurance concern in the generic path. `replacePane`
+ * disposes as well, since a68, so this is belt and braces on the one group
+ * whose leaves alternate between a chart and a table.
+ */
+async function loadReinsExhibit(block, leaf) {
+    if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
+    await loadExhibitLeaf('pane-reinsurance', 'reins', leaf, block);
 }
 
 /**
