@@ -135,6 +135,22 @@
                 <div id="editor-host"></div>
             </div>
             <i class="bi bi-x-circle editor-clear" id="editor-clear" title="clear" role="button" aria-label="clear editor"></i>
+            <!-- Where Ctrl+↑↓ has you in your history, as a bare `[3/4]`.
+                 Without it, stepping back to a program you have built before and
+                 building it looks like nothing happened, because the strip
+                 redraws to the same words.
+
+                 Here rather than on the action row, and four characters rather
+                 than a sentence, per the author (Round 5 item 14). On the row it
+                 was the one `.fb-text` outside `.fb-right`, so it missed the
+                 rule that makes those hints small, grey and monospaced and
+                 rendered at body size in the UI face: a third larger and darker
+                 than the keys it sat beside. Under the clear icon it reads as
+                 instrumentation on the box it describes.
+
+                 `pointer-events: none` so it never intercepts a click meant for
+                 the editor's right margin. Empty until the first build. -->
+            <span class="editor-pos" id="history-pos" aria-live="polite"></span>
         </div>
 
         <!-- Action row. One band: through a46 this was the button row over a
@@ -209,12 +225,6 @@
                         Net / Ceded</button></li>
                 </ul>
             </div>
-
-            <!-- Where Ctrl+↑↓ has you, as `DecL m/n`. Without it, stepping back
-                 and rebuilding a program you have built before looks like
-                 nothing happened, because the strip redraws to the same words.
-                 Empty until the first build. -->
-            <span class="fb-text" id="history-pos" aria-live="polite"></span>
 
             <!-- Two rows, split by kind rather than by how often each is
                  pressed: what you do to the program on top, where you go

@@ -117,7 +117,7 @@ function navigateHistory(dir) {
 }
 
 /**
- * The `DecL m/n` readout under the editor.
+ * The `[m/n]` history readout, under the editor's clear icon.
  *
  * Answers "did that do anything", which nothing on the page did before. Walking
  * back with Ctrl+Up to a program you have built before and building it redraws
@@ -133,7 +133,10 @@ function renderHistoryPos() {
     const node = $('history-pos');
     if (!node) return;
     const { m, n } = history.position();
-    node.textContent = n ? `DecL ${m}/${n}` : '';
+    // `[3/4]`, not `DecL 3/4`. The word was doing no work beside a box that is
+    // visibly full of DecL, and the brackets are what make four characters read
+    // as a counter rather than as a fraction someone forgot to finish.
+    node.textContent = n ? `[${m}/${n}]` : '';
 }
 
 // Clear-X clears the editor and refocuses.
@@ -401,6 +404,22 @@ async function applyViews(kw) {
     if (!can('canViews') || gcnBtn.hasAttribute('disabled')) return;
     const base = editor.getText().trim();
     if (!base) return;
+    // Close the menu **before** anything is disabled, and never the other way
+    // round. Bootstrap finds open dropdowns with
+    // `[data-bs-toggle="dropdown"]:not(.disabled):not(:disabled).show`, so a
+    // disabled toggle is invisible to `clearMenus`, the document-level handler
+    // that closes a menu when you click away; `Dropdown.hide()` bails on the
+    // same test. Disabling first therefore stranded the menu open: this handler
+    // runs on the item's click, disables the caret synchronously, and the click
+    // then bubbles to a `clearMenus` that can no longer see the thing it is
+    // there to close. The build that follows returns a bivariate, `canViews`
+    // goes false, and `renderActionRow` leaves `.disabled` on for good, so the
+    // menu could not be closed by clicking the caret either. Stuck open, which
+    // is the author's report (Round 5 item 7).
+    //
+    // General rule for anything added beside it: do not disable a Bootstrap
+    // dropdown toggle while its menu is open.
+    bootstrap.Dropdown.getInstance(gcnCaret)?.hide();
     gcnBtn.disabled = true;
     gcnCaret.disabled = true;
     const label = gcnBtn.textContent;
@@ -527,9 +546,12 @@ function renderSummary(res) {
     } else {
         if (res.bs != null)   add(`bs = ${fmtBs(res.bs)}`);
         if (res.log2 != null) add(`log2 = ${res.log2}`);
-        // Between log2 and mean, and present only when the object is read on
-        // the payoff convention; the server omits it for loss, which is the
-        // default and would otherwise put the word "loss" on every build.
+        // Between log2 and mean, on every object that has an orientation to
+        // report. Sent for `loss` as well as `payoff` since a65: reporting only
+        // the exceptional case meant reporting nothing at all, because the two
+        // kinds that answer are both `loss` and the one that is `payoff` does
+        // not answer. A missing value now means the kind has no convention, not
+        // that its convention is the ordinary one.
         if (res.value_type)   add(res.value_type);
         if (res.mean != null) add(`mean ${fmt(res.mean)}`);
         if (res.cv != null)   add(`CV ${fmt(res.cv)}`);
@@ -576,8 +598,8 @@ function renderSummary(res) {
  * The answer to "I pressed Build and nothing happened". Building the same
  * program twice is a cache hit that redraws the strip with identical text, so
  * without this there is no evidence at all that the second press did anything.
- * The `DecL m/n` readout does not cover it either, because history dedups
- * against the most recent entry and both numbers hold.
+ * The `[m/n]` readout does not cover it either, because history dedups against
+ * the most recent entry and both numbers hold.
  *
  * Fires for cached and computed builds alike, deliberately: the reader is
  * asking whether the press registered, which has the same answer either way.

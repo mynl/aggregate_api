@@ -225,6 +225,18 @@ header .navbar { min-height: 56px; }
     color: var(--mut); font-size: 1.15rem; z-index: 3;
 }
 .editor-clear:hover { color: var(--mut); }
+/* The history readout, tucked under the clear icon and lined up with it. Same
+   face, size and ink as the key hints below the button row, which is what the
+   author asked for: instrumentation, not a label. `pointer-events: none` so the
+   editor's right margin still takes a click through it. */
+/* `top` clears the icon rather than guessing at it: the icon sits at .85rem and
+   its line box measures 28px, so it ends at 41px and this starts below that. */
+.editor-pos {
+    position: absolute; right: 1rem; top: 2.8rem; z-index: 3;
+    pointer-events: none; user-select: none;
+    font-family: var(--mono); font-size: var(--fs-meta); color: var(--mut);
+    line-height: 1;
+}
 
 /* ---- Action row ----
    One band. Through a46 this was two full width strips, the button row and the

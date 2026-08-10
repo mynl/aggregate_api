@@ -62,7 +62,7 @@ export function next() {
 }
 
 /**
- * Where the walk is, as `{m, n}`, for the `DecL m/n` readout.
+ * Where the walk is, as `{m, n}`, for the `[m/n]` readout under the editor.
  *
  * `n` is how many programs the history holds and `m` is which one is on
  * screen, counted from the oldest so that stepping back with Ctrl+Up counts

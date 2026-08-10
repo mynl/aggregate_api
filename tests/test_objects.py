@@ -47,25 +47,45 @@ def test_build_summary_fields(client):
     # Fixed frequency -> agg CV = sd/mean = sqrt(3*Var(U[1..6]))/10.5.
     assert body["cv"] == pytest.approx(0.2817, rel=1e-2)
     assert body["validation"] == "not unreasonable"
-    # Loss is the default convention, so the strip is not told about it.
-    assert body["value_type"] is None
+    # The convention is reported on every object that has one, loss included.
+    assert body["value_type"] == "loss"
     # A scalar object is not a pair, so there is nothing to enumerate.
     assert body["components"] == []
 
 
-def test_build_reports_payoff_convention_only(client):
-    """``value_type`` reports the payoff convention and stays quiet on loss.
+def test_build_reports_the_sign_convention(client):
+    """``value_type`` names the convention on every kind that has one.
 
-    The asymmetry is the point. Loss is the default and the overwhelming case,
-    so reporting it would spend a word on the status strip's first line to say
-    "normal" on every build; payoff is the exception a reader has to know
-    about, because it flips which tail is the bad one.
+    a57 sent it **only** for ``'payoff'``, reasoning that loss is the default
+    and reporting it would spend a word to say "normal" on every build. Sound
+    reasoning, wrong outcome: the two kinds that answer ``value_type`` at all
+    both answer ``'loss'`` and were therefore suppressed, so the field printed
+    for nothing the app can build and the author's ask went unfilled from a57 to
+    a65. ``None`` now means "this kind has no orientation", not "its orientation
+    is ordinary".
     """
     loss = client.post("/v1/objects", json={"decl": _DICE}).json()
-    assert loss["value_type"] is None
+    assert loss["value_type"] == "loss"
     decl = "agg PayoffCase 10 claims sev lognorm 50 cv 1 poisson payoff"
     payoff = client.post("/v1/objects", json={"decl": decl}).json()
     assert payoff["value_type"] == "payoff"
+
+
+def test_pnl_reports_the_payoff_convention(client):
+    """A P&L says ``payoff``, which the app asserts rather than reads.
+
+    ``PnL`` carries neither ``value_type`` nor ``_is_loss_value``, yet it is the
+    one kind whose whole reading turns on the convention: its own ledger caption
+    explains that the kappa columns run payoff convention, left tail bad. The
+    author's ruling is that a P&L is always payoff, implied by the name. So the
+    app states it, knowingly holding a fact about a library class from outside
+    it; ``PnL.value_type`` is asked for upstream and this case goes when it
+    lands. The test is here to fail loudly on the day the library disagrees.
+    """
+    built = client.post("/v1/objects", json={"decl": _DICE}).json()
+    derived = client.post(f"/v1/objects/{built['id']}/pnl", json={}).json()
+    assert derived["kind"] == "pnl"
+    assert derived["value_type"] == "payoff"
 
 
 def test_build_reports_library_warnings(client):
@@ -753,6 +773,34 @@ def test_bivariate_reports_per_component_grid(client):
         assert 4 <= c["log2"] <= 24
         assert c["mean"] > 0
         assert c["cv"] > 0
+
+
+def test_gcn_bivariate_reports_its_moments(client):
+    """A GCN pair carries moments too, and they come from a different place.
+
+    This is the case a57 missed and the test above did not catch. A bivariate
+    built with ``bivariate ... copula ...`` carries ``units``, a list of
+    component ``Aggregate`` objects, and the moments were read off those. One
+    built by ``grossnet`` (or its two siblings) carries ``units is None``, so
+    both moments resolved to ``None`` and the status strip printed
+    ``mean (?, ?) . CV (?, ?)`` on every GCN read from a57 to a65, which is
+    exactly the reading the ``components`` block was added to fix.
+
+    The moments are in ``stats_df``, whose columns are ``unit_names``, so the
+    pair lines up by name. Asserted loosely: the point is that they are numbers
+    at all, and Gross must exceed Net because the cession only removes loss.
+    """
+    decl = ("grossnet agg GcnMoments 100 claims 1000 xs 0 "
+            "sev lognorm 50 cv 2 occurrence net of 250 xs 250 poisson")
+    body = client.post("/v1/objects", json={"decl": decl}).json()
+    assert body["kind"] == "bvagg"
+    comps = body["components"]
+    assert [c["name"] for c in comps] == ["Gross", "Net"]
+    for c in comps:
+        assert c["mean"] is not None and c["mean"] > 0
+        assert c["cv"] is not None and c["cv"] > 0
+    gross, net = comps
+    assert gross["mean"] > net["mean"], "ceding a layer cannot raise the mean"
 
 
 def test_bivariate_builds_and_reports(client):

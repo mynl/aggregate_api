@@ -207,9 +207,14 @@ class BuildResponse(BaseModel):
     # gross / net basis selector. Cheap: read off the cession specs, never off
     # ``reins_summary_df``, which would materialize a frame on every build.
     has_reins: bool = False
-    # The loss / payoff sign convention, and **only when it is 'payoff'**.
-    # Loss is the default and the common case, so reporting it every time would
-    # spend a word on the status strip's first line to say "normal".
+    # The loss / payoff sign convention, on every object that has one.
+    #
+    # a57 sent it only for ``'payoff'``, to keep the status strip's first line
+    # from spending a word to say "normal". The result was that it printed for
+    # nothing: an ``Aggregate`` and a ``Portfolio`` both answer ``'loss'`` and
+    # were suppressed, and a ``PnL`` carries no ``value_type`` at all, so the
+    # field the author asked for never once appeared. ``None`` now means the
+    # kind has no orientation to report, not that its orientation is ordinary.
     value_type: str | None = None
     # Per-component grid and moments, for an object built from a pair. Empty
     # for every kind but ``bvagg``, whose ``bs`` is genuinely two numbers (one

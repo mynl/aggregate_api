@@ -407,6 +407,55 @@ def _has_reinsurance(obj: Any) -> bool:
     return False
 
 
+def _value_type(obj: Any) -> str | None:
+    """The sign convention the object is read on: ``'loss'`` or ``'payoff'``.
+
+    Parameters
+    ----------
+    obj : Any
+        Any first-class object.
+
+    Returns
+    -------
+    str or None
+        The convention's label, or ``None`` for a kind that has no orientation
+        to report (a ``Distortion``, a ``Severity``).
+
+    Notes
+    -----
+    **Always reported, including ``'loss'``.** a57 printed it only for
+    ``'payoff'``, reasoning that loss is the default and stamping it on every
+    build adds noise to a line that has been trimmed twice. The reasoning was
+    sound and the outcome was that the field printed for **no object the app can
+    build**: ``Aggregate`` and ``Portfolio`` both answer ``'loss'`` and were
+    suppressed, and a ``PnL`` has no ``value_type`` at all. The author's ruling,
+    2026-08-10, is that the convention is worth a word on every build, which is
+    what asking for it in the first place meant.
+
+    **A P&L is stated here rather than read off the object**, and that is a
+    deliberate exception with a short life. ``PnL`` exposes neither
+    ``value_type`` nor the internal ``_is_loss_value``, yet it is the one kind
+    whose reading genuinely depends on the convention: the library's own ledger
+    caption explains that its kappa columns run "payoff convention, left tail
+    bad". The author's ruling is that a P&L is always payoff, "implied by the
+    name, profit (positive) and loss (negative)". So the app asserts it, which is
+    the app holding a fact about a library class from outside it. ``PnL.value_type``
+    is asked for upstream (``dev/TODO.md``) and this branch deletes the day it
+    lands.
+    """
+    declared = getattr(obj, "value_type", None)
+    if declared is not None:
+        return str(declared)
+    # The one asserted case. Matched on the class name rather than by importing
+    # PnL, in keeping with `_classify_object` and `_has_reinsurance` above: this
+    # module names library types by string throughout so an import cycle is
+    # impossible and a kind the installed library does not carry is simply never
+    # matched.
+    if type(obj).__name__ == "PnL":
+        return "payoff"
+    return None
+
+
 def _summary_fields(obj: Any) -> dict:
     """Headline grid and moments for the build summary: ``bs``, ``log2``,
     ``mean``, ``cv``, ``validation``.
@@ -477,14 +526,7 @@ def _summary_fields(obj: Any) -> dict:
     except (TypeError, ValueError):
         log2 = None
 
-    # The loss / payoff role, reported only when it is ``payoff``. Loss is the
-    # default and by far the common case, so printing it on every build would
-    # add a word to the strip's first line that is almost never news, on a line
-    # that has been trimmed twice for exactly that reason. ``value_type`` is the
-    # public getter; the role itself is the internal ``_is_loss_value``.
-    value_type = getattr(obj, "value_type", None)
-    if value_type is not None and str(value_type).strip().lower() == "loss":
-        value_type = None
+    value_type = _value_type(obj)
 
     return {
         "bs": _num("bs"),
@@ -523,6 +565,21 @@ def _component_fields(obj: Any) -> list[dict]:
     ``log2`` is derived rather than read: a bivariate carries no ``log2``
     attribute, only the per-axis grids, and the axis length is what log2 means
     (the library's own ``bs_description`` computes it the same way).
+
+    **The moments come off ``stats_df``, not off ``units``.** a57 read them from
+    ``obj.units``, on the stated belief that it holds a list of ordinary
+    ``Aggregate`` objects. It does not: ``units`` is ``None`` on a
+    ``BivariateAggregate``, so both moments resolved to ``None`` and the strip
+    printed ``mean (?, ?) . CV (?, ?)`` for every pair built since. ``stats_df``
+    is the public frame that has them, and its columns are exactly
+    ``unit_names``, so the pair lines up by name rather than by position. The
+    ``units`` path is kept ahead of it for a kind that does carry components,
+    and costs nothing when there are none.
+
+    ``theoretical`` before ``empirical``, matching the scalar path's preference
+    for the analytic moment with the realized one as the fallback. On a
+    bivariate the two agree to about 1e-11 anyway, so the order is a convention
+    rather than a choice with consequences.
     """
     axis_xs = getattr(obj, "axis_xs", None)
     names = getattr(obj, "unit_names", None)
@@ -530,6 +587,7 @@ def _component_fields(obj: Any) -> list[dict]:
     bss = getattr(obj, "bs", None)
     if not axis_xs or not names or not isinstance(bss, (list, tuple)):
         return []
+    stats = getattr(obj, "stats_df", None)
 
     def _moment(unit: Any, *candidates: str) -> float | None:
         for name in candidates:
@@ -542,6 +600,19 @@ def _component_fields(obj: Any) -> list[dict]:
                 continue
         return None
 
+    def _from_stats(column: str, stat: str) -> float | None:
+        """One statistic for one axis, by name, out of the pair's stats frame."""
+        if stats is None or column not in getattr(stats, "columns", ()):
+            return None
+        for basis in ("theoretical", "empirical"):
+            try:
+                value = float(stats.loc[(basis, stat), column])
+            except (KeyError, IndexError, TypeError, ValueError):
+                continue
+            if math.isfinite(value):
+                return value
+        return None
+
     out: list[dict] = []
     for i, name in enumerate(names):
         try:
@@ -550,12 +621,14 @@ def _component_fields(obj: Any) -> list[dict]:
         except (IndexError, TypeError, ValueError):
             continue
         unit = units[i] if units is not None and i < len(units) else None
+        mean = _moment(unit, "actual_m", "est_m") if unit is not None else None
+        cv = _moment(unit, "actual_cv", "est_cv") if unit is not None else None
         out.append({
             "name": str(name),
             "bs": bs,
             "log2": int(round(math.log2(n))) if n > 0 else None,
-            "mean": _moment(unit, "actual_m", "est_m") if unit is not None else None,
-            "cv": _moment(unit, "actual_cv", "est_cv") if unit is not None else None,
+            "mean": mean if mean is not None else _from_stats(str(name), "mean"),
+            "cv": cv if cv is not None else _from_stats(str(name), "cv"),
         })
     return out
 

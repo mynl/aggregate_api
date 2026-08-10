@@ -4,6 +4,64 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a65
+
+`dev/plan-ui-round-5.md` phase a65, the strip and the action row. Three punch
+items and one thing the acceptance walk turned up, all of them a control or a
+readout saying something other than what is true.
+
+**The GCN menu could be opened and not closed** (Round 5 item 7). Bootstrap
+finds open dropdowns with
+`[data-bs-toggle="dropdown"]:not(.disabled):not(:disabled).show`, so a disabled
+toggle is invisible to `clearMenus`, the document handler that closes a menu
+when you click away, and `Dropdown.hide()` bails on the same test. `applyViews`
+disabled the caret synchronously on the item's own click, so by the time that
+click reached the document the menu could no longer be seen, let alone closed.
+The build then returned a bivariate, `canViews` went false, and
+`renderActionRow` left `.disabled` on for good: the menu was stranded open and
+the caret would not close it either. Hiding the menu **before** anything is
+disabled is the whole fix, and the rule it implies is in the comment for the
+next split button: do not disable a Bootstrap dropdown toggle while its menu is
+open.
+
+**The history readout was three sizes too big** (item 14). `#history-pos`
+carried `.fb-text`, but the rule that makes those hints small, grey and
+monospaced is on `.fb-right`, and the label sat outside it, so it rendered at
+body size in the UI face: larger and darker than the key hints beside it. It is
+now a bare `[3/4]` under the editor's clear icon, right-aligned to it, in the
+same 11.8px mono grey as `Ctrl+Enter build`. The word `DecL` went with the move;
+it was doing no work beside a box visibly full of DecL.
+
+**The sign convention printed for nothing** (item 17). a57 sent `value_type`
+only when it was `payoff`, so as not to spend a word saying "normal" on every
+build. Sound, and the outcome was that it never appeared at all: `Aggregate` and
+`Portfolio` both answer `'loss'` and were suppressed, and a `PnL` carries no
+`value_type` attribute whatsoever. It is now sent whenever the object has an
+orientation to report, and `None` means the kind has none rather than that its
+orientation is ordinary. A P&L says `payoff` on the author's ruling, which the
+app asserts knowingly from outside the class; `PnL.value_type` is asked for
+upstream and that branch deletes when it lands.
+
+**A GCN pair reported `mean (?, ?)` and `CV (?, ?)`.** Not on the punch list,
+found by walking the page, and the same failure as the item above one layer
+down: a57 read the per-axis moments off `obj.units`, on the stated belief that
+it is a list of component `Aggregate` objects. It is on a copula bivariate,
+which is why the test written at the time passed, and it is `None` on one built
+by `grossnet` or its siblings, which is what the reader actually presses the
+button for. So the block added at a57 to give a bivariate a status line gave it
+two question marks instead. The moments come off `stats_df` now, whose columns
+are exactly `unit_names`, so the pair lines up by name rather than by position,
+with the `units` path kept ahead of it for a kind that does carry components.
+
+Item 19, rounding the P&L premium, is upstream and is not here. It is written up
+with the round's three other library asks in
+`aggregate_REFACTOR/dev/note-from-aggregate-api-round-5.md`.
+
+Walked in a browser: the menu opens and closes on the pick and stays closed as
+the caret goes dark, `[3/3]` sits 4px under the clear icon at the hint's own
+size and face, the strip reads `bs = 1 . log2 = 16 . loss . mean 8,646.1`, and a
+`grossnet` pair reads `mean (4926.52, 4561.42) . CV (0.201225, 0.176488)`.
+
 ## 1.0.0a64
 
 `dev/plan-ui-round-5.md` phase a64. Two preferences that shipped at a59 and have
