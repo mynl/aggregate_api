@@ -638,13 +638,20 @@ one version bump each.
 - [ ] **The joint surface, end to end**: `dev/plan-3d-plot.md`, three parties,
       the canonical copy here and a symlink in the library. In flight rather
       than pending: a72 landed the api half (section 3, the three query
-      parameters, the ceiling setting and the chart document cache) and a73 the
+      parameters, the ceiling setting and the chart document cache), a73 the
       app's foundation (section 4.1's one decode, section 8.3's `node --test`
-      runner, the `echarts-gl` pin). Still open on this side, in order: the full
-      grid rule (4.2), the wall curves (4.3), the cuts and the walk (4.4 to
-      4.5). Waiting on the library: the corrected block coordinates, the window
-      chosen before the reduction, and the emitted fields, without which the
-      knob is a knob on nothing and two of the api tests stay skipped.
+      runner, the `echarts-gl` pin) and a74 the drawing geometry (the window
+      range, the sampler, the level line, the cuts, the fit rule).
+      **Blocked on the author for section 4.2.1**: the full grid rule and the
+      payload budget cannot both be had, measured at 181k to 551k cells against
+      the budget's 4,158, and the way out is the library serving the four one
+      dimensional curves the rule protects (the total's density, kappa, both
+      conditional means) so that the app computes none of them. Everything left
+      on this side (the walls, the cuts on screen, the walk, the eight controls)
+      draws that answer, so it waits on it. Also waiting on the library for the
+      corrected block coordinates, the window chosen before the reduction, and
+      the emitted fields, without which the knob is a knob on nothing and two of
+      the api tests stay skipped.
 
 ## Raised with `aggregate` (not fixed here)
 

@@ -428,6 +428,60 @@ applies to the marginals, which must be the unit's own aggregate distribution
 and not the marginal of a truncated joint, and to `E[Y | X = x]`, which must not
 move when the window does.
 
+#### 4.2.1 The whole grid and the payload budget cannot both be had, and the way out is upstream
+
+Raised by the API agent 2026-08-11, on starting this section. **Open: needs the
+author.** It changes what LIB emits, so it wants answering while that work is
+in flight rather than after.
+
+The rule above and section 3.3 are in tension, and the tension is arithmetic
+rather than emphasis. "Everything derived is computed on the whole grid" needs
+the client to hold the whole grid. Section 5.2 chooses the block factor from the
+*cropped* extent, so that the window gets `detail` cells. Emit the whole grid at
+that factor and the payload is the window's cell count multiplied by the square
+of the ratio of the axis to the window. Measured on the four test surfaces with
+`show-windows.js`, that ratio per axis is:
+
+| surface | window | window cells of the 128 cell axis | full grid at `detail=128` on the window |
+|---|---|---|---|
+| Clayton | 4 | 38 x 39 | 431 x 420, 181k cells, 724 kB as float32 |
+| Clayton | 2 | 20 x 19 | 819 x 673, 551k cells, 2.2 MB |
+| Indep | 4 | 31 x 8 | 256 x 2048, 524k cells, 2.1 MB |
+
+Against section 3.3's budget of 4,158 cells and 12.6 kB. So the choice as the
+plan currently stands is between a payload one to two orders of magnitude over
+budget, and a client whose kappa is wrong by up to 4.9%, which is the error
+`check-kappa-window.js` measures and the reason 4.2 exists.
+
+**The way out is that neither of those is the real design.** Every quantity the
+full-grid rule protects is one dimensional, and the library can serve each one
+exactly, off the fine lattice, immune to the window, for a few hundred floats:
+
+- `marginals.x`, `marginals.y`. Already in 2.2, for exactly this reason
+- the density of the **total**, on its own lattice. This is what normalizes a
+  cut at constant total, and without it a conditional drawn from the visible
+  part of the cut is wrong by the missing weight, up to 17% at `window=4`
+- `kappa_1(s)` on that same lattice. `kappa_2 = s - kappa_1`, so one array
+- the conditional means `E[Y | X = x]` and `E[X | Y = y]`, one array each
+
+With those served, the client needs the whole grid for nothing. It draws shapes
+from the windowed grid, normalizes them with a served exact curve, and marks
+means that are the library's own numbers rather than its own arithmetic over a
+truncated integral. The payload stays at 3.3's budget, the invariants of 4.2
+become statements about the library, and the acceptance criteria that currently
+sit under "SPA 4.2" move to the LIB suite with them.
+
+That is also the only reading consistent with the purist ruling. Kappa is
+meaning. An app that integrates a joint density to get one is an app building a
+number the library owns, which is the thing the round 6 preamble forbids and
+the thing 5.5 already says about the marginals: "the exact marginal is a better
+curve than one integrated off a coarsened and windowed joint".
+
+The ask, if this is agreed: `kappa`, `total` and `cond_mean` join `marginals`
+and `moments` in the surface block, and 5.2 emits the display grid cropped to
+its window. The SPA work below waits on the answer, since the two designs put
+the same arithmetic in different repos.
+
 Two invariants hold this down and both are implemented in the prototype's `check-lab.js`:
 
 - kappa and `E[Y|X]`, compared across window depths at a fixed total in **data**
@@ -631,6 +685,8 @@ phase one release). Mass per cell, not density: mass is exact, is what
 block reduction preserves, and lets the consumer form either.
 
 ### 5.5 Carry the exact marginals and the moments
+
+See 4.2.1, which asks for three more arrays on the same argument and is open.
 
 `marginals.x` and `marginals.y` on the display lattice, computed by the object
 rather than integrated off the reduced joint, and `moments.mean` from the fine

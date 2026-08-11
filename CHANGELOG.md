@@ -4,6 +4,48 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a74
+
+**The drawing geometry, and the finding that stops the drawing.**
+
+`web/src/charts/surface-geometry.js` is the second leaf module: the window
+range, a bilinear sampler, the line of constant total, a cut as a snapped grid
+row or column, and the fit rule for the two wall curves. Eight more tests, 22
+in all under `npm test`. These are the invariants `dev/plan-3d-plot.md` section
+8.2 sends to the app, and each is checked on a grid whose two axes differ by 250
+to 1 in bucket size, because a square fixture passes tests a rectangular one
+fails and one of the four real test surfaces is 64 wide against 128 deep.
+
+The fit rule is the interesting one. One vertical scale for **both** walls, not
+one each: scaling each marginal to its own peak draws them at identical heights
+every time, whatever the two distributions are, and a reader takes equal heights
+to mean something. Past a factor of eight the smaller curve gets an eighth of
+the wall and the taller one runs off the top, because a curve visibly leaving
+the box says "taller than fits" and a curve lying on the floor says nothing.
+
+**Plan section 4.2.1, open, and it is why the rest of the app's half waits.**
+Section 4.2 says everything derived is computed on the whole grid and only the
+drawing is clipped to the window. Section 5.2 chooses the reduction from the
+cropped extent, so the window gets the requested detail. Both together put the
+whole grid on the wire at the window's resolution, which is 181k cells on
+Clayton at `window=4` and 551k at `window=2`, against section 3.3's budget of
+4,158. Dropping the rule instead costs up to 4.9% on kappa, which
+`check-kappa-window.js` measures and which is the one quantity this chart exists
+to show.
+
+Neither is the real design. Every quantity the rule protects is one
+dimensional, and the library can serve each exactly for a few hundred floats:
+the marginals (already in the plan), the density of the total, `kappa_1(s)`,
+and the two conditional means. Served, the app needs the whole grid for
+nothing, draws shapes from the window, normalizes them with an exact curve, and
+marks numbers that are the library's rather than its own integral over a
+truncated cut. That is also the only reading consistent with the purist ruling:
+kappa is meaning, and an app that integrates a joint density to get one is
+building a number the library owns.
+
+So this release stops at the geometry. `weightedMean` is in the module and
+nothing marks a mean with it yet, which is the seam the answer lands on.
+
 ## 1.0.0a73
 
 **One decode for the surface grid, and the app grows a test runner to hold it
