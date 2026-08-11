@@ -4,6 +4,57 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a73
+
+**One decode for the surface grid, and the app grows a test runner to hold it
+down.** `dev/plan-3d-plot.md` section 4.1 and section 8.3.
+
+`web/src/charts/surface-grid.js` is a new **leaf module**: it imports nothing,
+so `node --test` can exercise it, and it is the only thing in the app that
+reads a document's grid. Both drawing paths call it. `surfaceOption` drew the
+relief and `heatmapPanel` drew the flat version of the same grid, and both
+destructured `series.surface` themselves; two readers of one wire format drift,
+and the format is about to grow four encodings and a lattice.
+
+It decodes `f32b64`, `f64b64`, `u16log12b64` and `json`, from `z_block` or from
+the legacy `x`, `y`, `z` arrays, normalizes an `xy`-ordered block to row major
+once, and prefers the declared lattice over the arrays beside it. Then it does
+the one thing the plan is most insistent about: **divides by the cell area,
+once**, so everything downstream is a density. The wire carries mass per
+display cell, because mass is what a block reduction preserves and is exact.
+The prototype's worst bug was a marginal integrating as if the values were
+already a density against a conditional normalizing into one, which disagreed
+by a factor of 1024 on one surface and drew the conditional flat on the floor
+while the marginal stood up beside it.
+
+`edge` is read and honored: `centerX` and `centerY` return the coordinate
+itself when the grid names midpoints and half a step up when it names left
+edges. That is the arithmetic every mean, conditional mean and kappa is taken
+against, and it is where the library's display grid currently biases a mean by
+close to a whole bucket. A document that says nothing is read as left edges.
+
+A grid whose value count does not match its lattice **throws** rather than
+drawing. A silent mismatch here is a picture that reads plausibly and says
+something false.
+
+**The reading strip follows the declared dtype.** Seven significant figures on
+float32, four on the log-quantized form, which recovers a density to about
+2.1e-4, plus a tooltip line saying the height is quantized. Printing five
+digits of a number known to four invents precision the wire never carried.
+
+**`npm test`**, `node --test`, no new dependency: node's own runner, one line in
+`package.json`, 14 tests over the decode. The SPA has never had a runner, and
+six of this plan's invariants are geometry, which does not survive a rewrite
+unless something checks it. One of the tests reads the adapter's source and
+asserts there are exactly two calls to the decode and no `series.surface`
+destructuring left, which is the plan's own acceptance criterion for 4.1 and
+the only cheap way to state it about a module that cannot be imported outside a
+browser.
+
+**`echarts-gl` is pinned exactly**, 2.1.0, not `^2.1.0`. It is the least
+maintained dependency in the stack and the one this feature leans on hardest,
+and the plan's iPad gate wants a known version under it.
+
 ## 1.0.0a72
 
 **The chart route grows a knob, and the knob is all this service owns of it.**

@@ -66,8 +66,16 @@ export function loadSurface() {
  *     and placement, lighting, and the camera. Axis names, ranges, the mesh
  *     and its shape all come from the document.
  */
-export function surfaceOverrides({ xName, yName, logZ, zMin, side = 420 } = {}) {
+export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
+                                   quantized = false, side = 420 } = {}) {
     const s = houseStyle();
+    // Read the height to the precision the wire carried and no further. The
+    // log-quantized encoding recovers a density to about four significant
+    // figures, so printing five would be inventing a digit; float32 is exact
+    // to seven. `digits` comes off the document's declared dtype rather than
+    // from a constant here, which is what keeps the two in step when the
+    // default encoding changes.
+    const readHeight = (v) => Number(v).toExponential(Math.max(0, digits - 1));
     return {
         // No `...baseOption()`: that carries a 2-D grid, legend and axisPointer,
         // none of which a grid3D understands.
@@ -81,14 +89,15 @@ export function surfaceOverrides({ xName, yName, logZ, zMin, side = 420 } = {}) 
             textStyle: { fontSize: 11, color: s.text_color },
             formatter: (p) => {
                 const [x, y, h] = p.value;
-                const mass = logZ ? 10 ** h : h;
+                const density = logZ ? 10 ** h : h;
                 // A cell resting on the log floor is one the model puts nothing
                 // in; saying "1e-12" there would be reporting the floor as data.
                 const height = (logZ && h <= zMin)
                     ? `&lt; ${(10 ** zMin).toExponential(0)}`
-                    : Number(mass).toExponential(3);
+                    : readHeight(density);
                 return `${xName} ${fmt(x)}<br>${yName} ${fmt(y)}`
-                    + `<br>density <b>${height}</b>`;
+                    + `<br>density <b>${height}</b>`
+                    + (quantized ? '<br><i>height is quantized</i>' : '');
             },
         },
         visualMap: {

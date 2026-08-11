@@ -19,6 +19,9 @@
 
 import { fmt } from '../utils/format.js';
 import {
+    coordX, coordY, decodeSurfaceGrid, findSurfaceSeries, xCoords, yCoords, zExtent,
+} from './surface-grid.js';
+import {
     LOG_FLOOR, axisStyle, baseOption, fade, houseStyle, lineWidth, seriesColor,
 } from './theme.js';
 
@@ -1060,29 +1063,32 @@ function zoomExtent(zoom, window) {
 /**
  * Realize one grid panel flat: the z grid as a heatmap.
  *
- * ECharts draws a heatmap over category axes, so the grid's cell centers are
- * the categories and a cell is `[column, row, value]`. The values are display
- * cell masses, block-summed mass-preservingly upstream, so nothing is reduced
- * here.
+ * ECharts draws a heatmap over category axes, so the grid's coordinates are
+ * the categories and a cell is `[column, row, value]`. The values are
+ * densities: the wire carries mass per display cell, block-summed
+ * mass-preservingly upstream, and `decodeSurfaceGrid` divides by the cell area
+ * once so this and the 3-D path read the same units off one decode.
  *
  * A log reading of the z axis draws `log10` of each cell, floored one decade
- * under the smallest mass actually present. A zero cell rests on the floor
+ * under the smallest density actually present. A zero cell rests on the floor
  * rather than punching a hole: an FFT-built joint is full of exact zeros, and
  * as holes the field arrives moth-eaten.
  */
 function heatmapPanel(doc, panel, i, axes, view, box) {
-    const s = (doc.series || []).find((v) => v.panel_id === panel.id && v.surface);
+    const s = findSurfaceSeries(doc, panel.id);
     if (!s) return null;
-    const { x, y, z } = s.surface;
+    const g = decodeSurfaceGrid(s.surface);
+    const x = xCoords(g);
+    const y = yCoords(g);
     const zAxis = axes[panel.z_axis] || {};
     const useLog = axisScale(zAxis, view.log) === 'log';
-    const floor = decadeFloor(z) || LOG_FLOOR;
+    const floor = decadeFloor([g.z]) || LOG_FLOOR;
 
     let max = -Infinity;
     const cells = [];
-    for (let r = 0; r < y.length; r++) {
-        for (let c = 0; c < x.length; c++) {
-            const v = z[r][c];
+    for (let r = 0; r < g.ny; r++) {
+        for (let c = 0; c < g.nx; c++) {
+            const v = g.z[r * g.nx + c];
             const h = useLog ? Math.log10(Math.max(v, floor)) : v;
             if (h > max) max = h;
             cells.push([c, r, h]);
@@ -1434,58 +1440,40 @@ function resolveOverrides(overrides, ctx) {
     return typeof overrides === 'function' ? overrides(ctx) : overrides;
 }
 
-/**
- * The z range actually present in a grid, ignoring float dust.
- *
- * `min` is the smallest value above `LOG_FLOOR` (the log floor wants one
- * decade under the smallest mass actually present, not under arithmetic
- * noise); `max` is the plain maximum.
- */
-function zRange(z) {
-    let max = 0;
-    let min = Infinity;
-    for (const row of z) {
-        for (const v of row) {
-            if (v > max) max = v;
-            if (v > LOG_FLOOR && v < min) min = v;
-        }
-    }
-    return { max, min: Number.isFinite(min) ? min : LOG_FLOOR };
-}
-
 /** The 3-D path: one 'surface' panel, the bivariate joint in relief. */
 function surfaceOption(doc, opts, view) {
     const panel = (doc && doc.panels && doc.panels[0]) || null;
     if (!panel) return null;
     const axes = Object.fromEntries((doc.axes || []).map((a) => [a.id, a]));
-    const series = (doc.series || []).find((s) => s.surface);
+    const series = findSurfaceSeries(doc);
     if (!series) return null;
-    const { x, y, z } = series.surface;
+    const g = decodeSurfaceGrid(series.surface);
 
     // Whether a log height is meaningful is the Z AXIS's declaration, as the
     // scales it admits. A singleton `scales` means the axis has one honest
     // reading and the control does not apply.
     const useLog = axisScale(axes[panel.z_axis] || {}, view.log) === 'log';
-    const { max, min } = zRange(z);
+    const { max, min } = zExtent(g, LOG_FLOOR);
     const zMin = useLog ? Math.floor(Math.log10(min)) : 0;
     const zMax = useLog ? Math.ceil(Math.log10(max)) : max;
 
     // Flat vertex list + dataShape, never the parametric form: the two axes
     // have their own grids (independently built components routinely land on
     // different bucket sizes), so there is no single step describing both.
-    // `z[r][c]` sits at `(x[c], y[r])` per the SurfaceData contract.
+    // The decoded grid is row major over (y, x), so cell `(c, r)` sits at
+    // `(coordX(c), coordY(r))`.
     //
     // On the log view a zero cell rests exactly on the floor, one decade under
-    // the smallest mass present, never a hole: an FFT-built joint is full of
-    // exact zeros and as holes the mesh arrives moth-eaten.
+    // the smallest density present, never a hole: an FFT-built joint is full
+    // of exact zeros and as holes the mesh arrives moth-eaten.
     const data = [];
-    for (let c = 0; c < x.length; c++) {
-        for (let r = 0; r < y.length; r++) {
-            const v = z[r][c];
+    for (let c = 0; c < g.nx; c++) {
+        for (let r = 0; r < g.ny; r++) {
+            const v = g.z[r * g.nx + c];
             const height = useLog
                 ? (v > LOG_FLOOR ? Math.max(zMin, Math.log10(v)) : zMin)
                 : v;
-            data.push([x[c], y[r], height]);
+            data.push([coordX(g, c), coordY(g, r), height]);
         }
     }
 
@@ -1505,11 +1493,15 @@ function surfaceOption(doc, opts, view) {
         series: [{
             type: 'surface',
             name: series.name,
-            dataShape: [x.length, y.length],
+            dataShape: [g.nx, g.ny],
             data,
         }],
     };
+    // `grid` and `digits` ride in the context so the chrome can read the height
+    // to the precision the encoding actually carried: seven figures on float32,
+    // four on the log-quantized form, and a tooltip that says so.
     const ctx = { doc, view, box, xName, yName, zName, logZ: useLog, zMin, zMax,
+                  grid: g, digits: g.digits, quantized: g.quantized,
                   side: box.panelW };
     const option = merge(base, resolveOverrides(opts.overrides, ctx));
     option.hostHeight = box.hostHeight;
