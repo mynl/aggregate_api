@@ -635,6 +635,17 @@ one version bump each.
       `CopulaWindFlood`, is the log floor the right depth, and do the wall
       projections show the marginals usefully or just add clutter.
 
+- [ ] **The joint surface, end to end**: `dev/plan-3d-plot.md`, three parties,
+      the canonical copy here and a symlink in the library. In flight rather
+      than pending: a72 landed the api half (section 3, the three query
+      parameters, the ceiling setting and the chart document cache) and a73 the
+      app's foundation (section 4.1's one decode, section 8.3's `node --test`
+      runner, the `echarts-gl` pin). Still open on this side, in order: the full
+      grid rule (4.2), the wall curves (4.3), the cuts and the walk (4.4 to
+      4.5). Waiting on the library: the corrected block coordinates, the window
+      chosen before the reduction, and the emitted fields, without which the
+      knob is a knob on nothing and two of the api tests stay skipped.
+
 ## Raised with `aggregate` (not fixed here)
 
 - [ ] Two `role:hero` portfolios carry `note{}` after the last unit, where the

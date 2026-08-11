@@ -89,6 +89,27 @@ class Settings(BaseSettings):
     # so there is no server-side image format to have an opinion about.
 
     # ------------------------------------------------------------------
+    # Charts
+    # ------------------------------------------------------------------
+    # Ceiling on the chart route's ``detail`` parameter, the target cells
+    # per axis of a reduced surface grid.
+    #
+    # A setting rather than a constant because one route serves two cases
+    # that want opposite things. Over the wire the answer is a windowed
+    # grid of a few thousand cells and a payload in kilobytes; locally it
+    # is a drill-down into fine detail on a machine where bandwidth is not
+    # a constraint, and a hard cap there would prevent a use in order to
+    # prevent nothing. What stops a client misrepresenting what it got is
+    # the document (it reports the realized ``k``, ``bs``, ``nx``, ``ny``),
+    # not this number.
+    #
+    # The public deploy sets AGGAPI_MAX_CHART_DETAIL=256, because chart
+    # GETs sit outside the Caddy rate limiter and each parameter
+    # combination is a fresh reduction. VPN and local runs keep this
+    # default. See dev/plan-3d-plot.md sections 3.1 and 7 answer 2.
+    max_chart_detail: int = 1024
+
+    # ------------------------------------------------------------------
     # CORS
     # ------------------------------------------------------------------
     # Comma-separated list in the env var. Empty -> middleware skipped

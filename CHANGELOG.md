@@ -4,6 +4,62 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a72
+
+**The chart route grows a knob, and the knob is all this service owns of it.**
+`dev/plan-3d-plot.md` section 3, the api half of the bivariate joint surface.
+`GET /v1/objects/{id}/chart/{name}` takes three optional query parameters,
+`window` (quantile depth, 0 to 12 in halves), `detail` (target cells per axis
+after the display reduction, 16 up) and `encoding` (`f32b64`, `f64b64`,
+`u16log12b64` or `json`), and forwards to `charts.build_chart_doc` exactly what
+the caller named and nothing else.
+
+Which grid a caller gets is the library's decision, taken **before** the
+reduction, and this route does not crop or re-reduce what it is handed.
+Cropping downstream cannot recover resolution that was already averaged away:
+on one test surface the same quantile window applied to the fine lattice leaves
+232 cells and applied to the emitted display grid leaves 8, starting in the
+wrong place. So the parameters are plumbed upstream rather than honored here,
+and until the library takes them (its plan items 5.2 and 5.4) the round trip
+is the one thing this side cannot demonstrate: the two tests for it skip on
+the emitter's own signature rather than failing on a schedule nobody controls.
+
+They travel in the URL rather than a header because they change the bytes, so
+they belong in the thing the ETag answers for, and a URL that names its own
+resolution is shareable and shows up in a log.
+
+**`AGGAPI_MAX_CHART_DETAIL`, default 1024**, caps `detail`. A setting rather
+than a constant, because one route serves two cases that want opposite things:
+over the wire the answer is a few thousand cells and a payload in kilobytes,
+and locally it is a drill-down into fine detail on a machine where bandwidth is
+not a constraint, where a hard cap would prevent a use in order to prevent
+nothing. The public deploy sets it to 256, since chart GETs sit outside the
+Caddy rate limiter. What stops a client misrepresenting what it got is the
+document, which reports the realized grid, not the ceiling.
+
+Out of range is **422, never a silent clamp**. A request for detail this
+deployment will not serve was asking for something specific, and answering it
+with something else under a 200 and an ETag that both claim otherwise is the
+response lying about itself. Same for a chart whose emitter takes none of the
+three: the 422 names what was sent, rather than dropping it.
+
+**A chart document cache**, eight entries, keyed on `(oid, name, window,
+detail, encoding)`: everything that changes the bytes, which is what makes it
+the same key the ETag answers for. It sits above the object cache and can never
+cause a build, so no chart parameter is ever a reason to re-run an FFT. What it
+buys is revalidation: a conditional GET has to know the hash before it can
+answer 304, and the hash comes from building the document, so without it every
+`If-None-Match` would redo the window-and-reduce work in order to report that
+nothing changed.
+
+**Two findings recorded in the plan rather than fixed here.** The encoded `z`
+block takes its own key, `z_block`, because a nested array and an object cannot
+share one and phase one promises an old reader still draws (new section 2.4.1).
+And `GZipMiddleware` means chart payloads reach Caddy already encoded, so
+nothing is compressed twice but `Content-Encoding: zstd` is unreachable while
+the app compresses first: a deployment question for the author, worth about
+half a kilobyte on a surface.
+
 ## 1.0.0a71
 
 **Every table the library publishes is now drawn as published.** The author's

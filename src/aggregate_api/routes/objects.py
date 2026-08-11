@@ -68,6 +68,7 @@ import re
 import threading
 import time
 import warnings
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -192,6 +193,52 @@ def reset_singletons() -> None:
     with _cache_lock:
         _cache_singleton = None
         _audit_singleton = None
+    with _chart_cache_lock:
+        _chart_cache.clear()
+
+
+# ----------------------------------------------------------------------
+# The chart-document cache
+# ----------------------------------------------------------------------
+# Keyed on ``(oid, name, window, detail, encoding)``: everything that changes
+# the bytes, which is what makes it the same key the ETag answers for. It sits
+# *above* the object cache and can never cause a build, so no chart parameter
+# is ever a reason to re-run an FFT. An ``oid`` is the content hash of
+# ``(decl, log2, bs)``, so an entry cannot go stale under its own key: the only
+# way to get different numbers is a different key.
+#
+# What it buys is the revalidation path. A conditional GET has to know the
+# document's hash before it can answer 304, and the hash is only known by
+# building the document; without a cache every ``If-None-Match`` would redo the
+# window-and-reduce work in order to reply "nothing changed". A joint surface at
+# a high ``detail`` is the first chart in this app where that is real work.
+#
+# Small on purpose, and bounded by entries rather than bytes because the entries
+# a reader generates in one sitting are one object's charts at a few settings of
+# the knob. A surface at the public ceiling of 256 cells per axis is a few
+# hundred kB; at the local default of 1024 it can be a few MB, so eight entries
+# is a worst case of a few tens of MB.
+_CHART_CACHE_MAX = 8
+_chart_cache: OrderedDict[tuple, tuple[str, bytes]] = OrderedDict()
+_chart_cache_lock = threading.Lock()
+
+
+def _chart_cached(key: tuple) -> tuple[str, bytes] | None:
+    """Return the cached ``(etag, body)`` for ``key``, or None, marking it used."""
+    with _chart_cache_lock:
+        hit = _chart_cache.get(key)
+        if hit is not None:
+            _chart_cache.move_to_end(key)
+        return hit
+
+
+def _chart_store(key: tuple, etag: str, body: bytes) -> None:
+    """File ``(etag, body)`` under ``key``, evicting the least recently read."""
+    with _chart_cache_lock:
+        _chart_cache[key] = (etag, body)
+        _chart_cache.move_to_end(key)
+        while len(_chart_cache) > _CHART_CACHE_MAX:
+            _chart_cache.popitem(last=False)
 
 
 # ----------------------------------------------------------------------
@@ -2045,12 +2092,120 @@ def get_quantiles(
 # GET /v1/objects/{id}/chart/{name} -- the chart-document route
 # ----------------------------------------------------------------------
 
+#: The wire encodings a caller may ask for: the closed vocabulary of
+#: ``dev/plan-3d-plot.md`` section 2.3, which the surface block's ``dtype``
+#: declares back. Spelled as a ``Literal`` so an unknown name is a 422 off the
+#: schema, with the four valid names in the message, rather than a 500 out of
+#: an emitter that was handed a word it does not know.
+ChartEncoding = Literal["f32b64", "f64b64", "u16log12b64", "json"]
+
+
+def _chart_options(
+    window: float | None,
+    detail: int | None,
+    encoding: str | None,
+    settings: Settings,
+) -> dict:
+    """The chart parameters the caller actually set, as emitter options.
+
+    Parameters
+    ----------
+    window : float or None
+        Quantile depth: keep ``q(10**-window)`` to ``q(1 - 10**-window)`` of
+        each marginal, 0 meaning the whole grid.
+    detail : int or None
+        Target cells per axis after the display reduction.
+    encoding : str or None
+        One of :data:`ChartEncoding`.
+    settings : Settings
+        Live config, read for ``max_chart_detail``.
+
+    Returns
+    -------
+    dict
+        Keyword options for ``charts.build_chart_doc``, holding only what the
+        caller named.
+
+    Raises
+    ------
+    HTTPException
+        422 for a ``window`` off the half-step lattice, or a ``detail`` above
+        this deployment's ceiling.
+
+    Notes
+    -----
+    Only what the caller set travels. An option this route supplies by itself
+    would be this service having an opinion about a library default, and would
+    also make every chart that takes no such option fail the moment the route
+    grew a parameter for one that does.
+
+    Both checks are 422 rather than a silent clamp, which is the plan's
+    acceptance criterion and the right reading anyway: a request for detail the
+    deployment will not serve was asking for something specific, and answering
+    it with something else while returning 200 is the response lying about what
+    it is. The ceiling is a setting, so it cannot be a ``le=`` on the query
+    parameter; the schema carries ``ge=16`` and the description names the env
+    var.
+
+    ``window`` is on a half-step lattice because that is what the SPA's spinner
+    walks, and because a continuum of depths would make the chart cache and the
+    ETag answer for a parameter nobody can reproduce by hand.
+    """
+    options: dict = {}
+    if window is not None:
+        if round(window * 2) != window * 2:
+            raise HTTPException(
+                status_code=422,
+                detail=f"window must be a multiple of 0.5; got {window}",
+            )
+        options["window"] = window
+    if detail is not None:
+        if detail > settings.max_chart_detail:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"detail {detail} is above this deployment's ceiling of "
+                    f"{settings.max_chart_detail}; raise AGGAPI_MAX_CHART_DETAIL "
+                    "to serve finer grids"
+                ),
+            )
+        options["detail"] = detail
+    if encoding is not None:
+        options["encoding"] = encoding
+    return options
+
+
 @router.get("/objects/{oid}/chart/{name}")
 def get_chart_document(
     oid: str,
     name: str,
+    window: float | None = Query(
+        None, ge=0, le=12,
+        description=(
+            "Quantile depth, in multiples of 0.5: keep q(10**-window) to "
+            "q(1 - 10**-window) of each marginal. 0 keeps the whole grid. "
+            "Omitted, the library chooses. Grid charts only."
+        ),
+    ),
+    detail: int | None = Query(
+        None, ge=16,
+        description=(
+            "Target cells per axis after the display reduction. A target, not "
+            "a promise: the reduction blocks by powers of two, and the "
+            "document reports what it reached. Capped by "
+            "AGGAPI_MAX_CHART_DETAIL (default 1024). Grid charts only."
+        ),
+    ),
+    encoding: ChartEncoding | None = Query(
+        None,
+        description=(
+            "Wire encoding of the grid block: f32b64 (default upstream), "
+            "f64b64, u16log12b64, or json. Grid charts only."
+        ),
+    ),
     request: Request = None,
     entry: CacheEntry = Depends(_locked_entry),
+    settings: Settings = Depends(get_settings),
 ) -> Response:
     """Return the named chart as a chart document (the chart IR).
 
@@ -2082,6 +2237,25 @@ def get_chart_document(
     availability predicate, which is a second, narrower gate than the
     ``available_charts`` check below. That check stays, because it is what
     turns an unavailable name into a 404 that names what *is* available.
+
+    The three query parameters (``dev/plan-3d-plot.md`` section 3) are the
+    knob, and only the knob: which grid a caller gets is the library's
+    decision, taken before the reduction, and this route neither crops nor
+    re-reduces what it is handed. Cropping downstream cannot recover
+    resolution that was already averaged away, which is the whole argument for
+    plumbing the parameters upstream instead of doing the work here: on one
+    test surface the same quantile window applied to the fine lattice leaves
+    232 cells, and applied to the emitted display grid leaves 8, starting in
+    the wrong place.
+
+    They go in the URL rather than a header because they change the bytes, so
+    they belong in the thing the ETag answers for, and a URL that names its own
+    resolution is shareable and shows up in a log.
+
+    A chart whose emitter takes none of them says so with a 422 naming what was
+    sent. Silently dropping an option the caller asked for would return a grid
+    that is not the one requested, under a 200 and an ETag that both claim it
+    is.
     """
     available = agg_charts.available_charts(entry.obj)
     if name not in available:
@@ -2089,9 +2263,39 @@ def get_chart_document(
             status_code=404,
             detail=f"no chart {name!r} for this object; available: {available}",
         )
-    doc = agg_charts.build_chart_doc(entry.obj, name)
-    body = agg_charts.canonical_json(doc)
-    etag = f'"{doc.hash}"'
+    options = _chart_options(window, detail, encoding, settings)
+    key = (oid, name, window, detail, encoding)
+    hit = _chart_cached(key)
+    if hit is not None:
+        etag, body = hit
+    else:
+        try:
+            doc = agg_charts.build_chart_doc(entry.obj, name, **options)
+        except TypeError as exc:
+            # An emitter that does not take one of these. The message is
+            # CPython's "got an unexpected keyword argument", matched rather
+            # than guessed at from a signature: reading the signature means
+            # resolving the registry entry and the dispatch by hand, which is
+            # the reach this route was rewritten to stop making.
+            if not options or "unexpected keyword argument" not in str(exc):
+                raise
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"chart {name!r} takes none of "
+                    f"{', '.join(sorted(options))}: those apply to the grid "
+                    "charts, whose display lattice is chosen at emission"
+                ),
+            ) from exc
+        except ValueError as exc:
+            # Availability is screened above, so with options in hand a
+            # ValueError here is the emitter rejecting a parameter value.
+            if not options:
+                raise
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        body = agg_charts.canonical_json(doc)
+        etag = f'"{doc.hash}"'
+        _chart_store(key, etag, body)
     if request is not None and request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
     return Response(

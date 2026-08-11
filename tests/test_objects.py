@@ -1005,6 +1005,166 @@ def test_bivariate_chart_document(client):
     assert "joint_surface" in r4.json()["detail"]
 
 
+def _surface_takes_grid_options(client, oid) -> bool:
+    """Whether the installed library's surface emitter honors the knob yet.
+
+    ``dev/plan-3d-plot.md`` section 6 has the library and this service landing
+    in that order, and deliberately: the parameters are a knob on a capability
+    only the library can have, since it is the one that chooses the window
+    before it reduces. Until LIB items 5.2 and 5.4 land, the route's own
+    behavior is fully testable (bounds, the cache, the refusal) and the
+    round trip is not, so the two round-trip cases skip on this rather than
+    failing on a schedule nobody controls.
+    """
+    r = client.get(f"/v1/objects/{oid}/chart/joint_surface", params={"detail": 32})
+    return r.status_code != 422
+
+
+def test_chart_parameters_are_bounded(client):
+    """The three knobs validate at the edges, and 422 rather than clamp.
+
+    A clamp would answer a request for something specific with something else
+    under a 200 and an ETag that both claim to be what was asked for. The
+    half-step check on ``window`` is this route's own, not the schema's: the
+    SPA spinner walks halves, and a continuum of depths makes the cache key
+    and the ETag answer for a parameter nobody can reproduce by hand.
+    """
+    r = client.post("/v1/objects", json={"decl": _BV})
+    oid = r.json()["id"]
+    url = f"/v1/objects/{oid}/chart/joint_surface"
+    assert client.get(url, params={"window": 13}).status_code == 422
+    assert client.get(url, params={"window": -1}).status_code == 422
+    off_lattice = client.get(url, params={"window": 0.25})
+    assert off_lattice.status_code == 422
+    assert "multiple of 0.5" in off_lattice.json()["detail"]
+    assert client.get(url, params={"detail": 8}).status_code == 422
+    assert client.get(url, params={"encoding": "zip"}).status_code == 422
+
+    # The ceiling is a setting, so it is checked in the handler rather than by
+    # the schema, and the message names the env var that raises it.
+    monkey = client.get(url, params={"detail": 4096})
+    assert monkey.status_code == 422
+    assert "AGGAPI_MAX_CHART_DETAIL" in monkey.json()["detail"]
+
+
+def test_chart_detail_ceiling_is_a_setting(client, monkeypatch):
+    """``AGGAPI_MAX_CHART_DETAIL`` moves the ceiling, both ways.
+
+    The public deploy sets it to 256 because chart GETs sit outside the Caddy
+    rate limiter; local runs keep the high default so a drill-down into fine
+    detail is reachable. Both are the same code path with a different number,
+    which is what makes it a setting rather than a constant.
+    """
+    from aggregate_api.config import get_settings
+
+    r = client.post("/v1/objects", json={"decl": _BV})
+    oid = r.json()["id"]
+    url = f"/v1/objects/{oid}/chart/joint_surface"
+
+    monkeypatch.setenv("AGGAPI_MAX_CHART_DETAIL", "256")
+    get_settings.cache_clear()
+    over = client.get(url, params={"detail": 512})
+    assert over.status_code == 422
+    assert "ceiling of 256" in over.json()["detail"]
+    # At the ceiling the parameter is accepted by this route; whether the
+    # library honors it is the other half of the plan.
+    assert client.get(url, params={"detail": 256}).status_code in (200, 422)
+    get_settings.cache_clear()
+
+
+def test_chart_parameters_refused_by_a_chart_that_takes_none(client):
+    """An xy chart handed a grid parameter is a 422 naming what was sent.
+
+    The alternative, dropping an option the emitter cannot take, returns a
+    document that is not the one requested under a 200 and an ETag that both
+    say it is. The route reports the refusal instead and names the parameters,
+    so a caller learns which charts the knob applies to.
+    """
+    r = client.post("/v1/objects", json={"decl": _DICE})
+    oid = r.json()["id"]
+    refused = client.get(f"/v1/objects/{oid}/chart/agg", params={"detail": 64})
+    assert refused.status_code == 422
+    assert "detail" in refused.json()["detail"]
+    # Without the knob the same chart serves, which is what makes the 422 a
+    # statement about the parameter rather than about the chart.
+    assert client.get(f"/v1/objects/{oid}/chart/agg").status_code == 200
+
+
+def test_chart_parameters_reach_the_openapi_schema(client):
+    """The knob is discoverable, with its bounds, from /openapi.json."""
+    schema = client.get("/openapi.json").json()
+    params = schema["paths"]["/v1/objects/{oid}/chart/{name}"]["get"]["parameters"]
+    by_name = {p["name"]: p for p in params}
+    assert {"window", "detail", "encoding"} <= set(by_name)
+    window = by_name["window"]["schema"]
+    # anyOf, because the parameter is optional: the bounds sit on the numeric
+    # branch and the other branch is null.
+    numeric = window.get("anyOf", [window])[0]
+    assert numeric["maximum"] == 12 and numeric["minimum"] == 0
+    detail = by_name["detail"]["schema"]
+    assert detail.get("anyOf", [detail])[0]["minimum"] == 16
+
+
+def test_chart_document_cache_serves_the_revalidation(client, monkeypatch):
+    """A repeat GET, and a conditional one, do not rebuild the document.
+
+    A conditional GET has to know the hash before it can answer 304, and the
+    hash comes from building the document. Without the cache every
+    ``If-None-Match`` would redo the window-and-reduce work in order to say
+    nothing changed, which on a joint surface at a high ``detail`` is the first
+    time in this app that is real work.
+    """
+    from aggregate_api.routes import objects as objects_routes
+
+    r = client.post("/v1/objects", json={"decl": _BV})
+    oid = r.json()["id"]
+    url = f"/v1/objects/{oid}/chart/joint_surface"
+
+    calls = []
+    real = objects_routes.agg_charts.build_chart_doc
+
+    def counted(obj, name, **options):
+        calls.append(name)
+        return real(obj, name, **options)
+
+    monkeypatch.setattr(objects_routes.agg_charts, "build_chart_doc", counted)
+    first = client.get(url)
+    assert first.status_code == 200 and len(calls) == 1
+    again = client.get(url)
+    assert again.content == first.content and len(calls) == 1
+    etag = first.headers["ETag"]
+    assert client.get(url, headers={"If-None-Match": etag}).status_code == 304
+    assert len(calls) == 1
+
+
+def test_chart_parameters_change_the_bytes(client):
+    """Two detail settings are two documents, two ETags, two cache entries.
+
+    Skipped until the library honors the knob (plan items 5.2 and 5.4): this
+    is the round trip, and half of it is upstream.
+    """
+    r = client.post("/v1/objects", json={"decl": _BV})
+    oid = r.json()["id"]
+    if not _surface_takes_grid_options(client, oid):
+        pytest.skip("library surface emitter does not take window/detail yet")
+    url = f"/v1/objects/{oid}/chart/joint_surface"
+    coarse = client.get(url, params={"detail": 32})
+    fine = client.get(url, params={"detail": 64})
+    assert coarse.status_code == 200 and fine.status_code == 200
+    assert coarse.headers["ETag"] != fine.headers["ETag"]
+    # Each revalidates against its own ETag, and neither against the other's.
+    assert client.get(url, params={"detail": 32},
+                      headers={"If-None-Match": coarse.headers["ETag"]}
+                      ).status_code == 304
+    assert client.get(url, params={"detail": 32},
+                      headers={"If-None-Match": fine.headers["ETag"]}
+                      ).status_code == 200
+    # The realized grid is what the document reports, never what was asked
+    # for: `detail` is a target and the reduction blocks by powers of two.
+    surface = coarse.json()["series"][0]["surface"]
+    assert surface.get("nx", len(surface.get("x", []))) <= 32
+
+
 def test_chart_document_unavailable_kind(client):
     """A chart this object cannot serve 404s, naming the ones it can.
 
