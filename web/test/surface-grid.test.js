@@ -74,16 +74,17 @@ test('float64 round trips exactly', () => {
 });
 
 test('the log-quantized form round trips to its declared 2.1e-4', () => {
-    // The emitter's arithmetic, inverted: code = round((log10(v / peak) +
-    // decades) / decades * 65535). Written out rather than imported because
-    // this test is the contract's other end, and a shared helper would let
-    // both ends be wrong together.
+    // The library's `encode_z_block`, inverted: code 0 is reserved for an
+    // exact zero and the live codes run 1 to 65535 over twelve decades.
+    // Written out rather than imported because this test is the contract's
+    // other end, and a shared helper would let both ends be wrong together.
     const peak = Math.max(...MASS);
     const decades = 12;
     const codes = Uint16Array.from(MASS.map((v) => {
+        if (!(v > 0)) return 0;
         const rel = Math.log10(v / peak);
         return Math.max(0, Math.min(65535,
-            Math.round(((rel + decades) / decades) * 65535)));
+            1 + Math.round(((rel + decades) / decades) * 65534)));
     }));
     const g = decodeSurfaceGrid({
         ...LATTICE,
@@ -96,6 +97,16 @@ test('the log-quantized form round trips to its declared 2.1e-4', () => {
         assert.ok(Math.abs(g.z[i] - density) / density < 2.1e-4,
                   `cell ${i}: ${g.z[i]} against ${density}`);
     });
+    // An exact zero survives as an exact zero, which is the whole point of the
+    // reserved code: a joint is between 14% and 59% zeros, and a floor twelve
+    // decades down would draw as a real, flat surface on the log view.
+    const withZero = decodeSurfaceGrid({
+        ...LATTICE,
+        z_block: { dtype: 'u16log12b64', order: 'yx', peak: 0.25, decades: 12,
+                   data: b64(Uint16Array.from([0, 65535, 0, 0, 0, 0])) },
+    });
+    assert.equal(withZero.z[0], 0);
+    assert.equal(withZero.z[1], 0.25 / 20);
 });
 
 test('the json block decodes nested and flat alike', () => {
@@ -174,10 +185,12 @@ test('edge says what a coordinate names, and centers follow it', () => {
     assert.equal(centerX(mid, 1), 2);
     assert.equal(centerY(left, 0), 105);
     assert.equal(centerY(mid, 0), 100);
-    // A document that says nothing is read as left edges, the convention the
-    // fine lattice is already in.
+    // A document that says nothing is read as midpoints, which is the
+    // library's rule for a grid emitted before the field existed: those
+    // documented their coordinates as cell centers, and reading them as left
+    // edges would shift every one of them half a bucket.
     assert.equal(decodeSurfaceGrid({ ...LATTICE, z_block: {
-        dtype: 'f64b64', data: b64(Float64Array.from(MASS)) } }).edge, 'left');
+        dtype: 'f64b64', data: b64(Float64Array.from(MASS)) } }).edge, 'mid');
 });
 
 test('the coordinate arrays a category axis wants are the lattice, walked', () => {

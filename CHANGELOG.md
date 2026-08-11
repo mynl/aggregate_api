@@ -4,6 +4,46 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a75
+
+**The library's emitter landed, the two halves were read against each other,
+and three things did not match.** `aggregate` a257 emits the windowed lattice,
+`edge`, `bs`, `k`, `window`, `marginals`, `moments`, `deficit` and `z_block`.
+This release is what changed on reading it.
+
+**The log-quantized decode was wrong.** The plan drafted
+`peak * 10 ** (code / 65535 * decades - decades)`; the library reserves **code
+0 for an exact zero** and spreads 65,535 live codes over the decades below the
+peak. The library's version is the better one and the plan now carries it: an
+FFT-built joint is between 14% and 59% exact zeros, and an encoding whose
+smallest word is "twelve decades down" turns every one of them into a floor
+that the log view then draws as a real, flat surface.
+
+**A missing `edge` means midpoints, not left edges.** The app had guessed the
+other way. A document that declares no edge is one from before the field
+existed, and those documented their coordinates as cell centers, so reading
+them as left edges would shift every legacy grid half a bucket.
+
+**The bivariate chart test now asserts the windowed contract.** It read "the
+display cells sum to 1", which was true while the emitted grid was the whole
+joint and became wrong the moment the window arrived. It reconciles instead:
+the grid holds `kept * (1 - deficit)`. It also checks the lattice against the
+arrays beside it, `edge`, the `z_block` dtype and order, and that the served
+marginals are as long as their axes. The two round-trip tests that skipped at
+a72 now run: `detail=32` and `detail=64` are two documents, two ETags, and each
+revalidates only against its own.
+
+**Plan section 5.1.1, upstream, found in the fix for 5.1.** `edge = "left"` is
+half a fine bucket off. The fine lattice is not in the left edge convention: it
+is in the representative-point convention and it is exact, with `xs @ p`
+reproducing a theoretical mean to 8e-9 of a bucket. So a display block covering
+`k` fine cells has its representative point at `x0 + i * dx + (k - 1) * bs / 2`,
+and `edge = "left"` asks a consumer to add `dx / 2`, which overshoots by
+`bs / 2`. Measured against the served `moments.mean` on the first real
+document, that is +4.58 and +3.86 on the two axes, exactly `bs / 2` each. The
+app follows the declaration literally rather than second-guessing it, so the
+bias is visible rather than quietly patched out, and nothing marks a mean yet.
+
 ## 1.0.0a74
 
 **The drawing geometry, and the finding that stops the drawing.**

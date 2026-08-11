@@ -129,7 +129,7 @@ distribution is in the box, or what the exact marginals are.
 |---|---|---|
 | `x0`, `dx`, `nx` | float, float, int | the x lattice, as an origin and a step, **not** an array. See 2.2.1 |
 | `y0`, `dy`, `ny` | float, float, int | the y lattice. Independent of x in both length and step |
-| `edge` | `"left" \| "mid"` | what a coordinate names: the left edge of its cell or its midpoint. Stating this is what would have caught upstream ask 1 |
+| `edge` | `"left" \| "mid"` | what a coordinate names: the left edge of its cell or its midpoint. Stating this is what would have caught upstream ask 1. **Absent means `mid`**, since a document from before the field existed documented its coordinates as cell centers, and reading those as left edges would shift every legacy grid half a bucket |
 | `z_block` | object, see 2.3 | the joint **mass** per cell, row major over `(y, x)`, length `nx * ny`. Its own key rather than `z`, see 2.4.1 |
 | `bs` | `[float, float]` | the **fine** bucket size each axis was reduced from |
 | `k` | `[int, int]` | the block factor per axis, so `dx == bs[0] * k[0]`. Together with `bs`, this says what the grid is a reduction of, which is the difference between "the support starts at 508" and "the first block covers [0, 512)" |
@@ -189,8 +189,22 @@ can change later without a format change:
 | `u16log12b64` | 2 | 2.1e-4 | large grids, when a four figure density is enough |
 | `json` | ~10 | 1e-6 | the current behavior, kept for one release as a fallback |
 
-For `u16log12` the block also carries `peak` and `decades`, and the value is
-`peak * 10 ** (code / 65535 * decades - decades)`.
+For `u16log12` the block also carries `peak` and `decades`. **Code 0 is
+reserved for an exact zero**, and the live codes run 1 to 65535 over the
+decades below the peak:
+
+```
+value = 0                                                    if code == 0
+value = peak * 10 ** ((code - 1) / 65534 * decades - decades) otherwise
+```
+
+The reserved zero is the library's refinement of the draft formula above it
+(landed with the emitter, 2026-08-11) and it is worth the code it costs: an
+FFT-built joint is between 14% and 59% exact zeros, and an encoding whose
+smallest word is "twelve decades down" turns every one of them into a floor
+that the log view then draws as a real, flat surface. Anything more than
+`decades` under the peak also encodes as zero, which is the wire saying it
+cannot carry that depth rather than claiming the mass is absent.
 
 **Do not send float64.** It is the single largest lever in this whole plan and
 it points the other way from intuition. The low mantissa bits of an FFT built
@@ -602,6 +616,56 @@ convention the fine lattice is already in. Then declare it, via `edge` in the
 surface block. Repro: `uv run --no-sync python dev/prototypes/joint-surface/make-surface-data.py`,
 which
 prints the table above every run.
+
+#### 5.1.1 The fix lands, and `edge = "left"` is half a fine bucket off
+
+Found by the API agent 2026-08-11, decoding the first real document the new
+emitter produced (`aggregate` a257, `bvagg/joint_surface`, 94 x 117,
+`bs = (10, 8)`, `k = (4, 2)`). Small, and the same bug as 5.1 rather than a new
+one, so it wants fixing in the same place.
+
+The premise above is wrong on one point: **the fine lattice is not in the left
+edge convention.** It is in the representative-point convention, and it is
+exact. Measured on `agg TestConv 5 claims sev lognorm 100 cv 0.5 poisson`,
+`xs @ p` reproduces the theoretical mean of 500 to 8e-9 of a bucket, while
+`(xs + bs/2) @ p` is high by exactly half a bucket. The fine coordinate *is*
+the point the mass sits at.
+
+So a display block covering `k` fine cells has its representative point at the
+mean of the fine coordinates it covers, `x0 + i * dx + (k - 1) * bs / 2`, which
+is neither the block's left edge nor its midpoint. Declaring `edge = "left"`
+tells a consumer to add `dx / 2`, and `dx = k * bs`, so it overshoots by
+`bs / 2` on every axis. Measured on that document, taking the mean off the
+display grid three ways against the served `moments.mean` of
+`(624.9170, 624.3338)`:
+
+| the coordinate read as | mean | off by |
+|---|---|---|
+| the declared coordinate itself | 609.500, 620.194 | -15.4, -4.1 |
+| a cell midpoint, which is what `edge = "left"` asks for | 629.500, 628.194 | **+4.58, +3.86**, exactly `bs / 2` |
+| the mean of the fine coordinates the block covers | 624.500, 624.194 | -0.42, -0.14, the window truncation and nothing else |
+
+The third row is the one that closes on the served moments, and the residual in
+it is the upper tail the window drops, biasing down, which is the right sign.
+
+Three ways out, all upstream, none of them the app's to take:
+
+1. emit the block's representative point as the coordinate,
+   `x0 + (k - 1) * bs / 2`, and declare `edge = "mid"`. Exact, and it costs
+   8.1's phrasing: the first coordinate of a positive-support law becomes
+   `(k - 1) * bs / 2` rather than 0, which is the honest answer to "where does
+   the first block's mass sit" but is no longer "starts at 0". The criterion
+   becomes `x0 - (k - 1) * bs / 2 == xs[0]`
+2. give `edge` a third value for what is actually being carried, the block's
+   first fine coordinate. Exact, and it makes every consumer learn a word
+3. leave it and let consumers reconstruct the representative point from `bs`
+   and `k`, which they can, since both are carried. This re-opens the exact
+   ambiguity `edge` was added to close, and is what the app is doing today
+   only because it marks no means yet
+
+Recommend 1. Until it lands the app's `centerX` and `centerY` follow the
+declaration literally rather than second-guessing it, which is the purist rule
+and also means the bias is visible rather than quietly patched out.
 
 ### 5.2 The window must be chosen before the reduction
 

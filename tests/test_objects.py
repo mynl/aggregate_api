@@ -985,9 +985,34 @@ def test_bivariate_chart_document(client):
     surf = doc["series"][0]["surface"]
     assert len(surf["z"]) == len(surf["y"])
     assert len(surf["z"][0]) == len(surf["x"])
-    # mass-preserving reduction: display cells sum to the joint's mass.
+    # The reduction preserves mass, and the window keeps the fraction it says
+    # it keeps. Through a256 this read "the display cells sum to 1", which was
+    # right while the emitted grid was the whole joint and became wrong the
+    # moment the window arrived: what the grid holds now is `kept`, and
+    # asserting the sum against the document's own claim is the check that
+    # survives the next change of depth.
     total = sum(v for row in surf["z"] for v in row)
-    assert abs(total - 1.0) < 1e-6
+    # `kept` is a fraction of the joint's own mass, and that mass is short of 1
+    # by the construction deficit, so the two are reconciled rather than
+    # compared: the grid holds `kept * (1 - deficit)`.
+    placed = 1.0 - surf.get("deficit", 0.0)
+    assert abs(total - surf["window"]["kept"] * placed) < 1e-9
+    assert 0.999 < surf["window"]["kept"] <= 1.0
+    # The lattice, as an origin, a step and a count, and what a coordinate
+    # names. Both are what the app's decode reads in preference to the arrays
+    # beside them, and `edge` is what stops a mean being taken half a bucket
+    # off.
+    assert surf["nx"] == len(surf["x"]) and surf["ny"] == len(surf["y"])
+    assert abs(surf["x0"] - surf["x"][0]) < 1e-9
+    assert abs((surf["x"][1] - surf["x"][0]) - surf["dx"]) < 1e-9
+    assert surf["edge"] == "left"
+    # Phase one emits both forms: the arrays an old reader walks and the
+    # encoded block a new one prefers (plan 2.4.1).
+    assert surf["z_block"]["dtype"] == "f32b64"
+    assert surf["z_block"]["order"] == "yx"
+    # The exact marginals come off the object, not off the reduced joint.
+    assert len(surf["marginals"]["x"]) == surf["nx"]
+    assert len(surf["marginals"]["y"]) == surf["ny"]
     # ETag is the stamped document hash, quoted; a match revalidates.
     etag = r1.headers["ETag"]
     assert etag == f'"{doc["hash"]}"' and len(doc["hash"]) == 12

@@ -87,20 +87,29 @@ function decodeFloats(bytes, width) {
 }
 
 /**
- * The log-quantized form: 65,536 codes over `decades` decades under `peak`.
+ * The log-quantized form: code 0 for an exact zero, then 65,535 live codes
+ * spread over `decades` decades under `peak`.
  *
- * Note what code 0 means: the floor, `peak * 10 ** -decades`, and not an exact
- * zero. An FFT-built joint is full of exact zeros and this encoding cannot say
- * so, which is one more reason the default is float32 and this one is for the
- * case that wants the most cells for the fewest bytes.
+ *     value = 0                                            if code == 0
+ *     value = peak * 10 ** ((code - 1) / 65534 * decades - decades)
+ *
+ * The reserved zero is the library's, and it matters: an FFT-built joint is
+ * between 14% and 59% exact zeros, and an encoding that could only say "twelve
+ * decades down" would turn every one of them into a floor the log view then
+ * draws as a real, flat surface. Anything more than `decades` under the peak
+ * also encodes as zero, which is the wire saying it cannot carry that depth
+ * rather than claiming the mass is absent; a consumer that needs it asks for a
+ * float dtype.
  */
 function decodeQuantized(bytes, peak, decades) {
     const n = bytes.byteLength >> 1;
     const out = new Float64Array(n);
     const dv = new DataView(bytes.buffer, bytes.byteOffset, n * 2);
-    const step = decades / 65535;
     for (let i = 0; i < n; i += 1) {
-        out[i] = peak * 10 ** (dv.getUint16(i * 2, true) * step - decades);
+        const code = dv.getUint16(i * 2, true);
+        out[i] = code === 0
+            ? 0
+            : peak * 10 ** (((code - 1) / 65534) * decades - decades);
     }
     return out;
 }
@@ -258,11 +267,14 @@ export function decodeSurfaceGrid(surface) {
     return {
         x0: xl.origin, dx: xl.step, nx,
         y0: yl.origin, dy: yl.step, ny,
-        // 'left' is the convention the fine lattice is already in and the one
-        // a corrected emitter declares. Absent, assume it: a document that
-        // does not say is a document from before the field existed, and those
-        // label the left edge of a cell as well as they label anything.
-        edge: surface.edge === 'mid' ? 'mid' : 'left',
+        // 'left' is the convention the fine lattice is in and the one a
+        // corrected emitter declares. **Absent means 'mid'**, which is the
+        // library's own rule and not this reader's guess: a document that
+        // declares no edge is one from before the field existed, and those
+        // documented their coordinates as cell centers. Reading them as left
+        // edges would shift every legacy grid half a bucket, which is the same
+        // class of error the field was added to end.
+        edge: surface.edge === 'left' ? 'left' : 'mid',
         z,
         cellArea,
         totalMass,
