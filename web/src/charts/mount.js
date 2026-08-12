@@ -27,6 +27,7 @@ import {
     chartdocToEcharts, panelLayout, readings, rungAt, surfaceCuts,
 } from './chartdoc-to-echarts.js';
 import { fileStem, meshToGlb, meshToObj, meshToStl, surfaceMesh } from './mesh-export.js';
+import { chartParamsFor, migrateChartView, windowsWith } from './request-params.js';
 import { feelControls, feelForNav } from './spacemouse-panel.js';
 import { createSurfaceNav } from './surface-nav.js';
 import { loadSurface, readCamera, surfaceOverrides } from './surface.js';
@@ -47,9 +48,14 @@ let surfaceReady = false;
 // says which of them apply and the adapter ignores the rest. A reading nothing
 // declares is simply not surfaced and does nothing if it is held.
 
-// v3, because the state is now readings rather than the per-panel toggles the
-// app used to own. A stored v2 would restore a view nobody chose.
-const VIEW_KEY = 'aggapi.chartView.v3';
+// v3 was readings rather than the per-panel toggles the app used to own, and a
+// stored v2 would have restored a view nobody chose. v4 is the same reasoning
+// one level in: v3 also held a flat `window`, which is a request parameter and
+// not a reading, and a browser holding one asked every 2-D chart for something
+// no 2-D chart takes. See `dev/plan-plot-2d-fix.md`. The previous key is read
+// once, migrated and dropped, so the readings survive and the leak does not.
+const VIEW_KEY = 'aggapi.chartView.v4';
+const VIEW_KEY_PREVIOUS = 'aggapi.chartView.v3';
 
 const VIEW_DEFAULTS = {
     log: false,          // every axis that declares a log reading
@@ -79,7 +85,11 @@ const VIEW_DEFAULTS = {
     cutX: 0.5,
     cutY: 0.5,
     cutS: 0.5,
-    window: null,        // quantile depth asked of the library; null takes its default
+    // The quantile depth asked of the library, per chart registry name. A chart
+    // with no entry takes the library's own default, and a chart that takes no
+    // grid options can never gain an entry, because the box that writes one is
+    // only ever rendered on a document that realizes as a surface.
+    windows: {},
 };
 
 /** Which view keys the relief owns, for the reset button to put back. */
@@ -100,7 +110,17 @@ const WALK_INTERVAL = 50;
 
 let view = (() => {
     try {
-        return { ...VIEW_DEFAULTS, ...JSON.parse(localStorage.getItem(VIEW_KEY) || '{}') };
+        const held = localStorage.getItem(VIEW_KEY);
+        if (held !== null) return { ...VIEW_DEFAULTS, ...JSON.parse(held) };
+        const previous = localStorage.getItem(VIEW_KEY_PREVIOUS);
+        if (previous === null) return { ...VIEW_DEFAULTS };
+        const migrated = { ...VIEW_DEFAULTS, ...migrateChartView(JSON.parse(previous)) };
+        // Written through at once rather than left to the first control the
+        // reader touches: the old key is gone as of the next line, so a reload
+        // before any click would otherwise land on the defaults.
+        localStorage.setItem(VIEW_KEY, JSON.stringify(migrated));
+        localStorage.removeItem(VIEW_KEY_PREVIOUS);
+        return migrated;
     } catch {
         return { ...VIEW_DEFAULTS };
     }
@@ -280,6 +300,22 @@ export function notDrawable(message) {
         message || 'This chart is not published by the library yet.');
 }
 
+/**
+ * The pane a chart could not be fetched into, which is a different statement.
+ *
+ * `notDrawable`'s wording is about the library: it says this object publishes
+ * no such chart, and a reader who sees it stops asking. A request that failed
+ * says nothing about the library, and borrowing that wording for it is how a
+ * client bug reads as an upstream hole for a day. See
+ * `dev/plan-plot-2d-fix.md`, where a held request parameter did exactly that
+ * to every 2-D chart in the app.
+ */
+export function fetchFailed() {
+    return notDrawable('This chart could not be fetched. That is a request '
+        + 'failure rather than a gap in what the library publishes, so it is '
+        + 'worth trying again.');
+}
+
 // ---- controls ----------------------------------------------------------
 
 /**
@@ -325,8 +361,13 @@ function walkPositions(box, u) {
  * with the redraw deferred ~90 ms so a held key coalesces into one fetch rather
  * than one per repeat. Never written back into while focused: the value the
  * reader is typing is theirs until they leave.
+ *
+ * Held against `chart`, the registry name of the chart on screen, because the
+ * number is a parameter of the request rather than a way of reading the
+ * document. Sharing one number across charts is what stopped every 2-D chart
+ * on every object at a91, `dev/plan-plot-2d-fix.md`.
  */
-function windowBox(onWindow) {
+function windowBox(chart, onWindow) {
     const wrap = el('label', { className: 'exhibit-window' }, 'window ');
     const input = el('input', {
         type: 'number', min: '0', max: '12', step: '0.5',
@@ -336,7 +377,8 @@ function windowBox(onWindow) {
             + 'library chooses the grid from this before it reduces, so a '
             + 'deeper window is finer, not cropped',
     });
-    input.value = Number.isFinite(view.window) ? String(view.window) : '';
+    const held = (view.windows || {})[chart];
+    input.value = Number.isFinite(held) ? String(held) : '';
     input.placeholder = 'auto';
     let timer = null;
     input.addEventListener('input', () => {
@@ -345,7 +387,7 @@ function windowBox(onWindow) {
             const raw = input.value.trim();
             const next = raw === '' ? null : Number(raw);
             if (raw !== '' && !(next >= 0 && next <= 12)) return;
-            setView({ window: next });
+            setView({ windows: windowsWith(view.windows, chart, next) });
             onWindow();
         }, 90);
     });
@@ -363,7 +405,9 @@ function windowBox(onWindow) {
  * hooks : object
  *     `onChange`, `onReset`, `walking` and `onWalk` are the strip's own
  *     actions; `onWindow` is null on a document nobody can refetch (the
- *     bounds envelope, drawn from a premium the reader typed); `onExport` and
+ *     bounds envelope, drawn from a premium the reader typed), and `chart` is
+ *     the registry name its number is held against, null alongside it;
+ *     `onExport` and
  *     `canExport` are the mesh writers, which act on the drawing rather than
  *     on the document and so are greyed rather than absent while there is no
  *     drawing to write.
@@ -423,8 +467,8 @@ function spaceMouseButton(onSpaceMouse, register) {
 }
 
 function renderControls(doc, hooks) {
-    const { onChange, onReset, onWindow, walking, onWalk, onExport, canExport,
-            onSpaceMouse, register, nav, camera } = hooks;
+    const { chart, onChange, onReset, onWindow, walking, onWalk, onExport,
+            canExport, onSpaceMouse, register, nav, camera } = hooks;
     const offered = readings(doc);
     const row = el('div', { className: 'exhibit-controls exhibit-controls-center' });
     const box = el('div', { className: 'exhibit-group' });
@@ -561,7 +605,7 @@ function renderControls(doc, hooks) {
         feelPanel = feel.panel;
         // The window, last, and a number rather than a toggle: it is the one
         // control that is a new request rather than a new drawing.
-        if (onWindow) box.appendChild(windowBox(onWindow));
+        if (onWindow) box.appendChild(windowBox(chart, onWindow));
     }
 
     // The realization control, last, per the house order: axis readings before
@@ -616,9 +660,16 @@ function defaultKind(doc) {
  * Returns
  * -------
  * Promise<object|null>
- *     A handle with `dispose()`, or null when the document could not be
- *     fetched or carries nothing this renderer can draw. A null is the
- *     caller's cue to say so; it is never an approximation.
+ *     A handle with `dispose()`, or null when the served document carries
+ *     nothing this renderer can draw. A null is the caller's cue to say so; it
+ *     is never an approximation.
+ *
+ * Raises
+ * ------
+ * Error
+ *     When the document could not be fetched at all. Separated from the null
+ *     so the caller can tell the reader which of the two happened: one is a
+ *     statement about the library, the other is not. See `fetchFailed`.
  */
 export async function mountChart(container, spec) {
     empty(container);
@@ -632,31 +683,29 @@ export async function mountChart(container, spec) {
     // has started reading.
     showPlaceholder(host, spec.chart, host.clientWidth || 0);
 
+    const params = chartParamsFor(view, spec.chart);
     let doc;
     try {
         const [payload] = await Promise.all([
-            api.chartDoc(spec.id, spec.chart, chartParams()),
+            api.chartDoc(spec.id, spec.chart, params),
             loadStyle().catch(() => null),   // colors are a bonus, not a blocker
         ]);
         doc = payload;
     } catch {
-        empty(container);
-        return null;
+        // A fetch that carried parameters and failed retries without them, so
+        // held request state can only ever cost the reader the depth they
+        // asked for, never the chart. Defense in depth: with the window held
+        // per chart this should not fire, and it is cheap insurance against
+        // the next parameter that outlives the control offering it.
+        doc = Object.keys(params).length
+            ? await api.chartDoc(spec.id, spec.chart, {}).catch(() => null)
+            : null;
+        if (!doc) {
+            empty(container);
+            throw new Error('chart document could not be fetched');
+        }
     }
     return draw(container, tools, host, doc, spec);
-}
-
-/**
- * The request parameters the held view implies.
- *
- * Only `window`, and only when the reader has moved it off the library's own
- * default. Sending a parameter to say "do what you would have done" would put
- * the app's idea of the default into the URL, the cache key and the ETag, and
- * the first time the library changed its mind the app would be overriding it
- * without anybody deciding to.
- */
-function chartParams() {
-    return Number.isFinite(view.window) ? { window: view.window } : {};
 }
 
 /**
@@ -1112,6 +1161,7 @@ function draw(container, tools, host, doc, spec = null) {
         stripOff = [];
         empty(tools);
         const strip = renderControls(doc, {
+            chart: spec ? spec.chart : null,
             onChange: () => { if (ready) onToggle(); },
             onReset: () => { if (ready) onReset(); },
             onWindow: spec ? () => { if (ready) refetch(); } : null,
@@ -1174,7 +1224,7 @@ function draw(container, tools, host, doc, spec = null) {
         if (!spec) return;
         let next;
         try {
-            next = await api.chartDoc(spec.id, spec.chart, chartParams());
+            next = await api.chartDoc(spec.id, spec.chart, chartParamsFor(view, spec.chart));
         } catch {
             return;                     // the old document stays on screen
         }

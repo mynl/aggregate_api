@@ -4,6 +4,50 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a92
+
+**Every 2-D chart said "not published by the library yet", on every object, and
+the library had nothing to do with it.** The window box, offered while a surface
+realization is on screen, wrote its depth into the one flat sticky view state
+that every chart on every object shares, `aggapi.chartView.v3`. `chartParams`
+then attached that depth to every chart fetch; the chart route answers 422 to
+any emitter that takes none of the grid options, which is every 2-D chart; and
+the pane reported that refusal in `notDrawable`'s words. One number, turned once
+on one surface, and agg, port, severity, distortion and reins went dark
+everywhere until localStorage was cleared. Diagnosed and fixed per
+`dev/plan-plot-2d-fix.md`. The route behaved exactly as designed and is
+untouched, as is its pinned 422 contract in `tests/test_objects.py`: it named
+the offending parameter precisely, which is how the diagnosis took minutes.
+
+**The window is now held per chart.** `VIEW_DEFAULTS` loses `window` and gains
+`windows`, a map keyed by chart registry name; the box reads and writes its own
+chart's slot; a fetch carries a depth only for the chart the depth was set on.
+The map needs no list of which charts take the knob, because the box only ever
+renders on a document that realizes as a surface, so the stored key set
+maintains itself and a future grid chart gains its slot the day it offers the
+box. The view key moves to `aggapi.chartView.v4`: a stored v3 migrates minus its
+`window` and the old key is dropped, so a poisoned browser heals on its next
+load with no user action.
+
+**A fetch that failed now says so, in its own words.** A first fetch that
+carried parameters and failed retries once with none, so held request state can
+cost a reader the depth they asked for and never the chart. When that retry
+fails too, `mountChart` throws rather than returning null, and the Overview and
+Reinsurance panes put up `fetchFailed`: a request failure rather than a gap in
+what the library publishes, worth trying again. `notDrawable` keeps its "not
+published" wording for the case it is actually about, capability offering
+nothing.
+
+**The decision is a leaf module with tests.** It broke for want of three lines
+that could have been checked, and it was uncheckable because it lived against
+DOM state, next to a localStorage read at import time and an echarts import that
+will not load outside a browser. So `web/src/charts/request-params.js` imports
+nothing, the `surface-grid.js` arrangement and for the same reason, and holds
+`chartParamsFor`, `windowsWith` and the v3 migration.
+`web/test/request-params.test.js` exercises them under `node --test`, eight
+tests including the one that is the whole bug: a depth set on `joint_surface`
+reaches no other chart. Web suite 64 passing. No Python changes.
+
 ## 1.0.0a91
 
 **The exported surface gets its color, and stays a surface.** The author opened

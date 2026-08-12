@@ -23,7 +23,7 @@ import { api, ApiError } from './api.js';
 import { createEditor, emacsEnabledDefault } from './editor.js';
 import { mountExamples, mountPalette, loadExamples } from './examples.js';
 import { renderInfo } from './renderers.js';
-import { mountChart, mountChartDoc, notDrawable } from './charts/mount.js';
+import { fetchFailed, mountChart, mountChartDoc, notDrawable } from './charts/mount.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
 import { mountIrTable, irToGrid, docTruncated, atFullPrecision } from './tables.js';
 import { renderError, renderRateLimit } from './error-pane.js';
@@ -1606,12 +1606,16 @@ async function loadOverviewPlot() {
     if (!chart) { pane.appendChild(notDrawable()); return; }
     const host = el('div', { className: 'overview-plot' });
     pane.appendChild(host);
+    // The chart is a bonus and the tables carry the story, so a failure never
+    // throws out of here. It is still worth saying which failure it was: a
+    // request that did not land is not the library declining to publish.
+    let failed = false;
     try {
         overviewChart = await mountChart(host, { id: state.id, chart });
-    } catch { /* the chart is a bonus; the tables carry the story */ }
+    } catch { failed = true; }
     if (!overviewChart) {
         pane.removeChild(host);
-        pane.appendChild(notDrawable());
+        pane.appendChild(failed ? fetchFailed() : notDrawable());
     }
 }
 
@@ -1940,12 +1944,15 @@ async function loadReinsPlot() {
     empty(pane);
     const host = el('div', { className: 'overview-plot' });
     pane.appendChild(host);
+    // As in the Overview: a bonus, and the frames carry the numbers, but a
+    // fetch that failed says so in its own words.
+    let failed = false;
     try {
         reinsChart = await mountChart(host, { id: state.id, chart: 'reins' });
-    } catch { /* the chart is a bonus; the frames carry the numbers */ }
+    } catch { failed = true; }
     if (!reinsChart) {
         empty(pane);
-        pane.appendChild(notDrawable());
+        pane.appendChild(failed ? fetchFailed() : notDrawable());
     }
 }
 
