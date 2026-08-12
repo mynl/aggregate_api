@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>SpaceMouse probe</title>
+<style>
+    :root {
+        --ink: #212529; --mut: #6c757d; --line: #dee2e6;
+        --primary: #0d6efd; --good: #198754; --warn: #b45309;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0 auto; padding: 1.5rem 1.25rem 4rem; max-width: 60rem;
+        font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: var(--ink);
+    }
+    h1 { font-size: 1.4rem; margin: 0 0 .35rem; }
+    h2 { font-size: .95rem; margin: 1.6rem 0 .5rem; }
+    p.lede { color: var(--mut); max-width: 40rem; margin: 0 0 1rem; }
+    button {
+        font-size: .8rem; line-height: 1; padding: .45rem .8rem;
+        color: var(--ink); background: #fff; border: 1px solid var(--line);
+        border-radius: .375rem; cursor: pointer;
+    }
+    button:hover:not(:disabled) { color: var(--primary); border-color: var(--primary); }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    .row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+    .state { font-size: .8rem; color: var(--mut); }
+    .state b { color: var(--ink); }
+    .ok { color: var(--good); }
+    .bad { color: var(--warn); }
+    table { border-collapse: collapse; font-size: .8rem; width: 100%; }
+    th, td { text-align: left; padding: .25rem .5rem; border-bottom: 1px solid var(--line); }
+    th { font-weight: 600; color: var(--mut); font-size: .72rem;
+         text-transform: uppercase; letter-spacing: .04em; }
+    td.n, th.n { text-align: right; font-family: var(--mono); }
+    .hex { font-family: var(--mono); font-size: .78rem; }
+    .bar {
+        position: relative; height: 12px; background: #f1f3f5;
+        border: 1px solid var(--line); border-radius: 2px; overflow: hidden;
+    }
+    .bar i {
+        position: absolute; top: 0; bottom: 0; left: 50%;
+        background: var(--primary); display: block;
+    }
+    .bar u {
+        position: absolute; top: 0; bottom: 0; left: 50%; width: 1px;
+        background: var(--line);
+    }
+    .axes { display: grid; grid-template-columns: 3rem 1fr 5rem 8rem; gap: .3rem .6rem;
+            align-items: center; font-size: .8rem; max-width: 46rem; }
+    .axes span:first-child { font-family: var(--mono); }
+    pre {
+        font-family: var(--mono); font-size: .74rem; background: #f8f9fa;
+        border: 1px solid var(--line); border-radius: .375rem;
+        padding: .6rem .7rem; max-height: 16rem; overflow: auto; white-space: pre-wrap;
+    }
+    label { font-size: .8rem; color: var(--mut); }
+    input[type=number] { width: 5rem; font-size: .8rem; padding: .2rem .3rem; }
+</style>
+</head>
+<body>
+<h1>SpaceMouse probe</h1>
+<p class="lede">
+    The tuning and regression tool for <code>dev/plan-spacemouse.md</code>. It
+    opens the puck over WebHID and says exactly what it sends: which report IDs
+    arrive, how long each one is, what its bytes decode to under each candidate
+    layout, and how far the axes travel at full deflection. Nothing here touches
+    the app, and nothing happens until you press Connect: WebHID needs a user
+    gesture, by design.
+</p>
+
+<h2>Device</h2>
+<div class="row">
+    <button id="connect">Connect</button>
+    <button id="reattach">Reattach granted</button>
+    <button id="close" disabled>Close</button>
+    <span class="state" id="support"></span>
+</div>
+<div class="state" id="device" style="margin-top:.6rem">Nothing open.</div>
+<div id="collections"></div>
+
+<h2>Axes</h2>
+<div class="row" style="margin-bottom:.6rem">
+    <label>full deflection <input type="number" id="scale" value="350" min="1" step="10"></label>
+    <label><input type="checkbox" id="combined"> read report 1 as one combined 12 byte report</label>
+    <button id="zero">Reset observed range</button>
+</div>
+<div class="axes" id="axes"></div>
+<div class="state" id="buttons" style="margin-top:.7rem">buttons: none seen yet</div>
+
+<h2>Reports</h2>
+<table id="reports">
+    <thead><tr>
+        <th>id</th><th class="n">bytes</th><th class="n">count</th><th class="n">per second</th>
+        <th>last bytes</th><th>as int16, little endian</th>
+    </tr></thead>
+    <tbody></tbody>
+</table>
+
+<h2>Capture</h2>
+<div class="row">
+    <button id="capture">Record three seconds</button>
+    <button id="copy">Copy findings</button>
+    <span class="state" id="captureState"></span>
+</div>
+<pre id="out">Press Connect, move the puck, then Copy findings and paste the block into dev/plan-spacemouse.md.</pre>
+
+<h2>Log</h2>
+<pre id="log"></pre>
+
+<script>
+// Self contained by design: no imports, no bundle, no framework. It rides in
+// `public/`, so Vite copies it verbatim and the built app serves it at
+// /dev/spacemouse-probe.html without linking to it anywhere.
+
+const AXES = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz'];
+const VENDORS = [0x256f, 0x046d];   // 3Dconnexion, and Logitech for older units
+
+const state = {
+    device: null,
+    axes: { tx: 0, ty: 0, tz: 0, rx: 0, ry: 0, rz: 0 },
+    seen: {},                        // axis to [min, max] as raw counts
+    buttons: 0,
+    everButtons: 0,
+    reports: new Map(),              // report id to {bytes, count, last, first, at}
+    capture: null,
+};
+for (const a of AXES) state.seen[a] = [0, 0];
+
+const $ = (id) => document.getElementById(id);
+const hex = (view) => Array.from(new Uint8Array(view.buffer, view.byteOffset, view.byteLength))
+    .map((b) => b.toString(16).padStart(2, '0')).join(' ');
+
+function log(message) {
+    const at = new Date().toISOString().slice(11, 23);
+    $('log').textContent = `${at}  ${message}\n${$('log').textContent}`.slice(0, 8000);
+}
+
+// ---- the axis strip ----------------------------------------------------
+
+const bars = {};
+for (const axis of AXES) {
+    const name = document.createElement('span');
+    name.textContent = axis.toUpperCase();
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    const fill = document.createElement('i');
+    const mid = document.createElement('u');
+    bar.appendChild(mid);
+    bar.appendChild(fill);
+    const value = document.createElement('span');
+    value.className = 'hex';
+    const range = document.createElement('span');
+    range.className = 'state';
+    $('axes').append(name, bar, value, range);
+    bars[axis] = { fill, value, range };
+}
+
+function drawAxes() {
+    const scale = Number($('scale').value) || 350;
+    for (const axis of AXES) {
+        const raw = state.axes[axis];
+        const unit = Math.max(-1, Math.min(1, raw / scale));
+        const bar = bars[axis];
+        bar.fill.style.left = `${50 + Math.min(0, unit * 50)}%`;
+        bar.fill.style.width = `${Math.abs(unit) * 50}%`;
+        bar.value.textContent = `${raw} (${unit.toFixed(2)})`;
+        const [lo, hi] = state.seen[axis];
+        bar.range.textContent = `seen ${lo} to ${hi}`;
+    }
+    const bits = [];
+    for (let b = 0; b < 16; b += 1) if (state.buttons & (1 << b)) bits.push(b + 1);
+    $('buttons').textContent = state.everButtons
+        ? `buttons: ${bits.length ? bits.join(', ') : 'none down'}`
+            + `  (mask 0x${state.buttons.toString(16)}, ever seen`
+            + ` 0x${state.everButtons.toString(16)})`
+        : 'buttons: none seen yet';
+}
+
+function drawReports() {
+    const body = $('reports').querySelector('tbody');
+    body.textContent = '';
+    for (const [id, r] of [...state.reports.entries()].sort((a, b) => a[0] - b[0])) {
+        const seconds = Math.max(0.001, (r.at - r.first) / 1000);
+        const cells = [id, r.bytes, r.count, (r.count / seconds).toFixed(1),
+                       r.last, r.words.join(' ')];
+        const tr = document.createElement('tr');
+        cells.forEach((text, i) => {
+            const td = document.createElement('td');
+            if (i === 1 || i === 2 || i === 3) td.className = 'n';
+            if (i >= 4) td.className = 'hex';
+            td.textContent = String(text);
+            tr.appendChild(td);
+        });
+        body.appendChild(tr);
+    }
+}
+
+// ---- decoding ----------------------------------------------------------
+
+/**
+ * Signed 16 bit words, little endian, one per pair of bytes.
+ *
+ * Every candidate layout for this family is int16 triples, so the words are
+ * read once and assigned per layout below. Which assignment is right is the
+ * question this page exists to answer.
+ */
+function words(view) {
+    const out = [];
+    for (let i = 0; i + 1 < view.byteLength; i += 2) out.push(view.getInt16(i, true));
+    return out;
+}
+
+function apply(reportId, view) {
+    const w = words(view);
+    const combined = $('combined').checked;
+    if (reportId === 1 && (combined || w.length >= 6)) {
+        assign(['tx', 'ty', 'tz', 'rx', 'ry', 'rz'], w);
+    } else if (reportId === 1) {
+        assign(['tx', 'ty', 'tz'], w);
+    } else if (reportId === 2) {
+        assign(['rx', 'ry', 'rz'], w);
+    } else if (reportId === 3) {
+        // The button mask, however many bytes it takes.
+        let mask = 0;
+        for (let i = 0; i < view.byteLength; i += 1) mask |= view.getUint8(i) << (8 * i);
+        state.buttons = mask;
+        state.everButtons |= mask;
+    }
+    return w;
+}
+
+function assign(names, w) {
+    names.forEach((axis, i) => {
+        if (i >= w.length) return;
+        const v = w[i];
+        state.axes[axis] = v;
+        const seen = state.seen[axis];
+        if (v < seen[0]) seen[0] = v;
+        if (v > seen[1]) seen[1] = v;
+    });
+}
+
+// ---- the device --------------------------------------------------------
+
+function onReport(event) {
+    const { data, reportId } = event;
+    const w = apply(reportId, data);
+    const now = performance.now();
+    const seen = state.reports.get(reportId)
+        || { bytes: data.byteLength, count: 0, first: now, at: now, last: '', words: [] };
+    seen.bytes = data.byteLength;
+    seen.count += 1;
+    seen.at = now;
+    seen.last = hex(data);
+    seen.words = w;
+    state.reports.set(reportId, seen);
+    if (state.capture) state.capture.push({ reportId, hex: hex(data) });
+}
+
+function describe(device) {
+    const ids = `${device.vendorId.toString(16).padStart(4, '0')}:`
+        + `${device.productId.toString(16).padStart(4, '0')}`;
+    return `${device.productName || 'unnamed'}  (${ids})`;
+}
+
+/**
+ * The collections a device exposes, which is deliverable 2 of the probe phase.
+ *
+ * The receiver commonly enumerates more than one `HIDDevice`, and the one to
+ * open is the multi axis collection: usage page 0x01, usage 0x08. Printing the
+ * whole table is what makes that a reading rather than a guess.
+ */
+function showCollections(devices) {
+    const host = $('collections');
+    host.textContent = '';
+    if (!devices.length) return;
+    const table = document.createElement('table');
+    table.innerHTML = '<thead><tr><th>device</th><th class="n">usage page</th>'
+        + '<th class="n">usage</th><th>input report ids</th>'
+        + '<th>output ids</th><th>feature ids</th></tr></thead>';
+    const body = document.createElement('tbody');
+    for (const device of devices) {
+        for (const c of device.collections || []) {
+            const tr = document.createElement('tr');
+            const ids = (list) => (list || []).map((r) => r.reportId).join(', ') || 'none';
+            const cells = [describe(device),
+                           `0x${(c.usagePage || 0).toString(16)}`,
+                           `0x${(c.usage || 0).toString(16)}`,
+                           ids(c.inputReports), ids(c.outputReports), ids(c.featureReports)];
+            cells.forEach((text, i) => {
+                const td = document.createElement('td');
+                if (i === 1 || i === 2) td.className = 'n';
+                td.textContent = text;
+                tr.appendChild(td);
+            });
+            body.appendChild(tr);
+        }
+    }
+    table.appendChild(body);
+    host.appendChild(table);
+}
+
+async function open(device) {
+    if (!device) return;
+    if (state.device && state.device !== device) await close();
+    state.device = device;
+    if (!device.opened) await device.open();
+    device.addEventListener('inputreport', onReport);
+    $('device').innerHTML = `open: <b>${describe(device)}</b>`;
+    $('close').disabled = false;
+    log(`opened ${describe(device)}`);
+}
+
+async function close() {
+    const device = state.device;
+    state.device = null;
+    $('close').disabled = true;
+    $('device').textContent = 'Nothing open.';
+    if (!device) return;
+    device.removeEventListener('inputreport', onReport);
+    try { await device.close(); } catch (err) { log(`close failed: ${err.message}`); }
+    log(`closed ${describe(device)}`);
+}
+
+/** Every granted device whose vendor is one of ours, most likely first. */
+function preferred(devices) {
+    const ours = devices.filter((d) => VENDORS.includes(d.vendorId));
+    const multiAxis = ours.filter((d) => (d.collections || [])
+        .some((c) => c.usagePage === 0x01 && c.usage === 0x08));
+    return (multiAxis[0] || ours[0] || null);
+}
+
+$('connect').addEventListener('click', async () => {
+    try {
+        const devices = await navigator.hid.requestDevice({
+            filters: VENDORS.map((vendorId) => ({ vendorId })),
+        });
+        showCollections(devices);
+        if (!devices.length) { log('the chooser was dismissed with nothing picked'); return; }
+        devices.forEach((d) => log(`granted ${describe(d)}, `
+            + `${(d.collections || []).length} collections`));
+        await open(preferred(devices));
+    } catch (err) {
+        log(`requestDevice failed: ${err.message}`);
+    }
+});
+
+$('reattach').addEventListener('click', async () => {
+    const devices = await navigator.hid.getDevices();
+    showCollections(devices);
+    log(`${devices.length} already granted`);
+    await open(preferred(devices));
+});
+
+$('close').addEventListener('click', close);
+
+$('zero').addEventListener('click', () => {
+    for (const a of AXES) state.seen[a] = [0, 0];
+    state.reports.clear();
+});
+
+$('capture').addEventListener('click', () => {
+    state.capture = [];
+    $('captureState').textContent = 'recording, move the puck through every axis';
+    setTimeout(() => {
+        const rows = state.capture || [];
+        state.capture = null;
+        $('captureState').textContent = `${rows.length} reports captured`;
+        // Deduplicated by id and bytes: a rate controller sends the same frame
+        // sixty times a second and a wall of identical lines hides the shapes.
+        const seen = new Set();
+        const lines = [];
+        for (const r of rows) {
+            const key = `${r.reportId}|${r.hex}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            lines.push(`id ${r.reportId}: ${r.hex}`);
+        }
+        $('out').textContent = lines.slice(0, 80).join('\n')
+            || 'nothing arrived: is the puck asleep, or is another handle holding it?';
+    }, 3000);
+});
+
+$('copy').addEventListener('click', async () => {
+    const device = state.device;
+    const lines = ['### Probe findings, <date>', ''];
+    lines.push(device ? `Device: ${describe(device)}` : 'Device: none open');
+    if (device) {
+        for (const c of device.collections || []) {
+            lines.push(`  collection usage page 0x${(c.usagePage || 0).toString(16)}`
+                + ` usage 0x${(c.usage || 0).toString(16)}, input reports `
+                + `${(c.inputReports || []).map((r) => r.reportId).join(', ') || 'none'}`);
+        }
+    }
+    lines.push('', 'Reports:');
+    for (const [id, r] of [...state.reports.entries()].sort((a, b) => a[0] - b[0])) {
+        const seconds = Math.max(0.001, (r.at - r.first) / 1000);
+        lines.push(`  id ${id}: ${r.bytes} bytes, ${r.count} seen, `
+            + `${(r.count / seconds).toFixed(1)} per second, last ${r.last}`);
+    }
+    lines.push('', 'Axis travel, raw counts:');
+    for (const a of AXES) lines.push(`  ${a.toUpperCase()}: ${state.seen[a][0]} to ${state.seen[a][1]}`);
+    lines.push('', `Buttons ever seen: 0x${state.everButtons.toString(16)}`);
+    lines.push('', 'Notes: 3DxService running? double action in Chrome? sleep and wake?');
+    const text = lines.join('\n');
+    $('out').textContent = text;
+    try {
+        await navigator.clipboard.writeText(text);
+        $('captureState').textContent = 'findings copied to the clipboard';
+    } catch {
+        $('captureState').textContent = 'clipboard refused, the block is below';
+    }
+});
+
+// ---- lifecycle ---------------------------------------------------------
+
+if (!('hid' in navigator)) {
+    $('support').innerHTML = '<span class="bad">navigator.hid is absent: '
+        + 'this needs Chrome, Edge or another Chromium, over https or localhost.</span>';
+    for (const id of ['connect', 'reattach']) $(id).disabled = true;
+} else {
+    $('support').innerHTML = '<span class="ok">navigator.hid is present.</span>';
+    // Deliverable 4: whether sleep, wake and a receiver replug fire these, and
+    // with what timing. The log is timestamped for exactly that reading.
+    navigator.hid.addEventListener('connect', (e) => {
+        log(`connect event: ${describe(e.device)}`);
+    });
+    navigator.hid.addEventListener('disconnect', (e) => {
+        log(`disconnect event: ${describe(e.device)}`);
+        if (state.device === e.device) {
+            state.device = null;
+            $('device').textContent = 'Nothing open (the device went away).';
+            $('close').disabled = true;
+        }
+    });
+    log('ready. Nothing is open until you press Connect.');
+}
+
+setInterval(() => { drawAxes(); drawReports(); }, 100);
+</script>
+</body>
+</html>

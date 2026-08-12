@@ -4,6 +4,34 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a87
+
+**Phase 2 of `dev/plan-spacemouse.md`: the probe page.**
+`web/public/dev/spacemouse-probe.html`, self contained, no imports and no
+bundle: Vite copies `public/` verbatim, so it is served at
+`/dev/spacemouse-probe.html` by `npm run dev` and by the built app alike, and
+it is linked from nowhere. Nothing happens until Connect is pressed, which is
+WebHID's own rule and a good one.
+
+What it says: every granted device and every collection it exposes, with usage
+page, usage and report ids, which is how the multi axis collection is
+identified rather than guessed; a live table of report ids with their length,
+count, rate and last bytes, decoded as little endian int16 words; six axis bars
+with the raw counts and the travel observed so far, which is where the gains
+come from; the button mask, live and ever seen; and a timestamped log of
+`connect` and `disconnect`, which is the reading on sleep, wake and a receiver
+replug.
+
+Two buttons write findings out. `Record three seconds` collects raw reports and
+prints them deduplicated by id and bytes, in the form the phase 3 parser tests
+take, so confirming the layout is a fixture rather than a rewrite. `Copy
+findings` assembles the device, the reports, the axis travel and the button
+mask as a markdown block for the plan.
+
+**The findings themselves are open.** They need the puck, Chrome and the
+author's machine. Phase 3 therefore parses both documented candidate layouts,
+chosen by the report's own length, rather than waiting on the answer.
+
 ## 1.0.0a86
 
 **Phase 1 of `dev/plan-spacemouse.md`: the drawn surface leaves the app as a

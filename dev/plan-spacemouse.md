@@ -162,7 +162,7 @@ vertices, a 1.08 MB STL and a 652 kB OBJ. **Open question for the author,
 after the viewer**: whether a 21k triangle mesh is the right density or
 whether the export should offer the coarser grid the floor image uses.
 
-### Phase 2 `[SpaceMouse-Probe]`
+### Phase 2 `[SpaceMouse-Probe]` **page landed a87, findings open**
 
 A standalone probe page, `web/public/dev/spacemouse-probe.html`, self
 contained (inline script, no bundle imports), served by `npm run dev` or the
@@ -186,6 +186,38 @@ Deliverables, **recorded back into this plan as a findings block**:
    `connect` events fire around sleep, behavior when the receiver is
    unplugged and replugged.
 5. A feel note: sensible starting gains per axis at the observed ranges.
+
+**The page is at `/dev/spacemouse-probe.html`**, under `npm run dev` and in
+the built app alike (Vite copies `public/` verbatim, and the service worker
+takes navigations network first, so it never serves a stale copy). It is not
+linked from anywhere.
+
+#### Findings, to be recorded from the author's unit
+
+**OPEN.** The page is the deliverable this phase can produce without the
+hardware; the five readings below need the puck, Chrome and the author's
+machine, which is the one thing an agent cannot run. Press Connect, move every
+axis to its stop, press both buttons, then Copy findings and paste the block
+in here.
+
+1. Report IDs, lengths and layout: _pending_.
+2. Which `HIDDevice` entry is the multi axis collection (usage page `0x01`,
+   usage `0x08`): _pending_. The page prints every collection of every granted
+   device, and opens the multi axis one by preference.
+3. `3DxService` running versus stopped, and whether the KMJ emulator
+   double acts in Chrome: _pending_. If it does, the one-time configuration
+   that silences it is applied and written here.
+4. Sleep, wake and replug: _pending_. The log is timestamped, and the
+   `connect` and `disconnect` events are logged whether or not a device is
+   open, which is the reading.
+5. Starting gains at the observed ranges: _pending_.
+
+**Until they land, phase 3 parses both documented candidate layouts** rather
+than waiting: report 1 as three translations with report 2 as three rotations,
+or a single combined report 1 carrying all six, chosen by the report's own
+length. The probe's `Record three seconds` button writes deduplicated report
+lines in exactly the form the parser tests take, so confirming or correcting
+the layout is a test fixture rather than a rewrite.
 
 ### Phase 3 `[SpaceMouse-WebHID]`
 
