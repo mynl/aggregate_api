@@ -1,0 +1,277 @@
+# Plan [SpaceMouse-Surface]: a 6DOF puck for the joint surface, in the app and out of it
+
+> **Status: ready for execution, 2026-08-12.** Author has decided the WebHID
+> route and asked for the mesh export folded in. App repo only: no LIB work,
+> no server work, no wire change, so no symlink into `aggregate_REFACTOR`.
+> Layers on the `plan-3d-plot.md` surface (modules landed a73 to a76) and must
+> not disturb it: no echarts-gl version change, no change to the iPad path,
+> everything feature-detected and greyed elsewhere per the house rule.
+
+## Device facts (measured 2026-08-12, on the author's machine)
+
+- **3Dconnexion SpaceMouse Wireless via its USB receiver**: `HID\VID_256F&PID_C62E`,
+  enumerated as a HID multi-axis controller. Two physical buttons.
+- **3DxWare is installed and its service is live**: the `3Dconnexion KMJ
+  Emulator` virtual device is present, and the settings dump
+  (`C:/tmp/dm.3dxz`, read during planning) was written by `3DxService.exe`
+  version 17.9.14.3006 (3DxWare 10.9.14.745) with an update check dated today.
+- **The settings are factory defaults.** The dump contains only `Global.xml`,
+  `UserInfo.xml` and a version stamp: no per-application profiles, no custom
+  button or axis mappings. Nothing to migrate; the driver has never been
+  configured.
+
+**Driver stance: keep 3DxWare installed.** Their bundled viewer is the payoff
+of the export phase and needs the driver; uninstalling would kill that route.
+The known risk of coexistence is double action: raw HID reports flow to WebHID
+regardless (Windows HIDClass duplicates input reports to every open handle),
+but the driver may *also* interpret the motion through the KMJ emulator (its
+fallback in unsupported applications is scrolling and zooming the page). If
+the probe observes that, the fix is one-time and recorded in this plan when
+found: add Chrome to 3DxWare's application list with all mappings disabled, or
+stop `3DxService` for the session. Uninstalling is the last resort, not the
+recommendation.
+
+Expected report layout for the `0xC62E` family, to be **verified, not
+assumed**, in phase 2: report ID 1 carries `TX, TY, TZ` as three little-endian
+int16, report ID 2 carries `RX, RY, RZ`, report ID 3 carries the button
+bitmask; full deflection is roughly plus or minus 350. Some firmware sends a
+single 12-byte combined report under ID 1 instead. `requestDevice` may also
+surface more than one `HIDDevice` for the unit (the receiver exposes extra
+collections); the one to open is the multi-axis collection, usage page `0x01`
+usage `0x08`.
+
+## What the reader gets
+
+1. **Download buttons on the surface leaf**: `.stl` and `.obj` of the drawn
+   surface, loadable in 3Dconnexion's viewer (native, fully tuned 6DOF
+   navigation with zero integration code), Windows 3D Viewer, Blender, or a
+   slicer. This lands first: it is independent of everything else, it is an
+   afternoon of work, and it auditions how the loss surface feels under the
+   puck before the in-app tuning starts.
+2. **A SpaceMouse connect control on the surface leaf**: once granted, the
+   puck orbits, zooms and pans the live echarts-gl chart, composing with
+   mouse drag rather than fighting it, with feel settings that stick.
+
+## The echarts-gl camera contract (read before writing the integrator)
+
+`web/src/charts/surface.js` already documents the trap this plan must respect
+(`readCamera`, `surface.js:77-114`): echarts-gl writes the live camera back
+into the option's `viewControl` object as the reader drags, so re-sending a
+stored camera sixty times a second fights the reader and wins. The integrator
+therefore works read-modify-write **only while deflected**: each animation
+frame, read the live `viewControl` (the `readCamera` reach, cheap, no
+`getOption` clone), add this tick's deltas, and `setOption` a partial
+`{grid3D: {viewControl: {...}}}`. When every axis is inside the deadzone the
+loop goes fully idle and sends nothing, so mouse interaction is untouched and
+the existing damping feel is preserved. Interleaved mouse drags are picked up
+automatically because each tick starts from the live camera.
+
+Defaults to return to on reset (from `surfaceOverrides`, `surface.js:230-241`):
+`alpha 24, beta 40, distance 190`, center at the origin. Note `readCamera`
+currently preserves `alpha, beta, distance` only; this plan extends the
+read and the redraw path to carry `center` too, so a panned camera survives a
+control-driven rebuild the same way an orbited one already does.
+
+The device is a **rate controller**: deflection is velocity, not position.
+The mapping, all signs and assignments in one table in the module because
+conventions never survive contact with the hardware (phase 2 verifies):
+
+| puck axis | camera parameter |
+|---|---|
+| twist the cap (RZ) | `beta`, azimuth |
+| tilt toward or away (RX) | `alpha`, elevation |
+| slide toward or away (TY) | `distance`, zoom |
+| slide left or right (TX) | `center` pan, camera-relative horizontal |
+| lift or press (TZ) | `center` pan, camera-relative vertical |
+| roll left or right (RY) | unmapped: an orbit camera has no roll |
+| button 1 | reset camera to the chart's initial view |
+| button 2 | toggle `projection` perspective and orthographic |
+
+Camera-relative pan derives its basis from the live `alpha` and `beta` so the
+surface follows the hand in screen space rather than sliding along data axes.
+
+## Phases
+
+Each phase is one `[aNN]` version bump with a one-line commit and its
+CHANGELOG section, per house rules. Phase 1 is independent of the rest and
+deliberately first.
+
+### Phase 1 `[Surface-Mesh-Export]` **landed a86**
+
+`web/src/charts/mesh-export.js`, pure functions, no dependencies. Input: the
+same display-space grid arrays the renderer already builds (the
+`surface-geometry.js` output that feeds echarts-gl), which is the decision
+that matters here: the export bakes in the display normalization and the
+current z aspect, so the mesh is the box the reader sees, not a pancake in
+raw units (losses in the thousands against densities near zero). A height
+field triangulates as two triangles per grid cell; masked or NaN cells are
+skipped, leaving holes rather than inventing geometry; winding is consistent
+with normals up.
+
+Two writers:
+
+- **Binary STL**: 80-byte header naming the object and generator, uint32
+  triangle count, fifty bytes per triangle. Geometry only, and the format a
+  slicer wants.
+- **OBJ**: plain text vertices and faces. Geometry only in phase 1; the
+  viridis coloring is the stretch below.
+
+UI: two buttons on the surface leaf's existing controls row (the draw-style
+row), `Download .stl` and `Download .obj`, greyed with a why when no surface
+is drawn, per the never-hide rule. Blob download, filename
+`<object name>-surface.stl` / `.obj`. No wire change, no server change,
+consistent with the purist ruling: this is a rendering of the served
+document, exactly as the ECharts drawing is.
+
+Tests (`node --test`, beside `test/surface-geometry.test.js`): a golden 3 by 3
+grid asserting vertex and triangle counts, STL byte length `84 + 50n`, OBJ
+face indices in range and 1-based, a masked cell dropping exactly two
+triangles, and normals pointing up on a flat grid.
+
+**Stretch, author gate, not in this phase**: color. Either OBJ plus MTL with
+a small viridis strip texture and height-mapped UVs (portable), or a
+hand-written GLB with vertex colors (self-contained, ~150 lines). Decide
+after seeing the monochrome mesh in the 3Dconnexion viewer; record the
+verdict here.
+
+**Execution notes, a86.** As planned, with four things worth recording.
+
+1. The heights come from a named array in `surfaceOption`
+   (`chartdoc-to-echarts.js`) rather than from `surface-geometry.js`: the
+   drawn height is `height(density)`, which that module never computes,
+   because the log reading and the log floor are the option builder's. The
+   plan's "display-space grid arrays the renderer already builds" is that
+   array, now taken once and read twice.
+2. The z range written is the **snapped axis box** (`niceBox(zBase, zMax)`),
+   not the data extent, so the base drop and the round-numbered lid come
+   with the file and the relief stands at the height it stands at on screen.
+   The x and y extents are the data's: echarts widens a value axis to round
+   numbers and matching that would mean reading the live axis model for a
+   difference no viewer shows.
+3. The box dimensions are read back off the merged option's `grid3D`, so the
+   proportions are not a second constant that can drift from
+   `surfaceOverrides`.
+4. The buttons are greyed until the first surface is drawn, which needed one
+   new thing: the strip is built before the first render, so `syncTools`
+   rebuilds it the first time "is there a surface to save" changes. Every
+   other control reads the document, which is in hand before anything is
+   drawn.
+
+Measured on the `bvagg` fixture (94 by 117): 21,576 triangles, 10,998
+vertices, a 1.08 MB STL and a 652 kB OBJ. **Open question for the author,
+after the viewer**: whether a 21k triangle mesh is the right density or
+whether the export should offer the coarser grid the floor image uses.
+
+### Phase 2 `[SpaceMouse-Probe]`
+
+A standalone probe page, `web/public/dev/spacemouse-probe.html`, self
+contained (inline script, no bundle imports), served by `npm run dev` or the
+built app: a connect button (`navigator.hid.requestDevice` with filters for
+vendor `0x256F`, and `0x046D` for older units), a live hex dump of every
+input report with its report ID, decoded int16 readings per candidate layout,
+and live axis bars. It stays in the tree afterward as the tuning and
+regression tool; it is inert without a user gesture and invisible from the
+app's navigation.
+
+Deliverables, **recorded back into this plan as a findings block**:
+
+1. The exact report IDs, layout and axis ranges of this unit.
+2. Which `HIDDevice` entry among those the receiver exposes is the multi-axis
+   collection.
+3. Behavior with `3DxService` running versus stopped: whether reports flow to
+   WebHID in both states (expected yes) and whether the KMJ emulator causes
+   double action in Chrome (if yes, the one-time 3DxWare configuration that
+   silences it, applied and written down).
+4. Wireless behavior: sleep and wake timing, whether `disconnect` and
+   `connect` events fire around sleep, behavior when the receiver is
+   unplugged and replugged.
+5. A feel note: sensible starting gains per axis at the observed ranges.
+
+### Phase 3 `[SpaceMouse-WebHID]`
+
+Two modules, device and camera kept apart so neither knows the other's
+vocabulary:
+
+- **`web/src/spacemouse.js`**, the device layer, no chart knowledge. Feature
+  detection (`navigator.hid` present); silent reattach on load via
+  `getDevices()` so the one-time chooser grant persists across reloads;
+  connect flow behind a user gesture; `connect` / `disconnect` handlers for
+  sleep, wake and receiver replug; report parsing per the probe's findings
+  into a normalized state: six axes in [-1, 1] after deadzone, plus button
+  edge events. Exposes subscribe and unsubscribe, current state, and a
+  connected flag. Parsing is a pure function over `DataView`, unit tested
+  with synthetic reports captured by the probe.
+- **`web/src/charts/surface-nav.js`**, the integrator, beside `surface.js`.
+  Owns the mapping table above, the per-axis gains, the rAF loop with the
+  read-modify-write contract from the camera section, reset and projection
+  buttons, and the enable and disable lifecycle: it attaches to the live
+  chart instance when the surface leaf activates and detaches on
+  `disposePaneChart`, chart rebuild, or leaf switch, never holding a disposed
+  instance.
+
+UI: a `SpaceMouse` control on the surface controls row. Greyed with a why
+when `navigator.hid` is absent (Firefox, Safari, iPad) or no device is
+granted; a click runs the chooser; connected state shows plainly. The iPad
+acceptance path from `plan-3d-plot.md` is untouched by construction, since
+the control renders greyed and no gl behavior changes.
+
+Tests: parser and integrator math (deadzone, expo, camera-relative pan basis)
+as pure-function node tests; the browser loop is exercised through the probe
+page and manual acceptance.
+
+### Phase 4 `[SpaceMouse-Feel]`
+
+The difference between working and wanting to use it:
+
+- Per-axis gain, invert flags, deadzone width, and an expo curve (cubic
+  blend) so small deflections are precise and full deflection is fast.
+- A dominant-axis option (suppress all but the largest deflection) for
+  readers who find 6DOF soupy; off by default.
+- Sticky preferences under `aggapi.spacemouse` in localStorage, the existing
+  try-catch pattern for private mode.
+- A small settings affordance on the surface controls row (a popover or
+  details row) with the gains, inverts, deadzone, dominant-axis toggle, and a
+  reset-to-defaults.
+- A debug overlay (toggle in the settings affordance): live axis bars and the
+  current camera numbers, which is the tuning loop made visible. Off by
+  default.
+
+## Acceptance
+
+1. **Out of app**: an exported `.obj` and `.stl` of a `BivariateAggregate`
+   surface load in the 3Dconnexion viewer and in Windows 3D Viewer, at a
+   sensible aspect, and navigate under the puck natively. The STL slices in a
+   slicer without manifold complaints.
+2. **In app, Chrome**: grant once, reload, and the device reattaches without
+   a chooser. The puck orbits, zooms and pans the live surface at interactive
+   rate; mouse drag continues to work between and during sessions; releasing
+   the cap stops the camera dead (no drift); unplugging the receiver mid
+   session degrades silently and replug reattaches.
+3. **Everywhere else**: Firefox, Safari and the iPad show the greyed control
+   with a why, and nothing else changes. `npm run build` output size moves
+   only by the new modules; the echarts-gl pin is untouched.
+4. **Tests**: the node suite passes with the new parser, integrator and
+   writer tests; `check-nav.mjs` untouched (no new leaves, the controls ride
+   the existing surface leaf).
+
+## Out of scope, recorded so they are choices rather than gaps
+
+- The 3DxWare SDK and navlib route (their local WebSocket server driving our
+  camera): heavy integration, needs their driver protocol, and echarts-gl
+  exposes no full camera matrix API to hand it. The WebHID route replaces it.
+- Roll: an orbit camera cannot represent it; RY stays unmapped until some
+  future control wants it.
+- Driving 2D charts (dataZoom panning) and the DecL editor: fun, later, a
+  one-line subscribe if ever wanted.
+- Multi-device support and the Universal Receiver's multi-instrument mode:
+  this plan targets the author's `0xC62E` unit; the vendor filter admits
+  other 3Dconnexion products but their layouts are verified only when one
+  exists to test.
+- GLB and colored export: the stretch note in phase 1, author gated.
+
+## Cadence
+
+Four phases, four `[aNN]` bumps, one-line commits, CHANGELOG sections as the
+real descriptions, `dev/TODO.md` ticked as phases land. Probe findings are
+written into this plan at phase 2, and the plan moves to `dev/done/` when
+phase 4 lands.

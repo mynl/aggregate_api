@@ -2007,10 +2007,17 @@ function surfaceOption(doc, opts, view) {
     // different bucket sizes), so there is no single step describing both.
     // The decoded grid is row major over (y, x), so cell `(c, r)` sits at
     // `(coordX(c), coordY(r))`.
+    //
+    // The drawn heights are taken once, row major over `(y, x)` like the grid
+    // they come from, because two things read them: the vertex list below, and
+    // the mesh export, which writes the shape on screen rather than the
+    // densities behind it.
+    const heights = new Float64Array(g.nx * g.ny);
+    for (let k = 0; k < heights.length; k++) heights[k] = height(g.z[k]);
     const data = [];
     for (let c = 0; c < g.nx; c++) {
         for (let r = 0; r < g.ny; r++) {
-            data.push([coordX(g, c), coordY(g, r), height(g.z[r * g.nx + c])]);
+            data.push([coordX(g, c), coordY(g, r), heights[r * g.nx + c]]);
         }
     }
 
@@ -2180,6 +2187,11 @@ function surfaceOption(doc, opts, view) {
     // Grid lines on the three walls: chrome in the ordinary sense, but the
     // control that turns them off is the reader's, so the flag is read here.
     const wallGrid = { splitLine: { show: view.wallGrid !== false } };
+    // The drawn z axis, snapped so its ticks are round. Held in a name because
+    // the mesh export writes its file against the same two numbers: a mesh
+    // normalized on the data extent instead would stand taller than the
+    // surface the reader is looking at.
+    const zBox = niceBox(zBase, zMax);
     const base = {
         xAxis3D: { type: 'value', name: xName, ...wallGrid },
         yAxis3D: { type: 'value', name: yName, ...wallGrid },
@@ -2188,7 +2200,7 @@ function surfaceOption(doc, opts, view) {
         // the ticks between them are round too. The data still lives between
         // zMin and zMax.
         zAxis3D: {
-            type: 'value', name: zName, ...niceBox(zBase, zMax), ...wallGrid,
+            type: 'value', name: zName, ...zBox, ...wallGrid,
         },
         // Two maps, both semantic: color encodes the same variable as the
         // height, on the surface through its z and on the floor through the
@@ -2225,6 +2237,24 @@ function surfaceOption(doc, opts, view) {
     option.surfaceBox = {
         x: [coordX(g, 0), coordX(g, g.nx - 1)],
         y: [coordY(g, 0), coordY(g, g.ny - 1)],
+    };
+    // What the mesh writers need, and nothing they would have to reconstruct:
+    // the lattice, the drawn heights, the drawn z axis, and the box the grid3D
+    // is drawing in, read back off the merged option so the file cannot
+    // disagree with the picture about its own proportions.
+    const drawnBox = option.grid3D || {};
+    option.meshSource = {
+        name: doc.title || series.name || 'surface',
+        nx: g.nx, ny: g.ny,
+        x0: coordX(g, 0), dx: g.dx,
+        y0: coordY(g, 0), dy: g.dy,
+        z: heights,
+        zRange: [zBox.min, zBox.max],
+        box: {
+            width: drawnBox.boxWidth || 100,
+            depth: drawnBox.boxDepth || 100,
+            height: drawnBox.boxHeight || 62,
+        },
     };
     option.readings = readings(doc);
     return option;

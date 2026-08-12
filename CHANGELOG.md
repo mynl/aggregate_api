@@ -4,6 +4,53 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a86
+
+**Phase 1 of `dev/plan-spacemouse.md`: the drawn surface leaves the app as a
+mesh.** Two buttons on the relief's control row, `download .stl` and
+`download .obj`, save the joint surface on screen as a file. The payoff is out
+of the browser: 3Dconnexion's own viewer navigates an `.obj` with the puck
+natively, fully tuned, with no integration code at all, which is both the
+fastest route to the thing and the audition for the in-app version phases 2 to
+4 build.
+
+**`web/src/charts/mesh-export.js`, a leaf that imports nothing.** `surfaceMesh`
+triangulates a height field into two triangles per grid cell, `meshToStl`
+writes binary STL and `meshToObj` writes OBJ. Everything is arithmetic over a
+plain object, so `node --test` holds it down directly, the argument
+`surface-grid.js` and `surface-geometry.js` already make.
+
+**The input is the drawn heights, not the densities.** The export takes the
+array the renderer hands echarts-gl and the drawn z axis it is measured
+against, so the file carries the log reading and the box proportions the reader
+is looking at. In raw units it would be a pancake: losses run to the thousands
+against a density near zero, and no viewer rescales axes. `chartdoc-to-echarts`
+now takes the heights once into a named array and holds the snapped z axis in
+`zBox`, both of which the vertex list and the export read, and attaches
+`option.meshSource` carrying the lattice, the heights, that axis and the box
+dimensions read back off the merged option, so the file cannot disagree with
+the picture about its own proportions.
+
+Masked cells leave holes rather than inventing geometry, and only referenced
+vertices are written, so no file carries a NaN and every face index is in
+range. The mesh is therefore an open shell rather than a solid: a slicer will
+offer to close it, and closing it is a modeling decision this has no business
+making. Z is up in both writers.
+
+**The strip's handlers become one object.** `renderControls` had grown to six
+positional arguments, and a call site passing five arrows and a null says
+nothing about which is which. The export pair is also the first control whose
+state the *drawing* decides rather than the document, so the strip rebuilds
+once when the first surface lands: greyed with a why until then, per the
+never-hide rule.
+
+`web/test/mesh-export.test.js`: the triangle count a 3 by 3 grid implies, the
+box the mesh fills and a stated z range honored, `84 + 50n` STL bytes with
+normals up (including on a negative step, which flips the cross product and
+renders a surface inside out), OBJ faces one based and in range, a masked
+corner dropping exactly two triangles and its vertex, and a lattice too small
+to triangulate refused loudly.
+
 ## 1.0.0a85
 
 **Phase A3, the deletions the plan exists to make.** Nothing new works; a great

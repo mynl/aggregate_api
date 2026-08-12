@@ -25,6 +25,7 @@ import { el, empty } from '../utils/dom.js';
 import {
     chartdocToEcharts, panelLayout, readings, rungAt, surfaceCuts,
 } from './chartdoc-to-echarts.js';
+import { fileStem, meshToObj, meshToStl, surfaceMesh } from './mesh-export.js';
 import { loadSurface, readCamera, surfaceOverrides } from './surface.js';
 import { echarts, loadStyle } from './theme.js';
 
@@ -279,18 +280,6 @@ export function notDrawable(message) {
 // ---- controls ----------------------------------------------------------
 
 /**
- * The control strip for one document.
- *
- * A control appears if **any** axis or panel in the document declares its
- * reading, and acts on **every** one that does. So there is one log button
- * rather than one per panel, and a chart whose axes admit a single reading
- * shows no button at all rather than one that would do nothing.
- *
- * Centered under the panels, which is the only layout the strip needs now that
- * every control governs the whole chart by construction. It used to split
- * across the two panels, because a control belonged to one of them.
- */
-/**
  * A point in the box, as the three cut positions it implies.
  *
  * Each cut is held as a fraction of its own range, because a fraction survives
@@ -361,7 +350,39 @@ function windowBox(onWindow) {
     return wrap;
 }
 
-function renderControls(doc, onChange, onReset, onWindow, walking, onWalk) {
+/**
+ * The control strip, from the document and the handlers the mount holds.
+ *
+ * Parameters
+ * ----------
+ * doc : object
+ *     The chart document, read for which controls it declares.
+ * hooks : object
+ *     `onChange`, `onReset`, `walking` and `onWalk` are the strip's own
+ *     actions; `onWindow` is null on a document nobody can refetch (the
+ *     bounds envelope, drawn from a premium the reader typed); `onExport` and
+ *     `canExport` are the mesh writers, which act on the drawing rather than
+ *     on the document and so are greyed rather than absent while there is no
+ *     drawing to write.
+ *
+ * Notes
+ * -----
+ * A control appears if **any** axis or panel in the document declares its
+ * reading, and acts on **every** one that does. So there is one log button
+ * rather than one per panel, and a chart whose axes admit a single reading
+ * shows no button at all rather than one that would do nothing.
+ *
+ * Centered under the panels, which is the only layout the strip needs now that
+ * every control governs the whole chart by construction. It used to split
+ * across the two panels, because a control belonged to one of them.
+ *
+ * The handlers arrive as one object rather than as six positional arguments,
+ * which is what the list had grown to. A call site passing five arrows and a
+ * null says nothing about which is which, and the strip is still gaining
+ * controls.
+ */
+function renderControls(doc, hooks) {
+    const { onChange, onReset, onWindow, walking, onWalk, onExport, canExport } = hooks;
     const offered = readings(doc);
     const row = el('div', { className: 'exhibit-controls exhibit-controls-center' });
     const box = el('div', { className: 'exhibit-group' });
@@ -451,6 +472,30 @@ function renderControls(doc, onChange, onReset, onWindow, walking, onWalk) {
             title: 'Back to the default view, camera included',
             onClick: () => onReset && onReset(),
         }, 'reset'));
+        // The mesh, which is the drawing leaving the app: the surface on
+        // screen as a file that 3Dconnexion's viewer, Windows 3D Viewer,
+        // Blender or a slicer opens, and navigates with a 6DOF puck natively.
+        // No round trip and no wire change: this writes the same drawn heights
+        // ECharts is holding, which is what makes it a rendering of the served
+        // document rather than a second opinion about it.
+        for (const [ext, what] of [['stl', 'a slicer or Windows 3D Viewer'],
+                                   ['obj', 'a viewer or Blender']]) {
+            const can = canExport();
+            const btn = el('button', {
+                type: 'button',
+                className: 'exhibit-toggle',
+                title: can
+                    ? `Save the drawn surface as ${ext.toUpperCase()}, for `
+                        + `${what}. The file is the box on screen: the log `
+                        + 'reading and the proportions come with it, and masked '
+                        + 'cells are holes rather than invented geometry'
+                    : 'No surface is drawn yet, so there is nothing to save',
+                'aria-disabled': can ? 'false' : 'true',
+                onClick: () => onExport(ext),
+            }, `download .${ext}`);
+            btn.disabled = !can;
+            box.appendChild(btn);
+        }
         // The window, last, and a number rather than a toggle: it is the one
         // control that is a new request rather than a new drawing.
         if (onWindow) box.appendChild(windowBox(onWindow));
@@ -769,6 +814,63 @@ function draw(container, tools, host, doc, spec = null) {
         return option;
     }
 
+    /**
+     * Save the drawn surface as a mesh file.
+     *
+     * Parameters
+     * ----------
+     * format : str
+     *     'stl' or 'obj'.
+     *
+     * Notes
+     * -----
+     * Client side and off the option in hand, for the same reason the PNG
+     * download is: the reader is looking at a particular drawing, at a
+     * particular window, on the log reading or not, and a file fetched instead
+     * would be a second rendering that agrees with the picture only by luck.
+     *
+     * A lattice too small to triangulate raises rather than returning an empty
+     * mesh, and here that means the button does nothing. Saving a file with no
+     * triangles in it would be worse: it opens, and it is empty.
+     */
+    function saveMesh(format) {
+        const source = drawn && drawn.meshSource;
+        if (!source) return;
+        let mesh;
+        try {
+            mesh = surfaceMesh(source, { box: source.box, zRange: source.zRange });
+        } catch {
+            return;
+        }
+        const stem = fileStem(source.name);
+        const body = format === 'obj' ? meshToObj(mesh, stem) : meshToStl(mesh, stem);
+        const type = format === 'obj' ? 'text/plain' : 'model/stl';
+        const url = URL.createObjectURL(new Blob([body], { type }));
+        const link = el('a', { href: url, download: `${stem}-surface.${format}` });
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        // Revoked on the next turn of the loop rather than at once: the click
+        // has to have started the download before the URL stops resolving.
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+
+    /**
+     * Rebuild the strip when the answer to "is there a surface to save" moves.
+     *
+     * The strip is built before the first draw, so the export buttons are
+     * greyed when they are created and would stay greyed for the life of the
+     * chart. They read the drawing rather than the document, which is what
+     * makes them the one pair of controls whose state the render decides.
+     */
+    let exportable = false;
+    function syncTools() {
+        const can = Boolean(drawn && drawn.meshSource);
+        if (can === exportable) return;
+        exportable = can;
+        renderTools();
+    }
+
     function render() {
         if (renderer && renderer.chart) camera = readCamera(renderer.chart) || camera;
         const next = build();
@@ -796,6 +898,7 @@ function draw(container, tools, host, doc, spec = null) {
             renderer.chart.dispatchAction({ type: 'legendUnSelect', name });
         }
         writeReadout(null);
+        syncTools();
         return true;
     }
 
@@ -883,14 +986,15 @@ function draw(container, tools, host, doc, spec = null) {
 
     function renderTools() {
         empty(tools);
-        const strip = renderControls(
-            doc,
-            () => { if (ready) onToggle(); },
-            () => { if (ready) onReset(); },
-            spec ? () => { if (ready) refetch(); } : null,
-            () => walking,
-            () => setWalk(!walking),
-        );
+        const strip = renderControls(doc, {
+            onChange: () => { if (ready) onToggle(); },
+            onReset: () => { if (ready) onReset(); },
+            onWindow: spec ? () => { if (ready) refetch(); } : null,
+            walking: () => walking,
+            onWalk: () => setWalk(!walking),
+            onExport: (format) => saveMesh(format),
+            canExport: () => Boolean(drawn && drawn.meshSource),
+        });
         if (strip) tools.appendChild(strip);
     }
     renderTools();
