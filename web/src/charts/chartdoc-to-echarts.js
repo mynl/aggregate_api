@@ -281,7 +281,18 @@ export function readings(doc) {
     const panels = (doc && doc.panels) || [];
     const drawn = new Set(panels.flatMap((p) => [p.x_axis, p.y_axis, p.z_axis]));
     const kinds = new Set();
-    for (const p of panels) for (const k of p.kinds || [p.kind]) kinds.add(k);
+    for (const p of panels) {
+        for (const k of p.kinds || [p.kind]) kinds.add(k);
+        // A surface can also be read flat, because those are two drawings of
+        // one grid and this renderer has both. That is renderer capability
+        // rather than a claim about the document, which is why it is added
+        // here and not read off the panel: `realization` already honors a
+        // request for either, and without this the control strip offers no way
+        // to make one. Not the converse: a panel declared 'heatmap' gets no
+        // 3-D button, because `realization` would decline the request and a
+        // control that does nothing is worse than no control.
+        if (p.kind === 'surface') kinds.add('heatmap');
+    }
     return {
         log: axes.some((a) => drawn.has(a.id) && (a.scales || []).length > 1),
         fullRange: axes.some((a) => drawn.has(a.id) && Array.isArray(a.full_range)),
@@ -306,21 +317,20 @@ export function readings(doc) {
  *
  * An explicit request wins where the panel declares it and is ignored where it
  * does not, because silently drawing something else is the failure the
- * capability declaration exists to prevent. `_chartdoc._realization`, with one
- * difference: a grid panel with no declared alternative falls to 'heatmap'
- * here rather than to its declared 'surface'.
+ * capability declaration exists to prevent. `_chartdoc._realization`.
  *
- * That last is the author's interim ruling of 2026-08-09, while the final 3-D
- * design is worked out separately: the flat reading of the grid is what the
- * app draws for now. It is also the only realization a machine without WebGL
- * has. When `chart_joint_surface` declares `kinds` the ruling collapses into
- * the declaration and this special case goes.
+ * A grid panel used to fall to 'heatmap' with nothing requested, which was the
+ * author's interim ruling of 2026-08-09 while the 3-D design was unsettled.
+ * **Lifted 2026-08-12**, now that `dev/plan-3d-plot.md` is in flight: a panel
+ * the document declares as a surface draws as a surface. The flat reading
+ * stays reachable, because a heatmap is the same grid drawn the other way and
+ * the renderer can do both, and it is still what a machine without WebGL gets,
+ * by the fallback in `mount.js:build`.
  */
 function realization(panel, requested) {
     const kinds = panel.kinds || [panel.kind];
     if (requested && kinds.includes(requested)) return requested;
     if (requested === 'heatmap' && panel.kind === 'surface') return 'heatmap';
-    if (panel.kind === 'surface' && !requested) return 'heatmap';
     return panel.kind;
 }
 

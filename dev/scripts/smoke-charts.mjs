@@ -144,15 +144,27 @@ function checkReadings(label, doc, base) {
     if (offered.log) {
         const logged = at({ log: true });
         if (!checkDrawable(`${label} [log]`, doc, logged)) return;
-        const scales = (o) => [...o.xAxis, ...o.yAxis].filter((a) => a.type === 'log').length;
-        // A grid panel reads its z axis through the color ramp rather than
-        // through a drawn axis, so the log reading lands on the visualMap.
-        const ramps = (o) => JSON.stringify((o.visualMap || []).map((v) => [v.min, v.max]));
-        if (!(scales(logged) > scales(base)) && ramps(logged) === ramps(base)) {
+        // What the reading leaves behind, in whichever shape the option came
+        // back in. A 2-D option carries axis types and a visualMap array; a
+        // 3-D one carries neither, and reads the height through `zAxis3D` and
+        // a single visualMap. Written as one footprint rather than as two
+        // checks because the assertion is the same either way: switching the
+        // reading on has to change something.
+        const footprint = (o) => {
+            if (o.is3d) {
+                const vm = o.visualMap || {};
+                const z = o.zAxis3D || {};
+                return JSON.stringify([z.name, z.min, z.max, vm.min, vm.max]);
+            }
+            const axes = [...o.xAxis, ...o.yAxis];
+            return JSON.stringify([axes.filter((a) => a.type === 'log').length,
+                                   (o.visualMap || []).map((v) => [v.min, v.max])]);
+        };
+        if (footprint(logged) === footprint(base)) {
             fail(label, 'log is declared but nothing changed scale');
         }
     }
-    if (offered.fullRange) {
+    if (offered.fullRange && !base.is3d) {
         const full = at({ fullRange: true });
         if (!checkDrawable(`${label} [full]`, doc, full)) return;
         // Widening can move either end: a signed outcome axis reaches further

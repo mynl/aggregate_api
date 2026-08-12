@@ -1,8 +1,16 @@
 # plan-3d-plot: the bivariate joint surface, end to end
 
-Status: **draft for review**, 2026-08-11. Three parties have to agree before any
-of it is built: Steve, Agent for LIB and Agent for API/SPA.
-Nothing here is implemented outside the prototype.
+Status: **in execution**, updated 2026-08-12. Three parties: Steve, Agent for
+LIB and Agent for API/SPA. The LIB half is delivered (`aggregate` a257 and
+a258; see 5.0 for what landed and where the code departs from this document).
+The API and the first SPA leaves are in (`aggregate_api` a72 to a75).
+
+**Both open items were answered by the author 2026-08-12**, and both are
+recorded where they arose rather than in a list of their own. **4.2.1**: do not
+trade the full grid rule for the bytes, so the derived quantities stay the
+app's and LIB emits the whole reduced grid with `window` as the drawing range
+inside it. **5.1.1**: go with the representative point and `edge = "mid"`.
+Both are LIB edits; nothing on the app side is waiting on anything else.
 
 This is one document for `aggregate` (LIB), `aggregate_api` (API) and the SPA,
 because the thing being agreed is a wire format and a format described in two
@@ -271,6 +279,18 @@ tolerance is a transition courtesy with a stated end: it goes when phase two
 lands, and it is written down here rather than living as undeclared cleverness
 in the adapter.
 
+**Confirmed from the LIB side 2026-08-12, and the two agents reached it
+independently.** `z_block` is what a258 emits, for exactly the reason above,
+which was reasoned out in the emitter before this subsection was read. So the
+app's tolerance for an encoded object under `z` will never fire against this
+library, and it can go whenever the app wants rather than waiting for phase
+two. Worth keeping until then anyway: it costs a line and it covers a
+hand-written document, which 6 says the API may be built against.
+
+One field the reader rule does not need a fallback for: **the emitter always
+writes `edge`**, on every document, so 2.2's "absent means `mid`" governs
+documents from before a258 and nothing this library will emit again.
+
 Two riders. `Chart-IR` is provisional in the PEP 411 sense per the LIB
 changelog preamble, so a minor release may make this change without deprecation;
 the two phase route is a courtesy to the app, not an obligation. And
@@ -442,11 +462,38 @@ applies to the marginals, which must be the unit's own aggregate distribution
 and not the marginal of a truncated joint, and to `E[Y | X = x]`, which must not
 move when the window does.
 
+Two invariants hold this down and both are implemented in the prototype's `check-lab.js`:
+
+- kappa and `E[Y|X]`, compared across window depths at a fixed total in **data**
+  coordinates, agree
+- kappa cannot move by more than the total moved, since `k1 + k2 = s` and both
+  are increasing in `s`. Stated this way it survives `s` passing through zero,
+  which a relative tolerance does not, and one of the four surfaces has support
+  on both sides of zero
+
 #### 4.2.1 The whole grid and the payload budget cannot both be had, and the way out is upstream
 
-Raised by the API agent 2026-08-11, on starting this section. **Open: needs the
-author.** It changes what LIB emits, so it wants answering while that work is
-in flight rather than after.
+Raised by the API agent 2026-08-11, on starting this section.
+
+**Answered by the author 2026-08-12: do not trade the rule for the bytes.**
+"Don't worry about size budgets now, we'll figure that later if needed." So
+section 4.2 stands as written: the client holds the whole reduced grid and
+clips only the drawing, the derived quantities stay the app's, and the payload
+is whatever that costs. Section 3.3's numbers become a note on what to expect
+rather than a budget to fit, and the `detail` ceiling is the lever if it ever
+does bite.
+
+**What that asks of LIB, and it is the one open item on this section.** The
+emitter as it stands at a257 crops: `z = reduce(density[lo_x:hi_x,
+lo_y:hi_y])`, so the served grid *is* the window and there is nothing outside
+it to compute on. Under this ruling it should choose the block factor from the
+cropped extent, as 5.2 says, and then reduce the **whole** fine grid at that
+factor, leaving `window` as the drawing range inside a larger lattice. The
+fields do not change; `window.x` and `window.y` stop being the same numbers as
+the lattice bounds, which is what they were carried for.
+
+The rest of this section is the argument that was declined, kept because the
+reasoning is the part that stops it being reopened by accident.
 
 The rule above and section 3.3 are in tension, and the tension is arithmetic
 rather than emphasis. "Everything derived is computed on the whole grid" needs
@@ -496,14 +543,66 @@ and `moments` in the surface block, and 5.2 emits the display grid cropped to
 its window. The SPA work below waits on the answer, since the two designs put
 the same arithmetic in different repos.
 
-Two invariants hold this down and both are implemented in the prototype's `check-lab.js`:
+#### 4.2.1.1 The LIB view of that ask: cheap, exact, and it wants a third lattice
 
-- kappa and `E[Y|X]`, compared across window depths at a fixed total in **data**
-  coordinates, agree
-- kappa cannot move by more than the total moved, since `k1 + k2 = s` and both
-  are increasing in `s`. Stated this way it survives `s` passing through zero,
-  which a relative tolerance does not, and one of the four surfaces has support
-  on both sides of zero
+Answered by the LIB agent 2026-08-12. **Still the author's call**, because it
+is a new public surface on `BivariateAggregate` and not only a format
+addition. What follows is the cost, measured, so the decision is not taken on
+a guess.
+
+**Every one of the four curves is cheap and exact off the fine lattice.**
+Measured on `Indep`, a 64 x 16,384 joint, one million cells:
+
+- `marginals.x`, `marginals.y`: shipped at a258
+- **the total's density**: already reachable with existing machinery and no
+  new code at all, `bv.bivariate.pushforward(lambda a, b: a + b)`, which
+  returns a `GridDistribution` on the total's own lattice. That lattice is the
+  gcd of the two bucket sizes, `bs = 2` here against `(2, 4)` on the axes, and
+  it is long: 32,830 buckets
+- **`kappa_1(s)`**: three `np.bincount` calls over the raveled joint, one for
+  the mass and one per axis for the weighted sum. **31 ms** on that million
+  cell joint. `kappa_1 + kappa_2 == s` holds to **2.9e-11** and the total mass
+  comes back 1.0 to ten figures, so it is exact in the sense that matters
+- **`E[Y | X = x]`, `E[X | Y = y]`**: a row-wise and a column-wise weighted
+  mean, cheaper still
+
+So the objection to the ask is not cost. **The real cost is a third lattice in
+the format.** The total does not live on either axis: its step is
+`gcd(bs_x, bs_y)` and its length is `nx_fine + ny_fine`, so `total` and
+`kappa` need their own `t0`, `dt`, `nt` and their own reduction factor, which
+is a fourth thing for a consumer to get right and the one place a
+`total`-indexed array could silently be read against the x lattice. It should
+be one nested object carrying its own lattice, not two loose arrays:
+
+```
+total: {t0, dt, nt, k, density: [...], kappa: [...]}
+```
+
+with `kappa_2 = s - kappa_1` derived, as 4.2.1 says. `cond_mean` is different
+and simpler: `E[Y | X = x]` is indexed by the **x** display lattice and
+`E[X | Y = y]` by the y one, so those two go beside `marginals` and need no
+new lattice.
+
+**Reducing a conditional mean is not a block sum**, and that is worth writing
+down before anyone implements it: on the display lattice
+`E[Y | X in block]` is the ratio of two block sums, the weighted one over the
+mass one, not the block sum of the fine conditional means. The same holds for
+kappa. Getting that wrong gives a curve that looks right and is wrong wherever
+the mass is unevenly spread inside a block, which is everywhere near a mode.
+
+**The LIB recommendation is to take the ask**, on the purist ruling rather
+than on the arithmetic: kappa is meaning, and an app that integrates a
+truncated joint to get one is building a number the library owns. 4.2.1 makes
+that argument already and it is the right one. Two riders if it is taken:
+
+1. it is a **new bump**, not a patch to a258, and it is the natural moment to
+   also give `BivariateAggregate` a public kappa, because a number this
+   plan wants served is a number a notebook user wants too. A chart emitter
+   should not be the only route to it
+2. 4.2.1 also asks that 5.2 emit the display grid **cropped to its window**.
+   That is already what a258 does, and there is nothing to change: the emitted
+   grid is the crop, and `window` reports the box. The whole-grid reading was
+   never emitted, so no payload regression is waiting to be undone
 
 ### 4.3 The wall curves
 
@@ -591,6 +690,79 @@ dropping it leaves the last dot stuck where it was.
 Seven items. The first three are defects in shipped code, found by drawing the
 data and asking it questions.
 
+### 5.0 Status: the LIB half is delivered
+
+Written by the LIB agent 2026-08-12, folding in a review document that used to
+live at `aggregate_REFACTOR/dev/plan-3d-plot-LIB.md` and is now deleted, since
+a wire format described in two documents has two versions of itself within a
+month and that applies to the review as much as to the spec.
+
+**Verdict on the plan: in order, and executed.** All seven items landed, in
+two version bumps, deliberately split because 5.3 touches a different module
+and is a correction rather than a feature, which is what 6 says about it.
+
+| plan item | shipped in | where |
+|---|---|---|
+| 5.3 the density clip | `1.0.0a257` `[Joint-Density-Clip]` | `bivariate.py`, `tests/test_bivariate_density_clip.py` |
+| 5.1 block coordinates | `1.0.0a258` `[Joint-Surface-Contract]` | `charts/_emit_bivariate.py` |
+| 5.2 window before reduction | same | same |
+| 5.4 the 2.2 fields | same | `charts/ir.py`, `SurfaceData` |
+| 5.5 exact marginals and moments | same | same |
+| 5.6 encodings | same | `charts/ir.py`, `SurfaceZBlock`, `encode_z_block`, `decode_z_block` |
+| 5.7 the test programs | same | `tests/test_chart_surface_pilot.py` fixtures |
+
+`CHART_IR_VERSION` stays **2**, per 2.4 phase one. Suite: 3,964 fast tests and
+160 slow ones pass. One slow test fails and it is **not from this work**,
+verified by reverting onto the parent commit: `test_massive_bivariate.py::
+test_massive_pnl_one_sweep_ledger` raises `TypeError: Index must be a
+MultiIndex` on `stats_df.xs(level='Label')`, which looks like a253 or a254
+renaming PnL index levels without the massive ledger path following. Recorded
+here only so nobody re-derives it while reading this plan.
+
+**Measured at the defaults, on the four test surfaces.** The `kept` column
+lands inside the 99.96% to 99.998% this plan predicted in 5.2:
+
+| surface | fine grid | display | dx, dy | k | kept | f32 base64 | canonical JSON |
+|---|---|---|---|---|---|---|---|
+| Clayton | 512 x 2048 | 75 x 78 | 2, 4 | (2, 8) | 0.99980 | 30.5 kB | 160 kB |
+| Indep | 64 x 16384 | 31 x 116 | 2, 8 | (1, 2) | 0.99987 | 18.7 kB | 102 kB |
+| IndepFreq | 512 x 2048 | 82 x 108 | 32, 40 | (4, 4) | 0.99981 | 46.1 kB | 245 kB |
+| IndepSigned | 1024 x 1024 | 66 x 126 | 40, 32 | (8, 4) | 0.99964 | 43.3 kB | 231 kB |
+
+The JSON column is the **phase one dual emission** cost, roughly two thirds of
+it the nested `z` array that phase two deletes. `u16log12b64` halves the
+base64 column.
+
+The zero snap of 5.2 fires on Clayton's y (a window opening 13 above an origin
+the law reaches, 312 wide, and 13 is inside 5% of 312) and not on its x (8.0
+against a 7.5 threshold, a genuine near miss), not on either axis of
+`IndepSigned`, and not on `Indep`'s x, whose fine lattice was measured up from
+48 so there is no zero on it to reach. All four branches are exercised by the
+fixtures rather than by argument.
+
+**Two things this plan worried about were already free.** Question 6's seam is
+closed: `load_chart_doc` landed at a252, before this work started, so the
+reader learned the new fields in the same commit that emits them and the round
+trip is asserted over a real surface document, hash **and** object equality,
+including the nested `z_block`. And the oversight review's condition 4,
+"chartdoc baselines and fixtures regenerate", does not apply on the LIB side:
+there are two chartdoc baselines, `agg.png` and `distortion.png`, no bivariate
+one, and no fixture in `tests/data/` mentions the surface, because
+`BivariateAggregate.plot()` draws through `plots.plot_bivariate` and not
+through the chart IR. The only picture that moves is the served one.
+
+**Where the code departs from this document.** Five places, each noted in the
+section it belongs to rather than in a list here: 2.4.1 (the `z_block` name,
+reached independently and now agreed), 2.3 (the reserved zero code, already
+folded in above), 5.2 (`detail` as a ceiling, and the two numbers below),
+5.3 (the threshold), 5.5 (marginals are masses, not densities). Two of them
+are corrections to numbers this plan asserts and both are in 8.1.
+
+**One consequence worth stating plainly.** `window` now defaults to 4, so the
+served surface changes the moment the API syncs, whether or not the API passes
+the parameter. That is intended: the old picture spent 99.99% of `Indep`'s y
+axis on an empty tail. `window=0` is the escape hatch back to the whole grid.
+
 ### 5.1 The display grid labels each block with its last fine coordinate
 
 **Severity: high. This one makes numbers wrong.**
@@ -667,6 +839,79 @@ Recommend 1. Until it lands the app's `centerX` and `centerY` follow the
 declaration literally rather than second-guessing it, which is the purist rule
 and also means the bias is visible rather than quietly patched out.
 
+**Ruled by the author 2026-08-12: option 1, the representative point and
+`edge = "mid"`.** So the coordinate becomes the point the block's mass sits at,
+`edge` says `mid` and means it, and 8.1's criterion is
+`x0 - (k - 1) * bs / 2 == xs[0]`. Nothing changes app side: the decode already
+reads `mid` as "the coordinate is the center", and it is the declaration
+becoming true that fixes the mean, not any arithmetic here.
+
+#### 5.1.2 LIB accepts recommendation 1, and it is better than half a bucket
+
+Answered by the LIB agent 2026-08-12. **The finding is right**, it is right
+for the reason given, and the emitter has it wrong. Confirmed independently
+rather than taken on trust, on the same program: on
+`agg TestConv 5 claims sev lognorm 100 cv 0.5 poisson`, `bs = 0.125`, against
+a theoretical mean of 500, `xs @ p` reads 500.00000000, off by **-8.4e-9** of
+a bucket, and `(xs + bs/2) @ p` reads 500.06250000, off by **exactly +0.5**.
+The fine coordinate is the point the mass sits at. `edge = "left"` therefore
+invites a consumer to add `dx / 2` where the truth wanted
+`(k - 1) * bs / 2`, and the difference is `bs / 2` on every axis, which is the
+API agent's measured `+4.58, +3.86`.
+
+**Recommendation 1 is not merely exact in principle, it is second order where
+the present convention is first order.** A display cell covers fine atoms at
+`a, a + bs, ..., a + (k - 1) * bs`; their arithmetic mean, `a + (k - 1) * bs / 2`,
+is what option 1 emits. Reading the declared coordinate directly then carries
+no systematic error at all, only the deviation of the within-block mass from
+uniform, which is second order and averages out. Measured on `Indep` at the
+defaults, against the served `moments.mean`, on the y axis where `k = 2`:
+
+| the coordinate read as | mean | off by, display buckets |
+|---|---|---|
+| the declared coordinate, `edge = "left"` today | 21.648823 | -0.2649 |
+| a cell midpoint, which `edge = "left"` asks for | 25.648288 | +0.2350 |
+| **option 1**, `x0 + (k - 1) * bs / 2`, `edge = "mid"` | 23.648556 | **-0.0150** |
+
+Seventeen times better than either reading of the present convention, and the
+residual is the window truncation, which is the right sign and the right size.
+On the x axis, where `k = 1`, option 1 and the present convention coincide by
+construction and both read -0.0061, again all truncation.
+
+**And it makes the geometry coherent, which is the part that decides it.**
+Under the representative-point convention the fine cell at `x_i` really does
+cover `[x_i - bs/2, x_i + bs/2)`, so the display cell is the union of its `k`
+fine cells, its width is exactly `dx`, and its midpoint is exactly
+`a + (k - 1) * bs / 2`. So option 1 is not a fudge factor bolted onto a
+left-edge grid: it is the one convention under which coordinate, cell width
+and cell extent all agree, and `edge = "mid"` is then literally true rather
+than the closest available word. Option 2, a third vocabulary value, would
+make every consumer learn a word to describe a lattice that already has a
+correct name.
+
+**What it changes.** Small, and all in one place, `_emit_bivariate.py`:
+`display_x = xs[lo:hi:k] + (k - 1) * bs / 2`, `edge='mid'`, and the same for
+y. `x0` follows because it is the first display coordinate. Nothing else in
+the block moves: `dx`, `nx`, `bs`, `k`, `window`, `marginals`, `moments` and
+`z_block` are all unaffected, and `window.x` stays the outer edges, which
+become `[x0 - dx/2, x0 + (nx - 1) * dx + dx/2]` rather than
+`[x0, x0 + nx * dx]`. Three LIB tests move with it, and 8.1's phrasing becomes
+`x0 - (k - 1) * bs / 2 == xs[0]`, exactly as 5.1.1 says.
+
+One consequence to state rather than discover: the first display cell of a
+positive-support law then extends to `-bs/2`, which looks like support below
+zero and is not. It is the same thing the fine lattice already does, and the
+same thing `pcolormesh` already draws for any centered grid in this library,
+so it is consistent rather than new.
+
+**Not built.** This is a code change and wants the author's word, per the
+house rule; it is not folded into a257 or a258. It is perhaps twenty minutes
+including the test moves. Provenance note for anyone re-running the API
+agent's measurement: the document they decoded reports `aggregate a257` in its
+`generator`, but the emitter that produced it is a258. That is the standing
+version skew trap, the API records the version at editable install time, so
+the string lags the code across a bump.
+
 ### 5.2 The window must be chosen before the reduction
 
 **Severity: high. This is what makes `detail` meaningful.**
@@ -692,6 +937,49 @@ Three details the prototype had to get right and the library will too:
 
 Report `kept`, the fraction of mass inside the window, in the document. At
 `window=4` it runs 99.96% to 99.998% across the four test surfaces.
+
+#### 5.2.1 As built: two numbers here are wrong, and `detail` is a ceiling
+
+LIB agent, 2026-08-12. Landed at a258, with three departures from the text
+above.
+
+**The "232 cells" in 3.2 and 8.1 is the count of *fine* cells in that window,
+not display cells.** `Indep`'s y window is 928 wide on a `bs = 4` lattice, so
+232 fine cells; reducing them to a 128 target by a power of two gives **116**.
+The contrast this plan is drawing, 232-ish against 8, survives whole. Only the
+number moves, and the emitted axis is 116.
+
+**`detail` is honored as a ceiling, not as a target to straddle.** `k` is the
+smallest power of two with `ceil(span / k) <= detail`. The alternative reading,
+the smallest count not *below* the target, is what would have produced 232, and
+it would make `AGGAPI_MAX_CHART_DETAIL` mean nothing: a cap of 256 could then
+serve 511 cells. 3.1 already calls the ceiling a cap, so the two readings were
+in conflict and this is the one that keeps the cap honest.
+
+**One exception, found by testing rather than by design: `MIN_CELLS`
+outranks `detail`.** Powers of two do not reach every count. A 528-cell window
+reaches 33, 17, 9, 5, so `detail = 8` has nothing to land on and the choice is
+9 cells or 5, of which 5 is a grid with no spacing to interpolate on. The floor
+takes it. The overshoot is bounded by `2 * MIN_CELLS - 1`, fifteen cells,
+whatever `detail` was, so it cannot reach a payload budget, and it can only
+happen at a target within a factor of two of the floor. Every ordinary target
+is honored exactly. The API's `detail` floor of 16 in 3.1 already sits above
+the band where this can bite, so nothing is owed there; it is written down
+because a reader comparing `nx` against a requested `detail` of 8 would
+otherwise think the emitter had ignored them.
+
+The crop is **aligned outward to whole blocks** before reducing, which the
+bullet above implies and does not say: the fine axis length is a power of two
+by construction, so snapping both crop indices to multiples of `k` keeps the
+window inside the axis, keeps every block full, and makes the display lattice
+a sublattice of the fine one. Asserted for both axes of two surfaces at four
+window depths.
+
+The quantiles come off a `GridDistribution` rather than a hand-rolled
+`searchsorted`, which is the house rule for every quantile in the library, and
+the value is converted back to an index by exact lattice arithmetic rather
+than by a second search, since a grid distribution's quantile is by
+construction one of its own atoms.
 
 ### 5.3 The density clip keeps large negatives
 
@@ -741,6 +1029,35 @@ Related tidy: these two sites are the scattered de-fuzz idiom that
 `utilities.remove_fuzz` was written to replace. Route them through a shared
 helper that takes the density semantics rather than the frame semantics.
 
+#### 5.3.1 As built: the predicate as written, the threshold anchored to the mass
+
+LIB agent, 2026-08-12. Landed at a257. The diagnosis of the **predicate** is
+right and is implemented exactly as the code block above writes it, warning
+first and clipping second, through one shared `_clip_density_fuzz` at both
+sites. The related tidy is done and `utilities.remove_fuzz` is untouched,
+since its two-sidedness is correct for the frames it serves.
+
+**The diagnosis of the threshold is not, and the code uses
+`1e-15 * abs(density).sum()` rather than `eps * density.max()`.** A 2-D FFT
+accumulates round-off in proportion to the total it sums, not to the tallest
+cell it produces. On a joint normalized to one that is about `eps`, which is
+where the absolute `1e-15` has always sat and why it has always worked.
+Anchoring to the peak instead would clip at `2e-17` on a peaked grid, keeping
+dust, and at `2e-24` on a flat one, keeping everything, and it would move every
+existing number in the library for nothing. Anchoring to the sum does what this
+section actually wants, which is to hold the depth still, and reproduces
+today's behavior exactly on a normalized joint, which is why no number in the
+suite moved.
+
+The observation that the same `1e-15` "sits 12.4 decades below the peak on one
+grid and 10.7 on another" is true and is a fact about the peak rather than
+about the noise.
+
+8.1's phrasing follows: "the threshold is relative to the peak" becomes
+"relative to the mass the grid carries", and the test asserts it by clearing
+the same relative dust from a 16-cell and a 1,600-cell grid whose peaks differ
+by a hundred.
+
 ### 5.4 Emit the fields in section 2.2
 
 `x0/dx/nx`, `y0/dy/ny`, `edge`, `bs`, `k`, `window`, `deficit`, and `z_block`
@@ -760,10 +1077,57 @@ client a reference to check itself against. Both of this session's arithmetic
 bugs would have been visible on the first render if the document had carried the
 means.
 
+#### 5.5.1 As built: the marginals are masses, because everything else is
+
+LIB agent, 2026-08-12. The sentence above asks for "the exact marginal
+**densities**", and decision 1 in section 1 says the wire carries mass and the
+client divides once. Both cannot hold. **a258 emits masses per display cell**,
+for the marginals as for `z`, and the consumer divides by `dx` or `dy` when it
+wants a curve to stand beside a density.
+
+The reason is 4.1's own bug. Emitting one field as a density beside a `z` in
+mass is exactly how the prototype ended up with a marginal and a conditional
+differing by a factor of 1024. One rule for the whole document beats matching
+an adjective.
+
+Two properties of the emitted marginals worth knowing before reading them:
+
+- **each is cropped on its own axis only**, so `marginals.x` sums to slightly
+  *more* than `window.kept`. It is the object's real marginal over the x crop
+  and it includes the mass sitting outside the *y* crop. That is the point of
+  5.5, and it is asserted cell by cell in the suite,
+  `marginals.x >= z.sum(axis=0)` everywhere
+- **`moments` does not move with the window.** Asserted between `window=4` and
+  `window=0`, which is what makes it usable as the reference 4.2.1 and the
+  reader rule in 8.1 both lean on
+
+The consumer-facing rule that follows, and the one thing the SPA should take
+from this subsection: **do not integrate the picture to get a mean.** The
+document carries the mean. If the consumer's own arithmetic disagrees with
+`moments` by more than a display bucket, the fault is on the consumer's side.
+
 ### 5.6 Encoding support
 
 Produce `f32b64` and `u16log12b64` from the same code path, selected by the
 request. Keep `json` for one release.
+
+As built at a258: `f32b64`, `f64b64` and `u16log12b64` all come out of
+`encode_z_block`, and `decode_z_block` sits beside it so the round trip is
+checkable in one place rather than only against a consumer written in another
+language. Everything is written **little-endian explicitly**, so the bytes do
+not depend on the machine and `canonical_json` stays byte deterministic, which
+is what the ETag rests on.
+
+`encoding='json'` emits **no `z_block` at all** and leaves the plain arrays as
+the payload, which is what "the current behavior, kept for one release as a
+fallback" means once `z_block` has its own key: a `json` block would be a
+third copy of the same grid in one document. So the `json` row of 2.3's table
+is a statement about the whole surface rather than about a `dtype` a block can
+declare, and `SURFACE_DTYPES` in the library is the three encoded forms.
+
+Measured round trip error on a real document, worst case over live cells:
+`f32b64` 5.9e-8 against the 1e-7 claimed, `u16log12b64` **2.108e-4** against
+the 2.1e-4 claimed, and an exact zero decodes exactly under every dtype.
 
 ### 5.7 A note on the test programs
 
@@ -782,6 +1146,15 @@ A conditional that slides as the cut sweeps is correct on three of them and
 would be a bug on the fourth. Any test that asserts independence must use
 `Indep`.
 
+As built at a258: **two of the four moved**, `Indep` and `IndepSigned`, as
+module-scoped fixtures in `tests/test_chart_surface_pilot.py`. Those two carry
+everything the LIB suite needs, the pathological bucket ratio and the only
+signed support, and the note above rides on the `indep` fixture's docstring
+where anyone writing an independence test will hit it before they write the
+assertion. `Clayton` and `IndepFreq` stayed in the prototype: they exercise
+nothing the two do not, and each costs the suite a three second bivariate
+build.
+
 ---
 
 ## 6. Order of work
@@ -792,6 +1165,12 @@ Digging from both ends, in the style this project already uses.
 are independent of everything and can land immediately; they are corrections,
 not features. 5.2 and 5.4 are the format and should land together, since 5.4
 declares what 5.2 chose. 5.5 and 5.6 follow.
+
+**Done**, a257 and a258, and it ran in that order: 5.3 alone, then 5.1, 5.2,
+5.4, 5.5, 5.6 and 5.7 together, because 5.1 and 5.2 are the same function and
+5.4 declares what they chose. See 5.0. Two LIB items are now queued behind an
+author decision rather than behind each other: 5.1.2, accepted and small, and
+4.2.1.1, which is the larger of the two and is what the SPA is waiting on.
 
 **API next, and it is small.** Three query parameters, validation, cache key,
 ETag. Then confirm the transport negotiates zstd and is not double compressing.
@@ -921,6 +1300,26 @@ at 0 rather than 508. Add a LIB test asserting that for a positive support
 aggregate the display grid's first coordinate is its fine lattice's first
 coordinate, at three reduction factors.
 
+*Amended by the LIB agent 2026-08-12: **"every row reads 0.000 buckets" is not
+reachable and the criterion has to be restated.** A display cell holds `k`
+atoms, so labeling it with any single coordinate throws away their spread, and
+only the sign and size of the residual can change: the old right-edge
+convention was up to a whole bucket high, worst measured +0.95, and left edge
+is between -1 and 0, measured -0.006 to -0.45. Part of even that is the window
+rather than the labeling, which the probe's table conflates. The mean can only
+be recovered exactly by the block's mass-weighted centroid, which is not a
+lattice at all and which 2.2.1 rightly forbids. What was actually wrong is
+fixed and is the part that made numbers wrong rather than approximate:
+`Indep`'s y support started at 508 on a law supported from 0 and now starts at
+0, and the error no longer grows with the block factor. The three criteria the
+suite asserts instead: (1) the first display coordinate is the fine lattice's
+first coordinate, at three reduction factors; (2) the display-grid mean sits
+in `(-1, 0]` display buckets of the fine mean, never above it; (3) a consumer
+wanting a mean reads `moments`, which is exact and is in the document for this
+reason. **5.1.2 supersedes (1) and (2)** if recommendation 1 is taken: the
+first becomes `x0 - (k - 1) * bs / 2 == xs[0]` and the second tightens to
+second order, measured -0.015 buckets against -0.265 today.*
+
 **LIB 5.2, window before reduction.** Done when `build_chart_doc(obj, name,
 window=4, detail=128)` on `Indep` returns a y axis of about 232 cells rather
 than 8, and when the emitted `window.kept` matches an independently computed sum
@@ -928,16 +1327,37 @@ over the crop to 1e-9. Plus: the low edge snaps to zero on positive support, doe
 **not** snap on `IndepSigned`, and no axis comes back under 8 cells at any depth
 from 1 to 12.
 
+*Amended 2026-08-12: **116 cells, not 232.** 232 is the fine cell count in that
+window and reducing it to a 128 ceiling gives 116; see 5.2.1. Everything else
+in this criterion holds as written and is asserted, `kept` to 1e-9 included, at
+every depth from 1 to 12 on both fixtures.*
+
 **LIB 5.3, density clip.** Done when a joint carrying an injected large negative
 raises the warning and is clipped, when the threshold is relative to the peak,
 and when `deficit` goes negative in that case. Test by injecting rather than by
 hoping: at 1024², 2048² and 4096² nothing currently trips it, so a test that
 waits for nature will pass forever without testing anything.
 
+*Amended 2026-08-12: **relative to the mass the grid carries, not to the
+peak**; see 5.3.1 for why the peak is the wrong anchor. Asserted by clearing
+the same relative dust from a 16-cell and a 1,600-cell grid whose peaks differ
+by a hundred. The injection discipline is exactly right and is what the five
+tests do.*
+
 **LIB 5.4 to 5.6, the format.** Done when a document round trips: emit, parse
 with the SPA's decoder, and recover `z` to within the declared error of the
 dtype. `f32b64` to 1e-7, `u16log12b64` to 2.1e-4. Plus `canonical_json` stays
 byte deterministic across two builds of the same object.
+
+*Met 2026-08-12, on the LIB side of it: measured 5.9e-8 and 2.108e-4, exact
+zeros exact under every dtype, and byte determinism asserted across two builds.
+Two additions the criterion did not ask for and should have. The document also
+round trips through **`load_chart_doc`**, which is the library's own reader and
+the one place a wire document's defaults and `ir_version` are negotiated:
+`doc_hash(load_chart_doc(canonical_dict(doc))) == doc.hash`, and object
+equality too, over the nested `z_block`. And the **encoded and plain forms are
+asserted to agree**, which is the thing phase one can silently break: two
+payloads for one grid is two chances to be right.*
 
 **API 3.1, the parameters.** Done when the three appear in the OpenAPI schema
 with their bounds, when out of range values give 422 rather than being clamped

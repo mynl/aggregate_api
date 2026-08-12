@@ -4,6 +4,48 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a76
+
+**The joint surface draws in relief again, and there is a control for the flat
+reading.** Reported from the running app on a258 and a75: only the heatmap
+appeared. Nothing in the a72 to a75 work caused it. Two pieces of standing
+behavior did, and together they left no way out.
+
+`realization` fell a surface panel to `heatmap` whenever the reader had not
+asked for something, which was the author's **interim ruling of 2026-08-09**,
+taken while the 3-D design was unsettled. And the realization control only
+appears for kinds the *document* declares, so with `chart_joint_surface`
+declaring one kind there were no 3D and flat buttons at all. Flat by default,
+and nothing on screen to change it.
+
+The interim ruling is **lifted**, now that `dev/plan-3d-plot.md` is in flight:
+a panel the document declares as a surface draws as a surface. The flat reading
+is offered beside it, as **renderer capability rather than a document claim**,
+which is the honest place for it: a heatmap and a relief are two drawings of
+one z grid and this renderer has both. Not the converse, so a panel declared
+`heatmap` gets no 3-D button, because `realization` would decline the request
+and a control that does nothing is worse than no control.
+
+One real bug behind the two: **a 3-D default has to ask for its own renderer.**
+`echarts-gl` is a lazy chunk and `build()` correctly falls back to the flat
+reading while it is missing, but the only thing that ever called `loadSurface`
+was a click on the control that was not being offered. So the mount now asks
+for the chunk when the default realization is 3-D, and redraws when it lands.
+
+The chart smoke test learned the 3-D shape. Its log check read `option.xAxis`,
+which a `grid3D` option does not carry, so it threw the moment the default
+changed. It compares a footprint per shape now, `zAxis3D` and the single
+visualMap for the 3-D form, and asserts the same thing either way: switching a
+declared reading on has to change something.
+
+**Both plan questions ruled, 2026-08-12.** Section 4.2.1: do not trade the full
+grid rule for the payload, so the derived quantities stay the app's and the
+library emits the whole reduced grid with `window` as the drawing range inside
+it. Section 5.1.1: the representative point and `edge = "mid"`, so the
+coordinate becomes the point a block's mass sits at and the declaration becomes
+true. Both are library edits; the app's decode already reads `mid` correctly
+and nothing here changes for either.
+
 ## 1.0.0a75
 
 **The library's emitter landed, the two halves were read against each other,

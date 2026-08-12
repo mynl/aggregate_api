@@ -238,13 +238,19 @@ function renderControls(doc, onChange) {
 /**
  * The realization a document takes when the reader has not picked one.
  *
- * A grid panel falls to the flat reading. That is the author's interim ruling
- * of 2026-08-09, while the final 3-D design is settled separately, and it is
- * also the only realization a machine without WebGL has.
+ * What the document declares. A surface draws in relief, which is the reading
+ * it exists for; the flat one is a click away and is what a machine without
+ * WebGL falls back to.
+ *
+ * This returned 'heatmap' from 2026-08-09, the author's interim ruling while
+ * the 3-D design was unsettled, and lifted 2026-08-12. Kept as a function
+ * rather than folded away because the pressed state of the realization control
+ * reads it, and because "what a document draws as by default" is a question
+ * worth having one answer to.
  */
 function defaultKind(doc) {
     const panels = (doc && doc.panels) || [];
-    return panels.some((p) => p.kind === 'surface') ? 'heatmap' : null;
+    return panels.some((p) => p.kind === 'surface') ? 'surface' : null;
 }
 
 // ---- mount -------------------------------------------------------------
@@ -549,13 +555,20 @@ function draw(container, tools, host, doc) {
     // Turning a 3-D realization on for the first time has to fetch its
     // renderer, so a toggle is not always a synchronous redraw.
     async function onToggle() {
-        if (view.kind === 'surface' && !surfaceReady) {
+        if ((view.kind || defaultKind(doc)) === 'surface' && !surfaceReady) {
             if (await loadSurface()) surfaceReady = true;
         }
         render();
     }
 
     ready = true;
+
+    // A 3-D default has to ask for its own renderer. `build()` already falls
+    // back to the flat reading while the lazy chunk is missing, so the first
+    // draw of a surface is flat and then correct; what this adds is the asking,
+    // which nothing did while the only path to `loadSurface` was a click on a
+    // control that was not being offered.
+    if (!surfaceReady && (view.kind || defaultKind(doc)) === 'surface') onToggle();
 
     // Rebuild on resize, always: every panel is sized from the host width so it
     // can hold the house aspect, which a bare `resize()` would not do.
