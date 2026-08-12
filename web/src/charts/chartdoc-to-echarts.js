@@ -225,14 +225,33 @@ function axisScale(axis, log) {
 }
 
 /**
- * The window this axis is drawn in: its suggestion, or its full extent.
+ * The window this axis is drawn in: its suggestion, or everything it reaches.
  *
- * An axis offers the zoom-out only by carrying `full_range`; where it does
- * not, the switch finds nothing to act on and the suggestion stands, because
- * a chart whose window is its meaning has no other reading.
+ * Released two ways, and both are the author's round 7 item 7. The **declared**
+ * extent is used where the document gives one. Where it does not, the drawn
+ * data's own extent is, which is what makes one button mean full x *and* full
+ * y: the library declares `full_range` on an outcome axis and not on the
+ * ordinate over it, on the reasoning that zero to the peak already is the whole
+ * extent of a density. It is not, once a severity atom is in the picture. The
+ * agg chart's ordinate stops at the *aggregate* peak whenever the severity peak
+ * is more than twice it (`_emit_aggregate.ordinate_top`), so a book with a mass
+ * draws a spike with its head cut off and no control could put it back.
+ *
+ * Reading the data rather than second-guessing the library is what keeps this
+ * inside the purist rule: how much of what was served to show is a question
+ * about drawing, and the numbers being released are the ones already in hand.
+ *
+ * @param {object} axis a ChartAxis.
+ * @param {boolean} full release the window.
+ * @param {Array<Array<number>>} [drawn] the coordinate arrays on this axis, the
+ *   fallback when the axis declares no full extent.
  */
-function axisWindow(axis, full) {
-    if (full && Array.isArray(axis.full_range)) return axis.full_range;
+function axisWindow(axis, full, drawn = null) {
+    if (full) {
+        if (Array.isArray(axis.full_range)) return axis.full_range;
+        const seen = drawn ? extentOf(drawn) : null;
+        if (seen) return seen;
+    }
     return Array.isArray(axis.suggested_range) ? axis.suggested_range : null;
 }
 
@@ -650,18 +669,23 @@ function axisOption(axis, gridIndex, { scale, window, floor, formatter, nameGap 
 }
 
 /**
- * An exponential with a mantissa digit only where one is needed.
+ * An exponential, always with its mantissa place: `1.0e-4`, `1.5e-4`.
  *
- * `1e-4` and `1.5e-4`, never `1.0e-4`, and never `1e-4` twice for two different
- * ticks. One significant figure was enough while the ticks fell wherever
- * ECharts put them; it is not enough on a lattice stepping by half a decade,
- * where a 5e-5 interval prints 1e-4, 1.5e-4, 2e-4 and one digit collapses the
- * middle one onto a neighbor. That showed up as a density axis reading
- * `0, 5e-5, 1e-4, 1e-4, 2e-4, 3e-4`, two pairs of identical labels on six
- * distinct gridlines.
+ * **One decimal, kept even when it is a zero.** The author's round 7 item 10,
+ * "at least 1dp". a62 stripped a trailing `.0`, on the reading that `1e-4` is
+ * the tidier label, and tidier is what it is on its own. In a row of ticks it is
+ * the one label written in a different register: a lattice stepping by half a
+ * decade reads `1e-4, 1.5e-4, 2e-4, 2.5e-4`, and every second label loses a
+ * place the others keep, which is what makes the axis look like it is repeating
+ * itself even where the numbers differ.
+ *
+ * It does not settle every repeat. Two ticks inside one mantissa place, which a
+ * window narrow enough asks for, print the same label at one decimal and would
+ * need a second; the formatter cannot see the interval it is labeling, so the
+ * fix for that lives where the window is decided rather than here.
  */
 function expLabel(v) {
-    return Number(v).toExponential(1).replace(/\.0e/, 'e');
+    return Number(v).toExponential(1);
 }
 
 /** The tick formatter for an axis, by what it measures. */
@@ -748,16 +772,25 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
     const allX = drawn.map((d) => d.x);
     const allY = drawn.map((d) => d.y);
 
-    const declaredX = axisWindow(xAxis, view.fullRange);
+    const xScale = axisScale(xAxis, view.log);
+    const yScale = axisScale(yAxis, view.log);
+    // **A log axis is never capped.** Room to see everything is the whole point
+    // of asking for one, so an axis that goes log releases its window on the way
+    // there rather than drawing a decade ladder inside the linear reading's
+    // crop. The author's round 7 item 7, whose case is a severity spike or a
+    // mass: log is exactly the reading that has room for a spike three decades
+    // over the aggregate peak, and it was the reading that cut it off.
+    const releaseX = view.fullRange || xScale === 'log';
+    const releaseY = view.fullRange || yScale === 'log';
+
+    const declaredX = axisWindow(xAxis, releaseX, allX);
     let xWindow = declaredX || extentOf(allX) || [0, 1];
     if (xMap && !declaredX) xWindow = [xWindow[0], Math.min(xWindow[1], MAX_RETURN_PERIOD)];
     // A paired reading re-slices the panel: the deep tail a return-period axis
     // exists to show sits far outside the window computed for the probability
     // reading, so the companion axis follows the data instead.
-    let yWindow = yMap ? null : axisWindow(yAxis, view.fullRange);
+    let yWindow = yMap ? null : axisWindow(yAxis, releaseY, allY);
     let xOnly = xMap ? null : xWindow;
-    const xScale = axisScale(xAxis, view.log);
-    const yScale = axisScale(yAxis, view.log);
     if (panel.aspect === 'equal' && xScale === yScale) {
         xOnly = squareWindow(xOnly, yWindow, allX, allY);
         yWindow = xOnly;
@@ -1216,8 +1249,14 @@ function heatmapPanel(doc, panel, i, axes, view, box) {
             // one grid and a reader flipping between them is entitled to see
             // one color mean one height.
             inRange: { color: VIRIDIS },
-            formatter: (v) => (useLog ? `1e${Math.round(v)}`
-                : (v ? Number(v).toExponential(1) : '0')),
+            // The bar is labeled in the units it colors, not in the exponent it
+            // is held in. `1e${Math.round(v)}` rounded the height to a whole
+            // decade, so a bar running from 10^-8.2 to 10^-8.0 printed `1e-8`
+            // at both ends, one bar with the same number written twice on it.
+            // Raising the height and formatting it says which end is which and
+            // is the same reading the tooltip gives a cell.
+            formatter: (v) => (useLog ? expLabel(10 ** Number(v))
+                : (v ? expLabel(v) : '0')),
         },
         tooltip: {
             trigger: 'item',

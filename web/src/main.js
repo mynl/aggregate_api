@@ -95,7 +95,14 @@ const editor = createEditor($('editor-host'), {
     onExampleNext: () => exampleStep('next'),
 });
 
-editor.setText('agg Dice dfreq [3] dsev [1:6]\n');
+// The program the page lands on, in `format_program`'s own spread layout so it
+// needs no round trip to look right. It mirrors `DiceOfDice` in the library's
+// `library.agg`, which is where the note and the tags live; this is a copy of
+// three lines of DecL rather than a fetch, because the whole point of it is
+// that the first paint owes nothing to the network. See `loadLanding`.
+const LANDING_DECL = 'agg DiceOfDice\n  dfreq [1 2 3 4 5 6]\n  dsev [1 2 3 4 5 6]\n';
+
+editor.setText(LANDING_DECL);
 editor.focus();
 
 // Reset the history cursor whenever the user types something new, so Ctrl-↑
@@ -1442,6 +1449,45 @@ document.addEventListener('keydown', (ev) => {
     toggleTableView();
 }, true);       // capture: see above, the editor must never see this
 
+/** Flip between the two business readings, the pair being only two. */
+function togglePerspective() {
+    setPerspective(_perspective === 'raw' ? 'insurer' : 'raw');
+}
+
+/**
+ * Ctrl+Shift+V: flip the perspective, for the reason Ctrl+Shift+U flips the
+ * table view.
+ *
+ * The second preference you change while reading rather than while deciding:
+ * the raw frame and the business reading of one exhibit are the same numbers
+ * asked two questions, and comparing them means going back and forth. The
+ * header strip beside the versions says which one you are on, so the keystroke
+ * and its readout arrived together.
+ *
+ * **Not taken inside an editable.** V is the one letter the browser itself
+ * claims with Ctrl+Shift: it is paste-as-plain-text, and it means something in
+ * the program box, in the Quick Re fields and in the pricing forms. So the
+ * shortcut yields there and works everywhere else, which is where the reader is
+ * standing when they want it, since this steers panes rather than the editor.
+ * The `.cm-editor` test is what covers the program box, whose editable node is
+ * a `contenteditable` div and not an input.
+ *
+ * Capture and `stopPropagation` for the same reason as U: CodeMirror drops the
+ * Shift on a Ctrl+letter and would otherwise match its own `Mod-v` binding.
+ */
+function inEditable(node) {
+    const el = node instanceof Element ? node : null;
+    return !!el?.closest('input, textarea, select, [contenteditable="true"], .cm-editor');
+}
+document.addEventListener('keydown', (ev) => {
+    if (!ev.ctrlKey || !ev.shiftKey || ev.altKey) return;
+    if (ev.code !== 'KeyV') return;
+    if (inEditable(ev.target)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    togglePerspective();
+}, true);
+
 for (const item of document.querySelectorAll('[data-table-view]')) {
     item.addEventListener('click', () => setTableView(item.dataset.tableView));
 }
@@ -2078,18 +2124,26 @@ const _quantileCache = new Map();
  * detachment probability and a bare number was a width, so one box meant two
  * different things depending on how it was typed.
  *
- * The **share** box takes the same dual reading: a percentage is a share (`so`)
- * and a bare number is an amount part-of (`po`), exactly as the grammar's
- * `reins_layer` spells them. A whole-layer share emits neither, since `100% so`
- * is a clause saying nothing. **`so`, not the words**: a spelled-out `share of`
- * is a parse error, which is what the first cut of this emitted.
+ * The **share** box takes the same dual reading, and both readings now emit
+ * `po`: `50% po 5000 xs 2500` is half the layer and `2500 po 5000 xs 2500` is
+ * an absolute amount of it, the share following as `amount / limit`. The `%` is
+ * the whole difference, which is why the box can keep taking either. A
+ * whole-layer share emits no head at all, since `100% po` is a clause saying
+ * nothing.
  *
- * The label on the row says `part of` in both cases and no longer tracks which
- * token this picks. That is the author's ruling, not drift: the `%` is what
- * carries the share reading, `share of` is going away upstream, and one fixed
- * English phrase reads better than a two-letter token that changes under you.
- * The preview line below the row is where the clause itself is shown, so
- * nothing is hidden by the label having stopped mirroring it.
+ * **`po` is the only placement keyword left.** `so` (share of) and `of` were
+ * retired upstream at `aggregate` 1.0.0a249, which computed the identical tuple
+ * for all three: `so` is an ordinary English word and a poor reserved word, and
+ * `of` forked the Earley parse against the `net of` in front of it. This row
+ * went on writing `so` over a percentage until a93, so every Quick Re add with
+ * a share in the box came back a parse error. Emitting the percentage literal
+ * is what carries the share reading now; do not "simplify" it to the fraction,
+ * which the grammar would read as an amount.
+ *
+ * The label on the row says `part of` in both cases and does not track the
+ * token. That is the author's ruling, not drift: one fixed English phrase reads
+ * better than a two-letter token, and the preview line below the row is where
+ * the clause itself is shown.
  *
  * @returns {Promise<string>} `occurrence net of 5000 xs 2500`, ready to cede.
  */
@@ -2127,7 +2181,9 @@ async function composeCession() {
 
     let head = '';
     if (share && share.kind === 'p' && Math.abs(share.value - 1) > 1e-9) {
-        head = `${layerNumber(share.value)} so `;
+        // The percentage as written, because the `%` is what tells the grammar
+        // this is a share and not an amount of cover.
+        head = `${layerNumber(share.value * 100)}% po `;
     } else if (share && share.kind === 'amount') {
         head = `${layerNumber(share.value)} po `;
     }
@@ -2995,42 +3051,33 @@ loadExamples().then((data) => {
 // ----------------------------------------------------------------------
 // The landing build
 // ----------------------------------------------------------------------
-// One of the entries tagged `role:hero` in library.agg, picked at random and
-// built, so a visitor arrives on a populated page rather than an empty one and
-// gets a different book each visit. The set grows over time, so never assume a
-// fixed count.
+// Dice of dice, every time. The author's ruling, round 7 item 13: "initial page
+// load is not smooth, rather than the hero idea let's just show dice of dice".
 //
-// a37 took away the card gallery this fed, not the build. The cards are to come
-// back inside the Examples dropdown, where a showcase is findable rather than
-// occupying the top of the page; `pickRandom` and the sparkline endpoint are
-// what that work will want, so the endpoint stays on the server.
+// Through a92 this asked `/v1/examples/heroes` for the entries tagged
+// `role:hero`, picked one at random and built it. Three things about that were
+// what made the landing untidy, and only the third was a bug: the editor showed
+// one program and then swapped to another when the fetch answered; a cold
+// server takes ~2 s on that route, because the first call loads the whole
+// recipe library, so the swap was slow enough to watch; and a different book
+// each visit meant the first thing a returning reader saw was unfamiliar. A
+// fixed program in the editor from the first paint has none of those. The
+// retry-and-report the old path carried went with it, having nothing left to
+// fail at.
 //
-// Retried once, and it reports. The author saw an empty hero row on a first page
-// load that populated on the next, and the old code could not tell us why: one
-// `.catch` covered both the fetch and the rendering, and it swallowed whatever
-// it caught in silence. A cold server takes ~2 s to answer this route (it loads
-// the whole recipe library on the first call), which is the sort of window a
-// single transient failure hides in, so a second attempt is worth more than a
-// diagnosis. The two failure modes stay separated: a fetch that fails twice says
-// so, and a build that throws is not mistaken for one.
-async function loadHeroes(attempt = 1) {
-    let data;
-    try {
-        data = await api.heroes();
-    } catch (err) {
-        if (attempt === 1) {
-            await new Promise((r) => setTimeout(r, 750));
-            return loadHeroes(2);
-        }
-        console.warn('[aLL] landing example unavailable:', err);
-        return;
-    }
-    const [item] = pickRandom(data.items || [], 1);
-    if (!item) {
-        console.warn('[aLL] no landing example: no entries tagged role:hero');
-        return;
-    }
-    loadExample(item.decl);
+// **Dice of dice** rather than any other example, and it is a good landing for
+// the same reason it is a good first example: a die for the claim count and a
+// die for each claim is a compound distribution you can work out by hand, so
+// the page opens on something the reader can check rather than on something
+// they have to trust. It builds in milliseconds at the default log2 too.
+//
+// The heroes endpoint stays on the server. The card gallery a37 took away is to
+// come back inside the Examples dropdown, and that is what will want it.
+function loadLanding() {
+    // The editor already holds `LANDING_DECL` from startup, so this is the
+    // build and nothing else: no text swap to watch and no fetch in front of
+    // it. `build()` reads the editor, so the reader can also have typed over it
+    // in the moment before this runs and get what they typed.
     build();
 }
 
@@ -3039,18 +3086,7 @@ async function loadHeroes(attempt = 1) {
 // three live-looking buttons on an empty page.
 renderActionRow();
 
-loadHeroes();
-
-// Fisher-Yates partial shuffle -> first n. Math.random is fine here (purely
-// cosmetic which-example-shows choice; not reproducibility-sensitive).
-function pickRandom(arr, n) {
-    const a = arr.slice();
-    for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a.slice(0, n);
-}
+loadLanding();
 
 function exampleStep(dir) {
     const n = exampleRing.decls.length;

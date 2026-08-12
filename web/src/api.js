@@ -198,7 +198,14 @@ export const api = {
     // Metadata
     // group: 'topic' (default) | 'kind' | 'role'
     examples:     (group = '')      => _json('GET',  `/v1/examples?${qs({ group })}`),
-    /** The `role:hero` entries. One is picked at random and built on landing. */
+    /**
+     * The `role:hero` entries, with their sparklines.
+     *
+     * Nothing calls this since a93, when the landing build became a fixed
+     * program (dice of dice) rather than one of these picked at random. Kept,
+     * with its route, for the showcase that is to return inside the Examples
+     * dropdown, which is what the tag and the sparkline are for.
+     */
     heroes:       ()                => _json('GET',  '/v1/examples/heroes'),
     meta:         ()                => _json('GET',  '/v1/meta'),
     /** House plot style (aggregate.style's color cycle etc.) for the charts. */

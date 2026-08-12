@@ -147,13 +147,15 @@ const CONTROLS = [
         key: 'log',
         label: 'log',
         title: 'Read every axis that offers a log scale on log. Which axes '
-            + 'those are is the document\'s statement, not a setting here',
+            + 'those are is the document\'s statement, not a setting here. An '
+            + 'axis drawn on log is never cropped: the room is the point',
     },
     {
         key: 'fullRange',
         label: 'full range',
-        title: 'Show the whole extent of every axis that offers one, instead '
-            + 'of the window the library computed from the data',
+        title: 'Show everything, on both axes: the whole extent where the '
+            + 'document declares one, and as far as the data reaches where it '
+            + 'does not, instead of the window the library computed',
     },
     {
         key: 'returnPeriod',

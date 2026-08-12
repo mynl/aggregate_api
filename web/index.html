@@ -33,6 +33,26 @@
                     </div>
                 </a>
                 <div class="nav-meta">
+                    <!-- The perspective in force, beside the versions and there
+                         for the same reason: it changes what every served table
+                         says, it is set from a menu two clicks away, and until
+                         a75 the only way to know which reading you were looking
+                         at was to open that menu and look at the tick.
+
+                         Both words are always shown, the active one lit, which
+                         makes the pair a readout and a control at once: they
+                         carry `data-perspective`, so the click wiring and the
+                         active-state sync that already serve the menu items
+                         pick them up with no second code path. Ctrl+Shift+V is
+                         the third way in, and moves this too. -->
+                    <span class="nav-perspective" id="nav-perspective">
+                        <button type="button" class="nav-persp-btn" data-perspective="raw"
+                                title="Raw: the frame as computed">Raw</button><span
+                              class="nav-persp-bar" aria-hidden="true">|</span><button
+                              type="button" class="nav-persp-btn" data-perspective="insurer"
+                              title="Insurer: the business reading">Insurer</button>
+                        <span class="dot" aria-hidden="true">·</span>
+                    </span>
                     <!-- The two versions that matter, in the header rather than
                          behind About. Which library built the numbers on screen
                          is the first question of any session that spans a
@@ -129,9 +149,9 @@
 
         <!-- The lede. One sentence naming what the app is for, on the same
              measure as every other run of prose. The hero cards that stood here
-             through a36 are gone; one hero is still picked at random and built
-             on load, so the page still lands populated, and the gallery is to
-             resurface inside the Examples dropdown. -->
+             through a36 are gone, and the random hero build behind them went at
+             a93: the page lands on dice of dice, in the editor from the first
+             paint. The gallery is to resurface inside the Examples dropdown. -->
         <p class="lede">Model a book of insurance, investigate tail risk,
            allocate margin, apply and price reinsurance.</p>
 
@@ -350,16 +370,19 @@
                      arrows, per the author: `<input type=number>` refuses the
                      `%` and the dual reading is worth more than the arrows.
 
-                     The row reads as a sentence, which is what the comma after
-                     `attach` is for: 100% part of 50% attach, 95% detach. -->
+                     The row reads as a sentence, and the operator words are
+                     what make it one: 100% part of, from 50% attach to 95%
+                     detach. The author's wording, round 7 item 2; the earlier
+                     `part of ... attach, ... detach` left the reader to supply
+                     the preposition and the layer read as three separate
+                     answers rather than as one cover. -->
                 <!-- `part of` is FIXED, and is no longer the DecL token it used
                      to mirror. It showed `so` over a percentage and `po` over
-                     an amount, which is what the grammar takes today; the
-                     author's ruling is that the `%` is what carries the share
-                     reading and `share of` is going away upstream, so the row
-                     says the one thing in English and `composeCession` keeps
-                     emitting whichever token parses. Do not "fix" this back
-                     into sync with the clause.
+                     an amount; `so` and `of` were retired upstream at
+                     1.0.0a249, so `po` is now the one placement keyword and the
+                     `%` is what tells it a share from an amount. The row says
+                     the one thing in English and `composeCession` writes the
+                     token. Do not "fix" this back into sync with the clause.
 
                      See `composeCession` in main.js. -->
                 <div class="tab-tools reins-entry" id="reins-entry">
@@ -379,11 +402,11 @@
                         <input id="qr-share" class="qr-field" type="text" inputmode="decimal"
                                autocomplete="off" spellcheck="false" value="100%"
                                aria-label="share or part of">
-                        <span class="qr-op">part of</span>
+                        <span class="qr-op">part of, from</span>
                         <input id="qr-attach" class="qr-field" type="text" inputmode="decimal"
                                autocomplete="off" spellcheck="false" value="50%"
                                aria-label="attachment">
-                        <span class="qr-op">attach,</span>
+                        <span class="qr-op">attach to</span>
                         <input id="qr-detach" class="qr-field" type="text" inputmode="decimal"
                                autocomplete="off" spellcheck="false" value="95%"
                                aria-label="detachment">

@@ -4,6 +4,102 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a93
+
+The author's round 7 punch list, nine items of it, all app side. One of the ten
+is a library matter and is recorded rather than worked around; see the end.
+
+**Quick Re wrote a keyword the grammar no longer has.** A share in the first box
+emitted `50 so 5000 xs 2500`, and `so` was retired upstream at `aggregate`
+1.0.0a249, so every Quick Re add with anything other than a whole line in the
+share box came back a parse error. `po` is the one placement keyword now, and
+the leading quantity is what says which reading is meant, so `composeCession`
+emits the **percentage literal**: `50% po 5000 xs 2500` is half the layer, where
+`0.5 po` would be read as an amount and give a placement of 0.01%. Verified end
+to end: the clause parses, the program reformats, and the description line reads
+"Net of 50% share of 3 xs 3 per occurrence". `dev/api-punchlist.md` round 7
+item 11. The row's English is unchanged and still deliberately not the token.
+
+**The Quick Re row reads as a sentence again**, in the author's own words:
+`100% part of, from 50% attach to 95% detach`. Two operator words changed; the
+comma moved from after `attach` to after `part of`, where it belongs once
+`from` and `to` carry the layer. The three boxes narrow from 5.4rem to 3.9rem,
+cut for the four characters of `100%` rather than for a text field, which is
+what stops the row wrapping on a laptop.
+
+**Every box holding a number is right aligned**, percentages included: the three
+Quick Re fields, the four pricing and evaluation fields, and the two Bounds
+amounts. The Bounds `against` box keeps its left edge, holding a unit name or a
+DecL fragment rather than a number.
+
+**Ctrl+Shift+V flips the perspective**, the second preference worth a keystroke
+for the reason Ctrl+Shift+U was the first: it is the one you change while
+reading, and the raw frame against the business reading is a comparison you make
+by going back and forth. It yields inside an editable, which is the one thing V
+needs that U did not: Ctrl+Shift+V is the browser's own paste-as-plain-text and
+it means something in the program box and in every form field, so the shortcut
+works everywhere else, which is where a reader stands when they want it.
+
+**And the header says which perspective is in force.** `Raw | Insurer ·` sits
+left of the versions, the active word lit. It is also the control: both words
+carry `data-perspective`, so the click wiring and the tick sync that already
+served the menu items pick them up with no second code path, and menu, header
+and keystroke are three ways into one value.
+
+**The chart legend stopped shuffling.** It is a legend that fills in as the
+cursor moves, laid out left to right, so a number growing a character pushed
+every name to the right of it along and reading one curve against another meant
+watching the whole row move. Tabular figures on the head, a mono face on each
+value, and a floor under both slots: measured across two hover positions, every
+chip holds its width and its x to the pixel while the numbers change.
+
+**A log axis is never cropped, and full range means full x and full y.** The
+author's item 7, whose case is a severity spike: the agg chart's ordinate stops
+at the *aggregate* peak whenever the severity peak is more than twice it
+(`_emit_aggregate.ordinate_top`), so dice of dice draws its severity block with
+the head cut off at 8e-2 when the block stands at 1.67e-1. Two changes, and
+between them the picture has a way out. `axisWindow` falls back to the drawn
+data's own extent where the document declares no `full_range`, so one button
+releases both axes rather than only the one the library thought worth a
+zoom-out. And an axis that goes log releases on the way there, because room to
+see everything is the whole point of asking for a log scale. Reading the data
+rather than second-guessing the library keeps this inside the purist rule: how
+much of what was served to show is a question about drawing.
+
+**Exponential tick labels keep their decimal place**: `1.0e-4`, never `1e-4`.
+a62 stripped a trailing `.0` as the tidier label, and tidier is what it is on
+its own; in a row of ticks it is the one label in a different register, and half
+a decade lattice reads `1e-4, 1.5e-4, 2e-4` with every second label a place
+shorter than its neighbors. The heatmap colorbar had a real duplicate rather
+than an inconsistent one: it labeled the height in the exponent it is held in,
+rounded, so a bar running from 10^-8.2 to 10^-8.0 printed `1e-8` at both ends.
+It now raises the height and prints the value, the same reading the tooltip
+gives a cell.
+
+**The landing is dice of dice, in the editor from the first paint.** Through a92
+the page asked `/v1/examples/heroes`, picked one at random and built it, so the
+editor showed one program and swapped to another when the fetch answered, on a
+route that takes ~2 s cold because the first call loads the whole recipe
+library. A fixed program has none of that, and dice of dice is a good landing
+for the same reason it is a good first example: a die for the count and a die
+for each claim is a compound distribution the reader can check by hand. The
+heroes route and its client method stay, for the showcase that is to return
+inside the Examples dropdown.
+
+**Not fixed, and upstream: the Reinsurance plot's occurrence panel answers none
+of the control strip** (round 7 item 12). Confirmed at the document rather than
+guessed: `charts/_emit_reins.py` gives that panel a `claim` axis that offers no
+log reading, and a `sev_density` axis that is log with no alternative, so the
+`log` button can never touch it. On an unlimited program `_claim_window` returns
+`None`, and the axis is then given **neither** a suggested nor a full range,
+because `full_range` is written as `None if claim is None`; so `full range` has
+nothing to act on either, though the full extent `(min(0, x[0]), x[-1])` is
+knowable whether or not the limit bounds the window. `return period` and
+`invert` are declared by the aggregate panel's axes alone. The library owns what
+readings an axis offers, so this is an upstream ask and not an app patch.
+
+No Python changes. Web suite 64 passing, `check-nav.mjs` clean.
+
 ## 1.0.0a92
 
 **Every 2-D chart said "not published by the library yet", on every object, and

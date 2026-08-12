@@ -177,6 +177,21 @@ header .navbar { min-height: 56px; }
    still carries them. */
 .nav-versions { font-size: .68rem; letter-spacing: -.01em; white-space: nowrap; }
 @media (max-width: 575.98px) { .nav-versions { display: none; } }
+/* The perspective, in the same quiet register as the versions and to their
+   left. Two words with a rule between them rather than one word that changes:
+   the pair says what the choice is as well as which half of it is in force, and
+   the unlit word is a click away from being the lit one. Styled back down to
+   text, like the legend chips, because the affordance is the pointer. */
+.nav-perspective { display: inline-flex; align-items: baseline; white-space: nowrap; }
+.nav-persp-btn {
+    background: none; border: 0; padding: 0 .28rem; margin: 0;
+    font: inherit; font-size: .68rem; color: var(--mut); cursor: pointer;
+}
+.nav-persp-btn:hover { color: var(--primary); }
+.nav-persp-btn.active { color: var(--ink); font-weight: 600; }
+.nav-persp-bar { color: var(--line); font-size: .68rem; }
+.nav-perspective .dot { margin-left: .3rem; }
+@media (max-width: 575.98px) { .nav-perspective .dot { display: none; } }
 
 /* ---- Header menu (hamburger dropdown) + Help/About offcanvas panels ---- */
 .hamburger-btn { border: 0; background: transparent; color: var(--mut); cursor: pointer;
@@ -592,7 +607,13 @@ header .navbar { min-height: 56px; }
    difference the eye reads as a mistake without being able to name it. */
 .price-form { gap: .6rem; --price-h: 1.8rem; }
 .price-field { display: inline-flex; align-items: center; gap: .35rem; margin: 0; font-size: .78rem; }
-.price-field input { width: 5rem; height: var(--price-h); font-size: .78rem; }
+/* Right aligned, because every one of them holds a number. A number typed into
+   a left aligned box grows away from the eye and its digits never line up with
+   the box beside it; right aligned, the units column is where the units column
+   is, which is the same reason a table of numbers is right aligned. Applies to
+   percentages too, since a percentage is a number wearing a suffix. The one
+   exception is the Bounds `against` box, which takes a name or a program. */
+.price-field input { width: 5rem; height: var(--price-h); font-size: .78rem; text-align: right; }
 .price-form .btn-group .btn {
     height: var(--price-h); display: inline-flex; align-items: center;
     padding: 0 .6rem;
@@ -648,6 +669,9 @@ header .navbar { min-height: 56px; }
 #bounds-form .bounds-against { flex: 1 1 20rem; min-width: 11rem; }
 #bounds-form .bounds-against input {
     width: 100%; font-family: var(--mono); font-size: .74rem;
+    /* Left, against the rest of the form: this one holds a unit name or a
+       DecL fragment, and prose reads from the left. */
+    text-align: left;
 }
 #bounds-premium, #bounds-assets { width: 6.5rem; }
 @media (max-width: 575.98px) {
@@ -681,13 +705,16 @@ header .navbar { min-height: 56px; }
     height: var(--qr-h); display: inline-flex; align-items: center;
     padding: 0 .8rem; font-size: .78rem;
 }
-/* Narrow on purpose: each holds a percentage or a round number, and left to the
-   form-field default they would each claim a text box's width and wrap the row
-   on a laptop. Mono so the digits line up as they are typed. */
+/* Narrow on purpose, and **keyed to a percentage**: `100%` is what these hold
+   most of the time and four characters is what the width is cut for, so the row
+   reads as a sentence with three small slots in it rather than as three text
+   boxes with words between them. A longer amount still types and scrolls, which
+   is the trade the author asked for. Mono so the digits line up as they are
+   typed, right aligned for the reason the pricing fields are. */
 .qr-field {
-    width: 5.4rem; height: var(--qr-h);
+    width: 3.9rem; height: var(--qr-h);
     font-family: var(--mono); font-size: .74rem;
-    padding: 0 .45rem;
+    padding: 0 .45rem; text-align: right;
     border: 1px solid var(--line); border-radius: .375rem;
     background: #fff; color: var(--ink);
 }
@@ -738,8 +765,9 @@ header .navbar { min-height: 56px; }
 .reins-entry.is-off .qr-op { color: var(--line); }
 .reins-entry.is-off .qr-field { background: var(--soft); cursor: not-allowed; }
 @media (max-width: 575.98px) {
-    /* 16px stops iOS zooming the page on focus. */
-    .qr-field { font-size: 16px; width: 4.8rem; }
+    /* 16px stops iOS zooming the page on focus, so the box has to grow with the
+       face to hold the same four characters. */
+    .qr-field { font-size: 16px; width: 4.2rem; }
 }
 
 /* ---- Rate-limit card (friendly HTTP 429 on the shared demo) ---- */
@@ -881,8 +909,19 @@ header .navbar { min-height: 56px; }
     display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem 1rem;
     width: 100%;
 }
-.chart-readout-head { font-weight: 700; }
-.chart-readout-head.is-idle { font-weight: 400; color: var(--mut); font-style: italic; }
+/* Fixed width digits, and a floor under the width of every slot that holds a
+   number. The strip is a legend that fills in as the cursor moves, and it is
+   laid out left to right, so any number that grows a character pushes every
+   name to the right of it along: reading one curve against another meant
+   watching the whole row shuffle. Tabular figures stop the digits themselves
+   from changing width, and the floors stop a chip from resizing until its value
+   genuinely outgrows the slot, which is what the author asked "fixed width
+   format" for. Author's punch list, round 7 item 5. */
+.chart-readout-head {
+    font-weight: 700; font-variant-numeric: tabular-nums;
+    min-width: 13ch;
+}
+.chart-readout-head.is-idle { font-weight: 400; color: var(--mut); font-style: italic; min-width: 0; }
 /* A button, because clicking one shows or hides its series, which is what the
    ECharts legend did and what `dev/graphs.md` records the author liking. Styled
    back down to text: the affordance is the pointer and the dimming, not a box. */
@@ -890,6 +929,14 @@ header .navbar { min-height: 56px; }
     display: inline-flex; align-items: baseline; gap: .3rem;
     background: none; border: 0; padding: 0; margin: 0;
     font: inherit; color: inherit; cursor: pointer;
+}
+/* The value the cursor put here. Mono, so `1.234e-05` and `9.876e-12` are the
+   same width, and given a floor and a right edge to grow from, so a chip only
+   changes size when the reading really is longer than the slot. */
+.chart-readout-item b {
+    display: inline-block; min-width: 9ch; text-align: right;
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+    font-weight: 600;
 }
 .chart-readout-item:hover .chart-readout-name { color: var(--ink); }
 .chart-readout-item:focus-visible { outline: 1px dotted var(--mut); outline-offset: 2px; }
