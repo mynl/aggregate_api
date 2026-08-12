@@ -19,21 +19,10 @@
 // renderer chunk and `surfaceOverrides`, the per-chart chrome dict: colors,
 // tooltip dressing, lighting, and the camera.
 
-import { echarts, houseStyle, fade } from './theme.js';
+import { echarts, houseStyle, fade, VIRIDIS } from './theme.js';
 import { fmt } from '../utils/format.js';
 
 let pending = null;
-
-/**
- * Viridis, the ramp the prototype settled on.
- *
- * Not the house blue. A density read as relief is a height field first, and
- * viridis is the ramp that stays ordered under a shaded surface: the house
- * ramp runs white to one hue, so the lit and unlit faces of the same height
- * read as two different values. Perceptually uniform and colorblind safe are
- * the usual arguments and they hold here too.
- */
-const VIRIDIS = ['#440154', '#414487', '#2a788e', '#22a884', '#7ad151', '#fde725'];
 
 
 /**
@@ -141,7 +130,8 @@ function tick(v) {
 
 export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
                                    quantized = false, side = 420,
-                                   hostHeight = 480, camera = null } = {}) {
+                                   hostHeight = 480, camera = null,
+                                   lights = true } = {}) {
     const s = houseStyle();
     // Read the height to the precision the wire carried and no further. The
     // log-quantized encoding recovers a density to about four significant
@@ -213,15 +203,29 @@ export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
         },
         grid3D: {
             boxWidth: 100, boxDepth: 100, boxHeight: 62,
-            axisPointer: { show: true, lineStyle: { color: s.grid_color } },
+            // No axis pointer. On a grid3D it draws three planes through the
+            // picked point, and since a click is how a cut is placed, every
+            // placement flashed a set of cutting planes that are not the cut.
+            axisPointer: { show: false },
             light: {
                 // **No cast shadow.** It is a dark shape thrown across the floor
                 // picture by the thing you are trying to read, and on a density,
                 // which covers its whole domain, it lands on the tail every
                 // time. The key light and the ambient fill carry the shading
                 // without it.
-                main: { intensity: 1.15, shadow: false, alpha: 40, beta: 40 },
-                ambient: { intensity: 0.35 },
+                //
+                // `lights` on lifts the fill and drops the key, so no face of
+                // the surface is dark. That is not only taste: the color *is*
+                // the height here, and a key light strong enough to shade one
+                // side into darkness is a second, silent encoding fighting the
+                // first. Some shading is still wanted, or the relief flattens
+                // into its own floor image, so the key stays at 0.45 rather
+                // than going out.
+                main: {
+                    intensity: lights ? 0.45 : 1.15,
+                    shadow: false, alpha: 40, beta: 40,
+                },
+                ambient: { intensity: lights ? 0.85 : 0.35 },
             },
             viewControl: {
                 // Looking down the diagonal: dependence between the two

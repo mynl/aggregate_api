@@ -23,7 +23,7 @@
 import { api } from '../api.js';
 import { el, empty } from '../utils/dom.js';
 import {
-    chartdocToEcharts, panelLayout, readings, rungAt,
+    chartdocToEcharts, panelLayout, readings, rungAt, surfaceCuts,
 } from './chartdoc-to-echarts.js';
 import { loadSurface, readCamera, surfaceOverrides } from './surface.js';
 import { echarts, loadStyle } from './theme.js';
@@ -61,6 +61,7 @@ const VIEW_DEFAULTS = {
     wallGrid: true,
     marginals: false,
     contours: false,
+    lights: true,
     cut: 'none',         // none | components | total | all
     // Where each cut sits, as a fraction of its own range. Three rather than
     // one because a click places a cut where the reader pointed, which is two
@@ -72,7 +73,7 @@ const VIEW_DEFAULTS = {
 };
 
 /** Which view keys the relief owns, for the reset button to put back. */
-const SURFACE_KEYS = ['mesh', 'wallGrid', 'marginals', 'contours',
+const SURFACE_KEYS = ['mesh', 'wallGrid', 'marginals', 'contours', 'lights',
                       'cut', 'cutX', 'cutY', 'cutS'];
 
 /** The cut control cycles rather than branching into four buttons. */
@@ -180,6 +181,15 @@ const SURFACE_CONTROLS = [
         key: 'wallGrid',
         label: 'wall grid',
         title: 'Grid lines on the three walls of the box',
+    },
+    {
+        key: 'lights',
+        label: 'lights',
+        title: 'Light the surface from all around, so no face of it is dark. '
+            + 'The color is the height here, so a key light strong enough to '
+            + 'shade one side into darkness is a second encoding fighting the '
+            + 'first. Off is one hard key light, which reads the relief more '
+            + 'sculpturally and the color less well',
     },
 ];
 
@@ -614,7 +624,36 @@ function draw(container, tools, host, doc, spec = null) {
      *   the cursor is off the chart, which leaves the names and blanks the
      *   values rather than emptying the strip.
      */
+    /**
+     * The relief's strip: what the cut is standing on, in a fixed place.
+     *
+     * Not a tooltip. On a 3-D scene a tooltip follows the cursor over the thing
+     * it is describing and hides it, and the numbers here belong to the cut
+     * rather than to wherever the pointer happens to be, so they are written
+     * once per redraw and stay put. Above the canvas, where the 2-D charts
+     * already put their readout, which is also where the room is.
+     */
+    function writeCutReadout(rows) {
+        empty(readout);
+        if (!rows || !rows.length) {
+            readout.appendChild(el('span', { className: 'chart-readout-head is-idle' },
+                                   'click the surface to cut it'));
+            return;
+        }
+        for (const row of rows) {
+            const chip = el('span', { className: 'chart-readout-item' });
+            chip.appendChild(el('i', {
+                className: 'chart-readout-swatch',
+                style: `background:${row.color}`, 'aria-hidden': 'true',
+            }));
+            chip.appendChild(el('span', { className: 'chart-readout-name' }, row.name));
+            chip.appendChild(el('b', {}, row.value));
+            readout.appendChild(chip);
+        }
+    }
+
     function writeReadout(model) {
+        if (drawn && drawn.is3d) return;        // the relief writes its own
         empty(readout);
         const items = (drawn && drawn.legendItems) || [];
         if (!items.length) return;              // a grid panel keeps its own tooltip
@@ -713,6 +752,7 @@ function draw(container, tools, host, doc, spec = null) {
         // and the listeners would be left on the dead one. Each unbinds before
         // it binds, so re-arming costs nothing on the ordinary path.
         wireGestures();
+        if (next.is3d) writeCutReadout(next.cutReadout);
         // Re-apply what the reader switched off, for the same reason: a rebuilt
         // option carries a fresh legend model with everything selected, so a
         // hidden series would come back every time the log button was pressed.
@@ -900,10 +940,20 @@ function draw(container, tools, host, doc, spec = null) {
         let u = 0;
         walkFrame = setInterval(() => {
             const box = drawn && drawn.surfaceBox;
-            if (!walking || !ready || !box) return;
+            const chart = renderer && renderer.chart;
+            if (!walking || !ready || !box || !chart) return;
             u = (u + WALK_INTERVAL / WALK_PERIOD) % 1;
             setView(walkPositions(box, u), false);
-            render();
+            // Only the cuts. A full rebuild decodes the grid, rebuilds a
+            // hundred thousand surface vertices and hands echarts a new scene,
+            // which at twenty frames a second is more work than the browser
+            // has, and it is what made the walk crawl. These merge by id: the
+            // set of cut series does not change while the walk runs, only
+            // where they are.
+            const bundle = surfaceCuts(drawn, view);
+            if (!bundle) { render(); return; }
+            chart.setOption({ series: bundle.series }, false);
+            writeCutReadout(bundle.readout);
         }, WALK_INTERVAL);
     }
 
@@ -944,7 +994,11 @@ function draw(container, tools, host, doc, spec = null) {
 /** The per-chart renderer chrome, which today only the 3-D realization needs. */
 function overridesFor(doc) {
     const grid = (doc.panels || []).some((p) => p.kind !== 'xy');
-    return grid ? ((ctx) => (ctx.logZ === undefined ? null : surfaceOverrides(ctx))) : null;
+    return grid
+        ? ((ctx) => (ctx.logZ === undefined
+            ? null
+            : surfaceOverrides({ ...ctx, lights: view.lights !== false })))
+        : null;
 }
 
 /**

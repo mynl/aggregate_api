@@ -4,6 +4,54 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a81
+
+**The second look, six more.**
+
+**A `lights` control, on by default.** It lifts the fill to 0.85 and drops the
+key to 0.45, so no face of the surface is dark. Not only taste: the color *is*
+the height here, and a key light strong enough to shade one side into darkness
+is a second, silent encoding fighting the first. The key stays lit rather than
+going out, or the relief flattens into its own floor image. Off is the single
+hard light of a77, one click away, which reads the shape more sculpturally and
+the color less well.
+
+**The flickering cutting planes were the axis pointer.** On a `grid3D` it draws
+three planes through the picked point, and since a click is how a cut is
+placed, every placement flashed a set of planes that are not the cut. Off.
+
+**The walk was slow because it was rebuilding everything.** Each step decoded
+the grid, rebuilt eleven thousand surface vertices and handed echarts a whole
+new scene, twenty times a second, which is more work than a browser has. The
+surface context now rides on the option, so a step rebuilds only the cut series
+and merges them by id. What the walk does, since the question was fair: all
+three cuts move together out along `y = x`, the total rising steadily, one pass
+in thirteen seconds. The thing to watch is the filled dot against the hollow
+ring, which is how far from even the split is as the total grows.
+
+**A fixed strip above the chart**, in the place the 2-D charts already put
+theirs, carrying where the cut is (each component, their sum, the density
+there) and then what it leaves (the two conditional means, or kappa and the
+even split). Written once per redraw rather than followed by the cursor: on a
+3-D scene a tooltip covers the thing it describes, and these numbers belong to
+the cut rather than to wherever the pointer drifted. The rows are named by what
+is *left*, not by what is held: fixing x leaves a distribution in y, so the mean
+is of y.
+
+**The flat reading is the same drawing seen twice now**: viridis, the same
+eight contour levels, over the image. `VIRIDIS` moved to `theme.js` from the
+3-D module, because a reader flipping between the two readings is entitled to
+see one color mean one height. On category axes a contour path becomes
+fractional cell indices, which is what those axes take.
+
+**The z axis box snaps to round numbers.** Its ends were the data's own bounds,
+and an axis drawn between two of those subdivides into five more of them, so it
+printed arithmetic rather than ticks. Both ends now snap to multiples of a nice
+step, which makes every tick between them round as well and costs a little
+empty box where there was nothing to see. The data floor and ceiling are
+untouched: they still set the color scale, the log clamp and where the floor
+image stands.
+
 ## 1.0.0a80
 
 **Nine fixes from the first real look at the relief**, author 2026-08-12.

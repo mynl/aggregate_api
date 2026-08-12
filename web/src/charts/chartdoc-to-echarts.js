@@ -19,14 +19,16 @@
 
 import { fmt } from '../utils/format.js';
 import {
-    coordX, coordY, decodeSurfaceGrid, findSurfaceSeries, xCoords, yCoords, zExtent,
+    coordX, coordY, decodeSurfaceGrid, densityAt, findSurfaceSeries, xCoords,
+    yCoords, zExtent,
 } from './surface-grid.js';
 import {
     columnAt, contourPaths, diagonalSegment, interpAt, levelLine, rowAt,
     wallScale, weightedMean,
 } from './surface-geometry.js';
 import {
-    LOG_FLOOR, axisStyle, baseOption, fade, houseStyle, lineWidth, seriesColor,
+    LOG_FLOOR, VIRIDIS, axisStyle, baseOption, fade, houseStyle, lineWidth,
+    seriesColor,
 } from './theme.js';
 
 /**
@@ -1117,12 +1119,42 @@ function heatmapPanel(doc, panel, i, axes, view, box) {
     const zLabel = zAxis.label || 'z';
     const xTicks = categoryTicks(x);
     const yTicks = categoryTicks(y);
+    // Contours over the image, at the same eight levels the relief draws, so
+    // the two readings of one grid are the same drawing seen twice. The axes
+    // here are categories, so a path in data coordinates becomes one in
+    // fractional cell indices, which is what a category axis takes.
+    const toI = (v) => (v - g.x0) / g.dx;
+    const toJ = (v) => (v - g.y0) / g.dy;
+    const heightAt = (ci, rj) => {
+        const value = g.z[rj * g.nx + ci];
+        return useLog ? Math.log10(Math.max(value, floor)) : value;
+    };
+    const lines = [];
+    const top = Number.isFinite(max) ? max : min + 1;
+    for (let level = 1; level <= SURFACE_CONTOUR_LEVELS; level++) {
+        const at = min + ((top - min) * level) / (SURFACE_CONTOUR_LEVELS + 1);
+        for (const path of contourPaths(g, at, heightAt)) {
+            if (lines.length >= SURFACE_CONTOUR_CAP) break;
+            lines.push({
+                type: 'line', name: 'contour', silent: true,
+                xAxisIndex: i, yAxisIndex: i,
+                showSymbol: false, smooth: false,
+                data: path.map((p) => [toI(p[0]), toJ(p[1])]),
+                lineStyle: { color: SURFACE_CONTOUR_COLOR,
+                             width: SURFACE_CONTOUR_WIDTH,
+                             opacity: SURFACE_CONTOUR_OPACITY },
+                tooltip: { show: false },
+            });
+        }
+    }
     return {
+        // The image first, because the panel's visualMap addresses its first
+        // series and must color the cells rather than the contours over them.
         series: [{
             type: 'heatmap', name: s.name, data: cells,
             xAxisIndex: i, yAxisIndex: i,
             progressive: 4000, emphasis: { disabled: true },
-        }],
+        }, ...lines],
         legend: [],
         xAxis: axisStyle({
             type: 'category', gridIndex: i, name: (axes[panel.x_axis] || {}).label || '',
@@ -1141,9 +1173,10 @@ function heatmapPanel(doc, panel, i, axes, view, box) {
             top: box.top + 10,
             itemHeight: Math.max(90, box.height - 60),
             textStyle: { fontSize: 10, color: '#6c757d' },
-            // Sequential, white to the primary: a density is one-directional,
-            // so a diverging ramp would imply a midpoint that does not exist.
-            inRange: { color: ['#ffffff', fade(st.colors[0], 0.45), st.colors[0]] },
+            // The same ramp the relief uses, because these are two drawings of
+            // one grid and a reader flipping between them is entitled to see
+            // one color mean one height.
+            inRange: { color: VIRIDIS },
             formatter: (v) => (useLog ? `1e${Math.round(v)}`
                 : (v ? Number(v).toExponential(1) : '0')),
         },
@@ -1510,6 +1543,30 @@ const SURFACE_MESH_LIFT = 0.0018;
 /** A hair: what anything standing just clear of something else gets. */
 const SURFACE_HAIR = 0.004;
 
+/**
+ * The z axis box, snapped so its ticks are round numbers.
+ *
+ * The data bounds are whatever the density happens to reach, and an axis drawn
+ * between two of those subdivides into five more of them: an axis labeled
+ * -1.188e-6, -0.283e-6, 0.622e-6 is printing arithmetic. Snapping both ends to
+ * multiples of a nice step makes every tick between them round as well, and
+ * costs only a little empty box at the top and bottom, where there is nothing
+ * to see anyway. The absolute height of a density is not the reading here; the
+ * shape is.
+ *
+ * The *data* floor and ceiling are untouched: they still set the color scale,
+ * the log clamp and where the floor image stands. Only the drawn box moves.
+ */
+function niceBox(lo, hi) {
+    const span = hi - lo;
+    if (!(span > 0) || !Number.isFinite(span)) return { min: lo, max: hi };
+    const step = niceStep(span / 5) || span / 5;
+    return {
+        min: Math.floor(lo / step) * step,
+        max: Math.ceil(hi / step) * step,
+    };
+}
+
 /** The ink of the things drawn over the surface, from the same preset. */
 const SURFACE_MESH_COLOR = '#f8f9fa';
 const SURFACE_MESH_WIDTH = 0.9;
@@ -1588,8 +1645,9 @@ const CUT_COLORS = { x: '#dc3545', y: '#0d6efd', s: '#198754' };
  *
  * Returns
  * -------
- * Array
- *     Series, and `[]` when no cut is asked for.
+ * object
+ *     `{series, readout}`. `readout` is the fixed strip's rows, the numbers the
+ *     cut is standing on, and is empty when no cut is asked for.
  *
  * Notes
  * -----
@@ -1606,9 +1664,17 @@ const CUT_COLORS = { x: '#dc3545', y: '#0d6efd', s: '#198754' };
  */
 function cutSeries(g, ctx, view) {
     const mode = view.cut || 'none';
-    if (mode === 'none') return [];
-    const { height, zMax, floorH, hair, xWall, yWall, k, dataMax } = ctx;
+    if (mode === 'none') return { series: [], readout: [] };
+    const { height, zMax, floorH, hair, xWall, yWall, k, dataMax,
+            xName, yName, digits } = ctx;
     const out = [];
+    // Two groups, so the strip reads left to right in the order a reader asks
+    // the questions in: where the cut is, then what it leaves.
+    const where = [];
+    const leaves = [];
+    const shown = (v) => (Number.isFinite(v) ? fmt(v) : '');
+    const shownZ = (v) => (Number.isFinite(v)
+        ? Number(v).toExponential(Math.max(1, digits - 3)) : '');
     const onWall = (v) => Math.min(zMax, Math.max(floorH, height(v)));
     const frac = (value, fallback) => (Number.isFinite(value)
         ? Math.min(1, Math.max(0, value)) : fallback);
@@ -1700,7 +1766,26 @@ function cutSeries(g, ctx, view) {
                 lineStyle: { color: a.color, width: 1.6, opacity: 0.85 }, silent: true,
             });
             markMean(a.tag, a.color, a.alongY ? 'y' : 'x', a.coords, wall, mu);
+            where.push({
+                name: a.alongY ? xName : yName,
+                color: a.color,
+                value: shown(a.curve.at),
+            });
+            // Named by what is left, not by what is held: fixing x leaves a
+            // distribution in y, so this is the mean of y.
+            leaves.push({
+                name: `mean ${a.alongY ? yName : xName}`,
+                color: a.color,
+                value: shown(mu),
+            });
         }
+        // The joint density where the two component cuts cross, which is the z
+        // the reader is pointing at when they click.
+        const at = densityAt(g,
+            Math.max(0, Math.min(g.nx - 1, Math.round((heldX - g.x0) / g.dx))),
+            Math.max(0, Math.min(g.ny - 1, Math.round((heldY - g.y0) / g.dy))));
+        where.push({ name: 'x + y', color: '#6c757d', value: shown(heldX + heldY) },
+                   { name: 'density', color: '#6c757d', value: shownZ(at) });
     }
 
     if (mode === 'total' || mode === 'all') {
@@ -1776,9 +1861,41 @@ function cutSeries(g, ctx, view) {
                 itemStyle: { color: 'rgba(0,0,0,0)', borderColor: color, borderWidth: 1.6 },
                 silent: true,
             });
+            where.push({ name: 'total cut', color, value: shown(xs[0] + ys[0]) });
+            leaves.push({ name: `kappa ${xName}`, color, value: shown(k1) },
+                        { name: `kappa ${yName}`, color, value: shown(k2) },
+                        { name: 'even split', color, value: shown(half) });
         }
     }
-    return out;
+    return { series: out, readout: [...where, ...leaves] };
+}
+
+/**
+ * The cut series and their readout, for a rebuild that is only the cuts.
+ *
+ * The walk moves a cut twenty times a second, and rebuilding the whole option
+ * for each of those means decoding the grid, rebuilding a hundred thousand
+ * surface vertices and handing echarts a new scene to swallow, which is far
+ * more work than moving three lines and is why the walk crawled. The context
+ * the surface already computed rides on the option so this can rebuild the few
+ * series that actually moved and merge them by id.
+ *
+ * Parameters
+ * ----------
+ * option : object
+ *     A built surface option, carrying `cutContext`.
+ * view : object
+ *     The current view.
+ *
+ * Returns
+ * -------
+ * object or null
+ *     `{series, readout}`, or null for an option that is not a surface.
+ */
+export function surfaceCuts(option, view) {
+    const held = option && option.cutContext;
+    if (!held) return null;
+    return cutSeries(held.grid, held.ctx, view);
 }
 
 /** The 3-D path: one 'surface' panel, the bivariate joint in relief. */
@@ -1985,9 +2102,12 @@ function surfaceOption(doc, opts, view) {
         }
     }
 
-    drawnSeries.push(...cutSeries(g, {
+    const cutContext = {
         height, zMax, floorH, hair, xWall, yWall, k: wallK, dataMax: max,
-    }, view));
+        xName, yName, digits: g.digits,
+    };
+    const cuts = cutSeries(g, cutContext, view);
+    drawnSeries.push(...cuts.series);
 
     // Grid lines on the three walls: chrome in the ordinary sense, but the
     // control that turns them off is the reader's, so the flag is read here.
@@ -1995,9 +2115,13 @@ function surfaceOption(doc, opts, view) {
     const base = {
         xAxis3D: { type: 'value', name: xName, ...wallGrid },
         yAxis3D: { type: 'value', name: yName, ...wallGrid },
-        // The axis reaches down to the dropped base so the box has a bottom to
-        // stand the floor image on; the data still lives between zMin and zMax.
-        zAxis3D: { type: 'value', name: zName, min: zBase, max: zMax, ...wallGrid },
+        // The axis reaches down past the dropped base so the box has a bottom
+        // to stand the floor image on, and both ends snap to round numbers so
+        // the ticks between them are round too. The data still lives between
+        // zMin and zMax.
+        zAxis3D: {
+            type: 'value', name: zName, ...niceBox(zBase, zMax), ...wallGrid,
+        },
         // Two maps, both semantic: color encodes the same variable as the
         // height, on the surface through its z and on the floor through the
         // fourth column it carries. The ramp and the placement arrive with the
@@ -2022,6 +2146,12 @@ function surfaceOption(doc, opts, view) {
     const option = merge(base, resolveOverrides(opts.overrides, ctx));
     option.hostHeight = hostHeight;
     option.is3d = true;
+    // What the cut is standing on, for the fixed strip above the chart, and
+    // enough context for the mount to rebuild the cuts alone while the walk
+    // runs. Both ride on the option because the mount holds the last one it
+    // drew and neither wants the grid decoded a second time.
+    option.cutReadout = cuts.readout;
+    option.cutContext = { grid: g, ctx: cutContext };
     // The box in data coordinates, so the mount can turn a click into cut
     // positions and walk them without decoding the grid a second time.
     option.surfaceBox = {
