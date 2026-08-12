@@ -879,6 +879,17 @@ header .navbar { min-height: 56px; }
     font-size: .68rem; color: var(--mut);
     text-transform: uppercase; letter-spacing: .04em;
 }
+/* The relief's window box: a number in a row of buttons, so it takes the row's
+   type size and only as much width as four characters need. Wider and it reads
+   as the main control of the strip, which it is not. */
+.exhibit-window {
+    display: inline-flex; align-items: center; gap: .3rem;
+    font-size: .78rem; color: var(--mut); margin: 0;
+}
+.exhibit-window-input {
+    width: 4.6rem; height: 1.6rem; padding: .05rem .3rem;
+    font-size: .78rem;
+}
 /* The "calibrate on" row is a divided button group like `derive`, so its label
    needs the same breathing room the group label has, and the group itself has
    to clear it. */

@@ -104,8 +104,18 @@ export const api = {
      * decision (series, axes, scales, marks, and any display reduction, which
      * arrives already applied). The client only adapts the document to
      * ECharts; see chartdoc-to-echarts.js.
+     *
+     * `params` are the grid charts' knob: `window` (quantile depth, in halves),
+     * `detail` (target cells per axis) and `encoding`. They travel in the URL
+     * because they change the bytes, so they belong in what the ETag answers
+     * for. Which grid comes back is the library's decision, taken before the
+     * reduction; asking for a depth is not the same as cropping what arrives,
+     * and cropping here could not recover resolution already averaged away.
      */
-    chartDoc:     (id, name)        => _json('GET',  `/v1/objects/${id}/chart/${name}`),
+    chartDoc:     (id, name, params = {}) => _json(
+        'GET',
+        `/v1/objects/${id}/chart/${name}${Object.keys(params).length ? `?${qs(params)}` : ''}`,
+    ),
     kappa:        (id, p = {})      => _json('GET',  `/v1/objects/${id}/kappa?${qs(p)}`),
 
     // Reinsurance

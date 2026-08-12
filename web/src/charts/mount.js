@@ -61,10 +61,19 @@ const VIEW_DEFAULTS = {
     wallGrid: true,
     marginals: false,
     contours: false,
+    cut: 'none',         // none | components | total | all
+    cutU: 0.5,           // where the cuts sit, on the diagonal, 0 to 1
+    window: null,        // quantile depth asked of the library; null takes its default
 };
 
 /** Which view keys the relief owns, for the reset button to put back. */
-const SURFACE_KEYS = ['mesh', 'wallGrid', 'marginals', 'contours'];
+const SURFACE_KEYS = ['mesh', 'wallGrid', 'marginals', 'contours', 'cut', 'cutU'];
+
+/** The cut control cycles rather than branching into four buttons. */
+const CUT_MODES = ['none', 'components', 'total', 'all'];
+
+/** One pass of the walk, in milliseconds. */
+const WALK_PERIOD = 13000;
 
 let view = (() => {
     try {
@@ -239,7 +248,42 @@ export function notDrawable(message) {
  * every control governs the whole chart by construction. It used to split
  * across the two panels, because a control belonged to one of them.
  */
-function renderControls(doc, onChange, onReset) {
+/**
+ * The window box: a number the reader turns, which is a new request.
+ *
+ * `input` rather than `change`, so arrow keys and the spinner move the picture,
+ * with the redraw deferred ~90 ms so a held key coalesces into one fetch rather
+ * than one per repeat. Never written back into while focused: the value the
+ * reader is typing is theirs until they leave.
+ */
+function windowBox(onWindow) {
+    const wrap = el('label', { className: 'exhibit-window' }, 'window ');
+    const input = el('input', {
+        type: 'number', min: '0', max: '12', step: '0.5',
+        className: 'form-control form-control-sm exhibit-window-input',
+        title: 'How deep to cut the quantile window: keep q(10^-w) to '
+            + 'q(1 - 10^-w) of each component. 0 keeps the whole grid. The '
+            + 'library chooses the grid from this before it reduces, so a '
+            + 'deeper window is finer, not cropped',
+    });
+    input.value = Number.isFinite(view.window) ? String(view.window) : '';
+    input.placeholder = 'auto';
+    let timer = null;
+    input.addEventListener('input', () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+            const raw = input.value.trim();
+            const next = raw === '' ? null : Number(raw);
+            if (raw !== '' && !(next >= 0 && next <= 12)) return;
+            setView({ window: next });
+            onWindow();
+        }, 90);
+    });
+    wrap.appendChild(input);
+    return wrap;
+}
+
+function renderControls(doc, onChange, onReset, onWindow, walking, onWalk) {
     const offered = readings(doc);
     const row = el('div', { className: 'exhibit-controls exhibit-controls-center' });
     const box = el('div', { className: 'exhibit-group' });
@@ -278,6 +322,40 @@ function renderControls(doc, onChange, onReset) {
             }, spec.label);
             box.appendChild(btn);
         }
+        // The cut is a choice among four rather than a toggle, and cycling one
+        // button through them keeps the strip one row: none, each component
+        // held in turn, the total, and all three at once.
+        const cutBtn = el('button', {
+            type: 'button',
+            className: `exhibit-toggle${view.cut !== 'none' ? ' active' : ''}`,
+            title: 'Cut the joint and read the conditional it leaves, drawn on '
+                + 'the wall beside the marginal it should be compared with. On '
+                + 'the total, the two means are kappa',
+            onClick: () => {
+                const next = CUT_MODES[(CUT_MODES.indexOf(view.cut) + 1) % CUT_MODES.length];
+                setView({ cut: next });
+                cutBtn.textContent = `cut: ${next}`;
+                cutBtn.classList.toggle('active', next !== 'none');
+                onChange();
+            },
+        }, `cut: ${view.cut}`);
+        box.appendChild(cutBtn);
+
+        // The walk. All three cuts move together out along y = x, the total
+        // rising steadily, which is the one animation with an argument behind
+        // it: watching kappa move as the total rises is the whole exercise.
+        const walkBtn = el('button', {
+            type: 'button',
+            className: `exhibit-toggle${walking() ? ' active' : ''}`,
+            title: 'Walk the cuts out along the diagonal, the total rising '
+                + 'steadily, and watch where the split falls against an even one',
+            onClick: () => {
+                onWalk();
+                walkBtn.classList.toggle('active', walking());
+            },
+        }, 'walk');
+        box.appendChild(walkBtn);
+
         // Reset, last of the group. Back to the preset, camera included, which
         // is why it goes through its own handler rather than through
         // `onChange`: the camera lives in the renderer instance and survives an
@@ -288,6 +366,9 @@ function renderControls(doc, onChange, onReset) {
             title: 'Back to the default view, camera included',
             onClick: () => onReset && onReset(),
         }, 'reset'));
+        // The window, last, and a number rather than a toggle: it is the one
+        // control that is a new request rather than a new drawing.
+        if (onWindow) box.appendChild(windowBox(onWindow));
     }
 
     // The realization control, last, per the house order: axis readings before
@@ -360,7 +441,7 @@ export async function mountChart(container, spec) {
     let doc;
     try {
         const [payload] = await Promise.all([
-            api.chartDoc(spec.id, spec.chart),
+            api.chartDoc(spec.id, spec.chart, chartParams()),
             loadStyle().catch(() => null),   // colors are a bonus, not a blocker
         ]);
         doc = payload;
@@ -368,7 +449,20 @@ export async function mountChart(container, spec) {
         empty(container);
         return null;
     }
-    return draw(container, tools, host, doc);
+    return draw(container, tools, host, doc, spec);
+}
+
+/**
+ * The request parameters the held view implies.
+ *
+ * Only `window`, and only when the reader has moved it off the library's own
+ * default. Sending a parameter to say "do what you would have done" would put
+ * the app's idea of the default into the URL, the cache key and the ETag, and
+ * the first time the library changed its mind the app would be overriding it
+ * without anybody deciding to.
+ */
+function chartParams() {
+    return Number.isFinite(view.window) ? { window: view.window } : {};
 }
 
 /**
@@ -393,7 +487,7 @@ export function mountChartDoc(container, doc) {
  * Returns null rather than throwing when the document has no realizable panel,
  * so a caller can put the plain "not yet" pane up instead.
  */
-function draw(container, tools, host, doc) {
+function draw(container, tools, host, doc, spec = null) {
     if (!doc) { empty(container); return null; }
 
     // The legend, which is also the readout. One strip carrying the swatch, the
@@ -416,6 +510,10 @@ function draw(container, tools, host, doc) {
     let renderer = null;
     let drawn = null;
     let ready = false;
+    // The walk is not view state: it is a thing happening now, and a sticky one
+    // would have every chart open mid-animation.
+    let walking = false;
+    let walkFrame = null;
 
     const options = () => ({
         view: { ...view, kind: view.kind || defaultKind(doc) },
@@ -623,8 +721,14 @@ function draw(container, tools, host, doc) {
 
     function renderTools() {
         empty(tools);
-        const strip = renderControls(doc, () => { if (ready) onToggle(); },
-                                     () => { if (ready) onReset(); });
+        const strip = renderControls(
+            doc,
+            () => { if (ready) onToggle(); },
+            () => { if (ready) onReset(); },
+            spec ? () => { if (ready) refetch(); } : null,
+            () => walking,
+            () => setWalk(!walking),
+        );
         if (strip) tools.appendChild(strip);
     }
     renderTools();
@@ -652,12 +756,66 @@ function draw(container, tools, host, doc) {
      * whose whole job is to swing it back need a new instance.
      */
     function onReset() {
+        setWalk(false);
         const patch = {};
         for (const key of SURFACE_KEYS) patch[key] = VIEW_DEFAULTS[key];
         setView(patch);
         if (renderer) { renderer.dispose(); renderer = null; }
         renderTools();
         render();
+    }
+
+    /**
+     * Fetch the document again, because the window is a request parameter.
+     *
+     * Not a client-side crop, and the difference is the point of the parameter:
+     * the library chooses the reduction from the window *before* it reduces, so
+     * a deeper window comes back finer rather than cropped. Cropping here could
+     * only throw away resolution that had already been averaged out.
+     */
+    async function refetch() {
+        if (!spec) return;
+        let next;
+        try {
+            next = await api.chartDoc(spec.id, spec.chart, chartParams());
+        } catch {
+            return;                     // the old document stays on screen
+        }
+        if (!ready || !next) return;
+        doc = next;
+        if (renderer) { renderer.dispose(); renderer = null; }
+        render();
+    }
+
+    /**
+     * The walk: all three cuts out along `y = x`, the total rising steadily.
+     *
+     * Parameterized on the diagonal rather than by a shared fraction of each
+     * axis, which is `cutU`'s whole reason for being one number: the two axes
+     * cover different intervals and the total is parameterized by a third range
+     * again, so three cuts set to the same fraction of their own ranges drift
+     * apart instead of crossing at the point being walked to.
+     */
+    function setWalk(on) {
+        if (walking === on) return;
+        walking = on;
+        if (!on) {
+            if (walkFrame) cancelAnimationFrame(walkFrame);
+            walkFrame = null;
+            return;
+        }
+        if (view.cut === 'none') setView({ cut: 'all' });
+        let last = null;
+        const tick = (now) => {
+            if (!walking || !ready) return;
+            if (last === null) last = now;
+            const step = (now - last) / WALK_PERIOD;
+            last = now;
+            setView({ cutU: (view.cutU + step) % 1 });
+            render();
+            walkFrame = requestAnimationFrame(tick);
+        };
+        walkFrame = requestAnimationFrame(tick);
     }
 
     ready = true;
@@ -684,6 +842,7 @@ function draw(container, tools, host, doc) {
         get option() { return drawn; },
         dispose() {
             ready = false;
+            setWalk(false);
             try { ro.disconnect(); } catch { /* already gone */ }
             if (renderer) renderer.dispose();
         },

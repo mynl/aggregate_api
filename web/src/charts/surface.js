@@ -49,15 +49,18 @@ const VIRIDIS = ['#440154', '#414487', '#2a788e', '#22a884', '#7ad151', '#fde725
 export function loadSurface() {
     if (!pending) {
         pending = (async () => {
-            // `Line3DChart` as well as the surface: the mesh over the skin and
-            // the curves on the walls are real line geometry rather than the
-            // surface's built-in wireframe, which cannot be thinned and cannot
-            // carry its own opacity.
-            const [{ Line3DChart, SurfaceChart }, { Grid3DComponent }] = await Promise.all([
+            // Three chart types, not one. `Line3DChart` for the mesh over the
+            // skin and the curves on the walls, which are real line geometry
+            // rather than the surface's built-in wireframe (that one cannot be
+            // thinned and cannot carry its own opacity). `Scatter3DChart` for
+            // the marks: the mean standing on the curve it is the mean of, and
+            // kappa against the even split.
+            const [{ Line3DChart, Scatter3DChart, SurfaceChart },
+                   { Grid3DComponent }] = await Promise.all([
                 import('echarts-gl/charts'),
                 import('echarts-gl/components'),
             ]);
-            echarts.use([Line3DChart, SurfaceChart, Grid3DComponent]);
+            echarts.use([Line3DChart, Scatter3DChart, SurfaceChart, Grid3DComponent]);
             return true;
         })().catch(() => false);
     }

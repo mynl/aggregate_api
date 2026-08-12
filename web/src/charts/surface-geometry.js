@@ -311,6 +311,51 @@ function chain(segs, tol) {
 }
 
 /**
+ * Linear interpolation of a curve given as coordinates and values.
+ *
+ * Used to stand a mark on the curve it is the mean of: the mean lands between
+ * two drawn points nearly always, and putting the dot on the nearer one moves
+ * it by up to half a cell, which on a coarse grid is visible and is a lie about
+ * where the mean is.
+ */
+export function interpAt(coords, vals, at) {
+    const n = coords.length;
+    if (!n) return NaN;
+    const rising = coords[n - 1] >= coords[0];
+    const lo = rising ? coords[0] : coords[n - 1];
+    const hi = rising ? coords[n - 1] : coords[0];
+    if (!(at >= lo && at <= hi)) return NaN;
+    for (let i = 0; i < n - 1; i += 1) {
+        const a = coords[i];
+        const b = coords[i + 1];
+        if ((at >= a && at <= b) || (at <= a && at >= b)) {
+            const t = b === a ? 0 : (at - a) / (b - a);
+            return vals[i] + t * (vals[i + 1] - vals[i]);
+        }
+    }
+    return vals[n - 1];
+}
+
+/**
+ * The segment of the line `y = x` that lies inside the grid's box.
+ *
+ * The walk is parameterized on this and not by a shared fraction of each axis.
+ * Setting each cut to the same fraction of its own range does not put the three
+ * through one point, because the two axes cover different intervals and the
+ * total is parameterized by a third range again: three cuts that are supposed
+ * to cross at the point being walked to, drifting apart. Take `v` here and hold
+ * x at `v`, y at `v`, and the total at `2v`.
+ *
+ * Returns `null` when the two axes do not overlap at all, which is legitimate:
+ * one of the test surfaces is signed and another starts at 48.
+ */
+export function diagonalSegment(g) {
+    const lo = Math.max(coordX(g, 0), coordY(g, 0));
+    const hi = Math.min(coordX(g, g.nx - 1), coordY(g, g.ny - 1));
+    return hi > lo ? { lo, hi } : null;
+}
+
+/**
  * The mean of a set of values against their coordinates, weighted by them.
  *
  * Generic, and used for whatever the caller is entitled to compute: the mean of

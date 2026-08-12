@@ -12,8 +12,8 @@ import { test } from 'node:test';
 
 import { decodeSurfaceGrid } from '../src/charts/surface-grid.js';
 import {
-    columnAt, contourPaths, levelLine, rowAt, sampler, wallScale, weightedMean,
-    windowRange,
+    columnAt, contourPaths, diagonalSegment, interpAt, levelLine, rowAt, sampler,
+    wallScale, weightedMean, windowRange,
 } from '../src/charts/surface-geometry.js';
 
 /**
@@ -164,6 +164,35 @@ test('a contour lies at its level, and closes around a peak', () => {
     assert.deepEqual(ring[0], ring[ring.length - 1]);
     // Levels nothing reaches produce nothing rather than a degenerate path.
     assert.deepEqual(contourPaths(g, 1e9, at), []);
+});
+
+test('a mark stands on the curve, between its drawn points', () => {
+    // Putting the dot on the nearer drawn point instead moves it by up to half
+    // a cell, which on a coarse grid is a visible lie about where the mean is.
+    assert.equal(interpAt([0, 10], [0, 100], 2.5), 25);
+    assert.equal(interpAt([0, 10, 20], [0, 100, 0], 15), 50);
+    // A descending coordinate is the mirror curve on the other wall.
+    assert.equal(interpAt([20, 10, 0], [0, 100, 0], 15), 50);
+    // Outside the curve there is nothing to stand on, and NaN is what the
+    // caller checks to emit the mark empty rather than clamped to the edge.
+    assert.ok(Number.isNaN(interpAt([0, 10], [0, 100], 11)));
+    assert.ok(Number.isNaN(interpAt([], [], 1)));
+});
+
+test('the walk runs on the diagonal, not on a shared fraction', () => {
+    const g = grid(RAMP(1000));
+    // x covers [0, 8] and y covers [1000, 2500], which do not overlap, so
+    // there is no segment of y = x inside this box at all and the caller falls
+    // back rather than walking a line that is not there.
+    assert.equal(diagonalSegment(g), null);
+    // A box the diagonal does cross: the segment is the overlap of the two
+    // axis ranges, which is what makes one parameter put all three cuts
+    // through one point.
+    const square = decodeSurfaceGrid({
+        x0: 0, dx: 10, nx: 11, y0: 40, dy: 10, ny: 11,
+        z_block: { dtype: 'json', order: 'yx', data: new Array(121).fill(1) },
+    });
+    assert.deepEqual(diagonalSegment(square), { lo: 40, hi: 100 });
 });
 
 test('a weighted mean is the mean of the curve it is given', () => {

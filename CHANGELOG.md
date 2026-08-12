@@ -4,6 +4,61 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a79
+
+**The cuts, the marks and the walk.** `dev/plan-3d-plot.md` sections 4.4 and
+4.5, which is the last of the app's half that does not wait on the library.
+
+**cut** cycles none, components, total, all. Holding x leaves a distribution in
+y, and the conditional it leaves is drawn on the wall beside the marginal it
+should be compared with, at that wall's scale, so the gap between the two curves
+is the dependence: sweep the cut and on a joint that factors the conditional
+does not move off the marginal behind it. The cut is drawn three times over,
+because on its own the curve on the skin reads as a stripe of color rather than
+as a position: on the surface, as a trace on the floor giving it a foot, and as
+the conditional on the wall.
+
+**The marks.** On a component cut, `E[Y | X = x]` as a stem and a dot standing
+on the curve it is the mean of, which is the pairing that makes it a fact you
+can see rather than one you have to trust. On the total cut the same two marks
+are kappa, plus a hollow ring at the even split, `s / 2` to each: on the
+diagonal by construction and on the cut by construction, so the gap between the
+filled dot and the ring is how far from even the split is, drawn rather than
+subtracted. On an exchangeable pair the two sit on top of each other at every
+total.
+
+`kappa_1 + kappa_2 = s` holds to floating point at every position, checked at
+five: every point of the path has `x + y = s`, so the two means are weighted
+averages of numbers summing to `s` under the same weights, which makes it a
+real check on the arithmetic rather than a slogan.
+
+**walk**, one pass in thirteen seconds, all three cuts moving together out
+along `y = x`. Parameterized **on the diagonal**, which is why the position is
+one number: the two axes cover different intervals and the total is
+parameterized by a third range again, so three cuts set to the same fraction of
+their own ranges drift apart instead of crossing at the point being walked to.
+`diagonalSegment` returns null where the two axes do not overlap, which is a
+real case rather than a defensive one.
+
+**window**, a number box, live on `input` with the redraw deferred 90 ms so a
+held arrow key coalesces. It is the one control that is a new **request** rather
+than a new drawing: the library chooses the reduction from the window before it
+reduces, so a deeper window comes back finer rather than cropped, and a
+client-side crop could only throw away resolution that had already been
+averaged out. Empty means "the library's own default" and sends nothing, since
+a parameter saying "do what you would have done" puts the app's idea of the
+default into the URL and the ETag.
+
+**One honest limit, and it is upstream.** The conditionals and the marks are
+computed on the grid as served, and the library still crops that grid to the
+window, so a total cut whose line runs off the box is integrating over the part
+it can see. The author's 4.2.1 ruling closes this: the library emits the whole
+reduced grid with the window as a drawing range inside it, and nothing here
+changes when it lands. Until then, `window` 0 is the escape hatch: it asks for
+the whole grid and the marks are then exact.
+
+`loadSurface` registers `Scatter3DChart` as well, since the marks are points.
+
 ## 1.0.0a78
 
 **The relief gets controls of its own, and two of the things they turn on.**

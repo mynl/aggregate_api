@@ -21,7 +21,10 @@ import { fmt } from '../utils/format.js';
 import {
     coordX, coordY, decodeSurfaceGrid, findSurfaceSeries, xCoords, yCoords, zExtent,
 } from './surface-grid.js';
-import { contourPaths, wallScale } from './surface-geometry.js';
+import {
+    columnAt, contourPaths, diagonalSegment, interpAt, levelLine, rowAt,
+    wallScale, weightedMean,
+} from './surface-geometry.js';
 import {
     LOG_FLOOR, axisStyle, baseOption, fade, houseStyle, lineWidth, seriesColor,
 } from './theme.js';
@@ -1548,6 +1551,213 @@ function meshPolylines(g, k, at) {
     return [rows, cols];
 }
 
+/** The three cuts, colored so a curve on a wall says which cut it came from. */
+const CUT_COLORS = { x: '#dc3545', y: '#0d6efd', s: '#198754' };
+
+/**
+ * The cuts, their conditionals on the walls, and the marks on those.
+ *
+ * Parameters
+ * ----------
+ * g : object
+ *     The decoded grid.
+ * ctx : object
+ *     Everything the surface already computed: `height`, the box heights, the
+ *     wall positions, the wall scale `k`, and `dataMax`, the joint's own peak.
+ * view : object
+ *     Reads `cut` ('none' | 'components' | 'total' | 'all') and `cutU`, the
+ *     position on the diagonal.
+ *
+ * Returns
+ * -------
+ * Array
+ *     Series, and `[]` when no cut is asked for.
+ *
+ * Notes
+ * -----
+ * Two marks are the content of this whole chart. On a component cut, holding x
+ * leaves a distribution in y and the mark is `E[Y | X = x]` standing on the
+ * curve it is the mean of. On the total cut the pair is kappa, drawn against
+ * the even split, and the gap between the filled dot and the hollow ring is how
+ * far from even the split of a total is, drawn rather than subtracted.
+ *
+ * Every mark is emitted with empty data rather than omitted when it falls
+ * outside the box. An incremental update merges by id and can change a series
+ * that is there but cannot remove one that has gone, so dropping it leaves the
+ * last dot stuck where it was.
+ */
+function cutSeries(g, ctx, view) {
+    const mode = view.cut || 'none';
+    if (mode === 'none') return [];
+    const { height, zMax, floorH, hair, xWall, yWall, k, dataMax } = ctx;
+    const out = [];
+    const onWall = (v) => Math.min(zMax, Math.max(floorH, height(v)));
+    const seg = diagonalSegment(g);
+    const u = Number.isFinite(view.cutU) ? Math.min(1, Math.max(0, view.cutU)) : 0.5;
+    const v = seg ? seg.lo + (seg.hi - seg.lo) * u : coordX(g, Math.floor(g.nx / 2));
+
+    // A conditional is put on the marginal's scale on purpose: both are
+    // densities in the same variable, so their heights are comparable and the
+    // gap between them is the lesson. The trouble is that a conditional can
+    // legitimately be far taller: given the total, x is confined to [0, s] and
+    // the density there is roughly 1 / s, which at small s dwarfs anything the
+    // marginal does. So the shared scale is kept whenever it fits and the curve
+    // is shrunk by the least factor that brings it inside otherwise.
+    const fit = (vals) => {
+        let peak = 0;
+        for (const value of vals) if (value > peak) peak = value;
+        const room = dataMax * 0.98;
+        return peak > room ? room / peak : 1;
+    };
+    const scaled = (vals) => {
+        const f = fit(vals);
+        return f === 1 ? vals : vals.map((value) => value * f);
+    };
+
+    /** A stem to the floor and a dot on the curve, at `at`. */
+    const markMean = (tag, color, along, coords, vals, at) => {
+        const lo = Math.min(coords[0], coords[coords.length - 1]);
+        const hi = Math.max(coords[0], coords[coords.length - 1]);
+        const live = Number.isFinite(at) && at >= lo && at <= hi;
+        const top = live ? onWall(interpAt(coords, vals, at)) : 0;
+        const point = (z) => (along === 'x' ? [at, yWall, z] : [xWall, at, z]);
+        out.push({
+            id: `mean-${tag}`, type: 'line3D', name: `mean of ${tag}`,
+            data: live ? [point(floorH), point(top)] : [],
+            lineStyle: { color, width: 1.2, opacity: 0.55 }, silent: true,
+        }, {
+            id: `meandot-${tag}`, type: 'scatter3D', name: `mean of ${tag}`,
+            symbolSize: 9, data: live ? [point(top)] : [],
+            itemStyle: { color, opacity: 1, borderColor: '#ffffff', borderWidth: 1 },
+            silent: true,
+        });
+    };
+
+    if (mode === 'components' || mode === 'all') {
+        // Holding x leaves a distribution in y, and the mirror. The cut is
+        // named by what is held, the mean by what is left.
+        const held = [
+            { tag: 'x', color: CUT_COLORS.x, alongY: true,
+              curve: columnAt(g, v), coords: yCoords(g), step: g.dy },
+            { tag: 'y', color: CUT_COLORS.y, alongY: false,
+              curve: rowAt(g, v), coords: xCoords(g), step: g.dx },
+        ];
+        for (const a of held) {
+            const raw = Array.from(a.curve.values);
+            const mass = raw.reduce((s, value) => s + value, 0) * a.step;
+            // Renormalized, the cut is a conditional density in the same units
+            // as the marginal beside it, so it takes that wall's scale.
+            const wall = scaled(raw.map((value) => (value / (mass || 1)) * k));
+            const mu = weightedMean(a.coords, raw);
+            out.push({
+                id: `cond-${a.tag}`, type: 'line3D',
+                name: `conditional given ${a.tag}`,
+                data: a.alongY
+                    ? a.coords.map((c, r) => [xWall, c, onWall(wall[r])])
+                    : a.coords.map((c, i) => [c, yWall, onWall(wall[i])]),
+                lineStyle: { color: a.color, width: 2.4, opacity: 1 }, silent: true,
+            }, {
+                // The cut itself, lying on the surface, and its foot on the
+                // floor. On its own the curve on the skin reads as a stripe of
+                // color rather than as a position; the trace gives it a foot.
+                id: `cut-${a.tag}`, type: 'line3D', name: `cut at ${a.tag}`,
+                data: a.alongY
+                    ? a.coords.map((c, r) => [a.curve.at, c,
+                                              Math.min(zMax, height(raw[r]) + hair)])
+                    : a.coords.map((c, i) => [c, a.curve.at,
+                                              Math.min(zMax, height(raw[i]) + hair)]),
+                lineStyle: { color: a.color, width: 2.4, opacity: 1 }, silent: true,
+            }, {
+                id: `trace-${a.tag}`, type: 'line3D', name: `trace at ${a.tag}`,
+                data: a.alongY
+                    ? [[a.curve.at, coordY(g, 0), floorH + hair],
+                       [a.curve.at, coordY(g, g.ny - 1), floorH + hair]]
+                    : [[coordX(g, 0), a.curve.at, floorH + hair],
+                       [coordX(g, g.nx - 1), a.curve.at, floorH + hair]],
+                lineStyle: { color: a.color, width: 1.6, opacity: 0.85 }, silent: true,
+            });
+            markMean(a.tag, a.color, a.alongY ? 'y' : 'x', a.coords, wall, mu);
+        }
+    }
+
+    if (mode === 'total' || mode === 'all') {
+        // The line of constant total, sampled across the whole grid rather than
+        // across the part in view, because the mass off the picture is what
+        // decides how the total splits.
+        const color = CUT_COLORS.s;
+        const path = levelLine(g, 2 * v, { count: Math.max(g.nx, g.ny) });
+        if (path.length >= 2) {
+            const xs = path.map((p) => p[0]);
+            const ys = path.map((p) => p[1]);
+            const zs = path.map((p) => p[2]);
+            // The path's own spacing, not the grid's: the line is cut into
+            // `count` points across whatever interval it occupies, which is
+            // shorter than the x axis except corner to corner, and taking the
+            // grid step here inflates the conditional most at the short cuts.
+            const step = xs.length > 1 ? Math.abs(xs[1] - xs[0]) : 1;
+            const mass = zs.reduce((s, value) => s + value, 0) * step;
+            const norm = () => zs.map((value) => (value / (mass || 1)) * k);
+            const wallX = scaled(norm());
+            const wallY = scaled(norm());
+            // Along the anti-diagonal the joint is a function of x alone, and
+            // of y alone, because y = s - x. So one curve read against the x
+            // marginal is f(x | S = s) and the other is f(y | S = s), and the
+            // pair is how the total splits given its size.
+            out.push({
+                id: 'cond-s-x', type: 'line3D', name: 'x given the total',
+                data: path.map((p, i) => [p[0], yWall, onWall(wallX[i])]),
+                lineStyle: { color, width: 2.4, opacity: 1 }, silent: true,
+            }, {
+                id: 'cond-s-y', type: 'line3D', name: 'y given the total',
+                data: path.map((p, i) => [xWall, p[1], onWall(wallY[i])]),
+                lineStyle: { color, width: 2.4, opacity: 1 }, silent: true,
+            }, {
+                id: 'cut-s', type: 'line3D', name: 'cut at the total',
+                data: path.map((p) => [p[0], p[1], Math.min(zMax, height(p[2]) + hair)]),
+                lineStyle: { color, width: 2.4, opacity: 1 }, silent: true,
+            }, {
+                id: 'trace-s', type: 'line3D', name: 'trace at the total',
+                data: [[xs[0], ys[0], floorH + hair],
+                       [xs[xs.length - 1], ys[ys.length - 1], floorH + hair]],
+                lineStyle: { color, width: 1.6, opacity: 0.85 }, silent: true,
+            });
+
+            // kappa, on the two curves it is the mean of. k1 + k2 = s holds
+            // exactly rather than approximately, because every point of the
+            // path has x + y = s, so the two means are weighted averages of
+            // numbers summing to s under the same weights.
+            const k1 = weightedMean(xs, zs);
+            const k2 = weightedMean(ys, zs);
+            markMean('s-x', color, 'x', xs, wallX, k1);
+            markMean('s-y', color, 'y', ys, wallY, k2);
+
+            const inBox = (a, b) => a >= coordX(g, 0) && a <= coordX(g, g.nx - 1)
+                && b >= coordY(g, 0) && b <= coordY(g, g.ny - 1);
+            const onCut = (a) => Math.min(zMax, height(interpAt(xs, zs, a)) + hair * 2);
+            const half = (xs[0] + ys[0]) / 2;
+            out.push({
+                id: 'kappa-point', type: 'scatter3D', name: 'kappa',
+                symbolSize: 11,
+                data: inBox(k1, k2) ? [[k1, k2, onCut(k1)]] : [],
+                itemStyle: { color, opacity: 1, borderColor: '#ffffff', borderWidth: 1.5 },
+                silent: true,
+            }, {
+                // Where the cut crosses y = x: on the diagonal by construction
+                // and on the cut by construction, so it is the fixed thing
+                // kappa is read against. On an exchangeable pair the two sit on
+                // top of each other at every total, which is the cleanest
+                // statement of what exchangeable means.
+                id: 'even-split', type: 'scatter3D', name: 'even split',
+                symbolSize: 9,
+                data: inBox(half, half) ? [[half, half, onCut(half)]] : [],
+                itemStyle: { color: 'rgba(0,0,0,0)', borderColor: color, borderWidth: 1.6 },
+                silent: true,
+            });
+        }
+    }
+    return out;
+}
+
 /** The 3-D path: one 'surface' panel, the bivariate joint in relief. */
 function surfaceOption(doc, opts, view) {
     const panel = (doc && doc.panels && doc.panels[0]) || null;
@@ -1675,20 +1885,33 @@ function surfaceOption(doc, opts, view) {
     // the object rather than integrated from the reduced and windowed joint,
     // and they arrive as mass per display cell, so the division by the step is
     // what makes them densities comparable with each other.
+    //
+    // Stood a hair off the wall rather than on it. Exactly on it, a wall curve
+    // is coplanar with the plane grid3D draws there, and a `line3D` is built as
+    // a view-facing quad with real width, so half its geometry sits behind the
+    // wall and is occluded; which half wins depends on the view direction, so
+    // the curve stipples and flickers as the camera swings.
     const wallInsetX = (coordX(g, g.nx - 1) - coordX(g, 0)) * SURFACE_HAIR;
     const wallInsetY = (coordY(g, g.ny - 1) - coordY(g, 0)) * SURFACE_HAIR;
     const xWall = coordX(g, 0) + wallInsetX;
     const yWall = coordY(g, 0) + wallInsetY;
+    // The wall scale, shared by the marginals and by any conditional drawn
+    // beside them, which is what makes that comparison fair.
+    let wallK = 1;
+    if (g.marginals) {
+        const peak = (a) => Math.max(...Array.from(a, Math.abs)) || 1;
+        const px = peak(Array.from(g.marginals.x || [1], (m) => m / g.dx));
+        const py = peak(Array.from(g.marginals.y || [1], (m) => m / g.dy));
+        wallK = max * SURFACE_MARGINAL_SCALE * wallScale(px, py).scale;
+    }
     if (view.marginals && g.marginals) {
         const mx = Array.from(g.marginals.x || [], (m) => m / g.dx);
         const my = Array.from(g.marginals.y || [], (m) => m / g.dy);
-        const peak = (a) => Math.max(...a.map(Math.abs)) || 1;
         // One vertical scale for both walls, with the eight-fold cap: see
         // `wallScale`. The reference is the taller curve, and the whole pair is
         // drawn at a stated fraction of the box so it reads as an inset rather
         // than as a competing surface.
-        const fit = wallScale(peak(mx), peak(my));
-        const k = max * SURFACE_MARGINAL_SCALE * fit.scale;
+        const k = wallK;
         // Anything on a wall is scaled independently of the surface, so it can
         // land outside the box at either end: a marginal is near zero at the
         // edges of its support and a tight one peaks above the joint's own
@@ -1737,6 +1960,10 @@ function surfaceOption(doc, opts, view) {
             }
         }
     }
+
+    drawnSeries.push(...cutSeries(g, {
+        height, zMax, floorH, hair, xWall, yWall, k: wallK, dataMax: max,
+    }, view));
 
     // Grid lines on the three walls: chrome in the ordinary sense, but the
     // control that turns them off is the reader's, so the flag is read here.
