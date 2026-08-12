@@ -1,9 +1,13 @@
 # Plan [SpaceMouse-Surface]: a 6DOF puck for the joint surface, in the app and out of it
 
-> **Status: executed a86 to a89, 2026-08-12.** All four phases have landed.
-> What is open is what needs the hardware: the phase 2 findings block, and
-> acceptance items 1 and 2. The plan stays in `dev/` until those are written
-> in, then moves to `dev/done/`.
+> **Status: CLOSED 2026-08-12, moved to `dev/done/`.** All four phases landed
+> (a86 export, a87 probe, a88 device layer plus integrator, a89 feel), the
+> phase 2 findings block was written from the author's unit at a90 with the two
+> bugs that run found, and the phase 1 color stretch was ruled and shipped at
+> a91 as GLB with vertex colors. Five residual reads are recorded under
+> "What stays unread" below: they need the hardware or another browser, none of
+> them blocks anything, and they come back as punchlist entries if they matter.
+> Closed by the author rather than left open against them.
 >
 > **Original status, ready for execution, 2026-08-12.** Author has decided the
 > WebHID route and asked for the mesh export folded in. App repo only: no LIB work,
@@ -386,7 +390,7 @@ The difference between working and wanting to use it:
    writer tests; `check-nav.mjs` untouched (no new leaves, the controls ride
    the existing surface leaf).
 
-### Where acceptance stands, 2026-08-12 (a89)
+### Where acceptance stands at close, 2026-08-12 (a92)
 
 **Item 4, met.** 52 node tests pass, 19 of them new across the writers, the
 parser and the integrator. `check-nav.mjs` untouched: no leaf moved.
@@ -408,9 +412,12 @@ stretch above. The GLB in that viewer, and a slicer's opinion of the STL, are
 still unread. Expect the slicer to note an open shell: a height field is not
 a solid, deliberately and now by ruling.
 
-**Item 2, open, and it is the one that needs the hardware.** Nothing in the
-device path has met a device. The probe page is the first thing to run, and
-its findings block above is where its answers go.
+**Item 2, met in the part that mattered.** a90 overtook the sentence that stood
+here at a89. The device path has met a device: the author's unit ran the probe,
+the layout and travel were measured rather than assumed, and the puck drove the
+live camera, which is how the vertical pan was caught running away from a
+downward press. What was not exercised in that session is listed below rather
+than claimed.
 
 **Also observed, not reproduced**: one zrender exception
 (`eachBuiltinLayer`, reading `'0'` of null) during a first draw in a session
@@ -419,6 +426,36 @@ instance, on the path where the relief falls back to the flat reading until
 the gl chunk lands, which predates this plan. A clean load, build and draw
 produced an empty console, so it is recorded here rather than chased, and it
 earns a punchlist entry only if it recurs on a path a reader can take.
+
+### What stays unread at close
+
+Five readings that want the hardware, a slicer, or a browser without WebHID.
+None of them is code owed, none blocks a release, and each is written here so
+closing the plan does not lose it. Any that turns out to matter becomes a
+punchlist entry on the day it does.
+
+1. **Session lifecycle under the puck**: grant once and reload reattaching with
+   no chooser, the camera stopping dead on release, unplug and replug mid
+   session. The handlers are written and the reattach path is `getDevices()`;
+   what is missing is somebody watching it happen.
+2. **Sleep and wake** (phase 2 finding 4): whether `connect` and `disconnect`
+   fire as the wireless unit sleeps. Nothing hangs on the answer, since a
+   disconnect forgets the handle either way.
+3. **Zoom and twist direction**: `ty` positive zooming in and `rz` positive
+   orbiting right are still the a88 provisional signs. The vertical pan was the
+   one that was clearly wrong and a90 fixed it. Each of the other two is one
+   reverse flag away in the feel panel, which is exactly why phase 4 put the
+   flags in the UI.
+4. **The two files nobody has opened**: the a91 GLB in 3Dconnexion's viewer, and
+   the STL in a slicer. Expect the slicer to note an open shell, by ruling.
+5. **The greyed control elsewhere**: Firefox, Safari and the iPad read their
+   state from `navigator.hid` and have not been looked at. The iPad gl path is
+   untouched by construction.
+
+Plus one question the author was asked and has not needed to answer: whether
+21k to 28k triangles is the right export density, or whether the mesh row should
+also offer the coarser grid the floor image draws. It is a menu item, not a
+rework, if the answer ever comes back "coarser".
 
 ## Out of scope, recorded so they are choices rather than gaps
 
@@ -443,5 +480,8 @@ written into this plan at phase 2, and the plan moves to `dev/done/` when
 phase 4 lands.
 
 **As executed**: a86 the mesh export, a87 the probe page, a88 the device layer
-and the integrator, a89 the feel. The move to `dev/done/` waits on the findings
-block, which is the one deliverable a machine without the puck cannot write.
+and the integrator, a89 the feel, then a90 the findings block with the two bugs
+the probe run found and a91 the color ruling shipped as GLB. Seven bumps for
+four phases, the extra two being what meeting the hardware cost, which is the
+argument for having built the probe. Closed at a92 with the residual reads
+recorded above.

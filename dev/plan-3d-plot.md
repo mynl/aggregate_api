@@ -9,8 +9,16 @@ The API and the first SPA leaves are in (`aggregate_api` a72 to a75).
 recorded where they arose rather than in a list of their own. **4.2.1**: do not
 trade the full grid rule for the bytes, so the derived quantities stay the
 app's and LIB emits the whole reduced grid with `window` as the drawing range
-inside it. **5.1.1**: go with the representative point and `edge = "mid"`.
-Both are LIB edits; nothing on the app side is waiting on anything else.
+inside it, specified in full as **5.8**. **5.1.1**: go with the representative
+point and `edge = "mid"`, specified in **5.1.2**.
+
+**Both are LIB edits and both are open.** The app's half is otherwise built
+(a72 to a80): the decode, the geometry, the relief and its controls, the
+marginals on the walls, the contours, the cuts, the marks, the walk and the
+window box. Until 5.8 lands, every conditional and every mark is computed on
+the part of the grid that is on screen, which 5.8 measures at up to 4.9% on
+kappa; `window=0` is the escape hatch meanwhile and the app offers it as a box
+on the control strip.
 
 This is one document for `aggregate` (LIB), `aggregate_api` (API) and the SPA,
 because the thing being agreed is a wire format and a format described in two
@@ -483,14 +491,11 @@ is whatever that costs. Section 3.3's numbers become a note on what to expect
 rather than a budget to fit, and the `detail` ceiling is the lever if it ever
 does bite.
 
-**What that asks of LIB, and it is the one open item on this section.** The
-emitter as it stands at a257 crops: `z = reduce(density[lo_x:hi_x,
-lo_y:hi_y])`, so the served grid *is* the window and there is nothing outside
-it to compute on. Under this ruling it should choose the block factor from the
-cropped extent, as 5.2 says, and then reduce the **whole** fine grid at that
-factor, leaving `window` as the drawing range inside a larger lattice. The
-fields do not change; `window.x` and `window.y` stop being the same numbers as
-the lattice bounds, which is what they were carried for.
+**What that asks of LIB is written out in full as 5.8**, with the lines to
+change, the measured cost, and what "done" is. In one sentence: choose the
+block factor from the cropped extent as 5.2 says, then reduce the **whole** fine
+grid at that factor, leaving `window` as the drawing range inside a larger
+lattice.
 
 The rest of this section is the argument that was declined, kept because the
 reasoning is the part that stops it being reopened by accident.
@@ -1154,6 +1159,124 @@ where anyone writing an independence test will hit it before they write the
 assertion. `Clayton` and `IndepFreq` stayed in the prototype: they exercise
 nothing the two do not, and each costs the suite a three second bivariate
 build.
+
+### 5.8 Emit the whole reduced grid, and let `window` be the drawing range
+
+**The open LIB item, and the one the app is waiting on.** Written by the API
+agent 2026-08-12 at the author's request, because "it is important this works":
+this is the whole of what the app needs to stop reading a conditional off the
+part of a cut that happens to be on screen.
+
+#### What is wrong now
+
+The emitter crops before it emits:
+
+```python
+z = _reduce(_reduce(density[lo_x:hi_x, lo_y:hi_y], kx, axis=0), ky, axis=1)
+display_x = xs[lo_x:hi_x:kx]
+```
+
+So the served grid **is** the window, `window.x` and `window.y` come back equal
+to the lattice bounds, and there is nothing outside them for a consumer to
+compute on. Section 4.2 is then unsatisfiable by construction, and its rule is
+not fastidiousness: at a useful depth only a third of a cut at constant total is
+on screen, and the mass out there is what decides how the total splits.
+
+What that costs, measured by the prototype's `check-kappa-window.js` against
+kappa taken over the whole line:
+
+| surface | window | of the cut on screen | of its weight | kappa1 off by |
+|---|---|---|---|---|
+| Clayton | 4 | 33% | 83.2% | 4.9% |
+| Clayton | 2 | 27% | 81.9% | 7.8% |
+| IndepFreq | 3 | 34% | 95.5% | 1.0% |
+
+and the error flips sign with `s`, so it bends the shape of kappa against the
+total, which is the one thing the chart exists to show. The same applies to
+every conditional the app normalizes: `f(x | S = s)` divided by the visible
+mass is `f(x | S = s, both components in the box)`, a different and less
+interesting object whose mean moves whenever the window does.
+
+#### What to change
+
+One idea, and most of the emitter is already right. `_axis_plan` stays exactly
+as it is: **the block factor is still chosen from the cropped extent**, which is
+5.2 and is what makes `detail` mean something. What changes is what the
+reduction is applied to.
+
+1. **Reduce the whole fine axis, not the crop.** Take `k` from `_axis_plan` and
+   apply it from index 0 to the end: `z = _reduce(_reduce(density, kx, axis=0),
+   ky, axis=1)`, with `display_x = xs[::kx]` and `display_y = ys[::ky]`. The
+   blocking anchors at index 0, so `x0` is the first fine coordinate again and a
+   law supported from the origin is drawn from the origin. A ragged last block
+   is the usual remainder: pad the fine axis with zeros to a whole multiple of
+   `k` before reducing, which keeps the spacing uniform (5.2's own rule, and
+   every interpolation downstream depends on it) and preserves mass exactly,
+   since the pad is outside the support.
+2. **`window` becomes the drawing range**, which is what it was always carried
+   for. `window.x` and `window.y` stay the data bounds of the quantile window,
+   and they are now a sub-rectangle of the lattice rather than equal to it.
+   Nothing else about the field changes, and `kept` keeps its meaning exactly:
+   the fraction of the mass inside those bounds.
+3. **The marginals go on the whole lattice**, `_reduce(marg_x, kx)` rather than
+   `_reduce(marg_x[lo_x:hi_x], kx)`, so they are as long as the axis they index,
+   which is the invariant `SurfaceData` already validates.
+4. Everything else is untouched: `bs`, `k`, `deficit`, `moments`, the encodings,
+   and 5.1.2's representative point, which applies to the whole lattice the same
+   way it applies to the crop.
+
+#### What it costs, from the table in 5.0
+
+The whole reduced grid, at the `k` the window chose:
+
+| surface | fine | today, cropped | whole grid at the same `k` | ratio |
+|---|---|---|---|---|
+| Clayton | 512 x 2048 | 75 x 78 | 256 x 256 | 11x |
+| Indep | 64 x 16384 | 31 x 116 | 64 x 8192 | 146x |
+| IndepFreq | 512 x 2048 | 82 x 108 | 128 x 512 | 7x |
+| IndepSigned | 1024 x 1024 | 66 x 126 | 128 x 256 | 4x |
+
+`Indep` is the pathological one and it is the honest worst case: a Lomax on a
+lattice wide enough to hold its tail. 524k cells is 2.1 MB as float32 before
+transport compression. The author ruled 2026-08-12 that size is not the
+constraint here ("don't worry about size budgets now, we'll figure that later
+if needed"), and `detail` is the lever if it becomes one. Note the app does not
+*draw* those cells: it clips the drawing to `window` and computes on the rest,
+which is the whole point of the split.
+
+If the payload does become a problem, the knob to reach for is not a crop: it
+is a `context` parameter saying how far beyond the window to carry, with the
+whole grid as its default, so the choice is stated in the document rather than
+made silently by the emitter.
+
+#### Done when
+
+- `build_chart_doc(indep, 'joint_surface', window=4)` returns a y axis of about
+  8192 cells with `window.y` naming a sub-range of roughly 116 of them, rather
+  than a 116 cell axis whose window is the whole of it
+- `sum(z)` is the joint's whole placed mass, `1 - deficit`, to 1e-12, rather
+  than `kept * (1 - deficit)`
+- `window.kept` still matches an independently computed sum over the crop to
+  1e-9, which is now a statement about a sub-rectangle rather than about the
+  whole array
+- both marginals are as long as their axes, and the x marginal is unchanged by
+  the window depth: the same array at `window=2` and `window=6` up to the block
+  factor, since it is the object's own
+- the spacing is uniform on both axes at every depth from 1 to 12, including
+  where the zero pad fires
+- kappa at a fixed total in data coordinates agrees across depths 0, 6, 5, 4 and
+  3, which is the criterion this whole item exists for. It is an app-side test
+  today (plan 8.1, "SPA 4.2") and it cannot pass on either side until this lands
+
+#### What the app owes when it does
+
+One thing, and it is small: **clip the drawing to `window`**. `windowRange` is
+already written and tested, and `surfaceOption` currently draws every cell it is
+given because today every cell it is given is in the window. The surface, the
+mesh, the floor image and the contours take the index range; the conditionals,
+the means and kappa keep reading the whole grid, which is the rule. Nothing else
+app side changes, and the decode already carries the window through as
+`quantileWindow`.
 
 ---
 

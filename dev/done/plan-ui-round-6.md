@@ -184,7 +184,7 @@ Dependency.
 | Reinsurance Stats | yes, `reins` block 1 | the library serves one 17-row table, measures down and layers across; the api transposes and splits it into Layer terms and Moments. Author is pushing the change upstream. |
 | More Window | yes, `bs_window` | the exhibit serves the **public** frame: 10 columns, and it carries a stray `level_0`. The api serves the private `_bs_window_df`: 11 columns including `W` and `coverage`, which are the pane's whole diagnostic value. |
 | More Sharpen | **no exhibit at all** | `sharpen_df` / `sharpen_score` are not in the registry. |
-| Pricing (both), Bounds (all three) | **cannot be** | computed from what the reader typed, so not keyed on the object. The api builds these documents from pandas in `pricing.py` / `bounds.py`, which is the last pandas in the table pipeline. |
+| Pricing (both), Bounds (all three) | **cannot be** *(overturned 2026-08-12: `[Pricing-Keyed-On-Result]` keys the exhibits on result objects, and `dev/plan-pricing-exhibits.md` migrates the Pricing leaves; Bounds stays with the library's official channels plan)* | computed from what the reader typed, so not keyed on the object. The api builds these documents from pandas in `pricing.py` / `bounds.py`, which is the last pandas in the table pipeline. |
 | More Density, Reinsurance Density | n/a | bulk, permanently the grid's. Agreed exception. |
 
 So: one moves now, four are upstream asks, two are the agreed density case.

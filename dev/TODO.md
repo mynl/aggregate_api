@@ -54,7 +54,8 @@ review: the menu-from-capability rewrite (`applyKindGating` and the
 hardcoded NA tables read the capability response; `has_reins` gating folds
 in; chips gray out, never hide; unknown-to-the-page exhibits list under
 More), deleting the migrated `ROW_FLAGS` / `FORMATS` entries and the
-`main.js` title and caption literals (pricing FORMATS stay), wiring
+`main.js` title and caption literals (pricing FORMATS were to stay; as of
+2026-08-12 they delete too, per `dev/plan-pricing-exhibits.md`), wiring
 `check-exhibits.py` into CI, and extending `capture_fixtures.py` to the
 envelopes. *(The name collision that blocked the last of those is
 settled: a62 renamed the chart fixtures to `dev/fixtures/charts.json`,
@@ -71,13 +72,17 @@ serves. The `[Exhibits-App-Cleanup]` decision above is therefore taken: the
 migrated entries are deleted, and the frame routes stay as the raw / CSV api
 path, rendered by inference.
 
-What is left, and none of it is a published table: **More Sharpen** (the library
-registers no `sharpen` exhibit; `register_simple_exhibit` makes it a one-liner
-upstream), **Pricing and Bounds** (computed from the reader's input, so not
-keyed on the object; the author is adding a bounds summary upstream), and the
-**two densities**, bulk and the one exception the author scoped out. The asks
-are written up as
-`aggregate_REFACTOR/dev/note-from-aggregate-api-round-6.md`.
+What is left, and none of it is a published table: **More Sharpen** (the
+library registered `sharpen` at a255; the app-side cutover, `loadSharpenAudit`
+to `loadExhibitLeaf` plus deleting the two `FORMATS` entries and ledes, is
+owed on the next sync), **Pricing** (was "computed from the reader's input, so
+not keyed on the object"; superseded 2026-08-12 by `[Pricing-Keyed-On-Result]`
+and planned end to end in `dev/plan-pricing-exhibits.md`, three subtabs served
+by three exhibits on result objects), **Bounds** (stays with the library's
+`dev/plan-exhibit-official-channels.md` phase 10), and the **two densities**,
+bulk and the one exception the author scoped out. The asks were written up as
+`aggregate_REFACTOR/dev/note-from-aggregate-api-round-6.md`; items 1, 2, 3, 5
+and 6 closed upstream at a251 to a256.
 
 ### b) Consolidate the graphs on ECharts, and fix the options
 
@@ -570,14 +575,16 @@ one version bump each.
       target, and `Aggregate.calibrate_distortions` runs against a small view of
       that basis. No library internals reproduced. *(done)*
 
-- [ ] **Upstream, small: let `calibrate_distortions` take its distribution.**
-      Not blocking, since `_BasisView` works, but the api currently calls
-      `Aggregate.calibrate_distortions` **unbound** on a duck-typed object,
-      which is a little sharp. A `density=` keyword (or `basis=`) reading the
-      distribution to calibrate against instead of always `self.density_df`
-      would let that call become an ordinary one. Also worth exporting
-      `GridDistribution` from `aggregate` rather than making consumers import
-      `aggregate._grid_distribution`.
+- [x] **Upstream, small: let `calibrate_distortions` take its distribution.**
+      Landed upstream better than asked: `calibrate_distortions(reins_view=...)`
+      at a223, fixed for the shapes this api needs at a250
+      (`[Reins-Density-Fuzz]`), and richer than `_BasisView`'s three bases
+      (`gross`, `ceded`, `net`, plus the occurrence intermediates on two stage
+      programs, per `Aggregate.reins_views`). `GridDistribution` is public. The
+      shim and `_REINS_BASES` are deletable on a sync to a250 or later, and
+      their deletion is scheduled as phase A3 of
+      `dev/plan-pricing-exhibits.md`. *(done upstream; app-side deletion
+      pending in that plan)*
 
 - [ ] **Hero gallery empty on a first page load (not reproduced).** Reported by
       the author; populated on the next load. The server side is clean:
@@ -652,6 +659,37 @@ one version bump each.
       corrected block coordinates, the window chosen before the reduction, and
       the emitted fields, without which the knob is a knob on nothing and two of
       the api tests stay skipped.
+
+- [x] **The Pricing pane through the official channels**:
+      `dev/plan-pricing-exhibits.md` (canonical here, symlinked in the
+      library), FINAL 2026-08-12. Calibrate, Allocate, Evaluate subtabs served
+      by `pricing.calibrate` / `pricing.allocate` / `pricing.evaluate`
+      exhibits keyed on new result objects; a debounced pentagon preview line;
+      `[Calibrate]` replacing `[Price]`. The library's five phases landed at
+      `aggregate` 1.0.0a259 to a263, with execution notes and nine recorded
+      divergences in the library's `dev/plan-pricing-exhibits-LIB.md`. Three
+      phases here, all landed: **A1 routes a83, A2 pane a84, A3 deletions
+      a85.** `pricing.py` is thin runners with no pandas, and `tables.FORMATS`
+      holds the two sharpen entries alone, which the sharpen leaf's own cutover
+      (above) deletes.
+
+- [x] **SpaceMouse on the joint surface, and the surface out of the app**:
+      `dev/done/plan-spacemouse.md`, app repo only, CLOSED 2026-08-12. **Four
+      phases: a86 the mesh export, a87 the probe page, a88 the device layer
+      plus the camera integrator, a89 the feel**, then **a90 the probe
+      findings from the author's unit** (the combined 12-byte layout, travel
+      of plus or minus 350, one multi axis collection, no double action from
+      3DxWare) with the two bugs that run found, a button mask that could fire
+      its own camera reset and a vertical pan running against the hand, and
+      **a91 the color ruling**, GLB with per vertex viridis read against the
+      colorbar. The relief's row carries `mesh | .glb | .obj | .stl`,
+      `spacemouse` and `feel`; Chromium only, feature-detected, greyed
+      elsewhere, iPad path untouched and the `echarts-gl` pin unmoved.
+      Five residual readings (session lifecycle under the puck, sleep and
+      wake, zoom and twist direction, the GLB in 3Dconnexion's viewer and the
+      STL in a slicer, the greyed control in Firefox, Safari and iPad) are
+      recorded in the closed plan's "What stays unread" section, and come back
+      as punchlist entries if they matter.
 
 ## Raised with `aggregate` (not fixed here)
 

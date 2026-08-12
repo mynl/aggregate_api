@@ -1,0 +1,3612 @@
+<!doctype html>
+<!--
+  dev/prototypes/joint-surface/surface-lab.html
+
+  A live knob board for the 3-D surface, over synthetic and real data. This is
+  the reference implementation for `dev/plan-3d-plot.md`: where an argument in
+  that plan says "the prototype does X", this is X. Tracked, and kept until the
+  shipped surface matches it.
+
+  Why this exists. The bivariate surface in the app is an echarts-gl `surface`
+  series dressed by `web/src/charts/surface.js:surfaceOverrides`, and that dict
+  currently sets about eight of the roughly fifty options the renderer exposes.
+  Everything the author noticed follows from the eight: one hard directional
+  light and a low ambient term (so the far side is in shadow), `shading:
+  'lambert'` (so the material is matte and cannot take a highlight),
+  `environment: '#ffffff'` with no floor treatment (so the base is white on
+  white), and a color ramp whose first stop is `#ffffff` (so a density fades
+  out exactly where it is smallest).
+
+  So this page is not a mockup of a feature. It is the option surface itself,
+  wired to sliders, over data with no build step behind it. Pick a preset, then
+  take one knob at a time and watch what it does. When a combination looks
+  right, hit "option JSON" and the dict that produced it comes out ready to be
+  lifted into `surfaceOverrides`.
+
+  Nothing here ports automatically and nothing here touches the app.
+
+  The second half of the panel is not chrome at all. Marginals standing on the
+  walls, a conditional slice, and contour lines are the things the 3-D view can
+  say that a heat map cannot, and they are worth more than any amount of
+  shading. Press "the demo": both marginals stand on the far walls, the
+  contours ring the surface as topographic lines, and two cuts run at once: fix
+  x and the red conditional in y stands beside the y marginal, fix y and the
+  blue conditional in x stands beside the x marginal. Each cut carries a
+  translucent plane so its position is obvious rather than inferred, and the
+  two cut curves cross on the surface.
+
+  It sweeps on its own. The two cuts run on sines whose periods do not divide
+  each other, so the crossing point traces the whole domain instead of the
+  diagonal. Watch either wall: the colored conditional slides while the grey
+  marginal behind it stays put, and that gap, live, is the dependence. Under
+  independence it never opens. Untick "sweep the cuts continuously" to drive
+  them by hand.
+
+  The sweep is possible because a cut costs almost nothing to move. The grid is
+  memoized, so nothing re-samples the surface, and every slice series carries a
+  stable `id`, which lets the frame hand echarts a few small series and leave
+  the 14,000 vertex mesh alone. A full rebuild is about 400 ms, four frames a
+  second, and would have made this impossible.
+
+  Two things that look like they should work and do not, both learned the hard
+  way and both now written into the panel. Contour lines on the floor are
+  invisible under an opaque surface, and a density covers its whole domain, so
+  they go on the surface instead. And dropping the surface opacity to reveal
+  the floor costs more than it buys: echarts-gl turns off depthMask for
+  transparent materials, so the triangles render out of order and the peak
+  shreds.
+
+  Two rows sit outside the knob board, and both are arguments rather than
+  conveniences. Along the top of the chart is the control set a shipped panel
+  would actually carry: the height scale, the two projections, which way the
+  mesh runs, the cut at constant total, and a way back. Six, against the
+  eighty-seven beside them. Along the bottom is the reading, in one fixed place
+  rather than in a box that follows the cursor, which is how the 2-D charts in
+  the app already do it. It reads x, y, x + y and the height, and it keeps
+  saying where the cuts are whether or not anything is under the cursor.
+
+  x + y is not decoration. It is the total, the quantity the whole bivariate
+  exercise is about, and it is on neither axis. That is also why the mesh can
+  be turned to run along it: with x and y on the same grid, a line of constant
+  r + c is a line of constant x + y, so every rung of the diagonal mesh is an
+  event {S = s}. The third cut follows the same path and puts f(x | x + y = s)
+  on the wall beside the x marginal, which is the comparison the twelve plot is
+  built out of.
+
+  One thing to know before it is blamed on this page. echarts-gl answers a
+  mousemove over a surface by picking on the GPU and then scanning every vertex
+  to find the nearest one, so hover costs O(n squared) per event and on a
+  software renderer it will stall the tab. A bare `surface` series with none of
+  this code around it does the same thing. Clicking writes the reading too,
+  which is the way out.
+
+  State also comes from the query string, which makes a configuration a link
+  and lets the page be driven without a mouse:
+      surface-lab.html?preset=demo&sliceAtX=0.42&sweep=0&panel=0
+  With `panel=0` the controls are hidden, which is what a screenshot wants.
+  `sweep=0` matters for a headless capture specifically: a running sweep is an
+  endless requestAnimationFrame loop, so Chrome's virtual clock never goes idle
+  and `--screenshot` never fires.
+
+  Serving. Any static server rooted at the repo works, for example
+      python -m http.server 8123
+  then open
+      http://localhost:8123/dev/prototypes/joint-surface/surface-lab.html
+  Rooting at this directory works too and only costs the favicon. The four real
+  surfaces need `surface-data.json` beside this file, which is not tracked
+  because it is derived; rebuild it with
+      uv run --no-sync python dev/prototypes/joint-surface/make-surface-data.py
+
+  Network. echarts, echarts-gl and Bootstrap come from jsDelivr, as in the
+  other mockups. The two HDR environment maps under "image lighting" also come
+  from a CDN and are the one thing here that needs the network at click time;
+  with no connection that control does nothing and the rest is unaffected.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>surface lab</title>
+<link rel="icon" type="image/png" sizes="32x32" href="../../../src/aggregate_api/static/favicon-32x32.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+<style>
+  :root { --sidebar: 336px; --strip: 1.8rem; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; overflow: hidden;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: #212529; background: #fff;
+  }
+  .lab { display: flex; height: 100vh; }
+  .panel {
+    width: var(--sidebar); min-width: var(--sidebar);
+    border-right: 1px solid #dee2e6; overflow-y: auto; overflow-x: hidden;
+    background: #fcfcfd;
+  }
+  .stage { flex: 1 1 auto; position: relative; min-width: 0; }
+  #chart { position: absolute; inset: 0 0 var(--strip) 0; }
+  #chart.pickable { cursor: crosshair; }
+
+  /* The reading, in one fixed place, which is how the 2-D charts in the app
+     already do it (`web/src/charts/mount.js:useStrip`). A tooltip that follows
+     the cursor covers the thing it describes and moves the numbers while you
+     are trying to compare them, and on a rotating 3-D box both are worse. The
+     box is hidden in CSS and the formatter writes here instead. */
+  .readout {
+    position: absolute; left: 0; right: 0; bottom: 0; height: var(--strip);
+    display: flex; align-items: center; gap: .85rem;
+    padding: 0 .7rem; border-top: 1px solid #e9ecef; background: #fff;
+    font-size: .72rem; color: #495057; font-variant-numeric: tabular-nums;
+    white-space: nowrap; overflow: hidden;
+  }
+  .readout.is-idle { color: #adb5bd; }
+  .readout b { font-weight: 600; color: #212529; }
+  .readout .k { font-style: normal; color: #868e96; margin-right: .25rem; }
+  .readout .cuts { margin-left: auto; color: #868e96; }
+  .readout .cuts b { color: #495057; font-weight: 500; }
+
+  /* The controls a shipped panel would carry, over the chart instead of in the
+     laboratory panel beside it, so the two sets never get confused. */
+  .toolbar {
+    position: absolute; left: .6rem; top: .6rem; z-index: 5;
+    display: flex; flex-wrap: wrap; gap: .25rem;
+    background: rgba(255,255,255,.86); padding: .25rem .3rem;
+    border: 1px solid #e9ecef; border-radius: .25rem;
+  }
+  .toolbar .btn { font-size: .68rem; padding: .1rem .42rem; }
+  /* The one control on the row carrying a number rather than a state to
+     cycle, so it is a box and not a button. */
+  .toolbar .winbox {
+    display: inline-flex; align-items: center; gap: .25rem;
+    font-size: .68rem; color: #495057; padding: 0 .1rem 0 .35rem;
+    border-left: 1px solid #e9ecef; margin-left: .1rem;
+  }
+  .toolbar .winbox input {
+    width: 3.1rem; font-size: .68rem; padding: .05rem .2rem;
+    border: 1px solid #ced4da; border-radius: .2rem; color: inherit;
+  }
+  .toolbar .winbox.off { opacity: .4; }
+
+  .panel-head { padding: .6rem .75rem .5rem; border-bottom: 1px solid #dee2e6; background: #fff; }
+  .panel-head h1 { font-size: .95rem; font-weight: 600; margin: 0 0 .1rem; letter-spacing: .01em; }
+  .panel-head .sub { font-size: .7rem; color: #6c757d; line-height: 1.3; }
+
+  .grp { border-bottom: 1px solid #e9ecef; }
+  .grp > summary {
+    cursor: pointer; list-style: none; padding: .38rem .75rem;
+    font-size: .68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .09em; color: #495057; background: #f1f3f5;
+    user-select: none;
+  }
+  .grp > summary::-webkit-details-marker { display: none; }
+  .grp > summary::before { content: "\25B8"; display: inline-block; width: 1em; color: #adb5bd; }
+  .grp[open] > summary::before { content: "\25BE"; }
+  /* `.grp` means a real control group and nothing else, so the group logic
+     can select it without picking up the closing note. */
+  .grp .body, .grp-note .body { padding: .4rem .75rem .6rem; }
+  .grp-note { border-bottom: 1px solid #e9ecef; }
+
+  .ctl { margin-bottom: .42rem; }
+  /* !important because `.ctl.check` further down sets display:flex at the
+     same specificity and would otherwise win on source order, which left
+     checkbox controls visible while every other inert control vanished. */
+  .ctl.hidden { display: none !important; }
+  .ctl.filtered, .grp.filtered { display: none !important; }
+  .ctl.dim { opacity: .4; }
+  .ctl label { font-size: .72rem; color: #343a40; display: flex; justify-content: space-between; gap: .5rem; margin-bottom: .05rem; }
+  .ctl label .val { color: #6c757d; font-variant-numeric: tabular-nums; font-size: .68rem; }
+  .ctl input[type=range] { width: 100%; height: 1rem; }
+  .ctl select, .ctl input[type=color] { width: 100%; font-size: .74rem; padding: .1rem .3rem; }
+  .ctl select { height: 1.55rem; }
+  .ctl input[type=color] { height: 1.55rem; padding: .1rem; }
+  .ctl.check { display: flex; align-items: center; gap: .4rem; }
+  .ctl.check input { margin: 0; }
+  .ctl.check label { font-size: .72rem; margin: 0; display: inline; }
+  .note { font-size: .66rem; color: #868e96; line-height: 1.35; margin: .3rem 0 .1rem; }
+
+  .presets { padding: .45rem .75rem; border-bottom: 1px solid #dee2e6; background: #fff; }
+  .presets .btn { font-size: .68rem; padding: .12rem .42rem; margin: 0 .2rem .2rem 0; }
+  .fps {
+    position: absolute; right: .6rem; bottom: calc(var(--strip) + .4rem); z-index: 5;
+    font-size: .68rem; color: #adb5bd; font-variant-numeric: tabular-nums;
+    background: rgba(255,255,255,.8); padding: .1rem .35rem; border-radius: .2rem;
+  }
+  #dump { font-family: ui-monospace, Consolas, monospace; font-size: .7rem; white-space: pre; }
+  .filter-row {
+    display: flex; gap: .25rem; padding: .4rem .75rem;
+    border-bottom: 1px solid #dee2e6; background: #fff;
+    position: sticky; top: 0; z-index: 3;
+  }
+  .filter-row .form-control { font-size: .74rem; height: 1.65rem; padding: .1rem .35rem; }
+  .filter-row .btn { font-size: .68rem; padding: .12rem .42rem; margin: 0; flex: 0 0 auto; }
+  .snap-row { display: flex; gap: .25rem; }
+  .snap-row .form-control, .snap-row .form-select { font-size: .72rem; height: 1.6rem; padding: .1rem .3rem; }
+  .snap-row .btn { flex: 0 0 auto; margin: 0; }
+  #snap-text {
+    font-family: ui-monospace, Consolas, monospace; font-size: .72rem;
+    width: 100%; min-height: 22rem; white-space: pre;
+  }
+</style>
+</head>
+<body>
+<div class="lab">
+  <div class="panel">
+    <div class="panel-head">
+      <h1>surface lab</h1>
+      <div class="sub">Every echarts-gl option that changes how the surface reads, over synthetic data. Rotate with the mouse; the camera survives a rebuild.</div>
+    </div>
+    <div class="presets">
+      <div style="font-size:.66rem;color:#6c757d;margin-bottom:.2rem">presets</div>
+      <button class="btn btn-outline-secondary" data-preset="app">defaults</button>
+      <button class="btn btn-outline-secondary" data-preset="shipped">as shipped</button>
+      <button class="btn btn-outline-secondary" data-preset="vtk">VTK shiny</button>
+      <button class="btn btn-outline-secondary" data-preset="matte">matte + AO</button>
+      <button class="btn btn-outline-secondary" data-preset="wire">wireframe</button>
+      <button class="btn btn-outline-secondary" data-preset="meshc">mesh + contours</button>
+      <button class="btn btn-outline-secondary" data-preset="surfc">surface + mesh</button>
+      <button class="btn btn-outline-secondary" data-preset="gloss">gloss</button>
+      <button class="btn btn-outline-secondary" data-preset="studio">dark studio</button>
+      <button class="btn btn-outline-secondary" data-preset="grounded">grounded</button>
+      <button class="btn btn-outline-primary" data-preset="demo">the demo</button>
+      <button class="btn btn-outline-primary" data-preset="kappa">kappa walk</button>
+      <button class="btn btn-outline-primary" data-preset="steve">the look</button>
+      <div class="mt-1">
+        <button class="btn btn-outline-primary" id="btn-dump">option JSON</button>
+        <button class="btn btn-outline-secondary" id="btn-png">PNG</button>
+      </div>
+    </div>
+    <div class="presets snap">
+      <div style="font-size:.66rem;color:#6c757d;margin-bottom:.2rem">snapshots</div>
+      <div class="snap-row">
+        <input id="snap-name" class="form-control form-control-sm" placeholder="name" spellcheck="false">
+        <button class="btn btn-outline-primary" id="snap-save">save</button>
+      </div>
+      <div class="snap-row mt-1">
+        <select id="snap-list" class="form-select form-select-sm"></select>
+        <button class="btn btn-outline-secondary" id="snap-del">delete</button>
+      </div>
+      <div class="mt-1">
+        <button class="btn btn-outline-secondary" id="snap-json">snapshot JSON</button>
+        <button class="btn btn-outline-secondary" id="snap-link">copy link</button>
+      </div>
+      <div class="form-check mt-1" style="font-size:.7rem">
+        <input class="form-check-input" type="checkbox" id="snap-remember">
+        <label class="form-check-label" for="snap-remember">restore where I left off on reload</label>
+      </div>
+      <div class="form-check" style="font-size:.7rem">
+        <input class="form-check-input" type="checkbox" id="panel-showall">
+        <label class="form-check-label" for="panel-showall">show every control, even the inert ones</label>
+      </div>
+      <div class="mt-1">
+        <button class="btn btn-outline-secondary" id="grp-all">open all</button>
+        <button class="btn btn-outline-secondary" id="grp-none">close all</button>
+      </div>
+      <div class="note" id="snap-note"></div>
+    </div>
+    <div class="filter-row">
+      <input id="ctl-filter" class="form-control form-control-sm"
+             placeholder="find a control" spellcheck="false" autocomplete="off">
+      <button class="btn btn-outline-secondary" id="ctl-filter-clear">clear</button>
+    </div>
+    <div id="controls"></div>
+    <div class="grp-note"><div class="body note" style="padding-top:.5rem">
+      Reading order that tends to work: <b>material</b> first (shading and
+      roughness decide whether a highlight is possible at all), then
+      <b>lighting</b> (one hard light reads as a dark far side; image lighting
+      fixes that in one move), then <b>ground</b> (what stops the surface
+      dissolving into the floor), then <b>post</b> (ambient occlusion is what
+      makes contact with the base legible).
+    </div></div>
+  </div>
+  <div class="stage">
+    <div class="toolbar" id="toolbar"></div>
+    <div id="chart"></div>
+    <div class="fps" id="fps"></div>
+    <div class="readout is-idle" id="readout">point at the surface to read it</div>
+  </div>
+</div>
+
+<div class="modal fade" id="dumpModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title" style="font-size:.9rem">option, with the mesh elided</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body"><pre id="dump"></pre></div>
+      <div class="modal-footer py-1">
+        <button class="btn btn-sm btn-outline-secondary" id="btn-copy">copy</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="snapModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title" style="font-size:.9rem">snapshot JSON, editable</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="note mb-1">
+          The whole control state. Edit it, or paste one in from somewhere else,
+          then apply. Unknown keys are ignored and missing ones fall back to
+          the shipped defaults, so a snapshot taken before a control existed
+          still restores.
+        </div>
+        <textarea id="snap-text" spellcheck="false"></textarea>
+      </div>
+      <div class="modal-footer py-1">
+        <button class="btn btn-sm btn-outline-secondary" id="snap-copy">copy</button>
+        <button class="btn btn-sm btn-primary" id="snap-apply">apply</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts-gl@2.1.0/dist/echarts-gl.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+/* ------------------------------------------------------------------ data */
+/* Each generator returns the SurfaceData shape the app already speaks:
+   x and y are the two grids, z[r][c] is the height at (x[c], y[r]). The
+   `signed` flag picks a diverging ramp by default; `floorable` marks the
+   ones that decay to zero, which is where the vanishing-base problem lives. */
+
+const SURFACES = {
+  ripple: {
+    label: 'ripple, cos r damped',
+    span: [-12, 12], signed: true, floorable: false,
+    f: (x, y, p) => {
+      const r = Math.hypot(x, y);
+      return Math.cos(r) * Math.exp(-p.damp * r);
+    },
+  },
+  sombrero: {
+    label: 'sombrero, sin r / r',
+    span: [-12, 12], signed: true, floorable: false,
+    f: (x, y) => {
+      const r = Math.hypot(x, y);
+      return r < 1e-9 ? 1 : Math.sin(r) / r;
+    },
+  },
+  peaks: {
+    label: 'peaks',
+    span: [-3, 3], signed: true, floorable: false,
+    f: (x, y) => 3 * (1 - x) ** 2 * Math.exp(-x * x - (y + 1) ** 2)
+      - 10 * (x / 5 - x ** 3 - y ** 5) * Math.exp(-x * x - y * y)
+      - Math.exp(-((x + 1) ** 2) - y * y) / 3,
+  },
+  mixture: {
+    label: 'bivariate mixture, decays to 0',
+    span: [0, 10], signed: false, floorable: true,
+    f: (x, y) => 0.72 * bvn(x, y, 3.0, 3.0, 1.15, 1.15, 0.55)
+      + 0.28 * bvn(x, y, 6.6, 6.9, 1.7, 2.1, -0.15),
+  },
+  lognormal: {
+    label: 'joint lognormal, long tail',
+    span: [0.15, 14], signed: false, floorable: true,
+    f: (x, y) => {
+      const a = Math.log(x), b = Math.log(y);
+      return bvn(a, b, 0.9, 1.0, 0.55, 0.7, 0.6) / (x * y);
+    },
+  },
+};
+
+/* Real joint aggregates, baked by `make-surface-data.py` beside this file, from DecL run
+   through `aggregate` and its own `chart_joint_surface` emitter. They arrive as
+   mass per cell, summing to one, on the display grid the library chose, and
+   `reduceGrid` turns that into a density on the way out.
+
+   They are here because the closed-form bumps above cannot argue about the
+   things that matter. A mixture of normals is smooth, symmetric, supported on
+   a square and has no tail; a joint aggregate is none of those. And they break
+   the assumptions every earlier version of this page was built on: the two
+   axes have different bucket sizes, one surface is 64 wide against 128 deep,
+   so anything that read a line of constant x + y off the index anti-diagonal
+   was right only by accident, and `IndepSigned` carries mass on both sides of
+   zero, so anything that assumed a loss starts at the origin is wrong on it.
+
+   One caution about the coordinates. The display grid labels each aggregated
+   block with the coordinate of its *last* fine cell, so it claims support that
+   starts up to one display bucket above where it does, and every mean read off
+   it is biased up by the same amount. The packer prints the size of that bias
+   per surface. It is an upstream matter and nothing here compensates for it,
+   so kappa and the conditional means shown on this page carry it. */
+let DATA = {};
+
+async function loadData() {
+  try {
+    const r = await fetch('surface-data.json', { cache: 'no-cache' });
+    if (!r.ok) return;
+    DATA = await r.json();
+  } catch (e) {
+    /* Served from somewhere without the file, or opened as a bare file. The
+       synthetic surfaces are unaffected and the real ones simply do not
+       appear in the menu. */
+    console.warn('surface-lab: surface-data.json not available', e);
+    return;
+  }
+  for (const [name, d] of Object.entries(DATA)) {
+    SURFACES[name] = {
+      label: `${name}, ${d.label}`,
+      sampled: name, units: d.units, decl: d.decl,
+      span: [d.x[0], d.x[d.x.length - 1]], signed: false, floorable: true,
+    };
+  }
+}
+
+/**
+ * Block sum a baked grid down toward n cells on each axis, as a density.
+ *
+ * Each axis is reduced by its own factor, since they need not have the same
+ * length, and the factor is a power of two so the blocks divide the grid
+ * exactly. That matters twice over: an uneven last block would make the
+ * spacing non-uniform, which every interpolation here relies on, and it would
+ * put a wider cell at the end of the axis, which is exactly where the tail is.
+ *
+ * Summing rather than averaging is what keeps this a probability
+ * distribution. The marginals, the conditionals and kappa are all computed off
+ * the reduced grid, and they are only right if reduction is mass preserving.
+ *
+ * The last line divides the block's mass by the block's area, and that
+ * division is not cosmetic. `z` arrives as a mass per cell, but every other
+ * surface here is a density and everything downstream assumes one: the wall
+ * curves integrate with `sum * dy`, the conditional divides by `sum * dy`.
+ * Feed those a mass and the two disagree by a factor of `dx * dy`, which on
+ * `Indep` is 1024, so the conditional sat flat on the floor while the marginal
+ * stood up beside it. Mass over area is the density, the two axes' different
+ * bucket sizes stay visible in it rather than being absorbed into the height,
+ * and it is the only choice that does not move when the `n` slider does: block
+ * summed masses grow with the block, a density does not.
+ */
+function pow2Under(r) { let k = 1; while (k * 2 <= r) k *= 2; return k; }
+
+/** `reduceWith` at the factors that bring an axis of `count` cells to `n`. */
+function reduceGrid(src, n, count) {
+  const nx0 = count ? count[0] : src.x.length;
+  const ny0 = count ? count[1] : src.y.length;
+  return reduceWith(src, pow2Under(Math.max(1, nx0 / n)), pow2Under(Math.max(1, ny0 / n)));
+}
+
+function reduceWith(src, kx, ky) {
+  const nx0 = src.x.length, ny0 = src.y.length;
+  const nx = Math.floor(nx0 / kx), ny = Math.floor(ny0 / ky);
+
+  const mid = (a, k, m) => {
+    const out = [];
+    for (let i = 0; i < m; i++) {
+      let s = 0;
+      for (let j = 0; j < k; j++) s += a[i * k + j];
+      out.push(s / k);
+    }
+    return out;
+  };
+  const x = mid(src.x, kx, nx);
+  const y = mid(src.y, ky, ny);
+  const area = (x.length > 1 ? x[1] - x[0] : 1) * (y.length > 1 ? y[1] - y[0] : 1);
+
+  const z = [];
+  for (let r = 0; r < ny; r++) {
+    const row = new Array(nx).fill(0);
+    for (let rr = r * ky; rr < (r + 1) * ky; rr++) {
+      const base = rr * nx0;
+      for (let c = 0; c < nx; c++) {
+        let s = 0;
+        for (let cc = c * kx; cc < (c + 1) * kx; cc++) s += src.z[base + cc];
+        row[c] += s;
+      }
+    }
+    for (let c = 0; c < nx; c++) row[c] /= area;
+    z.push(row);
+  }
+  return { x, y, z, kx, ky };
+}
+
+/** A rectangular sub-grid, by index, sharing nothing with its parent. */
+function subGrid(g, i0, i1, j0, j1) {
+  return {
+    x: g.x.slice(i0, i1 + 1),
+    y: g.y.slice(j0, j1 + 1),
+    z: g.z.slice(j0, j1 + 1).map((row) => row.slice(i0, i1 + 1)),
+  };
+}
+
+/* How near zero the low edge of a window has to be before it is taken to zero,
+   as a fraction of the window's width. A loss that starts at the origin should
+   be drawn starting at the origin: a window that opens 3 percent of the span
+   above it is reporting support the distribution does not have, and on a
+   surface it reads as a wall of density rising out of nowhere. */
+const ZERO_SNAP = 0.05;
+
+/**
+ * The two marginal running sums of a baked grid, computed once and kept.
+ *
+ * Returns
+ * -------
+ * object
+ *     `{x, y}`, each the cumulative mass along that axis, so a quantile is a
+ *     search rather than a sum.
+ */
+function marginalCums(src) {
+  if (src.cums) return src.cums;
+  const nx = src.x.length, ny = src.y.length;
+  const mx = new Array(nx).fill(0), my = new Array(ny).fill(0);
+  for (let r = 0; r < ny; r++) {
+    const base = r * nx;
+    let s = 0;
+    for (let c = 0; c < nx; c++) { const v = src.z[base + c]; mx[c] += v; s += v; }
+    my[r] = s;
+  }
+  const run = (a) => { let s = 0; return a.map((v) => (s += v)); };
+  src.cums = { x: run(mx), y: run(my) };
+  return src.cums;
+}
+
+/** The index range holding all but p of the mass at each end of one axis. */
+function axisWindow(cum, coords, p) {
+  const last = cum.length - 1;
+  const total = cum[last] || 1;
+  let lo = 0;
+  while (lo < last && cum[lo] < p * total) lo++;
+  let hi = last;
+  while (hi > lo && cum[hi - 1] >= (1 - p) * total) hi--;
+  if (coords[lo] > 0) {
+    let zero = 0;
+    while (zero < lo && coords[zero] < 0) zero++;
+    if (coords[lo] - coords[zero] <= ZERO_SNAP * (coords[hi] - coords[lo])) lo = zero;
+  }
+  /* Never crop an axis to nothing. A distribution that carries almost all of
+     its mass in one bucket, which is what a Lomax looks like on a lattice wide
+     enough to hold its tail, otherwise puts both ends of the window in that
+     bucket and leaves a grid one cell across, with no spacing to interpolate
+     on and no second point to take a step from. The floor grows upward first,
+     since on that shape the tail is the part worth seeing. */
+  const MIN_CELLS = Math.min(8, last + 1);
+  while (hi - lo + 1 < MIN_CELLS && hi < last) hi++;
+  while (hi - lo + 1 < MIN_CELLS && lo > 0) lo--;
+  return [lo, hi];
+}
+
+/**
+ * Crop a baked grid to q(10^-n) .. q(1 - 10^-n) on each axis.
+ *
+ * Parameters
+ * ----------
+ * src : object
+ *     A baked surface, `{x, y, z}` with `z` flat and row major.
+ * n : float
+ *     The depth. Zero, or anything not positive, means the whole grid.
+ *
+ * Returns
+ * -------
+ * object
+ *     The same shape as `src`, cropped, plus `kept`, the fraction of the mass
+ *     inside the window. `src` itself comes back when nothing is cropped.
+ *
+ * Notes
+ * -----
+ * Two sided on purpose, and not because both tails are equally interesting.
+ * The grid a joint aggregate arrives on is chosen to hold the whole
+ * distribution, so on a positive risk almost all of it is empty tail and the
+ * body lands in a corner; on a signed one there is a left tail to lose as
+ * well. Cropping by quantile rather than by a fixed fraction of the axis is
+ * what makes one control work for both.
+ *
+ * Everything downstream is then computed on the window, so a marginal is the
+ * marginal of what is drawn and a conditional is normalized over what is
+ * drawn. At n = 4 that is 0.02 percent of the mass away from the truth. The
+ * figure is reported beside the vertex count rather than assumed, since it is
+ * the one number that says how much a deep window is costing.
+ */
+function windowIndices(src, n) {
+  const nx0 = src.x.length, ny0 = src.y.length;
+  const whole = { c0: 0, c1: nx0 - 1, r0: 0, r1: ny0 - 1, kept: 1 };
+  if (!(n > 0)) return whole;
+  const p = 10 ** -n;
+  const cum = marginalCums(src);
+  const [c0, c1] = axisWindow(cum.x, src.x, p);
+  const [r0, r1] = axisWindow(cum.y, src.y, p);
+  if (c0 === 0 && c1 === nx0 - 1 && r0 === 0 && r1 === ny0 - 1) return whole;
+  let kept = 0, total = 0;
+  for (let r = 0; r < ny0; r++) {
+    const base = r * nx0;
+    const inRow = r >= r0 && r <= r1;
+    for (let c = 0; c < nx0; c++) {
+      const v = src.z[base + c];
+      total += v;
+      if (inRow && c >= c0 && c <= c1) kept += v;
+    }
+  }
+  return { c0, c1, r0, r1, kept: total > 0 ? kept / total : 1 };
+}
+
+/** The same window, as a cropped copy of the source. */
+function windowOf(src, n) {
+  const w = windowIndices(src, n);
+  const nx0 = src.x.length;
+  const nx = w.c1 - w.c0 + 1, ny = w.r1 - w.r0 + 1;
+  if (nx === nx0 && ny === src.y.length) return src;
+  const z = new Array(nx * ny);
+  for (let r = 0; r < ny; r++) {
+    const from = (w.r0 + r) * nx0 + w.c0, to = r * nx;
+    for (let c = 0; c < nx; c++) z[to + c] = src.z[from + c];
+  }
+  return { x: src.x.slice(w.c0, w.c1 + 1), y: src.y.slice(w.r0, w.r1 + 1), z, kept: w.kept };
+}
+
+/** Bivariate normal density, the workhorse behind both decaying surfaces. */
+function bvn(x, y, mx, my, sx, sy, rho) {
+  const zx = (x - mx) / sx, zy = (y - my) / sy;
+  const d = 1 - rho * rho;
+  const q = (zx * zx - 2 * rho * zx * zy + zy * zy) / d;
+  return Math.exp(-q / 2) / (2 * Math.PI * sx * sy * Math.sqrt(d));
+}
+
+const RAMPS = {
+  house: ['#ffffff', '#86b7fe', '#0d6efd'],
+  houseTinted: ['#eef4ff', '#86b7fe', '#0b5ed7'],
+  viridis: ['#440154', '#414487', '#2a788e', '#22a884', '#7ad151', '#fde725'],
+  magma: ['#000004', '#3b0f70', '#8c2981', '#de4968', '#fe9f6d', '#fcfdbf'],
+  ice: ['#f7fbff', '#9ecae1', '#4292c6', '#08306b'],
+  terrain: ['#2c5e8f', '#3f9e6f', '#c6cf7a', '#a9784f', '#f4f4f4'],
+  grey: ['#f1f3f5', '#adb5bd', '#343a40'],
+  divergent: ['#2166ac', '#67a9cf', '#f7f7f7', '#ef8a62', '#b2182b'],
+};
+
+/* -------------------------------------------------------------- controls */
+/* One entry per knob. `when` hides a control that cannot bite, so the panel
+   only ever shows options that are live given the rest of the state. */
+
+/** Whether the current representation draws mesh lines at all. */
+const hasLines = (s) => s.rep === 'edges' || s.rep === 'wire';
+
+/** Whether any cut is live, which is what the shared cut options depend on. */
+const anyCut = (s) => Boolean(s.sliceX || s.sliceY || s.sliceS);
+
+/**
+ * Whether the surface is a density, so a conditional mean means anything.
+ *
+ * `peaks` and the two ripples take negative values, and a weighted mean with
+ * negative weights is not a mean: on `peaks` it lands at x = -10 on an axis
+ * that stops at -3. So kappa, and the mean marker generally, is offered only
+ * where there is a distribution to take it of.
+ */
+const isDensity = (s) => !SURFACES[s.surf].signed;
+
+const SPEC = [
+  ['data', 'the surface', [
+    /* Evaluated when the panel is built, not when this array is written: the
+       baked surfaces are added to SURFACES once their JSON has arrived, which
+       is after this module has finished loading. */
+    ['surf', 'select', 'the surface', () => Object.keys(SURFACES).map(k => [k, SURFACES[k].label])],
+    ['n', 'range', 'grid, n x n (a target, for a baked surface)', [16, 220, 2]],
+    /* The window, as a depth rather than as two numbers per axis. The grid a
+       joint aggregate arrives on has to hold the whole distribution, so it is
+       mostly empty and the body sits in a corner; asking for the middle
+       1 - 2 * 10^-n of each marginal puts the body back in the box, and one
+       number does it for both axes and for either sign of support. */
+    ['windowN', 'num', 'window: q(10^-n) to q(1 - 10^-n), 0 for the whole grid',
+      [0, 12, 0.5], s => Boolean(SURFACES[s.surf].sampled)],
+    ['damp', 'range', 'ripple damping', [0, 0.35, 0.005], s => s.surf === 'ripple'],
+    ['logz', 'check', 'log height (densities)', null, s => SURFACES[s.surf].floorable],
+    ['decades', 'range', 'decades shown below the peak', [2, 16, 1], s => s.logz && SURFACES[s.surf].floorable],
+    ['boxHeight', 'range', 'height of the box', [15, 160, 1]],
+  ]],
+  ['proj', 'marginals, slices, contours', [
+    ['marginals', 'select', 'marginals on the walls', [
+      ['none', 'none'], ['line', 'a line'], ['ribbon', 'a filled ribbon'],
+    ]],
+    ['marginalKind', 'select', 'what the wall curve is', [
+      ['integral', 'the marginal, other axis integrated out'],
+      ['max', 'the literal shadow, max projection'],
+    ], s => s.marginals !== 'none'],
+    ['marginalScale', 'range', 'wall curve height', [0.2, 1, 0.05], s => s.marginals !== 'none' || anyCut(s)],
+    ['marginalColor', 'color', 'wall curve color', null, s => s.marginals !== 'none'],
+    /* Two separate controls, not one "far side" toggle, because the far pair
+       is not symmetric: at the default camera the far walls are y high and x
+       low. Which walls are behind the surface depends on the azimuth, and
+       rotating does not trigger a rebuild, so this stays manual. */
+    ['wallForX', 'select', 'x marginal stands at y =', [
+      ['min', 'low'], ['max', 'high'],
+    ], s => s.marginals !== 'none' || s.sliceY || s.sliceS],
+    ['wallForY', 'select', 'y marginal stands at x =', [
+      ['min', 'low'], ['max', 'high'],
+    ], s => s.marginals !== 'none' || s.sliceX],
+    /* Two independent cuts rather than one selector, so both can run at once.
+       Fixing x gives a conditional in y, which belongs beside the y marginal
+       on the x wall; fixing y gives the mirror. With both live the pair of
+       cuts crosses on the surface and each conditional stands next to the
+       marginal it should be read against. */
+    ['clickToSlice', 'check', 'click the surface to put the cuts there', null],
+    ['sliceX', 'check', 'fix x, conditional in y', null],
+    ['sliceAtX', 'range', 'x cut position', [0, 1, 0.005], s => s.sliceX],
+    ['sliceColorX', 'color', 'x cut color', null, s => s.sliceX],
+    ['sliceY', 'check', 'fix y, conditional in x', null],
+    ['sliceAtY', 'range', 'y cut position', [0, 1, 0.005], s => s.sliceY],
+    ['sliceColorY', 'color', 'y cut color', null, s => s.sliceY],
+    /* The third cut, and the only one that is not an index. Fixing the total
+       is the event the aggregate cares about: kappa_i(s) = E[X_i | S = s]
+       conditions on x + y, so the path it runs along is the anti-diagonal and
+       not either axis. The conditional it puts on the x wall is f(x | S = s),
+       which is exactly the curve the twelve plot is built out of. */
+    ['sliceS', 'check', 'fix x + y, conditional along the total', null],
+    ['sliceAtS', 'range', 'x + y cut position', [0, 1, 0.005], s => s.sliceS],
+    ['sliceColorS', 'color', 'x + y cut color', null, s => s.sliceS],
+    ['sweep', 'check', 'sweep the cuts continuously', null, anyCut],
+    ['sweepPath', 'select', 'how the sweep moves', [
+      ['outward', 'out along the diagonal, the total rising'],
+      ['sway', 'sway over the box, two rates that never repeat'],
+    ], s => anyCut(s) && s.sweep],
+    ['sweepSpeed', 'range', 'sweep speed', [0.05, 1.2, 0.05], s => anyCut(s) && s.sweep],
+    ['sliceNorm', 'check', 'renormalize, so it is a conditional density', null, anyCut],
+    ['fitWalls', 'check', 'shrink a wall curve that would leave the box', null, anyCut],
+    ['showMeans', 'check', 'mark the conditional mean (kappa, on the total cut)', null,
+      s => anyCut(s) && isDensity(s)],
+    ['sliceCut', 'check', 'draw the cut on the surface', null, anyCut],
+    /* Only visible when the floor is, so it does nothing under an opaque
+       surface and everything under a wireframe. The plane is the general
+       answer; this is the tidier one when you can use it. */
+    ['sliceFloor', 'check', 'trace the cut on the floor (needs a see-through surface)', null, anyCut],
+    ['slicePlane', 'check', 'show the cutting plane', null, anyCut],
+    ['slicePlaneOpacity', 'range', 'plane opacity', [0.03, 0.5, 0.01], s => anyCut(s) && s.slicePlane],
+    ['contours', 'check', 'contour lines', null],
+    /* On the floor they are invisible whenever the surface covers the whole
+       domain, which for a density it always does. Either drop the surface
+       opacity so the floor shows through, or put them on the surface, where a
+       contour at level L sits at height L by construction and reads like a
+       topographic line. */
+    ['contourWhere', 'select', 'contour lines go', [
+      ['surface', 'on the surface, as topographic lines'],
+      ['floor', 'on the floor, needs a translucent surface'],
+      ['both', 'both'],
+    ], s => s.contours],
+    ['contourLevels', 'range', 'how many levels', [2, 14, 1], s => s.contours],
+    ['contourColor', 'color', 'contour color', null, s => s.contours],
+    ['contourWidth', 'range', 'contour width', [0.4, 3, 0.1], s => s.contours],
+  ]],
+  ['rep', 'representation', [
+    ['rep', 'select', 'draw as', [
+      ['surface', 'surface'], ['edges', 'surface with edges'],
+      ['wire', 'wireframe only'], ['points', 'points'],
+    ]],
+    ['edgeSource', 'select', 'lines come from', [
+      ['grid', 'line3D geometry, any spacing'],
+      ['cells', 'the built-in wireframe, locked to the data grid'],
+    ], hasLines],
+    /* Which family of mesh lines gets drawn. The diagonal family is the one
+       with a meaning rather than a convenience: with equal spacing on both
+       axes, a line of constant r + c is a line of constant x + y, so the mesh
+       reads in the coordinate the total lives in and every rung is a level set
+       of S. Drawing both families at once is a proper isometric net. */
+    ['meshDir', 'select', 'mesh lines run', [
+      ['xy', 'along x and y'],
+      ['diag', 'along x + y and x - y'],
+      ['both', 'both families'],
+      ['none', 'no mesh lines'],
+    ], s => hasLines(s) && s.edgeSource === 'grid'],
+    ['coarse', 'range', 'a line every k-th cell', [1, 16, 1], s => hasLines(s) && s.edgeSource === 'grid'],
+    ['wireSkin', 'check', 'opaque skin, so hidden lines stay hidden', null, s => s.rep === 'wire' && s.edgeSource === 'grid'],
+    ['wireLift', 'range', 'lift the lines off the surface', [0, 1.5, 0.05], s => hasLines(s) && s.edgeSource === 'grid'],
+    ['wireColorMode', 'select', 'line color', [['fixed', 'one color'], ['height', 'by height']], s => hasLines(s) && s.edgeSource === 'grid'],
+    ['wireColor', 'color', 'line color', null, s => hasLines(s) && !(s.edgeSource === 'grid' && s.wireColorMode === 'height')],
+    ['wireWidth', 'range', 'line width', [0.2, 4, 0.1], hasLines],
+    ['wireOpacity', 'range', 'line opacity', [0.05, 1, 0.05], hasLines],
+    ['pointSize', 'range', 'point size', [1, 12, 0.5], s => s.rep === 'points'],
+  ]],
+  ['mat', 'material', [
+    ['shading', 'select', 'shading', [
+      ['color', 'color, no lighting at all'],
+      ['lambert', 'lambert, matte'],
+      ['realistic', 'realistic, physically based'],
+    ]],
+    ['roughness', 'range', 'roughness', [0, 1, 0.02], s => s.shading === 'realistic'],
+    ['metalness', 'range', 'metalness', [0, 1, 0.02], s => s.shading === 'realistic'],
+    ['opacity', 'range', 'opacity', [0.1, 1, 0.05]],
+    ['colorMode', 'select', 'color', [
+      ['height', 'by height, visualMap ramp'],
+      ['flat', 'one material color'],
+    ]],
+    ['ramp', 'select', 'ramp', Object.keys(RAMPS).map(k => [k, k]), s => s.colorMode === 'height'],
+    ['flatColor', 'color', 'material color', null, s => s.colorMode === 'flat' || s.rep === 'wire'],
+  ]],
+  ['light', 'lighting', [
+    ['mainIntensity', 'range', 'key light', [0, 3, 0.05]],
+    ['mainAlpha', 'range', 'key elevation, alpha', [0, 90, 1]],
+    ['mainBeta', 'range', 'key azimuth, beta', [-180, 180, 1]],
+    ['mainColor', 'color', 'key color', null],
+    ['shadow', 'check', 'cast shadows', null],
+    ['shadowQuality', 'select', 'shadow quality', [['low', 'low'], ['medium', 'medium'], ['high', 'high'], ['ultra', 'ultra']], s => s.shadow],
+    ['ambient', 'range', 'ambient fill', [0, 1.5, 0.05]],
+    ['cubemap', 'select', 'image lighting (HDR)', [
+      ['none', 'none'], ['pisa', 'pisa, soft interior'], ['canyon', 'canyon, hard sun'],
+    ]],
+    ['cubeDiffuse', 'range', 'image diffuse', [0, 2, 0.05], s => s.cubemap !== 'none'],
+    ['cubeSpecular', 'range', 'image specular', [0, 4, 0.05], s => s.cubemap !== 'none'],
+    ['cubeExposure', 'range', 'image exposure', [0, 3, 0.05], s => s.cubemap !== 'none'],
+  ]],
+  ['ground', 'ground and box', [
+    ['environment', 'select', 'environment', [
+      ['#ffffff', 'white, as shipped'],
+      ['grad-light', 'light gradient'],
+      ['grad-slate', 'slate gradient'],
+      ['#1b1e21', 'near black'],
+      ['cubemap', 'the HDR itself'],
+    ]],
+    ['splitArea', 'check', 'shade the three walls', null],
+    ['splitAreaColor', 'color', 'wall shade', null, s => s.splitArea],
+    ['splitLine', 'check', 'grid lines on the walls', null],
+    ['axisColor', 'color', 'axis and grid color', null],
+    /* Separate from the grid color, and it has to be, because on a dark
+       environment the two want to move in opposite directions: the grid lines
+       go darker to stop shouting and the text goes lighter to stay readable. */
+    ['inkColor', 'color', 'axis text color', null],
+    ['floor', 'select', 'floor under the surface', [
+      ['none', 'nothing'],
+      ['slab', 'flat slab'],
+      ['project', 'projected heat map'],
+      ['bands', 'projected heat map, in steps'],
+    ]],
+    ['baseDrop', 'range', 'drop the base below the data', [0, 0.7, 0.02]],
+    ['bandCount', 'range', 'how many steps', [3, 16, 1], s => s.floor === 'bands'],
+    ['floorColor', 'color', 'slab color', null, s => s.floor === 'slab'],
+    ['floorOpacity', 'range', 'floor opacity', [0.05, 1, 0.05], s => s.floor !== 'none'],
+    ['axisPointer', 'check', 'crosshair on hover', null],
+  ]],
+  ['post', 'post processing', [
+    ['post', 'check', 'enable post effects', null],
+    ['ssao', 'check', 'ambient occlusion (SSAO)', null, s => s.post],
+    ['ssaoRadius', 'range', 'AO radius', [0.5, 8, 0.1], s => s.post && s.ssao],
+    ['ssaoIntensity', 'range', 'AO intensity', [0, 2, 0.05], s => s.post && s.ssao],
+    ['bloom', 'check', 'bloom', null, s => s.post],
+    ['bloomIntensity', 'range', 'bloom intensity', [0, 0.5, 0.01], s => s.post && s.bloom],
+    ['fxaa', 'check', 'FXAA', null, s => s.post],
+    ['brightness', 'range', 'brightness', [-0.3, 0.3, 0.01], s => s.post],
+    ['contrast', 'range', 'contrast', [0.4, 2, 0.02], s => s.post],
+    ['saturation', 'range', 'saturation', [0, 2, 0.02], s => s.post],
+    ['exposure', 'range', 'exposure', [0.2, 3, 0.02], s => s.post],
+    ['tss', 'check', 'temporal supersampling', null],
+  ]],
+  ['cam', 'camera', [
+    ['projection', 'select', 'projection', [['perspective', 'perspective'], ['orthographic', 'orthographic']]],
+    ['alpha', 'range', 'elevation', [0, 90, 1]],
+    ['beta', 'range', 'azimuth', [-180, 180, 1]],
+    ['distance', 'range', 'distance', [60, 400, 1], s => s.projection === 'perspective'],
+    ['orthoSize', 'range', 'ortho size', [40, 300, 1], s => s.projection === 'orthographic'],
+    ['autoRotate', 'check', 'auto rotate', null],
+  ]],
+];
+
+/* ----------------------------------------------------------------- state */
+
+const PRESETS = {
+  /* The state the page opens in, and the base every other preset is layered
+     over, so a preset only has to name what it changes.
+
+     Three of these are no longer what `surfaceOverrides` ships, and they are
+     the three the author picked after looking at the real surfaces: a surface
+     carrying its own mesh rather than a bare skin, viridis rather than the
+     house blue, and no cast shadow. The shadow is the interesting one. It is a
+     dark shape thrown across the floor picture by the thing you are trying to
+     read, and on a density, which covers its whole domain, it lands on the
+     tail every time. The key light and the ambient fill carry the shading
+     without it. What the app ships today is kept as the `shipped` preset
+     below, so the comparison is still one click away. */
+  app: {
+    surf: 'mixture', n: 96, windowN: 4, damp: 0.06, logz: false, decades: 8, boxHeight: 62,
+    rep: 'edges', edgeSource: 'grid', meshDir: 'xy', coarse: 6,
+    wireSkin: false, wireLift: 0.18,
+    wireColorMode: 'fixed', wireColor: '#f8f9fa', wireWidth: 0.9, wireOpacity: 0.5, pointSize: 4,
+    shading: 'lambert', roughness: 0.5, metalness: 0, opacity: 1,
+    colorMode: 'height', ramp: 'viridis', flatColor: '#0d6efd',
+    mainIntensity: 1.15, mainAlpha: 40, mainBeta: 40, mainColor: '#ffffff',
+    shadow: false, shadowQuality: 'medium', ambient: 0.35,
+    cubemap: 'none', cubeDiffuse: 0.5, cubeSpecular: 1.4, cubeExposure: 1,
+    environment: '#ffffff', splitArea: false, splitAreaColor: '#f1f3f5',
+    splitLine: true, axisColor: '#dee2e6', inkColor: '#6c757d',
+    /* The heat map under the surface, on by default and continuous rather than
+       stepped. It is not a preference: a density covers its whole domain, so
+       the interesting part of the base is pressed flat against the floor, and
+       the image is the only thing that says what is down there. `project` is
+       the imshow of it, one cell one color; `bands` quantizes the same picture
+       into steps, which reads as a contour map and is a different claim, so it
+       stays an option rather than the default. The drop is what makes any of
+       it visible: the floor's picture sits below the surface's by that much,
+       so a band of it clears the silhouette along the near edges.
+       The contour lines are separate and stay off until asked for. When they
+       are asked for they go on both, since `contourWhere` is `both`: the same
+       levels on the surface as topographic lines and on the floor over the
+       image, which is what makes the two read as one drawing. */
+    floor: 'project', floorColor: '#e9ecef', floorOpacity: 0.5, bandCount: 8,
+    baseDrop: 0.32, axisPointer: true,
+    marginals: 'none', marginalKind: 'integral', marginalScale: 0.55,
+    /* Both wall curves on the low walls. They were split high and low so the
+       pair sat on the two far walls at the default azimuth, but a conditional
+       is read against the marginal beside it and the two pairs are easier to
+       compare when they meet at a corner in front of you rather than facing
+       away from each other across the box. */
+    marginalColor: '#6c757d', wallForX: 'min', wallForY: 'min',
+    clickToSlice: true,
+    sliceX: false, sliceY: false, sliceS: false,
+    sliceAtX: 0.5, sliceAtY: 0.5, sliceAtS: 0.5,
+    sliceColorX: '#dc3545', sliceColorY: '#0d6efd', sliceColorS: '#198754',
+    sweep: false, sweepPath: 'outward', sweepSpeed: 0.35,
+    sliceNorm: true, fitWalls: true, showMeans: true,
+    sliceCut: true,
+    sliceFloor: true, slicePlane: false, slicePlaneOpacity: 0.12,
+    contours: false, contourWhere: 'both', contourLevels: 8,
+    contourColor: '#868e96', contourWidth: 1,
+    post: false, ssao: false, ssaoRadius: 2, ssaoIntensity: 1,
+    bloom: false, bloomIntensity: 0.1, fxaa: false,
+    brightness: 0, contrast: 1, saturation: 1, exposure: 1, tss: false,
+    projection: 'perspective', alpha: 24, beta: 40, distance: 190,
+    orthoSize: 140, autoRotate: false,
+  },
+  /* What `web/src/charts/surface.js` really sends today, kept so any comparison
+     starts honest: a bare lambert skin on the house ramp, lit hard from one
+     side with the shadow on. */
+  shipped: {
+    rep: 'surface', shading: 'lambert', colorMode: 'height', ramp: 'house',
+    opacity: 1, wireLift: 0.25, wireColor: '#343a40', wireWidth: 1, wireOpacity: 1,
+    mainIntensity: 1.15, mainAlpha: 40, mainBeta: 40, ambient: 0.35,
+    shadow: true, shadowQuality: 'medium',
+    environment: '#ffffff', splitArea: false, splitLine: true,
+    floor: 'none', marginals: 'none', contours: false,
+    sliceX: false, sliceY: false, sliceS: false, boxHeight: 62,
+  },
+  /* The look the author is after: a real material, image based lighting so
+     nothing is flatly dark, occlusion for contact, and a floor to land on. */
+  vtk: {
+    shading: 'realistic', roughness: 0.28, metalness: 0.05, opacity: 1,
+    colorMode: 'height', ramp: 'viridis',
+    mainIntensity: 0.9, mainAlpha: 55, mainBeta: 35, shadow: true, shadowQuality: 'high',
+    ambient: 0.15, cubemap: 'pisa', cubeDiffuse: 0.55, cubeSpecular: 1.9, cubeExposure: 1.1,
+    environment: 'grad-light', splitArea: true, splitAreaColor: '#f8f9fa',
+    splitLine: true, axisColor: '#ced4da',
+    floor: 'project', floorOpacity: 0.55,
+    post: true, ssao: true, ssaoRadius: 2.4, ssaoIntensity: 1.15,
+    bloom: false, fxaa: true, exposure: 1.1, contrast: 1.06, tss: true,
+    rep: 'surface', boxHeight: 78,
+  },
+  /* No shine at all, shape carried entirely by occlusion. Reads like a cast
+     plaster model and is the most legible option for a busy density. */
+  matte: {
+    shading: 'lambert', opacity: 1, colorMode: 'height', ramp: 'grey',
+    mainIntensity: 0.75, mainAlpha: 62, mainBeta: 55, shadow: true, shadowQuality: 'high',
+    ambient: 0.85, cubemap: 'none',
+    environment: 'grad-light', splitArea: true, splitAreaColor: '#f1f3f5',
+    splitLine: false, axisColor: '#ced4da', floor: 'slab', floorColor: '#e9ecef', floorOpacity: 1,
+    post: true, ssao: true, ssaoRadius: 3.2, ssaoIntensity: 1.5,
+    bloom: false, fxaa: true, contrast: 1.1, saturation: 0.9, exposure: 1, tss: true,
+    rep: 'surface', boxHeight: 70,
+  },
+  /* The VTK w key: see-through, both halves of the mesh visible, no skin.
+     Tick "opaque skin" for the hidden-line version, which is usually the more
+     readable of the two once the surface has any real structure. */
+  wire: {
+    rep: 'wire', n: 96, edgeSource: 'grid', coarse: 4, wireSkin: false, wireLift: 0,
+    wireColorMode: 'fixed', wireColor: '#212529', wireWidth: 1.2, wireOpacity: 0.9,
+    shading: 'color', colorMode: 'flat', flatColor: '#ffffff', opacity: 1,
+    environment: '#ffffff', splitArea: false, splitLine: true, axisColor: '#dee2e6',
+    floor: 'none', post: false, ssao: false, tss: true, shadow: false,
+    mainIntensity: 1, ambient: 1, cubemap: 'none', boxHeight: 62,
+  },
+  /* One material color on black, lit only by the environment map. This is the
+     configuration where metalness and roughness are easiest to read. */
+  studio: {
+    shading: 'realistic', roughness: 0.18, metalness: 0.65, opacity: 1,
+    colorMode: 'flat', flatColor: '#4dabf7',
+    mainIntensity: 0.5, mainAlpha: 50, mainBeta: 20, shadow: true, shadowQuality: 'high',
+    ambient: 0.05, cubemap: 'canyon', cubeDiffuse: 0.35, cubeSpecular: 2.6, cubeExposure: 1.3,
+    environment: '#1b1e21', splitArea: false, splitLine: true, axisColor: '#495057',
+    /* Was unreadable: the labels inherited a mid grey chosen for white walls.
+       On a near black environment they have to invert. */
+    inkColor: '#adb5bd',
+    floor: 'none',
+    post: true, ssao: true, ssaoRadius: 2, ssaoIntensity: 1,
+    bloom: true, bloomIntensity: 0.12, fxaa: true, exposure: 1.2, contrast: 1.1, tss: true,
+    rep: 'surface', boxHeight: 74,
+  },
+  /* Everything the 3-D view can say that a heat map cannot, at once: both
+     marginals standing on the walls, contours on the floor, and a conditional
+     slice sitting beside the marginal it should be read against. Drag "where
+     the cut sits" and the red curve sweeps past the grey one. The gap between
+     them is the dependence, and under independence there is no gap. */
+  demo: {
+    surf: 'mixture', n: 120, boxHeight: 80,
+    marginals: 'ribbon', marginalKind: 'integral', marginalScale: 0.6,
+    marginalColor: '#6c757d', wallForX: 'min', wallForY: 'min',
+    sliceX: true, sliceY: true, sliceAtX: 0.30, sliceAtY: 0.62,
+    sliceColorX: '#dc3545', sliceColorY: '#0d6efd',
+    sweep: true, sweepSpeed: 0.35, sliceNorm: true, sliceCut: true,
+    sliceFloor: false, slicePlane: true, slicePlaneOpacity: 0.1,
+    contours: true, contourWhere: 'surface', contourLevels: 10,
+    contourColor: '#ffffff', contourWidth: 1,
+    /* No floor projection, and the surface stays opaque. Those two go
+       together: a density covers its whole domain, so anything drawn on the
+       floor is only visible through a translucent surface, and echarts-gl
+       turns off depthMask for transparent materials, which renders the
+       triangles out of order and shreds the peak. Opaque surface, contours
+       on it, is the trade that actually reads. */
+    floor: 'none', opacity: 1,
+    rep: 'surface', shading: 'lambert', colorMode: 'height', ramp: 'viridis',
+    mainIntensity: 0.85, mainAlpha: 58, mainBeta: 45, shadow: true, shadowQuality: 'high',
+    ambient: 0.62, cubemap: 'none',
+    environment: 'grad-light', splitArea: true, splitAreaColor: '#f8f9fa',
+    splitLine: true, axisColor: '#ced4da',
+    /* No post effects at all, and temporal supersampling instead, which is
+       the one antialiasing route that does not go through the post chain.
+       Two things pushed this. SSAO is the right idea in principle and wrong
+       here in practice: most of a density is a near-flat plain seen at a
+       grazing angle, exactly the case that makes the occlusion term noisy, so
+       it speckles the tail. And the color correction stage lightens the axis
+       labels along with everything else, which costs more than the
+       antialiasing is worth. */
+    post: false, ssao: false, fxaa: false,
+    bloom: false, contrast: 1, exposure: 1, saturation: 1, tss: true,
+  },
+  /* The total cut, walking out from the origin along the diagonal. The one
+     animation here with an argument behind it rather than a look.
+
+     What to watch is not the surface. It is the pair of curves on the two low
+     walls: f(x | S = s) and f(y | S = s), the split of the total given its
+     size, with kappa_1(s) and kappa_2(s) marked on them as the dots. As s
+     rises they change shape, and how they change is the answer to the question
+     an aggregate is usually being asked. If the units were exchangeable the
+     two would stay mirror images and each dot would sit at s / 2 forever. They
+     do not: the heavier tailed unit's curve stretches, its dot slides out, and
+     the light one's retreats. That is the whole of why a large total is not
+     shared in proportion, watched happening rather than asserted.
+
+     The two component cuts ride along at the same fraction, so all three cross
+     at one point tracking out along the diagonal, and the grey marginals stay
+     put behind everything as the fixed thing to read against. */
+  kappa: {
+    windowN: 4, boxHeight: 84,
+    alpha: 22, beta: 45, distance: 200,
+    sliceX: true, sliceY: true, sliceS: true,
+    sliceAtX: 0, sliceAtY: 0, sliceAtS: 0,
+    sweep: true, sweepPath: 'outward', sweepSpeed: 0.3,
+    sliceNorm: true, fitWalls: true, showMeans: true,
+    sliceCut: true, sliceFloor: true, slicePlane: true, slicePlaneOpacity: 0.08,
+    marginals: 'line', marginalKind: 'integral', marginalScale: 0.6,
+    marginalColor: '#adb5bd', wallForX: 'min', wallForY: 'min',
+    /* The mesh runs with the total, not with the axes, even though all three
+       cuts are live. The button ties the mesh to the cut and would make this
+       `both` for a cut of `all`; here the extra family is line work about a
+       question the walk is not asking. Every rung of a diagonal mesh is a copy
+       of the moving cut, which turns the mesh into its scale. */
+    rep: 'edges', edgeSource: 'grid', meshDir: 'diag', coarse: 8, wireLift: 0.18,
+    wireColorMode: 'fixed', wireColor: '#f8f9fa', wireWidth: 0.8, wireOpacity: 0.35,
+    shading: 'lambert', colorMode: 'height', ramp: 'viridis', opacity: 1,
+    /* The image on the floor, not contour lines. A cut walking across the
+       domain is already three moving lines and a plane; a contour set under it
+       is line work competing with line work. */
+    floor: 'project', floorOpacity: 0.5, baseDrop: 0.3, contours: false,
+    environment: 'grad-light', splitArea: true, splitAreaColor: '#f8f9fa',
+    splitLine: false, axisColor: '#ced4da', inkColor: '#6c757d',
+    mainIntensity: 0.85, mainAlpha: 58, mainBeta: 45, shadow: false, ambient: 0.62,
+    cubemap: 'none', post: false, ssao: false, fxaa: false, tss: true,
+  },
+  /* The studio material in a lit room rather than a black one: the same
+     glossy surface and image lighting, over a light environment and legible
+     labels. This is the one to reach for if the shine is what you wanted and
+     the black box is not. */
+  gloss: {
+    surf: 'mixture', n: 120, boxHeight: 76,
+    rep: 'surface', shading: 'realistic', roughness: 0.16, metalness: 0.22, opacity: 1,
+    /* One material color, not a height ramp. A gloss preset is about the
+       light, and a highlight only reads as a highlight against a constant
+       albedo. It also sidesteps the ramp trap: every blue ramp here bottoms
+       out near white, which is exactly where a density's tail lives and
+       exactly the white-on-white that started all of this. */
+    colorMode: 'flat', flatColor: '#4dabf7',
+    mainIntensity: 0.7, mainAlpha: 55, mainBeta: 30, mainColor: '#ffffff',
+    shadow: true, shadowQuality: 'high', ambient: 0.28,
+    cubemap: 'pisa', cubeDiffuse: 0.5, cubeSpecular: 2.2, cubeExposure: 1.1,
+    environment: 'grad-light', splitArea: true, splitAreaColor: '#f8f9fa',
+    splitLine: true, axisColor: '#ced4da', inkColor: '#6c757d',
+    floor: 'none', contours: false, marginals: 'none',
+    sliceX: false, sliceY: false, sweep: false,
+    post: false, ssao: false, fxaa: false, tss: true,
+  },
+  /* The filled counterpart of meshc, which MATLAB calls surfc: a solid
+     surface carrying its own mesh, over a contoured floor.
+     One thing behaves differently here and it is worth knowing before it
+     surprises you. The contour lines are on the surface, not the floor,
+     because a solid surface is an opaque lid: for a density, which covers its
+     whole domain, nothing drawn on the floor can be seen. The banded floor is
+     still switched on, since it does show for any surface that lifts clear of
+     it (try peaks or the ripple), and it costs one series. For contours you
+     can actually read beneath the surface, use meshc. */
+  surfc: {
+    surf: 'mixture', n: 110, boxHeight: 92,
+    /* The drop and the camera work together and neither is enough alone. The
+       floor's image sits below the surface's by the drop; what you see of it
+       is whatever clears the surface's silhouette. Lowering the elevation
+       compresses that silhouette while leaving the separation alone, so the
+       flatter the view, the more of the contour map shows. */
+    alpha: 16, beta: 40, distance: 200,
+    rep: 'edges', edgeSource: 'grid', coarse: 6, wireLift: 0.18,
+    wireColorMode: 'fixed', wireColor: '#f8f9fa', wireWidth: 0.9, wireOpacity: 0.5,
+    shading: 'lambert', colorMode: 'height', ramp: 'viridis', opacity: 1,
+    contours: true, contourWhere: 'surface', contourLevels: 8,
+    contourColor: '#ffffff', contourWidth: 1.3,
+    floor: 'bands', bandCount: 10, floorOpacity: 1, baseDrop: 0.5,
+    marginals: 'none', sliceX: false, sliceY: false, sweep: false,
+    environment: 'grad-light', splitArea: true, splitAreaColor: '#f8f9fa',
+    splitLine: true, axisColor: '#ced4da', inkColor: '#6c757d',
+    mainIntensity: 0.85, mainAlpha: 58, mainBeta: 45, shadow: true, shadowQuality: 'high',
+    ambient: 0.62, cubemap: 'none',
+    post: false, ssao: false, fxaa: false, tss: true,
+  },
+  /* Mesh over a contoured floor, which is MATLAB's meshc and the one
+     arrangement where a floor projection actually earns its place. The reason
+     it works here and nowhere else: with the skin off, the surface is nothing
+     but lines, so the floor is visible through it. Every other representation
+     is an opaque lid over the thing you wanted to look at. The mesh takes its
+     color from height, so the wireframe is quantitative too. */
+  meshc: {
+    surf: 'mixture', n: 96, boxHeight: 76,
+    /* The lift is not optional here. A density's tail lies on the floor, and
+       the floor is exactly where the contour plot is, so at zero lift the mesh
+       and the floor are coplanar over most of the domain and fight. */
+    rep: 'wire', edgeSource: 'grid', coarse: 4, wireSkin: false, wireLift: 0.7,
+    wireColorMode: 'height', wireWidth: 1.4, wireOpacity: 1,
+    colorMode: 'height', ramp: 'viridis', shading: 'color', opacity: 1,
+    floor: 'bands', bandCount: 12, floorOpacity: 1, baseDrop: 0.2,
+    contours: true, contourWhere: 'floor', contourLevels: 6,
+    contourColor: '#ffffff', contourWidth: 0.8,
+    marginals: 'none',
+    sliceX: false, sliceY: false, sweep: false, sliceFloor: true, slicePlane: false,
+    environment: 'grad-light', splitArea: true, splitAreaColor: '#f8f9fa',
+    splitLine: true, axisColor: '#ced4da',
+    ambient: 1, mainIntensity: 0.6, shadow: false,
+    post: false, ssao: false, fxaa: false, tss: true,
+  },
+  /* Aimed squarely at the vanishing base: log height, a ramp that never
+     reaches white, the heat map projected onto the floor, occlusion on. */
+  grounded: {
+    surf: 'lognormal', n: 110, logz: true, decades: 6, boxHeight: 72,
+    rep: 'surface', shading: 'lambert', opacity: 1,
+    colorMode: 'height', ramp: 'ice',
+    mainIntensity: 0.9, mainAlpha: 58, mainBeta: 45, shadow: true, shadowQuality: 'high',
+    ambient: 0.6, cubemap: 'none',
+    environment: 'grad-light', splitArea: true, splitAreaColor: '#f8f9fa',
+    splitLine: true, axisColor: '#ced4da',
+    floor: 'project', floorOpacity: 0.75,
+    post: true, ssao: true, ssaoRadius: 2.6, ssaoIntensity: 1.2,
+    bloom: false, fxaa: true, contrast: 1.04, exposure: 1, tss: true,
+  },
+  /* The author's own arrangement, and the baseline the toolbar's reset returns
+     to: a solid surface carrying its own mesh, the stepped image of the density
+     on a dropped floor beneath it, contour lines on both, both marginals
+     standing on the low walls, and both index cuts live so a click lands two
+     conditionals beside the marginals they should be read against.
+     Standing in for a snapshot that could not be read back off the machine, so
+     the numbers here are a reconstruction and are meant to be overwritten by
+     pasting the real one into the snapshot JSON box. */
+  steve: {
+    surf: 'mixture', n: 110, boxHeight: 84,
+    alpha: 20, beta: 40, distance: 200,
+    rep: 'edges', edgeSource: 'grid', meshDir: 'xy', coarse: 6, wireLift: 0.18,
+    wireColorMode: 'fixed', wireColor: '#f8f9fa', wireWidth: 0.9, wireOpacity: 0.5,
+    shading: 'lambert', colorMode: 'height', ramp: 'viridis', opacity: 1,
+    contours: true, contourWhere: 'both', contourLevels: 8,
+    contourColor: '#ffffff', contourWidth: 1.2,
+    /* The continuous image rather than the stepped one, and the drop is what
+       makes any of it visible: the floor's picture sits below the surface's by
+       that much, so a band of it clears the silhouette along the near edges. */
+    floor: 'project', floorOpacity: 0.9, baseDrop: 0.32,
+    marginals: 'line', marginalKind: 'integral', marginalScale: 0.55,
+    marginalColor: '#6c757d', wallForX: 'min', wallForY: 'min',
+    clickToSlice: true,
+    sliceX: true, sliceY: true, sliceS: false,
+    sliceAtX: 0.32, sliceAtY: 0.6, sliceAtS: 0.5,
+    sweep: false, sliceNorm: true, fitWalls: true, showMeans: true,
+    sliceCut: true, sliceFloor: true,
+    slicePlane: true, slicePlaneOpacity: 0.1,
+    /* No grid lines on the walls and no cast shadow. Both are subtractions and
+       both are the same argument: the walls carry the marginals and the
+       surface carries the mesh, so a second set of lines behind the first, and
+       a dark shape thrown across the floor picture, are competing with the
+       content rather than supporting it. The shading still reads because the
+       key light and the ambient fill are doing that work. */
+    environment: 'grad-light', splitArea: true, splitAreaColor: '#f8f9fa',
+    splitLine: false, axisColor: '#ced4da', inkColor: '#6c757d',
+    mainIntensity: 0.85, mainAlpha: 58, mainBeta: 45, shadow: false,
+    ambient: 0.62, cubemap: 'none',
+    post: false, ssao: false, fxaa: false, tss: true,
+  },
+};
+
+const state = Object.assign({}, PRESETS.app);
+
+/**
+ * Keep only keys the current build knows, coerced to the shipped types.
+ *
+ * The gate every restored snapshot passes through, whether it came from
+ * storage, the JSON box, or a link. Two jobs. Keys that no longer exist get
+ * dropped, so a snapshot taken before a control was renamed still loads
+ * instead of poisoning the state with a dead key. And values arrive as
+ * strings from a query string and as whatever was typed from the JSON box,
+ * so each one is coerced to the type the default has.
+ */
+function cleanState(obj) {
+  const out = {};
+  if (!obj || typeof obj !== 'object') return out;
+  for (const [k, v] of Object.entries(obj)) {
+    if (!(k in PRESETS.app)) continue;
+    const t = typeof PRESETS.app[k];
+    if (t === 'number') { const n = parseFloat(v); if (Number.isFinite(n)) out[k] = n; }
+    else if (t === 'boolean') out[k] = (v === true || v === 1 || v === '1' || v === 'true');
+    else out[k] = String(v);
+  }
+  return out;
+}
+const HDR = {
+  pisa: 'https://cdn.jsdelivr.net/gh/apache/echarts-website@asf-site/examples/data-gl/asset/pisa.hdr',
+  canyon: 'https://cdn.jsdelivr.net/gh/apache/echarts-website@asf-site/examples/data-gl/asset/canyon.hdr',
+};
+const LOG_FLOOR = 1e-12;
+
+/* ------------------------------------------------------------- the build */
+
+/* Sampling is the expensive half of a rebuild, n squared calls into the
+   generator plus the arrays to hold them, and it depends on three pieces of
+   state only. Caching it is what lets the sweep run: a slice moving over a
+   fixed surface must not re-evaluate the surface. */
+let gridCache = { key: null, grid: null };
+
+/* The context the last full build worked from, so an incremental slice update
+   can reuse the ranges and wall scales instead of deriving them again, and
+   the slice configuration that was live when it was written. */
+let lastCtx = null;
+let lastSliceSig = null;
+
+/** Sample the current function onto its grid, memoized on what it depends on. */
+function sample() {
+  const key = `${state.surf}|${Math.round(state.n)}|${state.damp}|${state.windowN}`;
+  if (gridCache.key === key) return gridCache.grid;
+  const spec = SURFACES[state.surf];
+  /* A baked surface is not sampled, it is windowed and reduced: n is a target
+     rather than a count, and what comes back is whatever the power-of-two
+     blocking could reach without making the spacing uneven. The window sets
+     the blocking factor, since resolution should be spent on what is drawn,
+     but the reduction then runs over the **whole** source and the window is
+     taken as an index range inside the result.
+     That is not tidiness. Every number the walls carry is an integral over an
+     axis: a marginal integrates out the other component, a conditional
+     normalizes over one, kappa is a mean along a line of constant total. Take
+     any of those over the window alone and it is a statement about a truncated
+     distribution, which is not the distribution anyone asked about. So the
+     curves are computed on `full` and only their drawn portion is clipped to
+     the box, which is why kappa does not move when you change the window. */
+  if (spec.sampled) {
+    const src = DATA[spec.sampled];
+    const w = windowIndices(src, state.windowN);
+    const n = Math.round(state.n);
+    const full = reduceWith(src,
+      pow2Under(Math.max(1, (w.c1 - w.c0 + 1) / n)),
+      pow2Under(Math.max(1, (w.r1 - w.r0 + 1) / n)));
+    /* The window snaps outward to the reduction's own block boundaries, which
+       moves an edge by less than one drawn cell and buys something worth more
+       than that edge: the cells are the same cells at every window depth, so
+       changing the depth crops the picture instead of reshuffling the mesh. */
+    const i0 = Math.min(full.x.length - 1, Math.floor(w.c0 / full.kx));
+    const i1 = Math.min(full.x.length - 1, Math.floor(w.c1 / full.kx));
+    const j0 = Math.min(full.y.length - 1, Math.floor(w.r0 / full.ky));
+    const j1 = Math.min(full.y.length - 1, Math.floor(w.r1 / full.ky));
+    const grid = Object.assign(subGrid(full, i0, i1, j0, j1), {
+      spec, kept: w.kept, full, win: { i0, i1, j0, j1 },
+    });
+    gridCache = { key, grid };
+    return grid;
+  }
+  const [lo, hi] = spec.span;
+  const n = Math.round(state.n);
+  const x = [], y = [], z = [];
+  for (let i = 0; i < n; i++) {
+    const t = lo + (hi - lo) * i / (n - 1);
+    x.push(t); y.push(t);
+  }
+  for (let r = 0; r < n; r++) {
+    const row = [];
+    for (let c = 0; c < n; c++) row.push(spec.f(x[c], y[r], state));
+    z.push(row);
+  }
+  gridCache = { key, grid: { x, y, z, spec } };
+  return gridCache.grid;
+}
+
+/** Flatten to the [x, y, h] vertex list, applying the log view if asked. */
+function vertices({ x, y, z }, useLog, zMin) {
+  const out = [];
+  for (let c = 0; c < x.length; c++) {
+    for (let r = 0; r < y.length; r++) {
+      const v = z[r][c];
+      const h = useLog ? (v > LOG_FLOOR ? Math.max(zMin, Math.log10(v)) : zMin) : v;
+      out.push([x[c], y[r], h]);
+    }
+  }
+  return out;
+}
+
+/** Every k-th line of the mesh, for an edge overlay that is readable. */
+function decimate({ x, y, z }, k, useLog, zMin) {
+  const xi = [], yi = [];
+  for (let c = 0; c < x.length; c += k) xi.push(c);
+  for (let r = 0; r < y.length; r += k) yi.push(r);
+  const out = [];
+  for (const c of xi) {
+    for (const r of yi) {
+      const v = z[r][c];
+      const h = useLog ? (v > LOG_FLOOR ? Math.max(zMin, Math.log10(v)) : zMin) : v;
+      out.push([x[c], y[r], h]);
+    }
+  }
+  return { data: out, shape: [xi.length, yi.length] };
+}
+
+/**
+ * The mesh lines, as two polylines: one running along x, one along y.
+ *
+ * A `line3D` series is a single connected polyline, so the selected rows are
+ * walked boustrophedon, and the turn at the end of a row traces the boundary
+ * column point by point instead of cutting straight across it. Every segment
+ * that comes out is a real edge of the mesh, so this is a wireframe rather
+ * than a wireframe plus a set of chords through the surface.
+ */
+function vertexAt(grid, useLog, zMin, lift, zCap) {
+  const { x, y, z } = grid;
+  return (c, r) => {
+    const v = z[r][c];
+    const h = useLog ? (v > LOG_FLOOR ? Math.max(zMin, Math.log10(v)) : zMin) : v;
+    /* Capped, or the lift pushes the line above the box at the peak, where
+       the surface is already at the top. One vertex loses its clearance and
+       nothing else changes. */
+    return [x[c], y[r], Math.min(zCap, h + lift)];
+  };
+}
+
+function gridPolylines(grid, k, at) {
+  const nx = grid.x.length, ny = grid.y.length;
+  const every = (count) => {
+    const idx = [];
+    for (let i = 0; i < count; i += k) idx.push(i);
+    if (idx[idx.length - 1] !== count - 1) idx.push(count - 1);
+    return idx;
+  };
+
+  const rows = [];
+  every(ny).forEach((r, i, all) => {
+    const fwd = i % 2 === 0;
+    for (let j = 0; j < nx; j++) rows.push(at(fwd ? j : nx - 1 - j, r));
+    if (i < all.length - 1) {
+      const edge = fwd ? nx - 1 : 0;
+      for (let rr = r + 1; rr < all[i + 1]; rr++) rows.push(at(edge, rr));
+    }
+  });
+
+  const cols = [];
+  every(nx).forEach((c, i, all) => {
+    const fwd = i % 2 === 0;
+    for (let j = 0; j < ny; j++) cols.push(at(c, fwd ? j : ny - 1 - j));
+    if (i < all.length - 1) {
+      const edge = fwd ? ny - 1 : 0;
+      for (let cc = c + 1; cc < all[i + 1]; cc++) cols.push(at(cc, edge));
+    }
+  });
+  return [rows, cols];
+}
+
+/**
+ * Bilinear lookup on the grid, in data coordinates rather than in indices.
+ *
+ * Every diagonal here is a line in *value* space, so it does not pass through
+ * grid vertices and cannot be read off the lattice. The two axes have their own
+ * bucket sizes, routinely different by orders of magnitude, so there is no
+ * change of variable that makes the anti-diagonal a lattice line either. This
+ * is the general answer, and the one the app will need.
+ */
+function sampler(grid) {
+  const { x, y, z } = grid;
+  const nx = x.length, ny = y.length;
+  const dx = (x[nx - 1] - x[0]) / (nx - 1);
+  const dy = (y[ny - 1] - y[0]) / (ny - 1);
+  return (xv, yv) => {
+    const ux = (xv - x[0]) / dx, uy = (yv - y[0]) / dy;
+    const c = Math.max(0, Math.min(nx - 2, Math.floor(ux)));
+    const r = Math.max(0, Math.min(ny - 2, Math.floor(uy)));
+    const fx = Math.min(1, Math.max(0, ux - c));
+    const fy = Math.min(1, Math.max(0, uy - r));
+    return z[r][c] * (1 - fx) * (1 - fy) + z[r][c + 1] * fx * (1 - fy)
+      + z[r + 1][c] * (1 - fx) * fy + z[r + 1][c + 1] * fx * fy;
+  };
+}
+
+/**
+ * One line of constant x + y (or of constant x - y), clipped to the box.
+ *
+ * Parameters
+ * ----------
+ * grid : object
+ * level : float
+ *     The value of x + y, or of x - y when `anti` is false.
+ * anti : bool
+ * count : int
+ *     How many points to put along it.
+ *
+ * Returns
+ * -------
+ * Array
+ *     `[x, y, z]` triples, evenly spaced in x, or empty if the line misses the
+ *     box entirely.
+ */
+function levelLine(grid, level, anti, count) {
+  const { x, y } = grid;
+  const nx = x.length, ny = y.length;
+  const yOf = (xv) => (anti ? level - xv : xv - level);
+  /* The x interval where both coordinates are inside. The other axis is
+     monotone in x either way, so the interval is the intersection of two
+     ranges and nothing more. */
+  const a = anti ? level - y[ny - 1] : y[0] + level;
+  const b = anti ? level - y[0] : y[ny - 1] + level;
+  const lo = Math.max(x[0], Math.min(a, b));
+  const hi = Math.min(x[nx - 1], Math.max(a, b));
+  if (!(hi > lo)) return [];
+  const at = sampler(grid);
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const xv = lo + (hi - lo) * i / (count - 1);
+    const yv = yOf(xv);
+    out.push([xv, yv, at(xv, yv)]);
+  }
+  return out;
+}
+
+/**
+ * The other mesh: lines of constant x + y and of constant x - y.
+ *
+ * The anti-diagonal family is the one worth having. Every rung of it is a level
+ * set of the total, so reading the surface along it is reading the event kappa
+ * conditions on. The main diagonal is its partner and turns the pair into a
+ * net.
+ *
+ * Unlike the row and column families, these are **not** one polyline each.
+ * They cannot be: a line of constant x + y does not follow grid edges once the
+ * two axes have different bucket sizes, so consecutive diagonals share no
+ * vertex to turn on and any connector between them would be a chord drawn
+ * across the surface. One series per rung is the honest shape, and the count is
+ * capped so a fine grid with a coarse spacing cannot quietly emit hundreds.
+ *
+ * Returns
+ * -------
+ * Array
+ *     A list of `[name, points]` pairs, one per rung.
+ */
+function diagPolylines(grid, k, useLog, zMin, lift, zCap) {
+  const { x, y } = grid;
+  const nx = x.length, ny = y.length;
+  const count = Math.max(nx, ny);
+  const rungs = Math.max(2, Math.min(48, Math.round((nx + ny) / Math.max(1, k))));
+  const disp = (v) => {
+    const h = useLog ? (v > LOG_FLOOR ? Math.max(zMin, Math.log10(v)) : zMin) : v;
+    return Math.min(zCap, h + lift);
+  };
+  const out = [];
+  for (const anti of [true, false]) {
+    const lo = anti ? x[0] + y[0] : x[0] - y[ny - 1];
+    const hi = anti ? x[nx - 1] + y[ny - 1] : x[nx - 1] - y[0];
+    for (let i = 1; i < rungs; i++) {
+      const pts = levelLine(grid, lo + (hi - lo) * i / rungs, anti, count);
+      if (pts.length < 2) continue;
+      out.push([anti ? 'edges along x+y' : 'edges along x-y',
+        pts.map((p) => [p[0], p[1], disp(p[2])])]);
+    }
+  }
+  return out;
+}
+
+/**
+ * The four wall curves: both marginals, and both literal shadows.
+ *
+ * The marginal is the integral over the other axis, which is the object with
+ * a meaning: the aggregate distribution of that unit on its own. The shadow
+ * is the max over the other axis, which is what you would actually see if you
+ * stood at the wall and looked along the axis. They are different pictures
+ * and the difference is worth being able to flip between: a ridge running off
+ * the diagonal shows in the shadow and is integrated away in the marginal.
+ */
+/**
+ * The grid every integral is taken over, and where the drawn box sits in it.
+ *
+ * A synthetic surface is its own full grid, so this is the identity on those
+ * and the rest of the code never has to ask which kind it is holding.
+ */
+function fullOf(grid) {
+  if (grid.full) return { base: grid.full, win: grid.win };
+  return { base: grid, win: { i0: 0, i1: grid.x.length - 1, j0: 0, j1: grid.y.length - 1 } };
+}
+
+function wallCurves(grid) {
+  const { x, y, z } = grid;
+  const dx = x[1] - x[0], dy = y[1] - y[0];
+  const mx = [], my = [], px = [], py = [];
+  for (let c = 0; c < x.length; c++) {
+    let s = 0, m = -Infinity;
+    for (let r = 0; r < y.length; r++) { s += z[r][c]; if (z[r][c] > m) m = z[r][c]; }
+    mx.push(s * dy); px.push(m);
+  }
+  for (let r = 0; r < y.length; r++) {
+    let s = 0, m = -Infinity;
+    for (let c = 0; c < x.length; c++) { s += z[r][c]; if (z[r][c] > m) m = z[r][c]; }
+    my.push(s * dx); py.push(m);
+  }
+  return { mx, my, px, py };
+}
+
+/**
+ * Marching squares over one level of a height grid, as loose segments.
+ *
+ * The two saddle cases are resolved on the average of the four corners rather
+ * than picked arbitrarily, which is what keeps a contour from crossing itself
+ * where two modes nearly touch.
+ */
+function isoSegments(H, x, y, level) {
+  const segs = [];
+  const nr = H.length, nc = H[0].length;
+  const cut = (va, vb, pa, pb) => {
+    const t = (level - va) / (vb - va);
+    return [pa[0] + t * (pb[0] - pa[0]), pa[1] + t * (pb[1] - pa[1])];
+  };
+  for (let r = 0; r < nr - 1; r++) {
+    for (let c = 0; c < nc - 1; c++) {
+      const v = [H[r][c], H[r][c + 1], H[r + 1][c + 1], H[r + 1][c]];
+      const p = [[x[c], y[r]], [x[c + 1], y[r]], [x[c + 1], y[r + 1]], [x[c], y[r + 1]]];
+      let idx = 0;
+      for (let k = 0; k < 4; k++) if (v[k] > level) idx |= (1 << k);
+      if (idx === 0 || idx === 15) continue;
+      const e = [];
+      for (let k = 0; k < 4; k++) {
+        const a = k, b = (k + 1) % 4;
+        e[k] = ((v[a] > level) !== (v[b] > level)) ? cut(v[a], v[b], p[a], p[b]) : null;
+      }
+      const join = (a, b) => { if (e[a] && e[b]) segs.push([e[a], e[b]]); };
+      switch (idx) {
+        case 1: case 14: join(3, 0); break;
+        case 2: case 13: join(0, 1); break;
+        case 4: case 11: join(1, 2); break;
+        case 8: case 7: join(2, 3); break;
+        case 3: case 12: join(3, 1); break;
+        case 6: case 9: join(0, 2); break;
+        case 5: case 10: {
+          const centerAbove = (v[0] + v[1] + v[2] + v[3]) / 4 > level;
+          if (((idx & 1) !== 0) === centerAbove) { join(0, 1); join(2, 3); }
+          else { join(3, 0); join(1, 2); }
+          break;
+        }
+      }
+    }
+  }
+  return segs;
+}
+
+/**
+ * Sew loose segments into polylines, because a line3D series is one polyline
+ * and a contour arrives as a heap of unordered two-point pieces.
+ */
+function chainSegments(segs, tol) {
+  const key = (p) => `${Math.round(p[0] / tol)}:${Math.round(p[1] / tol)}`;
+  const at = new Map();
+  segs.forEach((s, i) => {
+    for (const p of s) {
+      const k = key(p);
+      if (!at.has(k)) at.set(k, []);
+      at.get(k).push(i);
+    }
+  });
+  const used = new Array(segs.length).fill(false);
+  const out = [];
+  const grow = (path, takeEnd) => {
+    for (let guard = 0; guard < segs.length; guard++) {
+      const tip = takeEnd ? path[path.length - 1] : path[0];
+      const k = key(tip);
+      const j = (at.get(k) || []).find((i) => !used[i]);
+      if (j == null) return;
+      used[j] = true;
+      const other = key(segs[j][0]) === k ? segs[j][1] : segs[j][0];
+      if (takeEnd) path.push(other); else path.unshift(other);
+    }
+  };
+  for (let i = 0; i < segs.length; i++) {
+    if (used[i]) continue;
+    used[i] = true;
+    const path = [segs[i][0], segs[i][1]];
+    grow(path, true);
+    grow(path, false);
+    if (path.length >= 3) out.push(path);
+  }
+  return out;
+}
+
+/**
+ * Axis tick text. The default prints the axis endpoints at full float
+ * precision, which on a density puts "0.00000033263996616838" beside the box.
+ */
+function tick(v) {
+  if (v === 0) return '0';
+  const a = Math.abs(v);
+  if (a >= 1e5 || a < 1e-3) return v.toExponential(1);
+  return String(+v.toPrecision(4));
+}
+
+/** Sample a ramp at t in [0, 1], for building stepped floor bands. */
+function sampleRamp(colors, t) {
+  const hex = (h) => {
+    let s = String(h).replace('#', '');
+    if (s.length === 3) s = s.split('').map((c) => c + c).join('');
+    const v = parseInt(s, 16) || 0;
+    return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+  };
+  const u = Math.min(0.999999, Math.max(0, t)) * (colors.length - 1);
+  const i = Math.floor(u), f = u - i;
+  const a = hex(colors[i]), b = hex(colors[Math.min(colors.length - 1, i + 1)]);
+  return `rgb(${a.map((v, k) => Math.round(v + f * (b[k] - v))).join(',')})`;
+}
+
+/**
+ * Everything the two cuts draw, as its own function.
+ *
+ * Split out because it is the only part of the option that changes while the
+ * sweep runs, and every series it makes carries a stable `id`. echarts matches
+ * components by id before name or position, so the animation can hand it back
+ * a two-series option and leave a 14,000 vertex surface untouched. Rebuilding
+ * the whole thing costs about 400 ms, which is four frames a second.
+ *
+ * Parameters
+ * ----------
+ * ctx : object
+ *     `{grid, nx, ny, disp, zMin, zMax, floorZ, hair, xWall, yWall, kx, ky}` from
+ *     the caller, so nothing here has to re-derive the ranges.
+ *
+ * Returns
+ * -------
+ * Array
+ *     Zero to eight series: for each live axis a cut curve on the surface, a
+ *     conditional on the wall, a trace on the floor, and a cut plane.
+ */
+function sliceSeries({ grid, base, win, nx, ny, disp, zMin, zMax, zBase, floorZ, hair, xWall, yWall, kx, ky, dataMax }) {
+  const out = [];
+  const axes = [];
+  if (state.sliceX) axes.push({ tag: 'x', alongY: true, at: state.sliceAtX, color: state.sliceColorX });
+  if (state.sliceY) axes.push({ tag: 'y', alongY: false, at: state.sliceAtY, color: state.sliceColorY });
+
+  const onWall = (v) => Math.min(zMax, Math.max(floorZ, disp(v)));
+
+  /**
+   * Shrink a wall curve, but only if it would leave the box.
+   *
+   * A conditional is put on the marginal's scale on purpose: both are
+   * densities in the same variable, so their heights are comparable and the
+   * gap between them is the whole lesson. The trouble is that a conditional
+   * can legitimately be far taller. Given the total, X is confined to [0, s]
+   * and the density on that segment is roughly 1 / s, which at small s dwarfs
+   * anything the marginal does, and clamping it just painted a flat line along
+   * the lid.
+   *
+   * So the shared scale is kept whenever it fits and the curve is shrunk by
+   * the least factor that brings it inside otherwise. The comparison stays
+   * honest in the common case and stays visible in the rest.
+   */
+  const fit = (vals) => {
+    if (!state.fitWalls) return 1;
+    let peak = 0;
+    for (const v of vals) if (v > peak) peak = v;
+    /* Measured on the raw data maximum rather than on zMax, so the same test
+       works whether the height is being shown linearly or in decades. */
+    const room = dataMax * 0.98;
+    return peak > room ? room / peak : 1;
+  };
+  const scaled = (vals) => {
+    const f = fit(vals);
+    return f === 1 ? vals : vals.map((v) => v * f);
+  };
+
+  /**
+   * Mark the mean of a wall curve: a stem down to the floor and a dot on the
+   * curve.
+   *
+   * This is the conditional expectation, drawn on the distribution it is the
+   * mean of. That pairing is the point. E[X2 | X1 = a] read off a number is a
+   * fact you have to trust; read off the curve it sits on, you can see how
+   * tight it is, whether the density is skewed enough that the mean is in a
+   * thin place, and where it is about to move as the cut slides. On the total
+   * cut the same two marks are kappa_1 and kappa_2, and they sum to s.
+   *
+   * Parameters
+   * ----------
+   * tag : str
+   *     Series id suffix.
+   * color : str
+   * along : str
+   *     'x' when the curve runs along x on the y wall, 'y' for the mirror.
+   * coords, vals : Array
+   *     The curve, as drawn: coordinate and wall height.
+   * at : float
+   *     The mean, in coordinate units.
+   */
+  const markMean = (tag, color, along, coords, vals, at) => {
+    if (!state.showMeans || !isDensity(state)) return;
+    /* The mean is taken over the whole distribution and the curve is only the
+       part inside the window, so the mark can legitimately have nowhere to
+       stand. Clamping it to the edge would put a dot on a number that is not
+       there; the strip still prints the value.
+       Emitted with no data rather than not emitted, because an incremental
+       update merges by id and can change a series that is there but cannot
+       remove one that has gone. Dropping it would leave the last dot stuck on
+       the chart at the position it had when the mean was last inside. */
+    const lo = Math.min(coords[0], coords[coords.length - 1]);
+    const hi = Math.max(coords[0], coords[coords.length - 1]);
+    const live = Number.isFinite(at) && at >= lo && at <= hi;
+    const top = live ? onWall(interpAt(coords, vals, at)) : 0;
+    const point = (z) => (along === 'x' ? [at, yWall, z] : [xWall, at, z]);
+    out.push({
+      id: `mean-${tag}`, type: 'line3D', name: `mean of ${tag}`,
+      data: live ? [point(floorZ), point(top)] : [],
+      lineStyle: { color, width: 1.2, opacity: 0.55 }, silent: true,
+    });
+    out.push({
+      id: `meandot-${tag}`, type: 'scatter3D', name: `mean of ${tag}`,
+      symbolSize: 9, data: live ? [point(top)] : [],
+      itemStyle: { color, opacity: 1, borderColor: '#ffffff', borderWidth: 1 },
+      silent: true,
+    });
+  };
+
+  lastMeans = {};
+
+  for (const a of axes) {
+    const count = a.alongY ? nx : ny;
+    const cut = Math.max(0, Math.min(count - 1, Math.round(a.at * (count - 1))));
+    /* The same cell, in the whole grid's indices. Fixing x leaves a
+       distribution in y that runs off both ends of the window, and it is that
+       distribution the curve claims to be: normalized over the window it would
+       be f(y | x, y in the box), which is a different and less interesting
+       object, and its mean would move every time the window did. */
+    const fullCut = (a.alongY ? win.i0 : win.j0) + cut;
+    const coordsAll = a.alongY ? base.y : base.x;
+    const rawAll = a.alongY
+      ? base.y.map((_, r) => base.z[r][fullCut])
+      : base.x.map((_, c) => base.z[fullCut][c]);
+    const lo = a.alongY ? win.j0 : win.i0;
+    const hi = a.alongY ? win.j1 : win.i1;
+    const raw = rawAll.slice(lo, hi + 1);
+    const step = coordsAll[1] - coordsAll[0];
+    const mass = rawAll.reduce((s, v) => s + v, 0) * step;
+    /* Renormalized, the slice is a conditional density in the same units as
+       the marginal beside it, so it takes that wall's scale factor. Raw, it
+       is a joint density value already living on the surface's own z, so it
+       takes no scaling at all. */
+    const wall = scaled(state.sliceNorm
+      ? raw.map((v) => (v / (mass || 1)) * (a.alongY ? ky : kx))
+      : raw.slice());
+    const line = (width, opacity) => ({
+      color: a.color, width, opacity,
+    });
+
+    out.push({
+      id: `cond-${a.tag}`, type: 'line3D', name: `conditional given ${a.tag}`,
+      data: a.alongY
+        ? grid.y.map((yv, r) => [xWall, yv, onWall(wall[r])])
+        : grid.x.map((xv, c) => [xv, yWall, onWall(wall[c])]),
+      lineStyle: line(2.4, 1), silent: true,
+    });
+
+    /* Fixing x leaves a distribution in y, so its mean is E[X2 | X1 = a], and
+       fixing y gives the mirror. Naming them that way round is worth the care:
+       the cut is labeled by what is held, the mean by what is left. */
+    const coords = a.alongY ? grid.y : grid.x;
+    const mu = isDensity(state) ? meanOf(coordsAll, rawAll) : NaN;
+    lastMeans[a.tag] = { at: a.alongY ? grid.x[cut] : grid.y[cut], mean: mu };
+    markMean(a.tag, a.color, a.alongY ? 'y' : 'x', coords, wall, mu);
+
+    if (state.sliceCut) {
+      out.push({
+        id: `cut-${a.tag}`, type: 'line3D', name: `cut at ${a.tag}`,
+        data: a.alongY
+          ? grid.y.map((yv, r) => [grid.x[cut], yv, Math.min(zMax, disp(raw[r]) + hair)])
+          : grid.x.map((xv, c) => [xv, grid.y[cut], Math.min(zMax, disp(raw[c]) + hair)]),
+        lineStyle: line(2.4, 1), silent: true,
+      });
+    }
+
+    /* Where the cut is, said twice more. On its own the curve on the surface
+       reads as a stripe of color and not as a position, which is the thing
+       that was unclear: a trace on the floor gives it a foot, and the plane
+       gives it a body. Both are cheap and either one alone is enough. */
+    if (state.sliceFloor) {
+      out.push({
+        id: `trace-${a.tag}`, type: 'line3D', name: `trace at ${a.tag}`,
+        data: a.alongY
+          ? [[grid.x[cut], grid.y[0], floorZ + hair], [grid.x[cut], grid.y[ny - 1], floorZ + hair]]
+          : [[grid.x[0], grid.y[cut], floorZ + hair], [grid.x[nx - 1], grid.y[cut], floorZ + hair]],
+        lineStyle: line(1.6, 0.85), silent: true,
+      });
+    }
+
+    if (state.slicePlane) {
+      /* Two triangles, so the depth sorting that shreds a translucent surface
+         has nothing to get wrong here. */
+      const lo = a.alongY ? grid.y[0] : grid.x[0];
+      const hi = a.alongY ? grid.y[ny - 1] : grid.x[nx - 1];
+      const fix = a.alongY ? grid.x[cut] : grid.y[cut];
+      const corner = (t, z) => (a.alongY ? [fix, t, z] : [t, fix, z]);
+      out.push({
+        id: `plane-${a.tag}`, type: 'surface', name: `plane at ${a.tag}`,
+        dataShape: [2, 2],
+        data: [corner(lo, zBase), corner(lo, zMax), corner(hi, zBase), corner(hi, zMax)],
+        shading: 'color', wireframe: { show: false }, silent: true,
+        itemStyle: { color: a.color, opacity: state.slicePlaneOpacity },
+      });
+    }
+  }
+
+  /* The cut at constant total, which is a path and not an index, so it gets
+     its own block rather than a third entry in the loop above. */
+  if (state.sliceS) {
+    /* The whole line of constant total, not the part of it in the box. This is
+       the one that pays for the machinery: at any useful window most of the
+       line {x + y = s} runs off the picture, and the mass out there is what
+       decides how the total splits. Normalized over the visible piece, the
+       curve is f(x | S = s, both components in the box) and kappa is its mean,
+       which is a number about the window rather than about the risk. */
+    const path = diagPath(grid, state.sliceAtS);
+    const color = state.sliceColorS;
+    const line = (width, opacity) => ({ color, width, opacity });
+    /* Which points to draw. The rest are real and carry weight; they are just
+       outside the box, and echarts-gl does not clip, so drawing them would
+       hang the curve in space beside the chart. */
+    const eps = 1e-9;
+    const inBox = (p) => p[0] >= grid.x[0] - eps && p[0] <= grid.x[nx - 1] + eps
+      && p[1] >= grid.y[0] - eps && p[1] <= grid.y[ny - 1] + eps;
+    const keep = [];
+    for (let i = 0; i < path.length; i++) if (inBox(path[i])) keep.push(i);
+    const shown = keep.map((i) => path[i]);
+    const head = shown.length ? shown[0] : path[0];
+    const tail = shown.length ? shown[shown.length - 1] : path[path.length - 1];
+
+    /* Both projections of the same conditional, one per wall.
+       Along the anti-diagonal the joint density is a function of x alone, and
+       of y alone, because y = s - x. So the curve read against the x marginal
+       is f(x | S = s) and the curve read against the y marginal is
+       f(y | S = s), and they are each other's mirror image. The pair is worth
+       drawing rather than either alone: together they are how the total splits
+       between the two units given its size, which is the quantity kappa names.
+       kappa_1(s) is the mean of the first, kappa_2(s) the mean of the second,
+       and they sum to s. */
+    /* The path's own spacing, not the grid's. The line is cut into `count`
+       points across whatever interval it occupies, which is shorter than the x
+       axis except when it runs corner to corner, so taking the grid step here
+       inflated the conditional by up to the ratio of the two and did it most
+       at the short cuts near the corners. */
+    const xsAll = path.map((p) => p[0]);
+    const step = xsAll.length > 1 ? Math.abs(xsAll[1] - xsAll[0]) : 1;
+    const mass = path.reduce((s, p) => s + p[2], 0) * step;
+    const norm = (k) => (state.sliceNorm
+      ? path.map((p) => (p[2] / (mass || 1)) * k)
+      : path.map((p) => p[2]));
+    const wallX = scaled(norm(kx));
+    const wallY = scaled(norm(ky));
+    const drawnX = keep.map((i) => wallX[i]);
+    const drawnY = keep.map((i) => wallY[i]);
+    out.push({
+      id: 'cond-s-x', type: 'line3D', name: 'x given x+y',
+      data: shown.map((p, i) => [p[0], yWall, onWall(drawnX[i])]),
+      lineStyle: line(2.4, 1), silent: true,
+    });
+    out.push({
+      id: 'cond-s-y', type: 'line3D', name: 'y given x+y',
+      data: shown.map((p, i) => [xWall, p[1], onWall(drawnY[i])]),
+      lineStyle: line(2.4, 1), silent: true,
+    });
+
+    /* kappa, on the two curves it is the mean of.
+       kappa_1(s) + kappa_2(s) = s holds exactly here and not approximately,
+       because every point of the path has x + y = s, so the two means are
+       weighted averages of numbers that sum to s under the same weights. That
+       makes it a real check on the arithmetic rather than a slogan. */
+    const ys = path.map((p) => p[1]);
+    const zs = path.map((p) => p[2]);
+    const dens = isDensity(state);
+    const k1 = dens ? meanOf(xsAll, zs) : NaN;
+    const k2 = dens ? meanOf(ys, zs) : NaN;
+    lastMeans.s = { at: path[0][0] + path[0][1], k1, k2 };
+    markMean('s-x', color, 'x', shown.map((p) => p[0]), drawnX, k1);
+    markMean('s-y', color, 'y', shown.map((p) => p[1]), drawnY, k2);
+
+    /* The same pair as one point in the plane. It sits on the cut by
+       construction, and its track as s sweeps is the kappa curve: the next
+       thing to draw, and now one series away. */
+    const inXY = (a, b) => a >= grid.x[0] && a <= grid.x[nx - 1]
+      && b >= grid.y[0] && b <= grid.y[ny - 1];
+    const onCut = (a) => Math.min(zMax, disp(interpAt(xsAll, zs, a)) + hair * 2);
+    /* Both marks are emitted whatever happens, empty when they have nowhere to
+       stand, so the set of series does not depend on where the cut sits. */
+    out.push({
+      id: 'kappa-point', type: 'scatter3D', name: 'kappa',
+      symbolSize: 11,
+      data: (state.showMeans && dens && inXY(k1, k2)) ? [[k1, k2, onCut(k1)]] : [],
+      itemStyle: { color, opacity: 1, borderColor: '#ffffff', borderWidth: 1.5 },
+      silent: true,
+    });
+    /* Where the cut crosses y = x, the even split, s / 2 to each. It is on the
+       diagonal by construction and on the cut by construction, so it is the
+       fixed thing kappa is read against: the gap between the hollow ring and
+       the filled dot is how far from even the split is, drawn rather than
+       subtracted. On an exchangeable pair the two sit on top of each other at
+       every s, which is the cleanest statement of what exchangeable means. */
+    const half = (path[0][0] + path[0][1]) / 2;
+    out.push({
+      id: 'even-split', type: 'scatter3D', name: 'even split, s / 2 each',
+      symbolSize: 9,
+      data: inXY(half, half) ? [[half, half, onCut(half)]] : [],
+      itemStyle: { color: 'rgba(0,0,0,0)', borderColor: color, borderWidth: 1.6 },
+      silent: true,
+    });
+
+    if (state.sliceCut) {
+      out.push({
+        id: 'cut-s', type: 'line3D', name: 'cut at x+y',
+        data: shown.map((p) => [p[0], p[1], Math.min(zMax, disp(p[2]) + hair)]),
+        lineStyle: line(2.4, 1), silent: true,
+      });
+    }
+    if (state.sliceFloor) {
+      out.push({
+        id: 'trace-s', type: 'line3D', name: 'trace at x+y',
+        data: [[head[0], head[1], floorZ + hair], [tail[0], tail[1], floorZ + hair]],
+        lineStyle: line(1.6, 0.85), silent: true,
+      });
+    }
+    if (state.slicePlane) {
+      out.push({
+        id: 'plane-s', type: 'surface', name: 'plane at x+y',
+        dataShape: [2, 2],
+        data: [
+          [head[0], head[1], zBase], [head[0], head[1], zMax],
+          [tail[0], tail[1], zBase], [tail[0], tail[1], zMax],
+        ],
+        shading: 'color', wireframe: { show: false }, silent: true,
+        itemStyle: { color, opacity: state.slicePlaneOpacity },
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * The mean of a discrete density given on a uniform grid.
+ *
+ * The step cancels between numerator and denominator, so this is right whether
+ * `vals` is a density, a renormalized conditional, or the same thing scaled to
+ * fit a wall. That is the reason the mean can be taken off the curve the eye is
+ * already looking at, which is the whole point of drawing it there.
+ */
+function meanOf(coords, vals) {
+  let s = 0, w = 0;
+  for (let i = 0; i < vals.length; i++) { s += vals[i] * coords[i]; w += vals[i]; }
+  return w > 0 ? s / w : coords[0];
+}
+
+/** Linear interpolation on a uniform grid, ascending or descending. */
+function interpAt(coords, vals, t) {
+  const n = coords.length;
+  if (n < 2) return vals[0] || 0;
+  const step = (coords[n - 1] - coords[0]) / (n - 1);
+  const u = (t - coords[0]) / step;
+  const i = Math.max(0, Math.min(n - 2, Math.floor(u)));
+  const f = Math.max(0, Math.min(1, u - i));
+  return vals[i] + f * (vals[i + 1] - vals[i]);
+}
+
+/**
+ * The anti-diagonal through a position in [0, 1], as raw `[x, y, z]` points.
+ *
+ * The parameter is quantized to one of nx + ny - 2 steps, so dragging it moves
+ * in units comparable to the mesh rather than continuously, and the two
+ * extreme values are skipped. That last part is not cosmetic: at s exactly at a
+ * corner the segment collapses to a point, and a one-point line3D would make
+ * the *set* of series depend on where the cut sits, which the incremental
+ * update is not allowed to have.
+ *
+ * Points are evenly spaced in x along the segment, which is what lets the mean
+ * be taken with uniform weights. Every point satisfies x + y = s exactly, by
+ * construction rather than by rounding, so kappa_1 + kappa_2 = s is exact too.
+ */
+function diagPath(grid, t) {
+  const nx = grid.x.length, ny = grid.y.length;
+  const steps = nx + ny - 2;
+  const i = Math.max(1, Math.min(steps - 1, Math.round(t * steps)));
+  const sMin = grid.x[0] + grid.y[0];
+  const sMax = grid.x[nx - 1] + grid.y[ny - 1];
+  const s = sMin + (sMax - sMin) * i / steps;
+  /* The position is read off the box, since that is what the slider is moving
+     across and what the eye is looking at, but the line itself is drawn on the
+     whole grid. So the cut lands where you put it and still integrates over
+     every (x, y) that sums to s, including the ones off the picture. */
+  const { base } = fullOf(grid);
+  const pts = levelLine(base, s, true, Math.max(base.x.length, base.y.length));
+  /* levelLine can only come back short if the box is degenerate, but the cut
+     must never be, so fall back to the shortest legal segment. */
+  return pts.length >= 2 ? pts : levelLine(grid, (sMin + sMax) / 2, true, Math.max(nx, ny));
+}
+
+/* The conditional means the last pass computed, so the reading strip can print
+   them without redoing the arithmetic or guessing at it. */
+let lastMeans = {};
+
+/** The set of slice series currently on the chart, so an incremental update
+ *  can tell whether it is safe to merge by id or has to rebuild. */
+function sliceSignature() {
+  return [state.sliceX, state.sliceY, state.sliceS, state.sliceCut, state.sliceFloor,
+    state.slicePlane, state.sliceNorm, state.fitWalls, state.showMeans].join('|');
+}
+
+/** Fold an opacity into a hex color, for the one consumer that ignores opacity. */
+function rgba(hex, alpha) {
+  let h = String(hex).replace('#', '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const v = parseInt(h, 16) || 0;
+  return `rgba(${(v >> 16) & 255},${(v >> 8) & 255},${v & 255},${alpha})`;
+}
+
+function environmentOf() {
+  switch (state.environment) {
+    case 'grad-light': return {
+      type: 'linearGradient', x: 0, y: 0, x2: 0, y2: 1,
+      colorStops: [{ offset: 0, color: '#ffffff' }, { offset: 1, color: '#dfe4ea' }],
+    };
+    case 'grad-slate': return {
+      type: 'linearGradient', x: 0, y: 0, x2: 0, y2: 1,
+      colorStops: [{ offset: 0, color: '#8d99ae' }, { offset: 1, color: '#edf2f4' }],
+    };
+    case 'cubemap': return state.cubemap === 'none' ? '#ffffff' : HDR[state.cubemap];
+    default: return state.environment;
+  }
+}
+
+/** Whether the height is being shown on a log scale, which only a density is. */
+function usingLog() {
+  return Boolean(state.logz) && SURFACES[state.surf].floorable;
+}
+
+function buildOption() {
+  const grid = sample();
+  const spec = grid.spec;
+  const useLog = usingLog();
+
+  let min = Infinity, max = -Infinity;
+  for (const row of grid.z) for (const v of row) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  let smallest = Infinity;
+  if (useLog) for (const row of grid.z) for (const v of row) {
+    if (v > LOG_FLOOR && v < smallest) smallest = v;
+  }
+  const zMax = useLog ? Math.ceil(Math.log10(max)) : max;
+  /* A joint lognormal runs twelve decades from its mode to its corner, and on
+     a log axis that spends most of the box on mass no one will ever look at,
+     which is its own way of making the interesting part flat. So the floor is
+     a stated number of decades under the peak, not wherever the data stops. */
+  const zMin = useLog
+    ? Math.max(Math.floor(Math.log10(smallest)), zMax - Math.round(state.decades))
+    : min;
+
+  const data = vertices(grid, useLog, zMin);
+  const nx = grid.x.length, ny = grid.y.length;
+  const rampColors = RAMPS[state.ramp] || RAMPS.house;
+  const byHeight = state.colorMode === 'height';
+
+  /* Where the mesh lines come from, which is the whole story of this group.
+     The built-in `wireframe` is drawn inside the surface's own fragment
+     shader, and that shader mixes the line color into `gl_FragColor.rgb`
+     while leaving `.a` alone. Two consequences follow. The lines inherit the
+     surface's opacity, so a transparent skin erases them rather than
+     revealing them. And the mesh they trace is the data mesh, so at n = 96
+     they are a solid block of ink with no way to thin them.
+
+     `line3D` on the same grid3D has neither problem: it is real geometry, at
+     whatever spacing is asked for, with its own color, width and opacity.
+     `lines3D` is not the one to reach for despite the name, its layout
+     handles globe and geo3D only, so on a cartesian3D grid it draws nothing
+     at all and reports no error. */
+  const wantLines = hasLines(state);
+  const fromCells = wantLines && state.edgeSource === 'cells';
+  const fromGrid = wantLines && state.edgeSource === 'grid';
+  /* Wireframe only still draws a surface when the lines live inside it, and
+     optionally when they do not: an opaque skin is what stops the far half of
+     the mesh reading through the near half. VTK's w shows both halves, so the
+     skin is off by default in that mode. */
+  const skinned = state.rep === 'wire';
+  const wantSurface = state.rep === 'surface' || state.rep === 'edges'
+    || (skinned && (state.wireSkin || fromCells));
+
+  const series = [];
+  let surfaceIdx = -1, pointsIdx = -1;
+  const lineIdx = [];
+
+  if (state.rep === 'points') {
+    pointsIdx = series.length;
+    series.push({
+      type: 'scatter3D', name: 'surface',
+      symbolSize: state.pointSize,
+      itemStyle: { color: byHeight ? undefined : state.flatColor, opacity: state.opacity },
+      data,
+    });
+  } else if (wantSurface) {
+    surfaceIdx = series.length;
+    series.push({
+      type: 'surface', name: 'surface',
+      dataShape: [nx, ny], data,
+      wireframe: {
+        show: fromCells,
+        /* `lineStyle.opacity` is never read for this one, only `color` and
+           `width`, so the opacity has to ride in the color. */
+        lineStyle: { color: rgba(state.wireColor, state.wireOpacity), width: state.wireWidth },
+      },
+      shading: skinned ? 'color' : state.shading,
+      realisticMaterial: { roughness: state.roughness, metalness: state.metalness },
+      itemStyle: {
+        color: (byHeight && !skinned) ? undefined : state.flatColor,
+        opacity: state.opacity,
+      },
+    });
+  }
+
+  if (fromGrid && state.meshDir !== 'none') {
+    const k = Math.max(1, Math.round(state.coarse));
+    const lift = (zMax - zMin) * 0.01 * state.wireLift;
+    const at = vertexAt(grid, useLog, zMin, lift, zMax);
+    const families = [];
+    if (state.meshDir !== 'diag') {
+      const [rows, cols] = gridPolylines(grid, k, at);
+      families.push(['edges along x', rows], ['edges along y', cols]);
+    }
+    if (state.meshDir !== 'xy') {
+      families.push(...diagPolylines(grid, k, useLog, zMin, lift, zMax));
+    }
+    for (const [name, pts] of families) {
+      lineIdx.push(series.length);
+      series.push({
+        type: 'line3D', name, data: pts,
+        lineStyle: {
+          color: state.wireColor, width: state.wireWidth, opacity: state.wireOpacity,
+        },
+        /* Pickable when click-to-slice is on, so a wireframe-only view, which
+           has no surface to hit, can still be clicked. */
+        silent: !state.clickToSlice,
+      });
+    }
+  }
+
+  /* The floor. A slab is a constant-height surface, which always works. The
+     projection carries the real height in a fourth data column and colors by
+     it through a second visualMap, so the base of the box becomes the heat
+     map the surface is standing on. */
+  /* One hair, reused by everything that has to sit just clear of something
+     else. The floor projection gets half of one, because the grid3D draws its
+     own bottom plane at exactly the axis minimum and two coplanar opaque
+     surfaces fight. It only shows up at full floor opacity: below that the
+     floor stops writing depth and the fight goes away, which is why this took
+     a preset with an opaque floor to surface at all.
+     Measured on the data range, not the drawn one, so dropping the base does
+     not silently scale every clearance in the scene. */
+  const hair = (zMax - zMin) * 0.004;
+
+  /* The base, pushed below the data.
+     Dropping it does two things. The box gets a visible bottom, which it
+     never had. And the floor's projection slides down the screen relative to
+     the surface's, so a band of it clears the surface silhouette along the
+     near edges and the contour map underneath becomes visible instead of
+     being an opaque lid's worth of wasted work.
+     The data floor stays zMin and keeps its jobs: the color scale, the
+     contour levels, the log clamp, the wall curve scaling. Only the axis
+     minimum and the things that stand on the floor move. */
+  const zBase = zMin - (zMax - zMin) * state.baseDrop;
+  const floorH = zBase + hair * 0.5;
+  let floorIdx = -1;
+  if (state.floor === 'slab') {
+    floorIdx = series.length;
+    series.push({
+      type: 'surface', name: 'floor',
+      dataShape: [2, 2],
+      data: [
+        [grid.x[0], grid.y[0], floorH], [grid.x[0], grid.y[ny - 1], floorH],
+        [grid.x[nx - 1], grid.y[0], floorH], [grid.x[nx - 1], grid.y[ny - 1], floorH],
+      ],
+      shading: 'color',
+      itemStyle: { color: state.floorColor, opacity: state.floorOpacity },
+      wireframe: { show: false }, silent: true,
+    });
+  } else if (state.floor === 'project' || state.floor === 'bands') {
+    const k = Math.max(1, Math.round(Math.max(nx, ny) / 90));
+    const p = decimate(grid, k, useLog, zMin);
+    floorIdx = series.length;
+    series.push({
+      type: 'surface', name: 'floor',
+      /* Declared rather than inferred. The fourth column is the real height,
+         and naming the dimensions is what guarantees echarts keeps it around
+         for `visualMap.dimension: 3` to reach. */
+      dimensions: ['x', 'y', 'z', 'height'],
+      dataShape: p.shape,
+      data: p.data.map(([x, y, h]) => [x, y, floorH, h]),
+      shading: 'color',
+      itemStyle: { opacity: state.floorOpacity },
+      wireframe: { show: false }, silent: true,
+    });
+  }
+
+  /* ---- the walls, the cut, and the floor contours ----------------------
+     All of this is content rather than chrome. The marginals are the one
+     thing the 3-D view can show that a heat map cannot: read off a wall, they
+     are the two aggregate distributions on their own. The conditional slice
+     lands on the same wall as the marginal it should be compared with, so
+     dragging the cut sweeps the conditional past a fixed marginal, and how
+     far it moves is exactly how much dependence there is. Under independence
+     it does not move at all. */
+  const disp = (v) => (useLog ? (v > LOG_FLOOR ? Math.max(zMin, Math.log10(v)) : zMin) : v);
+  const floorZ = floorH;
+  /* Anything drawn on a wall is scaled independently of the surface, so it can
+     land outside the box at either end: a marginal is near zero at the edges
+     of its support, and a tight conditional can peak above the joint's own
+     maximum. echarts-gl does not clip to the box, so unclamped these render
+     as lines hanging in space below the floor or above the lid. Clamping
+     flattens such a peak against the top, which is visible and honest;
+     lowering "wall curve height" is the cure. */
+  const onWall = (v) => Math.min(zMax, Math.max(floorZ, disp(v)));
+
+  /* Stood a hair off the wall rather than on it.
+     Exactly on it, a wall curve is coplanar with the plane grid3D draws
+     there, and a line3D is worse than a ribbon because it is built as a
+     view-facing quad with real width, so half its geometry sits behind the
+     wall and gets occluded. Which half wins depends on the view direction,
+     so the curve stipples and flickers as the camera swings, from one side
+     only. The same fix as the floor, in x and y instead of z, and inward so
+     the curve is always on the side of the wall you are looking at. */
+  const insetX = (grid.x[nx - 1] - grid.x[0]) * 0.004;
+  const insetY = (grid.y[ny - 1] - grid.y[0]) * 0.004;
+  const xWall = state.wallForY === 'max' ? grid.x[nx - 1] - insetX : grid.x[0] + insetX;
+  const yWall = state.wallForX === 'max' ? grid.y[ny - 1] - insetY : grid.y[0] + insetY;
+  const wantWalls = state.marginals !== 'none' || state.sliceX || state.sliceY;
+
+  const { base, win } = fullOf(grid);
+  let kx = 1, ky = 1, curves = null;
+  if (wantWalls) {
+    /* Off the whole grid, then sliced to the window. The marginal in x is the
+       integral over every y there is, not over the ones on screen, so this is
+       the unit's own aggregate distribution however deep the window is cut. */
+    curves = wallCurves(base);
+    /* One vertical scale for both walls, not one each.
+       The old reading was that these are densities in different variables so
+       no shared scale exists. That is wrong, and the picture it produced was
+       worse than wrong: scaling each to its own peak drew both marginals at
+       exactly the same height, every time, whatever the two distributions
+       were. A reader takes equal heights to mean something, and here it meant
+       only that both had been divided by themselves.
+       The two variables are both losses on the same money axis, so f_X and f_Y
+       are both densities per unit loss and are directly comparable. Shared
+       scale, and the tight one stands up while the diffuse one lies flat,
+       which is the true statement about them.
+       The cap is what stops that being useless when the two differ by orders
+       of magnitude, which they do: on `Indep` a gamma at cv 0.1 against a
+       Lomax on a 512-wide bucket is a ratio of hundreds, and a faithful shared
+       scale would draw the second one along the floor. So the reference peak
+       is the larger of the two, unless that is more than `WALL_RATIO_CAP`
+       times the smaller, in which case the smaller is given that fraction of
+       the wall and the larger runs off the top and is clipped against the lid.
+       Clipped is honest, since a curve you can see leaving the box says "taller
+       than this fits" and a curve lying on the floor says nothing at all. */
+    const peak = (a) => Math.max(...a.map(Math.abs)) || 1;
+    const target = max * state.marginalScale;
+    const cx = (state.marginalKind === 'max' ? curves.px : curves.mx).slice(win.i0, win.i1 + 1);
+    const cy = (state.marginalKind === 'max' ? curves.py : curves.my).slice(win.j0, win.j1 + 1);
+    const px = peak(cx), py = peak(cy);
+    const WALL_RATIO_CAP = 8;
+    const ref = Math.min(Math.max(px, py), Math.min(px, py) * WALL_RATIO_CAP);
+    kx = ky = target / ref;
+
+    if (state.marginals !== 'none') {
+      const walls = [
+        ['marginal in x', grid.x.map((xv, c) => [xv, yWall, onWall(cx[c] * kx)])],
+        ['marginal in y', grid.y.map((yv, r) => [xWall, yv, onWall(cy[r] * ky)])],
+      ];
+      for (const [name, pts] of walls) {
+        if (state.marginals === 'line') {
+          series.push({
+            type: 'line3D', name, data: pts,
+            lineStyle: { color: state.marginalColor, width: 2, opacity: 0.95 },
+            silent: true,
+          });
+        } else {
+          /* A filled ribbon is a surface whose second index runs from the
+             floor to the curve instead of across the plane. dataShape is
+             [outer, inner] and the vertex list is outer-major, so this is a
+             legal mesh, just a degenerate one: n by 2. */
+          const strip = [];
+          for (const p of pts) { strip.push([p[0], p[1], floorZ]); strip.push(p); }
+          series.push({
+            type: 'surface', name, dataShape: [pts.length, 2], data: strip,
+            shading: 'color', wireframe: { show: false }, silent: true,
+            itemStyle: { color: state.marginalColor, opacity: 0.7 },
+          });
+        }
+      }
+    }
+  }
+
+  lastCtx = { grid, base, win, nx, ny, disp, zMin, zMax, zBase, floorZ, hair,
+    xWall, yWall, kx, ky, dataMax: max };
+  series.push(...sliceSeries(lastCtx));
+
+  let contourCount = 0;
+  if (state.contours) {
+    const H = grid.z.map((row) => row.map(disp));
+    const levels = Math.round(state.contourLevels);
+    const tol = Math.min(grid.x[1] - grid.x[0], grid.y[1] - grid.y[0]) * 1e-4;
+    /* A contour at level L lies on the surface at height L by construction,
+       so "on the surface" needs no projection, only a hair of lift to keep it
+       off the skin it is lying on. */
+    const heights = [];
+    if (state.contourWhere !== 'floor') heights.push(null);
+    if (state.contourWhere !== 'surface') heights.push(floorZ);
+    for (let i = 1; i <= levels; i++) {
+      const L = zMin + (zMax - zMin) * i / (levels + 1);
+      const paths = chainSegments(isoSegments(H, grid.x, grid.y, L), tol);
+      for (const at of heights) {
+        for (const path of paths) {
+          if (contourCount >= 160) break;
+          contourCount++;
+          const z = (at === null ? L : at) + hair;
+          series.push({
+            type: 'line3D', name: 'contour',
+            data: path.map((p) => [p[0], p[1], z]),
+            lineStyle: {
+              color: state.contourColor, width: state.contourWidth, opacity: 0.9,
+            },
+            silent: true,
+          });
+        }
+      }
+    }
+  }
+
+  /* Who gets colored by height. A skin in wireframe mode is deliberately not
+     on the list: it is there to occlude, and a colored one competes with the
+     lines it is supposed to be showing off. */
+  const heightTargets = [];
+  if (pointsIdx >= 0) heightTargets.push(pointsIdx);
+  if (surfaceIdx >= 0 && !skinned) heightTargets.push(surfaceIdx);
+  if (fromGrid && state.wireColorMode === 'height') heightTargets.push(...lineIdx);
+
+  const visualMaps = [];
+  if (byHeight && heightTargets.length) {
+    visualMaps.push({
+      show: true, calculable: true, dimension: 2,
+      seriesIndex: heightTargets,
+      min: zMin, max: zMax,
+      right: 6, top: 24, itemHeight: 240,
+      textStyle: { fontSize: 10, color: state.inkColor },
+      inRange: { color: rampColors },
+      formatter: (v) => (useLog ? '1e' + Math.round(v) : tick(v)),
+    });
+  }
+  if (state.floor === 'bands' && floorIdx >= 0) {
+    /* Hard steps need a piecewise map. A continuous ramp interpolates, so
+       there is no way to ask it for a boundary you can actually see. */
+    const k = Math.round(state.bandCount);
+    const pieces = [];
+    for (let i = 0; i < k; i++) {
+      pieces.push({
+        min: zMin + (zMax - zMin) * i / k,
+        max: zMin + (zMax - zMin) * (i + 1) / k,
+        color: sampleRamp(rampColors, (i + 0.5) / k),
+      });
+    }
+    visualMaps.push({
+      type: 'piecewise', show: false, dimension: 3,
+      seriesIndex: floorIdx, pieces,
+    });
+  } else if (state.floor === 'project' && floorIdx >= 0) {
+    visualMaps.push({
+      show: false, dimension: 3,
+      seriesIndex: floorIdx,
+      min: zMin, max: zMax,
+      inRange: { color: byHeight ? rampColors : RAMPS.grey },
+    });
+  }
+
+  const light = {
+    main: {
+      color: state.mainColor, intensity: state.mainIntensity,
+      shadow: state.shadow, shadowQuality: state.shadowQuality,
+      alpha: state.mainAlpha, beta: state.mainBeta,
+    },
+    ambient: { color: '#ffffff', intensity: state.ambient },
+  };
+  if (state.cubemap !== 'none') {
+    light.ambientCubemap = {
+      texture: HDR[state.cubemap],
+      exposure: state.cubeExposure,
+      diffuseIntensity: state.cubeDiffuse,
+      specularIntensity: state.cubeSpecular,
+    };
+  }
+
+  const postEffect = {
+    enable: state.post,
+    SSAO: { enable: state.ssao, quality: 'high', radius: state.ssaoRadius, intensity: state.ssaoIntensity },
+    bloom: { enable: state.bloom, bloomIntensity: state.bloomIntensity },
+    FXAA: { enable: state.fxaa },
+    colorCorrection: {
+      enable: true, exposure: state.exposure, brightness: state.brightness,
+      contrast: state.contrast, saturation: state.saturation,
+    },
+  };
+
+  const axisCommon = {
+    axisLine: { lineStyle: { color: state.axisColor } },
+    axisTick: { lineStyle: { color: state.axisColor } },
+    nameTextStyle: { fontSize: 11, color: state.inkColor },
+    axisLabel: { fontSize: 9, color: state.inkColor, formatter: tick },
+    splitLine: { show: state.splitLine, lineStyle: { color: state.axisColor } },
+    splitArea: { show: state.splitArea, areaStyle: { color: [state.splitAreaColor] } },
+  };
+
+  return {
+    /* Match the canvas to a solid environment, so the colorbar and the margins
+       sit on the same field as the box instead of a white frame around it. */
+    backgroundColor: /^#/.test(state.environment) ? state.environment : '#ffffff',
+    /* No tooltip at all, rather than a tooltip whose box is hidden.
+       The app hides the box and keeps the formatter (`mount.js:useStrip`),
+       which is right for a 2-D chart where the formatter is the only way to
+       see what is under the cursor. On a grid3D there is a better hook:
+       echarts-gl dispatches a real `mousemove` into the ECharts event system
+       with the data index attached (`LayerGL._dispatchDataEvent`), so the
+       strip can be written from `chart.on('mousemove')` and the tooltip
+       component never has to run. */
+    tooltip: { show: false },
+    animation: false,
+    visualMap: visualMaps,
+    /* A baked surface knows what its two units are called, and "Wind" against
+       "Flood" is worth more on an axis than "x" against "y". */
+    xAxis3D: Object.assign({ type: 'value', name: (spec.units || ['x'])[0] || 'x' }, axisCommon),
+    yAxis3D: Object.assign({ type: 'value', name: (spec.units || [, 'y'])[1] || 'y' }, axisCommon),
+    zAxis3D: Object.assign({}, axisCommon, {
+      type: 'value', name: useLog ? 'log z' : 'z', min: zBase, max: zMax,
+      axisLabel: {
+        fontSize: 9, color: state.inkColor,
+        formatter: (v) => (useLog ? `1e${Math.round(v)}` : tick(v)),
+      },
+    }),
+    grid3D: {
+      boxWidth: 100, boxDepth: 100, boxHeight: state.boxHeight,
+      environment: environmentOf(),
+      axisPointer: { show: state.axisPointer, lineStyle: { color: '#adb5bd' } },
+      light,
+      postEffect,
+      temporalSuperSampling: { enable: state.tss },
+      viewControl: {
+        projection: state.projection,
+        alpha: state.alpha, beta: state.beta,
+        distance: state.distance, orthographicSize: state.orthoSize,
+        autoRotate: state.autoRotate, autoRotateSpeed: 8,
+        damping: 0.85, zoomSensitivity: 1,
+      },
+    },
+    series,
+  };
+}
+
+/* ------------------------------------------------------------------- app */
+
+const chart = echarts.init(document.getElementById('chart'));
+let lastMs = 0;
+
+/** Copy the live camera back into state so a rebuild does not snap the view. */
+function syncCamera() {
+  try {
+    const vc = chart.getModel().getComponent('grid3D').option.viewControl;
+    if (vc && Number.isFinite(vc.alpha)) {
+      state.alpha = Math.round(vc.alpha);
+      state.beta = Math.round(vc.beta);
+      if (Number.isFinite(vc.distance)) state.distance = Math.round(vc.distance);
+    }
+  } catch (e) { /* first paint, or a version that does not write back */ }
+}
+
+/**
+ * Redraw only the cuts.
+ *
+ * Safe exactly when the *set* of slice series has not changed, because a
+ * merge by id can update a series that is already there but cannot be trusted
+ * to add or remove one. Anything else falls back to a full render.
+ */
+function updateSlices() {
+  if (!lastCtx || sliceSignature() !== lastSliceSig) { render(); return; }
+  const t0 = performance.now();
+  chart.setOption({ series: sliceSeries(lastCtx) }, false);
+  lastMs = performance.now() - t0;
+  /* Only the two sliders that moved, not the whole panel: a full refresh is
+     sixty DOM writes and this runs once a frame. */
+  for (const k of ['sliceAtX', 'sliceAtY', 'sliceAtS']) {
+    const el = els[k];
+    if (!el) continue;
+    el.value = state[k];
+    const box = el.closest('.ctl');
+    const val = box && box.querySelector('.val');
+    if (val) val.textContent = fmtVal(parseFloat(el.value));
+  }
+  paintReadout();
+  stamp();
+}
+
+/**
+ * Put both cuts through a point on the surface.
+ *
+ * The two cuts cross exactly where you clicked, so the pair of conditionals
+ * on the walls is the pair through that point: f(y | x = x0) beside the y
+ * marginal, f(x | y = y0) beside the x marginal. Reading them against the
+ * grey curves behind is the whole lesson, and now it is one click per point.
+ */
+function sliceAtPoint(xv, yv) {
+  const g = gridCache.grid;
+  if (!g) return;
+  const nx = g.x.length, ny = g.y.length;
+  const span = (a) => (a[a.length - 1] - a[0]) || 1;
+  const clamp01 = (t) => Math.min(1, Math.max(0, t));
+
+  /* Turning a cut on, or stopping the sweep, changes the set of series or the
+     animation, and neither can be done through the incremental path. */
+  const needsFull = state.sweep || !anyCut(state);
+  if (!anyCut(state)) { state.sliceX = true; state.sliceY = true; }
+  state.sweep = false;
+  state.sliceAtX = clamp01((xv - g.x[0]) / span(g.x));
+  state.sliceAtY = clamp01((yv - g.y[0]) / span(g.y));
+  /* The total cut goes through the same point, so a click lands all three on
+     it: the two conditionals on a component, and the one on the total. Taken
+     in data coordinates rather than off the indices, which is the only form
+     that survives the two axes having different bucket sizes. */
+  const sMin = g.x[0] + g.y[0];
+  const sMax = g.x[nx - 1] + g.y[ny - 1];
+  state.sliceAtS = clamp01((xv + yv - sMin) / ((sMax - sMin) || 1));
+  if (needsFull) render(); else updateSlices();
+}
+
+let sweeping = false;
+
+/**
+ * Move the cuts, one of two ways.
+ *
+ * `sway` walks the two component cuts along their axes at incommensurable
+ * rates: two sines whose periods do not divide each other, so the crossing
+ * point traces a Lissajous path over the whole domain instead of running the
+ * diagonal forever. What it is for: the conditional on each wall slides while
+ * the marginal behind it stays put, and the size of that gap, live, is the
+ * dependence.
+ *
+ * `outward` is the other question, and the one the total cut was built for.
+ * Every live cut walks the same fraction together, from the near corner to the
+ * far one, so the point they cross at travels out along the box diagonal and
+ * the total rises steadily through its whole range. Watch the pair of wall
+ * curves rather than the surface: they are f(x | S = s) and f(y | S = s), the
+ * split of the total given its size, and their means are kappa. On an
+ * exchangeable pair they stay each other's mirror image; where one unit's tail
+ * is heavier, its curve stretches as s grows and kappa slides off the middle.
+ * That drift, watched once, is the whole argument for kappa.
+ */
+/**
+ * Put every live cut through one point of the line y = x.
+ *
+ * Parameters
+ * ----------
+ * u : float
+ *     Position along the part of y = x that lies inside the box, in [0, 1].
+ *
+ * Notes
+ * -----
+ * The reason this is a function and not three assignments of `u`. Setting each
+ * cut to the same *fraction* of its own range does not put them through one
+ * point: the two axes cover different intervals, so fraction u of x and
+ * fraction u of y are not the same place, and the cut at constant x + y is
+ * parameterized by a third range again. Three cuts that are supposed to cross
+ * at the point being walked to, drifting apart from each other.
+ *
+ * So the walk is defined on the diagonal itself. Take v on the segment of
+ * y = x inside the box, and every cut is derived from it: x is held at v, y is
+ * held at v, the total is held at 2v. They meet at (v, v) by construction, and
+ * the marker the walk carries sits there.
+ *
+ * The diagonal is the right track for this because it is the direction of
+ * increasing total through the middle of the joint. It is not the box's
+ * diagonal, which the eye reads as the diagonal: the box is square by
+ * construction while the axes cover whatever they cover.
+ */
+function walkTo(u) {
+  const g = gridCache.grid;
+  if (!g) return;
+  const nx = g.x.length, ny = g.y.length;
+  const lo = Math.max(g.x[0], g.y[0]);
+  const hi = Math.min(g.x[nx - 1], g.y[ny - 1]);
+  /* The two ranges can miss each other entirely, which is not exotic: a small
+     unit against a large one puts the whole box off the diagonal. Then there
+     is no y = x to walk and the fractions are the best available. */
+  if (!(hi > lo)) {
+    if (state.sliceX) state.sliceAtX = u;
+    if (state.sliceY) state.sliceAtY = u;
+    if (state.sliceS) state.sliceAtS = u;
+    return;
+  }
+  const v = lo + (hi - lo) * u;
+  const at = (a, b, t) => Math.min(1, Math.max(0, (t - a) / ((b - a) || 1)));
+  if (state.sliceX) state.sliceAtX = at(g.x[0], g.x[nx - 1], v);
+  if (state.sliceY) state.sliceAtY = at(g.y[0], g.y[ny - 1], v);
+  if (state.sliceS) {
+    state.sliceAtS = at(g.x[0] + g.y[0], g.x[nx - 1] + g.y[ny - 1], 2 * v);
+  }
+}
+
+function sweepFrame(ts) {
+  if (!sweeping) return;
+  const t = (ts / 1000) * state.sweepSpeed;
+  if (state.sweepPath === 'outward') {
+    /* A quarter of the sway's rate, so "slowly" is the default rather than
+       something to be found on the speed slider, and a sawtooth rather than a
+       sine: the walk is a statement about increasing s, and a sine spends half
+       its time coming back and most of it near the ends. */
+    const u = (t * 0.25) % 1;
+    walkTo(u);
+  } else {
+    if (state.sliceX) state.sliceAtX = 0.5 + 0.46 * Math.sin(t);
+    if (state.sliceY) state.sliceAtY = 0.5 + 0.46 * Math.sin(t * 0.618 + 1.3);
+    if (state.sliceS) state.sliceAtS = 0.5 + 0.36 * Math.sin(t * 0.414 + 0.7);
+  }
+  updateSlices();
+  requestAnimationFrame(sweepFrame);
+}
+
+function setSweep(on) {
+  const live = on && anyCut(state);
+  if (live === sweeping) return;
+  sweeping = live;
+  if (sweeping) requestAnimationFrame(sweepFrame);
+}
+
+/* ---- the fixed reading ---- */
+
+/* The last point the cursor was over, kept so the strip can be rewritten when
+   a cut moves without waiting for another hover. */
+let lastRead = null;
+
+/** Four significant figures, exponent only when the fixed form would be worse. */
+function num(v) {
+  if (!Number.isFinite(v)) return '--';
+  const a = Math.abs(v);
+  if (a !== 0 && (a >= 1e5 || a < 1e-3)) return v.toExponential(3);
+  return String(+v.toPrecision(5));
+}
+
+/**
+ * Where the cuts are and what the conditional means are, for the right of the
+ * strip.
+ *
+ * Each cut is printed as what is held, then what that leaves. Holding a
+ * component leaves a distribution in the other one, so the number is
+ * E[X2 | X1 = a]. Holding the total leaves a distribution in each, so there
+ * are two numbers, and they are kappa. Their sum is printed as well, because
+ * it has to come back as the total and seeing it do so is worth more than
+ * being told it does.
+ */
+function cutsHtml() {
+  const g = gridCache.grid;
+  if (!g) return '';
+  const m = lastMeans || {};
+  const bits = [];
+  const mean = (v) => (state.showMeans && Number.isFinite(v) ? ` <i class="k">&rarr;</i><b>${num(v)}</b>` : '');
+  if (state.sliceX && m.x) {
+    bits.push(`<i class="k">x</i><b>${num(m.x.at)}</b>${mean(m.x.mean)}`);
+  }
+  if (state.sliceY && m.y) {
+    bits.push(`<i class="k">y</i><b>${num(m.y.at)}</b>${mean(m.y.mean)}`);
+  }
+  if (state.sliceS && m.s) {
+    const k = (state.showMeans && Number.isFinite(m.s.k1))
+      ? ` <i class="k">&kappa;</i><b>${num(m.s.k1)}</b> + <b>${num(m.s.k2)}</b>`
+        + ` = <b>${num(m.s.k1 + m.s.k2)}</b>`
+      : '';
+    bits.push(`<i class="k">x+y</i><b>${num(m.s.at)}</b>${k}`);
+  }
+  return bits.length ? `<span class="cuts">${bits.join(' &nbsp;&middot;&nbsp; ')}</span>` : '';
+}
+
+/**
+ * Write the strip: the point under the cursor, then where the cuts sit.
+ *
+ * x + y earns its place beside x and y because it is the quantity the whole
+ * bivariate exercise is about. On a joint density the reader is rarely asking
+ * about a component on its own; they are asking what the total is doing, and
+ * the total is not on either axis.
+ */
+function paintReadout() {
+  const el = document.getElementById('readout');
+  if (!el) return;
+  const v = lastRead;
+  /* `f`, not `p`. The height is a density everywhere now, including on the
+     baked surfaces, where the mass per cell is divided by the cell's area on
+     the way out of the reduction. Calling it p was the label for the thing
+     that made the walls disagree. */
+  const zName = SURFACES[state.surf].floorable ? 'f' : 'z';
+  const head = v
+    ? `<span><i class="k">x</i><b>${num(v.x)}</b></span>`
+      + `<span><i class="k">y</i><b>${num(v.y)}</b></span>`
+      + `<span><i class="k">x + y</i><b>${num(v.x + v.y)}</b></span>`
+      + `<span><i class="k">${zName}</i><b>${num(v.z)}</b></span>`
+    : '<span>point at the surface to read it</span>';
+  el.classList.toggle('is-idle', !v);
+  el.innerHTML = head + cutsHtml();
+}
+
+function stamp() {
+  /* The grid that was actually built, not the one that was asked for. A baked
+     surface reduces by powers of two, so the two rarely agree, and the
+     difference is exactly the thing worth seeing. */
+  const g = gridCache.grid;
+  const nx = g ? g.x.length : 0, ny = g ? g.y.length : 0;
+  const opt = chart.getOption();
+  const count = (opt.series || []).length;
+  /* What the window costs, said out loud. Everything on a windowed grid is
+     computed over the window, so this is the size of the approximation and the
+     one number that says whether the depth is set too shallow. */
+  const kept = (g && g.kept !== undefined && g.kept < 1)
+    ? `, window holds ${(g.kept * 100).toFixed(4)}% of the mass` : '';
+  document.getElementById('fps').textContent =
+    `${nx} x ${ny} = ${(nx * ny).toLocaleString()} vertices, ${count} series${kept}, `
+    + `last update ${lastMs.toFixed(0)} ms`;
+}
+
+function render() {
+  const t0 = performance.now();
+  const option = buildOption();
+  chart.setOption(option, true);
+  lastSliceSig = sliceSignature();
+  lastMs = performance.now() - t0;
+  stamp();
+  refreshVisibility();
+  refreshBar();
+  paintReadout();
+  setSweep(state.sweep);
+  document.getElementById('chart').classList.toggle('pickable', Boolean(state.clickToSlice));
+  rememberLast();
+}
+
+/* ---------------------------------------------------------- snapshots */
+/* The point of these is that the page gets edited underneath you. Settings
+   live in localStorage, keyed by origin, so they survive a reload, a rewrite
+   of this file, and a hard refresh. They do not survive a move to a different
+   port, which is what the JSON and the link are for.
+   Every restore goes through `applyState`, which layers the snapshot over the
+   shipped defaults and drops keys it does not recognize. That is what makes a
+   snapshot taken three controls ago still work. */
+
+const LS_SNAPS = 'surface-lab.snapshots';
+const LS_LAST = 'surface-lab.last';
+const LS_REMEMBER = 'surface-lab.remember';
+
+/**
+ * Every touch of localStorage, behind a guard.
+ *
+ * Reading `window.localStorage` **throws** when the browser has site data
+ * blocked for the origin, and it throws on the property access itself, before
+ * any method is called. `http://127.0.0.1` is blocked in at least one browser
+ * here while `http://localhost` on the same port is not, which is a difference
+ * nothing in the page can see.
+ *
+ * That one throw used to take out the whole snapshot panel. `wireSnapshots`
+ * read the remember flag on its first line, threw, and the boot guard caught
+ * it and carried on, so **none** of the buttons below that line were ever
+ * wired: save did nothing, delete did nothing, and "snapshot JSON" did nothing,
+ * all silently and all looking like a dead panel rather than a blocked one.
+ *
+ * So storage is now optional. Nothing throws, `blocked` records that it
+ * happened, and the parts that need no storage at all, the JSON box and the
+ * link, keep working.
+ */
+const LS = {
+  blocked: false,
+  get(k) {
+    try { return localStorage.getItem(k); } catch (e) { LS.blocked = true; return null; }
+  },
+  set(k, v) {
+    try { localStorage.setItem(k, v); } catch (e) { LS.blocked = true; }
+  },
+  remove(k) {
+    try { localStorage.removeItem(k); } catch (e) { LS.blocked = true; }
+  },
+};
+
+function readSnaps() {
+  try { return JSON.parse(LS.get(LS_SNAPS)) || {}; } catch (e) { return {}; }
+}
+
+function writeSnaps(o) {
+  LS.set(LS_SNAPS, JSON.stringify(o));
+  if (LS.blocked) note('this origin has site data blocked, so nothing can be saved. Use snapshot JSON or copy link');
+}
+
+function note(msg) {
+  const el = document.getElementById('snap-note');
+  if (el) el.textContent = msg || '';
+}
+
+function applyState(obj) {
+  Object.assign(state, PRESETS.app, cleanState(obj));
+  render();
+}
+
+function refreshSnapList(select) {
+  const snaps = readSnaps();
+  const list = document.getElementById('snap-list');
+  const names = Object.keys(snaps).sort();
+  list.innerHTML = '';
+  const head = document.createElement('option');
+  head.value = '';
+  head.textContent = names.length ? `restore one of ${names.length}` : 'none saved yet';
+  list.appendChild(head);
+  for (const n of names) {
+    const o = document.createElement('option');
+    o.value = n; o.textContent = n;
+    list.appendChild(o);
+  }
+  if (select) list.value = select;
+}
+
+/* Debounced, because a slider drag fires this on every pixel and a
+   localStorage write is synchronous. */
+let lastTimer = null;
+function rememberLast() {
+  if (!document.getElementById('snap-remember').checked) return;
+  clearTimeout(lastTimer);
+  lastTimer = setTimeout(() => LS.set(LS_LAST, JSON.stringify(state)), 400);
+}
+
+function wireSnapshots() {
+  const nameBox = document.getElementById('snap-name');
+  const list = document.getElementById('snap-list');
+  const remember = document.getElementById('snap-remember');
+
+  remember.checked = LS.get(LS_REMEMBER) !== '0';
+  remember.addEventListener('change', () => {
+    LS.set(LS_REMEMBER, remember.checked ? '1' : '0');
+    if (remember.checked) rememberLast(); else LS.remove(LS_LAST);
+    note(remember.checked ? 'will reopen where you left off' : 'reload starts from the shipped defaults');
+  });
+
+  document.getElementById('snap-save').addEventListener('click', () => {
+    const name = (nameBox.value || '').trim();
+    if (!name) { note('give it a name first'); nameBox.focus(); return; }
+    const snaps = readSnaps();
+    const existed = name in snaps;
+    snaps[name] = Object.assign({}, state);
+    writeSnaps(snaps);
+    refreshSnapList(name);
+    note(`${existed ? 'updated' : 'saved'} "${name}"`);
+  });
+
+  list.addEventListener('change', () => {
+    const name = list.value;
+    if (!name) return;
+    const snaps = readSnaps();
+    if (!snaps[name]) { note('gone'); refreshSnapList(); return; }
+    nameBox.value = name;
+    applyState(snaps[name]);
+    refreshSnapList(name);
+    note(`restored "${name}"`);
+  });
+
+  document.getElementById('snap-del').addEventListener('click', () => {
+    const name = list.value;
+    if (!name) { note('pick one to delete'); return; }
+    const snaps = readSnaps();
+    delete snaps[name];
+    writeSnaps(snaps);
+    refreshSnapList();
+    note(`deleted "${name}"`);
+  });
+
+  document.getElementById('snap-json').addEventListener('click', () => {
+    document.getElementById('snap-text').value = JSON.stringify(state, null, 2);
+    new bootstrap.Modal(document.getElementById('snapModal')).show();
+  });
+
+  document.getElementById('snap-copy').addEventListener('click', () => {
+    navigator.clipboard.writeText(document.getElementById('snap-text').value);
+  });
+
+  document.getElementById('snap-apply').addEventListener('click', () => {
+    let parsed;
+    try { parsed = JSON.parse(document.getElementById('snap-text').value); }
+    catch (e) { note('that is not valid JSON'); return; }
+    applyState(parsed);
+    bootstrap.Modal.getInstance(document.getElementById('snapModal')).hide();
+    note('applied');
+  });
+
+  /* Only what differs from the shipped defaults, so the link stays short
+     enough to paste into a message. */
+  document.getElementById('snap-link').addEventListener('click', () => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(state)) {
+      if (v === PRESETS.app[k]) continue;
+      q.set(k, typeof v === 'boolean' ? (v ? '1' : '0') : String(v));
+    }
+    const url = `${location.origin}${location.pathname}?${q}`;
+    navigator.clipboard.writeText(url);
+    note(`link copied, ${q.toString().length} characters`);
+  });
+
+  const showAll = document.getElementById('panel-showall');
+  /* Default on. Hiding keeps the panel short and makes it impossible to learn:
+     a control you have never seen cannot be looked for. Greyed out says both
+     "this exists" and "not right now", which is the whole message. */
+  showAll.checked = LS.get('surface-lab.showall') !== '0';
+  showAll.addEventListener('change', () => {
+    LS.set('surface-lab.showall', showAll.checked ? '1' : '0');
+    refreshVisibility();
+  });
+
+  document.getElementById('grp-all').addEventListener('click', () => setAllGroups(true));
+  document.getElementById('grp-none').addEventListener('click', () => setAllGroups(false));
+
+  const filter = document.getElementById('ctl-filter');
+  filter.addEventListener('input', applyFilter);
+  document.getElementById('ctl-filter-clear').addEventListener('click', () => {
+    filter.value = '';
+    applyFilter();
+    filter.focus();
+  });
+
+  refreshSnapList();
+}
+
+/**
+ * Read state out of the query string, so a configuration is a link.
+ *
+ * `?preset=demo&sliceAt=0.6&panel=0` applies the preset, then the individual
+ * overrides, then optionally hides the control panel for a clean capture.
+ * This is also how the page gets driven without a mouse.
+ */
+function applyQuery() {
+  const q = new URLSearchParams(location.search);
+  let touched = false;
+  const p = q.get('preset');
+  if (p && PRESETS[p]) {
+    Object.assign(state, PRESETS.app, PRESETS[p]);
+    /* So the toolbar's reset goes back to the preset the link asked for, not
+       to the shipped default the link was written to get away from. */
+    lastPreset = p;
+    touched = true;
+  }
+  for (const [k, v] of q) {
+    if (!(k in state)) continue;
+    const cur = state[k];
+    state[k] = typeof cur === 'number' ? parseFloat(v)
+      : typeof cur === 'boolean' ? (v === '1' || v === 'true')
+        : v;
+    touched = true;
+  }
+  /* Not part of the chart state, so it is read here by hand. `?find=contour`
+     opens the page already narrowed to those controls. */
+  const find = q.get('find');
+  if (find) document.getElementById('ctl-filter').value = find;
+  if (q.get('panel') === '0') {
+    document.querySelector('.panel').style.display = 'none';
+    document.getElementById('fps').style.display = 'none';
+  }
+  /* Separate from `panel`, because the toolbar is the thing a screenshot of
+     the shipping view most wants to keep and the knob board is the thing it
+     most wants gone. */
+  if (q.get('bar') === '0') document.getElementById('toolbar').style.display = 'none';
+  if (q.get('strip') === '0') {
+    document.getElementById('readout').style.display = 'none';
+    document.documentElement.style.setProperty('--strip', '0px');
+  }
+  return touched;
+}
+
+/* ---- control rendering ---- */
+
+const els = {};
+
+function ctlId(key) { return 'c-' + key; }
+
+/* Which groups are open is remembered too. It is not part of the chart state,
+   so it does not belong in a snapshot, but losing it on reload reads exactly
+   like the controls have gone missing, which is worse than it sounds. */
+const LS_GROUPS = 'surface-lab.groups';
+
+function readGroups() {
+  try {
+    const o = JSON.parse(LS.get(LS_GROUPS));
+    if (!o || typeof o !== 'object') return null;
+    /* A stored state with every group shut is never worth restoring: the
+       panel comes back with nothing in it but eight title bars, which reads
+       as broken rather than as tidy. Reopening is the lesser annoyance. */
+    if (Object.values(o).every((v) => !v)) return null;
+    return o;
+  } catch (e) { return null; }
+}
+
+/* Filtering opens and closes groups to show its matches, and those are not
+   choices the user made, so they must not be written back over the ones that
+   were. */
+let filtering = false;
+
+function writeGroups() {
+  if (filtering) return;
+  const o = {};
+  document.querySelectorAll('.grp').forEach((d) => { o[d.dataset.gid] = d.open; });
+  LS.set(LS_GROUPS, JSON.stringify(o));
+}
+
+/**
+ * Narrow the panel to controls whose label or key matches.
+ *
+ * With 87 controls across 8 groups, "where is that setting" is the question
+ * the panel gets asked most, and scrolling eight accordions is a poor answer.
+ * An empty box restores the groups exactly as they were left.
+ */
+function applyFilter() {
+  const box = document.getElementById('ctl-filter');
+  const q = (box.value || '').trim().toLowerCase();
+  const saved = readGroups();
+  filtering = true;
+  document.querySelectorAll('.grp').forEach((d) => {
+    let hits = 0;
+    d.querySelectorAll('.ctl').forEach((el) => {
+      const match = !q || (el.dataset.search || '').includes(q);
+      el.classList.toggle('filtered', !match);
+      if (match && !el.classList.contains('hidden')) hits++;
+    });
+    d.classList.toggle('filtered', Boolean(q) && hits === 0);
+    const gid = d.dataset.gid;
+    d.open = q ? hits > 0 : (saved && gid in saved ? saved[gid] : true);
+  });
+  filtering = false;
+}
+
+function setAllGroups(open) {
+  document.querySelectorAll('.grp').forEach((d) => { d.open = open; });
+  writeGroups();
+}
+
+function buildPanel() {
+  const host = document.getElementById('controls');
+  const saved = readGroups();
+  for (const [id, title, items] of SPEC) {
+    const d = document.createElement('details');
+    d.className = 'grp';
+    d.dataset.gid = id;
+    /* Open by default, all of them. Eight collapsed accordions plus the
+       hiding rule meant a fresh load showed 35 of 87 controls, which is
+       indistinguishable from most of the panel being missing. */
+    d.open = saved && id in saved ? saved[id] : true;
+    d.addEventListener('toggle', writeGroups);
+    const s = document.createElement('summary');
+    /* The count matters when the group is shut: a bare title looks like a
+       heading, a title with "(10)" looks like something you can open. */
+    s.textContent = `${title} (${items.length})`;
+    d.appendChild(s);
+    const body = document.createElement('div');
+    body.className = 'body';
+    for (const item of items) body.appendChild(makeControl(item));
+    d.appendChild(body);
+    host.appendChild(d);
+  }
+}
+
+/**
+ * The handler behind a number box, shared by the panel and the toolbar.
+ *
+ * Both `input` and `change` are wired to it, which is what makes the arrows
+ * step live: a spinner click or a held arrow key raises `input` and nothing
+ * else, so listening only for `change` left the picture waiting for the box to
+ * lose focus. The cost of listening to `input` is that typing "12" fires at
+ * "1" as well, so the redraw is deferred by a frame or two and a second
+ * keystroke inside that window replaces the first. Holding an arrow key
+ * coalesces the same way and the surface keeps up.
+ *
+ * Parameters
+ * ----------
+ * key : str
+ *     The state key.
+ * input : HTMLInputElement
+ * min, max : float
+ *     Clamped to, since a number box will happily hand back anything typed.
+ * after : function, optional
+ *     Run once the state is set, before the redraw.
+ */
+function numApplier(key, input, min, max, after) {
+  let timer = null;
+  return () => {
+    const raw = parseFloat(input.value);
+    if (!Number.isFinite(raw)) return;      // mid-edit, an empty box or a bare '-'
+    const v = Math.min(max, Math.max(min, raw));
+    if (v === state[key]) return;
+    state[key] = v;
+    if (after) after();
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      syncCamera();
+      render();
+    }, 90);
+  };
+}
+
+function makeControl([key, type, label, arg, when]) {
+  const wrap = document.createElement('div');
+  wrap.className = type === 'check' ? 'ctl check' : 'ctl';
+  wrap.dataset.key = key;
+  wrap.dataset.search = `${label} ${key}`.toLowerCase();
+  if (when) wrap._when = when;
+
+  if (type === 'check') {
+    const input = document.createElement('input');
+    input.type = 'checkbox'; input.id = ctlId(key); input.checked = Boolean(state[key]);
+    input.className = 'form-check-input';
+    input.addEventListener('change', () => { syncCamera(); state[key] = input.checked; render(); });
+    const lab = document.createElement('label');
+    lab.htmlFor = ctlId(key); lab.textContent = label;
+    wrap.appendChild(input); wrap.appendChild(lab);
+    els[key] = input;
+    return wrap;
+  }
+
+  const lab = document.createElement('label');
+  lab.htmlFor = ctlId(key);
+  const name = document.createElement('span');
+  name.textContent = label;
+  const val = document.createElement('span');
+  val.className = 'val';
+  lab.appendChild(name); lab.appendChild(val);
+  wrap.appendChild(lab);
+
+  let input;
+  if (type === 'range') {
+    const [min, max, step] = arg;
+    input = document.createElement('input');
+    input.type = 'range'; input.min = min; input.max = max; input.step = step;
+    input.value = state[key];
+    input.className = 'form-range';
+    val.textContent = fmtVal(state[key]);
+    /* `input` for the live feel, but a heavy rebuild on every pixel of drag
+       is unusable at n = 200, so the mesh only rebuilds on release. The two
+       cut positions go the other way: they touch nothing but their own
+       series, so they update on every pixel and stay smooth. */
+    const heavy = key === 'n' || key === 'coarse';
+    const cheap = key === 'sliceAtX' || key === 'sliceAtY';
+    const apply = () => {
+      if (!cheap) syncCamera();
+      state[key] = parseFloat(input.value);
+      if (cheap) updateSlices(); else render();
+    };
+    input.addEventListener('input', () => {
+      val.textContent = fmtVal(parseFloat(input.value));
+      if (!heavy) apply();
+    });
+    input.addEventListener('change', () => { if (heavy) apply(); });
+  } else if (type === 'num') {
+    /* A box rather than a slider, and the only one on the panel. The value is
+       an exponent, so a drag covers twelve orders of magnitude in as many
+       pixels and every useful setting is a whole or half step. Typing one is
+       the honest gesture, and so is holding an arrow key. */
+    const [min, max, step] = arg;
+    input = document.createElement('input');
+    input.type = 'number'; input.min = min; input.max = max; input.step = step;
+    input.value = state[key];
+    input.className = 'form-control form-control-sm';
+    const paint = () => {
+      const v = state[key];
+      val.textContent = v > 0 ? `p = ${(10 ** -v).toExponential(1)}` : 'the whole grid';
+    };
+    wrap._val = paint;
+    paint();
+    const apply = numApplier(key, input, min, max, paint);
+    input.addEventListener('input', apply);
+    input.addEventListener('change', apply);
+  } else if (type === 'select') {
+    input = document.createElement('select');
+    input.className = 'form-select form-select-sm';
+    for (const [v, t] of (typeof arg === 'function' ? arg() : arg)) {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = t;
+      input.appendChild(o);
+    }
+    input.value = state[key];
+    input.addEventListener('change', () => { syncCamera(); state[key] = input.value; render(); });
+  } else if (type === 'color') {
+    input = document.createElement('input');
+    input.type = 'color'; input.value = state[key];
+    input.addEventListener('input', () => { syncCamera(); state[key] = input.value; render(); });
+  }
+  input.id = ctlId(key);
+  wrap.appendChild(input);
+  els[key] = input;
+  return wrap;
+}
+
+function fmtVal(v) {
+  if (!Number.isFinite(v)) return String(v);
+  return Math.abs(v) >= 100 || Number.isInteger(v) ? String(v) : v.toFixed(2);
+}
+
+/**
+ * Push state into the widgets, and deal with the ones that cannot bite.
+ *
+ * Hiding them keeps the panel short but makes it move under you, and a
+ * control that vanishes is indistinguishable from one that was never there.
+ * So there is a switch: hide, or show greyed. Greyed is the honest default
+ * for anyone still learning what is in here.
+ */
+function refreshVisibility() {
+  const showAll = document.getElementById('panel-showall').checked;
+  document.querySelectorAll('.ctl').forEach((el) => {
+    const key = el.dataset.key;
+    const input = els[key];
+    if (input) {
+      if (input.type === 'checkbox') input.checked = Boolean(state[key]);
+      /* Never write back into the box being typed in. The redraw a number box
+         triggers lands while the caret is still in it, and rewriting the value
+         there would fight the typist for the field. */
+      else if (input !== document.activeElement) input.value = state[key];
+      const val = el.querySelector('.val');
+      if (val && el._val) el._val();
+      else if (val && input.type === 'range') val.textContent = fmtVal(parseFloat(input.value));
+    }
+    if (el._when) {
+      const live = el._when(state);
+      el.classList.toggle('hidden', !live && !showAll);
+      el.classList.toggle('dim', !live && showAll);
+    }
+  });
+  /* A live filter has to be re-applied on top, since the pass above just
+     rewrote the classes it works from. */
+  if (document.getElementById('ctl-filter').value.trim()) applyFilter();
+}
+
+/* ---- presets, dump, resize ---- */
+
+/* A preset is a full look, layered over the shipped one so nothing is left
+   half set from the previous click. The data choice is not part of a look,
+   so it survives unless the preset names it: switching from "as shipped" to
+   "VTK shiny" should change the render and nothing else. */
+const DATA_KEYS = ['surf', 'n', 'windowN', 'damp', 'logz'];
+
+/* Which preset the page is sitting on, so the toolbar's reset has somewhere to
+   go back to. A shipped panel has exactly one answer here; the lab has ten, so
+   it remembers the last one asked for. */
+let lastPreset = 'app';
+
+document.querySelectorAll('[data-preset]').forEach((b) => {
+  b.addEventListener('click', () => {
+    applyPreset(b.dataset.preset);
+  });
+});
+
+function applyPreset(name, draw = true) {
+  const preset = PRESETS[name];
+  if (!preset) return;
+  lastPreset = name;
+  const keep = {};
+  for (const k of DATA_KEYS) if (!(k in preset)) keep[k] = state[k];
+  Object.assign(state, PRESETS.app, preset, keep);
+  if (draw) render();
+}
+
+/* ---- the toolbar, which is the shipping control set ---------------------
+   Everything in the panel to the left is a laboratory knob and would not
+   survive the trip into the app. This row is the argument about what would:
+   the height scale, the two projections, which way the mesh runs, which cuts
+   run, the wall grid, the window, and a way back. Eight, not fifty, and each
+   one changes what question the chart answers rather than how it looks. The
+   window is the newest and the least like the others, a number rather than a
+   state to cycle, and it earns the space twice over: it is what puts the body
+   of the distribution in the box, and stepping the depth up and down is the
+   quickest reading anywhere here of how far the tail actually reaches. The
+   wall grid is
+   the only one that is purely about the look, and it earns its place by
+   subtraction: with marginals on the walls and a mesh on the surface there is
+   already enough line work, and being able to take the grid away is what makes
+   the rest legible.
+   The floor image is deliberately **not** on the row. It is not a preference,
+   it is the reason the base is legible at all, so it stays on and the contour
+   button governs the lines only. */
+
+/* The mesh runs the way the cut runs. They are asking the same question about
+   the same two directions, so a mesh along x and y under a cut at constant
+   x + y draws a net whose lines cross the thing being read at an angle, and
+   the eye has to do the intersection itself. Tie them together and every rung
+   of the mesh is a copy of the cut, which turns the mesh into a scale for it.
+   That leaves the button as an on and off, which is what it should have been:
+   the direction is not a preference, it is a consequence. */
+const MESH_FOR_CUT = { none: 'xy', xy: 'xy', s: 'diag', all: 'both' };
+
+/* The cuts cycle the same way the mesh does, and through the same four
+   choices, because they are answering the same question about the same two
+   directions: along the axes, along the total, both, neither. Three booleans
+   underneath, one button on top. */
+const CUT_ORDER = ['none', 'xy', 's', 'all'];
+const CUT_LABEL = { none: 'no cut', xy: 'cut x, y', s: 'cut x+y', all: 'cut all' };
+const CUT_STATE = {
+  none: { sliceX: false, sliceY: false, sliceS: false },
+  xy: { sliceX: true, sliceY: true, sliceS: false },
+  s: { sliceX: false, sliceY: false, sliceS: true },
+  all: { sliceX: true, sliceY: true, sliceS: true },
+};
+
+/** Which of the four the three booleans currently amount to. */
+function cutMode() {
+  const { sliceX: x, sliceY: y, sliceS: s } = state;
+  if (x && y && s) return 'all';
+  if (s && !x && !y) return 's';
+  if (x || y) return 'xy';
+  return 'none';
+}
+
+const barEls = {};
+
+function buildBar() {
+  const bar = document.getElementById('toolbar');
+  if (!bar) return;
+  const mk = (key, label, title, act, primary) => {
+    const b = document.createElement('button');
+    b.className = `btn btn-outline-${primary ? 'primary' : 'secondary'}`;
+    b.textContent = label;
+    b.title = title;
+    b.addEventListener('click', () => { syncCamera(); act(); render(); });
+    bar.appendChild(b);
+    barEls[key] = b;
+  };
+  mk('log', 'log z', 'height on a log scale, which is the only way a tail shows',
+    () => { state.logz = !state.logz; });
+  mk('marg', 'marginals', 'both marginals, standing on the two low walls',
+    () => { state.marginals = state.marginals === 'none' ? 'line' : 'none'; });
+  mk('cont', 'contours', 'contour lines. The image underneath stays either way',
+    () => { state.contours = !state.contours; });
+  mk('mesh', 'mesh', 'the mesh, running the way the cut runs',
+    () => {
+      state.meshDir = state.meshDir === 'none' ? MESH_FOR_CUT[cutMode()] : 'none';
+      /* A mesh with nothing to draw on is not a state worth reaching by
+         accident, so asking for lines turns the representation that carries
+         them on. */
+      if (state.meshDir !== 'none' && state.rep === 'surface') state.rep = 'edges';
+    });
+  mk('cut', CUT_LABEL.none, 'which cuts run: along the axes, along the total, both, neither',
+    () => {
+      const next = CUT_ORDER[(CUT_ORDER.indexOf(cutMode()) + 1) % CUT_ORDER.length];
+      Object.assign(state, CUT_STATE[next]);
+      if (state.meshDir !== 'none') state.meshDir = MESH_FOR_CUT[next];
+    });
+  mk('grid', 'wall grid', 'grid lines on the three walls',
+    () => { state.splitLine = !state.splitLine; });
+  mk('reset', 'reset', 'back to the last preset, camera included',
+    () => { applyPreset(lastPreset, false); }, true);
+
+  /* The window belongs on this row and not only in the panel, because it is
+     not a laboratory knob: it is how you look at the thing, the same class of
+     act as rotating the box. Watching the support move as the depth changes is
+     also the fastest way to see how far a tail really goes. */
+  const box = document.createElement('label');
+  box.className = 'winbox';
+  box.title = 'window: keep q(10^-n) to q(1 - 10^-n) of each marginal, 0 for the whole grid';
+  const input = document.createElement('input');
+  input.type = 'number'; input.min = 0; input.max = 12; input.step = 0.5;
+  input.value = state.windowN;
+  const apply = numApplier('windowN', input, 0, 12);
+  input.addEventListener('input', apply);
+  input.addEventListener('change', apply);
+  box.append('window', input);
+  bar.appendChild(box);
+  barEls.win = box;
+  barEls.winInput = input;
+}
+
+function refreshBar() {
+  const on = (k, v) => { if (barEls[k]) barEls[k].classList.toggle('active', Boolean(v)); };
+  on('log', state.logz);
+  on('marg', state.marginals !== 'none');
+  on('cont', state.contours);
+  on('grid', state.splitLine);
+  on('mesh', state.meshDir !== 'none' && hasLines(state));
+  const cm = cutMode();
+  on('cut', cm !== 'none');
+  if (barEls.cut) barEls.cut.textContent = CUT_LABEL[cm];
+  /* Greyed rather than hidden, the same bargain the panel strikes: a control
+     that disappears is indistinguishable from one that was never there. */
+  if (barEls.log) barEls.log.disabled = !SURFACES[state.surf].floorable;
+  /* A synthetic surface is evaluated on its own span, so there is no grid to
+     take a window out of and the box has nothing to bite on. */
+  const windowed = Boolean(SURFACES[state.surf].sampled);
+  if (barEls.winInput) {
+    if (barEls.winInput !== document.activeElement) barEls.winInput.value = state.windowN;
+    barEls.winInput.disabled = !windowed;
+    barEls.win.classList.toggle('off', !windowed);
+  }
+}
+
+document.getElementById('btn-dump').addEventListener('click', () => {
+  const o = buildOption();
+  o.series = o.series.map((s) => Object.assign({}, s, {
+    data: `<${(s.data || []).length} vertices>`,
+  }));
+  document.getElementById('dump').textContent = JSON.stringify(o, (k, v) =>
+    typeof v === 'function' ? '<fn>' : v, 2);
+  new bootstrap.Modal(document.getElementById('dumpModal')).show();
+});
+
+document.getElementById('btn-copy').addEventListener('click', () => {
+  navigator.clipboard.writeText(document.getElementById('dump').textContent);
+});
+
+document.getElementById('btn-png').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = chart.getDataURL({ pixelRatio: 2, backgroundColor: '#fff' });
+  a.download = 'surface-lab.png';
+  a.click();
+});
+
+/* Click to place the cuts.
+   A rotate ends in a click too, so the gesture has to be told apart from a
+   drag or every attempt to look around would move the cuts. Four pixels of
+   travel is the threshold: below it the pointer did not really go anywhere. */
+let downAt = null;
+let dragged = false;
+const chartDom = document.getElementById('chart');
+
+chartDom.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; dragged = false; });
+chartDom.addEventListener('pointerup', (e) => {
+  if (downAt) dragged = Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4;
+  downAt = null;
+});
+
+chart.on('click', (params) => {
+  if (!state.clickToSlice || dragged) return;
+  /* Only the things that are actually the surface. The floor, the contours
+     and the wall curves all carry positions that would move the cuts
+     somewhere the click did not mean. */
+  const name = params.seriesName || '';
+  if (name !== 'surface' && !name.startsWith('edges along')) return;
+  const v = params.data || params.value;
+  if (!Array.isArray(v) || !Number.isFinite(v[0]) || !Number.isFinite(v[1])) return;
+  /* A click is also a reading, and a more deliberate one than a hover: this is
+     the point the cuts are now through, so it should be the point the strip is
+     showing. It also means the strip works on a machine where the hover pick
+     is too slow to be usable. */
+  lastRead = { x: +v[0], y: +v[1], z: usingLog() ? 10 ** v[2] : +v[2] };
+  sliceAtPoint(v[0], v[1]);
+});
+
+/* The reading, off the same event the click uses.
+   Throttled to one write per animation frame. echarts-gl answers a mousemove
+   over a surface by scanning every vertex to find the nearest
+   (`SurfaceView`, echarts-gl 2.1.0), which at n = 200 is 40,000 distance
+   computations per event, so the last thing this should add is a DOM write per
+   event on top. */
+let readPending = false;
+
+chart.on('mousemove', (params) => {
+  const name = params.seriesName || '';
+  if (name !== 'surface' && !name.startsWith('edges along')) return;
+  const v = params.data || params.value;
+  if (!Array.isArray(v) || !Number.isFinite(v[0]) || !Number.isFinite(v[1])) return;
+  lastRead = { x: +v[0], y: +v[1], z: usingLog() ? 10 ** v[2] : +v[2] };
+  if (readPending) return;
+  readPending = true;
+  requestAnimationFrame(() => { readPending = false; paintReadout(); });
+});
+
+window.addEventListener('resize', () => chart.resize());
+
+/* ------------------------------------------------------------------ boot */
+/* Stored state is the one input here that cannot be seen from the outside and
+   cannot be trusted, so every step that touches it is separately guarded.
+   Whatever else fails, `buildPanel` runs: a page with a broken chart is
+   debuggable, a page with no controls is not. */
+
+const boot = new URLSearchParams(location.search);
+
+/* `?reset=1` drops the panel state, `?reset=all` drops saved snapshots too.
+   The split is deliberate: the usual reason to reset is a panel that will not
+   show itself, and losing your named snapshots to fix that would be a poor
+   trade. */
+const reset = boot.get('reset');
+if (reset) {
+  const kill = [LS_LAST, LS_GROUPS, 'surface-lab.showall'];
+  if (reset === 'all') kill.push(LS_SNAPS, LS_REMEMBER);
+  for (const k of kill) LS.remove(k);
+}
+
+try { wireSnapshots(); } catch (e) { console.error('surface-lab: snapshot wiring failed', e); }
+
+let fromQuery = false;
+try { fromQuery = applyQuery(); } catch (e) { console.error('surface-lab: query parse failed', e); }
+
+if (!fromQuery) {
+  try {
+    const box = document.getElementById('snap-remember');
+    if (box && box.checked) {
+      const last = JSON.parse(LS.get(LS_LAST));
+      if (last) Object.assign(state, PRESETS.app, cleanState(last));
+    }
+  } catch (e) { console.error('surface-lab: stored state unreadable, using defaults', e); }
+}
+
+/* The baked surfaces have to be in `SURFACES` before the panel is built, since
+   the menu is a list of what exists rather than a list of what might. So the
+   rest of boot waits on one fetch. Everything above this point is synchronous
+   and unaffected: if the fetch fails, the three real surfaces are missing and
+   nothing else is. */
+loadData().then(() => {
+  /* A link or a stored state can name a surface that did not load. Falling
+     back is quieter than an exception and says which one went missing. */
+  if (!SURFACES[state.surf]) {
+    const wanted = state.surf;
+    state.surf = 'mixture';
+    note(`"${wanted}" is not available, surface-data.json did not load`);
+  }
+  buildPanel();
+  buildBar();
+  try { render(); } catch (e) {
+    console.error('surface-lab: first render failed', e);
+    note('the chart failed to build, controls still work, see the console');
+  }
+  afterFirstRender();
+});
+
+/** Everything that has to wait until the panel and the chart exist. */
+function afterFirstRender() {
+
+/* Said out loud, because the failure it describes is invisible: a blocked
+   origin looks exactly like a page whose buttons are broken. */
+if (LS.blocked) {
+  note(`site data is blocked on ${location.origin}, so nothing saves here. `
+    + 'The JSON box and the link still work. Try localhost instead of 127.0.0.1');
+}
+
+/* `?diag=1` reports what is in storage and what the panel actually built,
+   which is the only way to see any of it from another machine. */
+if (boot.get('diag') === '1') {
+  const groups = document.querySelectorAll('.grp');
+  const open = document.querySelectorAll('.grp[open]');
+  const ctl = document.querySelectorAll('.ctl');
+  const hidden = document.querySelectorAll('.ctl.hidden');
+  const stored = ['surface-lab.groups', 'surface-lab.last', 'surface-lab.showall',
+    'surface-lab.snapshots', 'surface-lab.remember']
+    .map((k) => {
+      const v = LS.get(k);
+      return `${k.replace('surface-lab.', '')}=${v === null ? 'unset' : `${v.length}b`}`;
+    }).join(' ');
+  const msg = `groups ${open.length}/${groups.length} open, controls `
+    + `${ctl.length - hidden.length}/${ctl.length} showing, showAll `
+    + `${document.getElementById('panel-showall').checked}, storage: ${stored}`;
+  note(msg);
+  console.log('surface-lab diag:', msg);
+}
+
+}
+</script>
+</body>
+</html>

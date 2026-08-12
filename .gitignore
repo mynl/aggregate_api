@@ -61,3 +61,7 @@ dev/fixtures/
 
 # hacks
 hacks/
+
+# The prototype baked data: 530 kB, derived, one command to rebuild.
+# See dev/prototypes/joint-surface/make-surface-data.py
+dev/prototypes/joint-surface/surface-data.json

@@ -1,5 +1,13 @@
 # plan-plot-ir-api: plotting via the IR in the api
 
+> **Status: DONE, moved to `dev/done/` 2026-08-12.** Items 2 to 6 and 8
+> landed at `a62` and `a63` against library `a244` (all eight emitters). The
+> heatmap declaration question resolved at `a76`: the flat reading became a
+> control the renderer offers rather than one the document declares, so
+> nothing waits on the emitter. The one residue is **item 7.1** (chart
+> responsiveness under `dataZoom`, the `filterMode` trade), a judgment that
+> needs a browser; tracked in the worktrees `dev-files.md`, "Getting to 1.0".
+
 Getting every chart in the app onto the chart IR, and deleting the two paths
 that predate it. Terse for now; each item fleshes out into the plan proper.
 
