@@ -97,17 +97,30 @@ export function loadSurface() {
  * Returns
  * -------
  * object or null
- *     `{alpha, beta, distance}`, or null when there is nothing to read.
+ *     `{alpha, beta, distance, center, projection}`, or null when there is
+ *     nothing to read.
+ *
+ * Notes
+ * -----
+ * `center` and `projection` joined at a88, for the puck. The camera can now be
+ * panned off the middle of the box and swapped to an orthographic reading, and
+ * a redraw that carried only the two angles and the distance would put a
+ * panned camera back in the center at the first toggle: the same failure the
+ * angles had before this function existed.
  */
 export function readCamera(chart) {
     try {
         const vc = chart.getModel().getComponent('grid3D').option.viewControl;
         if (!vc || !Number.isFinite(vc.alpha)) return null;
-        return {
-            alpha: vc.alpha,
-            beta: vc.beta,
-            distance: Number.isFinite(vc.distance) ? vc.distance : undefined,
-        };
+        // Only the keys that are actually there. The result is spread over the
+        // preset's `viewControl`, and a key present with an undefined value is
+        // not the same as an absent one: it overwrites the default rather than
+        // letting it stand.
+        const camera = { alpha: vc.alpha, beta: vc.beta };
+        if (Number.isFinite(vc.distance)) camera.distance = vc.distance;
+        if (Array.isArray(vc.center)) camera.center = vc.center.slice(0, 3);
+        if (vc.projection) camera.projection = vc.projection;
+        return camera;
     } catch {
         return null;
     }

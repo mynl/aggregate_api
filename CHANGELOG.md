@@ -4,6 +4,58 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a88
+
+**Phase 3 of `dev/plan-spacemouse.md`: the puck drives the relief.** A
+`spacemouse` control on the surface row connects a 3Dconnexion device over
+WebHID, once per browser, and after that it reattaches silently on every
+reload. Twist orbits, tilt raises the camera, push and pull zoom, slide pans,
+and the two buttons put the view back and swap perspective for orthographic.
+Mouse dragging keeps working throughout, between gestures and during them.
+
+**Two modules, sharing no vocabulary.** `web/src/spacemouse.js` is the device
+and knows nothing about charts: feature detection, the chooser behind a user
+gesture, `getDevices` for the silent reattach, `connect` and `disconnect`
+listeners for sleep, wake and a receiver replug, and parsing into six axes in
+[-1, 1] with a button mask. `web/src/charts/surface-nav.js` is the integrator
+and knows nothing about hardware: the mapping table, the gains, the shaping
+curve, the camera relative pan basis and the loop. It imports nothing at all,
+which is what puts its arithmetic under `node --test`.
+
+**Both documented report layouts are parsed**, chosen by the report's own
+length: three translations under id 1 with three rotations under id 2, or one
+combined report carrying all six. The author's unit has not been read yet, so
+this is deliberate rather than accidental generality, and the probe page writes
+reports in the form the tests take.
+
+**The camera contract is honored the way `surface.js` documents it.** The loop
+reads the live camera, adds the tick's deltas and writes a partial
+`viewControl` back, and only while deflected: centered axes stop the loop and
+send nothing, so a mouse drag between gestures is untouched and the damping
+feel survives. A puck that goes silent for 300 ms is read as released, because
+a camera that drifts on after the hand comes off is the worst failure this can
+have. The chart is reached through two closures rather than held, so a rebuild
+between frames cannot leave the loop driving a disposed instance.
+
+**`readCamera` now carries `center` and `projection`** alongside the two angles
+and the distance. Without that, panning the camera off the middle of the box
+survived until the first control toggle and then snapped back, which is exactly
+the failure the function was written to end for the angles.
+
+Greyed with a why where WebHID is absent, which is Firefox, Safari and the
+iPad: the control says the feature exists, that this browser is not covered,
+and that the `.obj` download is the way in there. Nothing about the gl path
+changes and the `echarts-gl` pin is untouched.
+
+`web/test/spacemouse.test.js` and `web/test/surface-nav.test.js`: both report
+layouts, the button mask, an unknown report dropped rather than guessed at, the
+deadzone rescaled rather than clipped, the shaping curve holding both ends, the
+pan basis orthonormal at every angle, orbit, clamped elevation, multiplicative
+zoom against the control's own limits, pan following the hand and adding to a
+camera already panned, the invert and dominant options, and the loop starting
+on deflection, stopping on release, stopping on silence, and writing nothing
+while there is no surface to drive.
+
 ## 1.0.0a87
 
 **Phase 2 of `dev/plan-spacemouse.md`: the probe page.**

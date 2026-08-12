@@ -219,7 +219,7 @@ length. The probe's `Record three seconds` button writes deduplicated report
 lines in exactly the form the parser tests take, so confirming or correcting
 the layout is a test fixture rather than a rewrite.
 
-### Phase 3 `[SpaceMouse-WebHID]`
+### Phase 3 `[SpaceMouse-WebHID]` **landed a88**
 
 Two modules, device and camera kept apart so neither knows the other's
 vocabulary:
@@ -250,6 +250,45 @@ the control renders greyed and no gl behavior changes.
 Tests: parser and integrator math (deadzone, expo, camera-relative pan basis)
 as pure-function node tests; the browser loop is exercised through the probe
 page and manual acceptance.
+
+**Execution notes, a88.** As planned. Six things worth recording.
+
+1. **The write path is `setOption`, not the control.** `Grid3DView.render`
+   calls `control.setFromViewControlModel`, so a partial
+   `{grid3D: {viewControl}}` merge does move the camera, and with the
+   option's `animation: false` it sets rather than eases. The lighter path
+   (reaching the view's private `_control` and calling `setAlpha` and
+   friends, which is what a mouse drag does) is deliberately not taken: it
+   is two underscores deep in a third party. If the rebuild cost per frame
+   ever shows, that is the fallback, and it is the only thing that would
+   change.
+2. **`grid3DChangeCamera` is not the way in.** The action exists and looks
+   like the answer, but its handler only writes the model option
+   (`componentModel.setView`) and its `update: 'series:updateCamera'` reaches
+   series views rather than the control. It is how echarts-gl syncs the
+   option *after* a drag, not how anything drives the camera.
+3. **The pan basis is derived rather than read.** `OrbitControl` builds the
+   camera rotation as `rotateY(-phi).rotateX(-theta)` with `theta = alpha`
+   and `phi = -beta` in radians, so screen right is `(cos b, 0, -sin b)` and
+   screen up is `(-sin a sin b, cos a, -sin a cos b)`. That keeps
+   `surface-nav.js` free of echarts, and it agrees with the mouse pan by
+   construction, which moves `center` along those same two columns scaled by
+   distance.
+4. **Zoom is multiplicative** (e-folds a second), clamped to echarts-gl's own
+   `minDistance` 40 and `maxDistance` 400. Additive zoom crawls when far out
+   and slams into the surface when close in, and writing past the clamps
+   reads as a zoom that sticks.
+5. **Silence is a release.** No report for 300 ms zeroes the axes. The
+   release report is the one that must not be lost.
+6. **`readCamera` gained `center` and `projection`**, and returns only the
+   keys it actually has: the result is spread over the preset's
+   `viewControl`, where a key present with an undefined value overwrites a
+   default rather than letting it stand.
+
+Signs are provisional until the phase 2 findings land: `ty` positive zooms
+in, `rz` positive orbits right, `rx` positive raises the camera, and a slide
+moves the target against the hand so the surface follows it. Each is one
+`invert` flag away from its opposite, and phase 4 puts those flags in the UI.
 
 ### Phase 4 `[SpaceMouse-Feel]`
 

@@ -21,11 +21,13 @@
 // because the old pathway is still wired.
 
 import { api } from '../api.js';
+import * as spacemouse from '../spacemouse.js';
 import { el, empty } from '../utils/dom.js';
 import {
     chartdocToEcharts, panelLayout, readings, rungAt, surfaceCuts,
 } from './chartdoc-to-echarts.js';
 import { fileStem, meshToObj, meshToStl, surfaceMesh } from './mesh-export.js';
+import { createSurfaceNav } from './surface-nav.js';
 import { loadSurface, readCamera, surfaceOverrides } from './surface.js';
 import { echarts, loadStyle } from './theme.js';
 
@@ -381,8 +383,47 @@ function windowBox(onWindow) {
  * null says nothing about which is which, and the strip is still gaining
  * controls.
  */
+/**
+ * The SpaceMouse control: connect, connected, or greyed with a why.
+ *
+ * Its own function because it is the one button on the strip whose label and
+ * title change without the strip being rebuilt: the device sleeps, the
+ * receiver is unplugged, and the reader is told, in place. The `watch`
+ * subscription is registered with the strip, which drops it when the strip is
+ * rebuilt: without that, every rebuild would leave another dead button being
+ * repainted for the life of the page.
+ */
+function spaceMouseButton(onSpaceMouse, register) {
+    const btn = el('button', { type: 'button', className: 'exhibit-toggle' });
+    const paint = () => {
+        const on = spacemouse.isConnected();
+        btn.textContent = on ? `spacemouse: ${spacemouse.deviceName()}` : 'spacemouse';
+        btn.classList.toggle('active', on);
+        btn.disabled = !spacemouse.isSupported();
+        btn.setAttribute('aria-disabled', btn.disabled ? 'true' : 'false');
+        btn.title = btn.disabled
+            ? 'This browser has no WebHID, so a 6DOF puck cannot be reached '
+                + 'from a page. Chrome or Edge on the desktop can. The .obj '
+                + 'download is the way in on every other browser: '
+                + "3Dconnexion's own viewer navigates it natively"
+            : (on
+                ? 'Connected. Twist to orbit, tilt to raise the camera, push '
+                    + 'and pull to zoom, slide to pan. The left button puts the '
+                    + 'view back, the right one swaps perspective and '
+                    + 'orthographic. Click to let the device go'
+                : 'Drive the relief with a 3Dconnexion SpaceMouse. One grant '
+                    + 'per browser: after that it reattaches silently. Mouse '
+                    + 'dragging keeps working throughout');
+    };
+    paint();
+    register(spacemouse.watch(paint));
+    btn.addEventListener('click', () => { onSpaceMouse().then(paint, paint); });
+    return btn;
+}
+
 function renderControls(doc, hooks) {
-    const { onChange, onReset, onWindow, walking, onWalk, onExport, canExport } = hooks;
+    const { onChange, onReset, onWindow, walking, onWalk, onExport, canExport,
+            onSpaceMouse, register } = hooks;
     const offered = readings(doc);
     const row = el('div', { className: 'exhibit-controls exhibit-controls-center' });
     const box = el('div', { className: 'exhibit-group' });
@@ -496,6 +537,10 @@ function renderControls(doc, hooks) {
             btn.disabled = !can;
             box.appendChild(btn);
         }
+        // The puck. Greyed with a why where WebHID is not, which is Firefox,
+        // Safari and the iPad, so the control still says the feature exists
+        // and that this browser is not covered, per the never-hide rule.
+        box.appendChild(spaceMouseButton(onSpaceMouse, register));
         // The window, last, and a number rather than a toggle: it is the one
         // control that is a new request rather than a new drawing.
         if (onWindow) box.appendChild(windowBox(onWindow));
@@ -863,6 +908,50 @@ function draw(container, tools, host, doc, spec = null) {
      * chart. They read the drawing rather than the document, which is what
      * makes them the one pair of controls whose state the render decides.
      */
+    /**
+     * The puck, against this chart's camera.
+     *
+     * One nav for the life of the mount, reading the live instance through
+     * these two closures rather than holding it. A rebuild between two frames
+     * replaces the ECharts instance, and a captured reference would be driving
+     * a disposed camera by the next tick; a closure is simply null for one
+     * frame and correct on the following one.
+     *
+     * `read` returns null while the flat reading is on screen, which is what
+     * makes the loop harmless there: the axes still arrive, nothing is driven,
+     * and it stops as soon as the reader lets go.
+     */
+    const nav = createSurfaceNav({
+        read: () => {
+            const chart = renderer && renderer.chart;
+            return (ready && chart && drawn && drawn.is3d) ? readCamera(chart) : null;
+        },
+        write: (patch) => {
+            const chart = renderer && renderer.chart;
+            if (!ready || !chart) return;
+            // Merged, not `notMerge`: everything else about the grid3D stands,
+            // and `animation: false` because this is a rate controller. Eased
+            // camera updates at sixty frames a second would each chase the
+            // previous one and the box would swim.
+            chart.setOption({ grid3D: { viewControl: { ...patch, animation: false } } });
+        },
+        reset: () => { if (ready) onReset(); },
+        setProjection: (projection) => {
+            const chart = renderer && renderer.chart;
+            if (!ready || !chart) return;
+            chart.setOption({ grid3D: { viewControl: { projection, animation: false } } });
+        },
+    });
+    const navOff = spacemouse.subscribe((message) => nav.input(message));
+
+    // Whether the page has already looked for a device it was granted. Once
+    // per mount, and only once a surface is actually on screen: a reader who
+    // never opens a bivariate never touches WebHID.
+    let asked = false;
+
+    // What the strip subscribed to, dropped when the strip is rebuilt.
+    let stripOff = [];
+
     let exportable = false;
     function syncTools() {
         const can = Boolean(drawn && drawn.meshSource);
@@ -891,6 +980,12 @@ function draw(container, tools, host, doc, spec = null) {
         // it binds, so re-arming costs nothing on the ordinary path.
         wireGestures();
         if (next.is3d) writeCutReadout(next.cutReadout);
+        if (next.is3d && !asked) {
+            // A grant already given should not need a second click, so the
+            // device is reopened silently the first time a relief is drawn.
+            asked = true;
+            spacemouse.reattach().catch(() => { /* no device, the ordinary case */ });
+        }
         // Re-apply what the reader switched off, for the same reason: a rebuilt
         // option carries a fresh legend model with everything selected, so a
         // hidden series would come back every time the log button was pressed.
@@ -985,6 +1080,8 @@ function draw(container, tools, host, doc, spec = null) {
     let stripKind = view.kind || defaultKind(doc);
 
     function renderTools() {
+        for (const off of stripOff) off();
+        stripOff = [];
         empty(tools);
         const strip = renderControls(doc, {
             onChange: () => { if (ready) onToggle(); },
@@ -994,6 +1091,10 @@ function draw(container, tools, host, doc, spec = null) {
             onWalk: () => setWalk(!walking),
             onExport: (format) => saveMesh(format),
             canExport: () => Boolean(drawn && drawn.meshSource),
+            onSpaceMouse: () => (spacemouse.isConnected()
+                ? spacemouse.disconnect()
+                : spacemouse.connect()),
+            register: (off) => stripOff.push(off),
         });
         if (strip) tools.appendChild(strip);
     }
@@ -1122,6 +1223,14 @@ function draw(container, tools, host, doc, spec = null) {
         dispose() {
             ready = false;
             setWalk(false);
+            // The puck outlives the chart: the grant and the open handle are
+            // the page's, and reopening the device on every leaf switch would
+            // put a chooser or a stall where there should be nothing. What
+            // goes is this chart's claim on it.
+            navOff();
+            nav.dispose();
+            for (const off of stripOff) off();
+            stripOff = [];
             try { ro.disconnect(); } catch { /* already gone */ }
             if (renderer) renderer.dispose();
         },
