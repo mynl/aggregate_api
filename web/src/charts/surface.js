@@ -35,11 +35,6 @@ let pending = null;
  */
 const VIRIDIS = ['#440154', '#414487', '#2a788e', '#22a884', '#7ad151', '#fde725'];
 
-/** The mesh lines and the floor, from the prototype's `app` preset. */
-const MESH_COLOR = '#f8f9fa';
-const MESH_WIDTH = 0.9;
-const MESH_OPACITY = 0.5;
-const FLOOR_OPACITY = 0.5;
 
 /**
  * Register echarts-gl's surface pieces, once.
@@ -174,14 +169,15 @@ export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
             },
             environment: '#ffffff',
         },
-        series: [
-            // The skin. Its own `wireframe` stays off: the mesh is drawn as
-            // real geometry two series down, which can be thinned and can carry
-            // an opacity of its own.
-            { wireframe: { show: false }, shading: 'lambert' },
-            { lineStyle: { color: MESH_COLOR, width: MESH_WIDTH, opacity: MESH_OPACITY } },
-            { lineStyle: { color: MESH_COLOR, width: MESH_WIDTH, opacity: MESH_OPACITY } },
-            { itemStyle: { opacity: FLOOR_OPACITY } },
-        ],
+        // Index 0 only, the skin. Everything else the adapter draws over the
+        // surface (the mesh, the floor image, the wall curves, the contours) is
+        // optional, so the list length depends on which controls are on and a
+        // positional merge onto it would style the wrong series the moment a
+        // reader turned one off. Those carry their own style, from the same
+        // preset, next to where they are built.
+        //
+        // The skin's own `wireframe` stays off: the mesh is real `line3D`
+        // geometry, which can be thinned and can carry an opacity of its own.
+        series: [{ wireframe: { show: false }, shading: 'lambert' }],
     };
 }

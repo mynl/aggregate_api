@@ -205,6 +205,112 @@ export function wallScale(peakX, peakY, cap = 8) {
 }
 
 /**
+ * Marching squares over one level of a height field, sewn into polylines.
+ *
+ * Parameters
+ * ----------
+ * g : object
+ *     A decoded grid, read for its lattice.
+ * level : float
+ *     The height to trace.
+ * heightAt : function
+ *     `(i, j)` to the drawn height of that cell, so the caller decides whether
+ *     the contour is of the density or of its log. A contour of `log f` at
+ *     level L is the same curve as a contour of `f` at `10 ** L`, but tracing
+ *     the drawn height is what makes the line lie *on* the drawn surface.
+ *
+ * Returns
+ * -------
+ * Array
+ *     Polylines, each an array of `[x, y]` pairs in data coordinates. Loose
+ *     segments are chained because a `line3D` series is one polyline and
+ *     marching squares produces an unordered heap of two-point pieces.
+ *
+ * Notes
+ * -----
+ * The two saddle cases are resolved on the average of the four corners rather
+ * than picked arbitrarily, which is what keeps a contour from crossing itself
+ * where two modes nearly touch. Ported from the prototype's `isoSegments` and
+ * `chainSegments`.
+ */
+export function contourPaths(g, level, heightAt) {
+    const segs = [];
+    const cut = (va, vb, pa, pb) => {
+        const t = (level - va) / (vb - va);
+        return [pa[0] + t * (pb[0] - pa[0]), pa[1] + t * (pb[1] - pa[1])];
+    };
+    for (let j = 0; j < g.ny - 1; j += 1) {
+        for (let i = 0; i < g.nx - 1; i += 1) {
+            const v = [heightAt(i, j), heightAt(i + 1, j),
+                       heightAt(i + 1, j + 1), heightAt(i, j + 1)];
+            const p = [[coordX(g, i), coordY(g, j)], [coordX(g, i + 1), coordY(g, j)],
+                       [coordX(g, i + 1), coordY(g, j + 1)], [coordX(g, i), coordY(g, j + 1)]];
+            let idx = 0;
+            for (let k = 0; k < 4; k += 1) if (v[k] > level) idx |= (1 << k);
+            if (idx === 0 || idx === 15) continue;
+            const e = [];
+            for (let k = 0; k < 4; k += 1) {
+                const a = k;
+                const b = (k + 1) % 4;
+                e[k] = ((v[a] > level) !== (v[b] > level)) ? cut(v[a], v[b], p[a], p[b]) : null;
+            }
+            const join = (a, b) => { if (e[a] && e[b]) segs.push([e[a], e[b]]); };
+            switch (idx) {
+            case 1: case 14: join(3, 0); break;
+            case 2: case 13: join(0, 1); break;
+            case 4: case 11: join(1, 2); break;
+            case 8: case 7: join(2, 3); break;
+            case 3: case 12: join(3, 1); break;
+            case 6: case 9: join(0, 2); break;
+            case 5: case 10: {
+                const centerAbove = (v[0] + v[1] + v[2] + v[3]) / 4 > level;
+                if (((idx & 1) !== 0) === centerAbove) { join(0, 1); join(2, 3); }
+                else { join(3, 0); join(1, 2); }
+                break;
+            }
+            default: break;
+            }
+        }
+    }
+    return chain(segs, Math.min(Math.abs(g.dx), Math.abs(g.dy)) * 1e-4 || 1e-9);
+}
+
+/** Sew loose two-point segments into polylines, joining ends within `tol`. */
+function chain(segs, tol) {
+    const key = (p) => `${Math.round(p[0] / tol)}:${Math.round(p[1] / tol)}`;
+    const at = new Map();
+    segs.forEach((s, i) => {
+        for (const p of s) {
+            const k = key(p);
+            if (!at.has(k)) at.set(k, []);
+            at.get(k).push(i);
+        }
+    });
+    const used = new Array(segs.length).fill(false);
+    const out = [];
+    const grow = (path, takeEnd) => {
+        for (let guard = 0; guard < segs.length; guard += 1) {
+            const tip = takeEnd ? path[path.length - 1] : path[0];
+            const k = key(tip);
+            const j = (at.get(k) || []).find((i) => !used[i]);
+            if (j == null) return;
+            used[j] = true;
+            const other = key(segs[j][0]) === k ? segs[j][1] : segs[j][0];
+            if (takeEnd) path.push(other); else path.unshift(other);
+        }
+    };
+    for (let i = 0; i < segs.length; i += 1) {
+        if (used[i]) continue;
+        used[i] = true;
+        const path = [segs[i][0], segs[i][1]];
+        grow(path, true);
+        grow(path, false);
+        if (path.length >= 3) out.push(path);
+    }
+    return out;
+}
+
+/**
  * The mean of a set of values against their coordinates, weighted by them.
  *
  * Generic, and used for whatever the caller is entitled to compute: the mean of

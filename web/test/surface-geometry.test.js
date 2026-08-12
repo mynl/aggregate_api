@@ -12,7 +12,8 @@ import { test } from 'node:test';
 
 import { decodeSurfaceGrid } from '../src/charts/surface-grid.js';
 import {
-    columnAt, levelLine, rowAt, sampler, wallScale, weightedMean, windowRange,
+    columnAt, contourPaths, levelLine, rowAt, sampler, wallScale, weightedMean,
+    windowRange,
 } from '../src/charts/surface-geometry.js';
 
 /**
@@ -136,6 +137,33 @@ test('the fit rule flattens nothing when it fires and something when it does not
     // Degenerate walls do not divide by zero.
     assert.equal(wallScale(0, 0).scale, 1);
     assert.equal(wallScale(3, 0).clipped, false);
+});
+
+test('a contour lies at its level, and closes around a peak', () => {
+    const g = grid(RAMP(1000));
+    const at = (i, j) => i + 10 * j;
+    // A plane: the contour is one open path crossing the box, and every vertex
+    // sits at the level by construction of the interpolation.
+    const [path] = contourPaths(g, 15.5, at);
+    assert.ok(path && path.length >= 2);
+    for (const [x, y] of path) {
+        const value = (x - g.x0) / g.dx + 10 * ((y - g.y0) / g.dy);
+        assert.ok(Math.abs(value - 15.5) < 1e-9, `${x}, ${y} reads ${value}`);
+    }
+    // A single interior peak: the contour under it closes, so its first and
+    // last vertex are the same point.
+    // Strictly interior, so the ring has somewhere to close: a plateau that
+    // reached the edge of the grid would leave an open path instead, which is
+    // correct and is not what this case is testing.
+    const peak = grid(() => 0);
+    const bump = (i, j) => ((i === 2 && j === 1) ? 10
+        : ((i >= 1 && i <= 3 && j >= 1 && j <= 2) ? 4 : 0));
+    const rings = contourPaths(peak, 2, bump);
+    assert.equal(rings.length, 1);
+    const ring = rings[0];
+    assert.deepEqual(ring[0], ring[ring.length - 1]);
+    // Levels nothing reaches produce nothing rather than a degenerate path.
+    assert.deepEqual(contourPaths(g, 1e9, at), []);
 });
 
 test('a weighted mean is the mean of the curve it is given', () => {

@@ -21,6 +21,7 @@ import { fmt } from '../utils/format.js';
 import {
     coordX, coordY, decodeSurfaceGrid, findSurfaceSeries, xCoords, yCoords, zExtent,
 } from './surface-grid.js';
+import { contourPaths, wallScale } from './surface-geometry.js';
 import {
     LOG_FLOOR, axisStyle, baseOption, fade, houseStyle, lineWidth, seriesColor,
 } from './theme.js';
@@ -1494,6 +1495,22 @@ const SURFACE_MESH_LIFT = 0.0018;
 /** A hair: what anything standing just clear of something else gets. */
 const SURFACE_HAIR = 0.004;
 
+/** The ink of the things drawn over the surface, from the same preset. */
+const SURFACE_MESH_COLOR = '#f8f9fa';
+const SURFACE_MESH_WIDTH = 0.9;
+const SURFACE_MESH_OPACITY = 0.5;
+const SURFACE_FLOOR_INK = '#e9ecef';
+const SURFACE_MARGINAL_COLOR = '#6c757d';
+const SURFACE_CONTOUR_COLOR = '#868e96';
+const SURFACE_CONTOUR_WIDTH = 1;
+
+/** How many contour levels, and the cap on the polylines they may emit. */
+const SURFACE_CONTOUR_LEVELS = 8;
+const SURFACE_CONTOUR_CAP = 160;
+
+/** How much of the drawn height the taller wall curve is scaled to fill. */
+const SURFACE_MARGINAL_SCALE = 0.55;
+
 /**
  * Every k-th line of the grid, as one connected polyline per family.
  *
@@ -1613,50 +1630,132 @@ function surfaceOption(doc, opts, view) {
     const zName = useLog ? `log ${zLabel}` : zLabel;
     const box = documentLayout(doc, opts.width);
 
+    // The series, in build order, because the two visualMaps address the
+    // surface and the floor by index and everything after them is optional.
+    // Only the skin's chrome arrives through the override, at index 0; the
+    // rest carry their style here, since a positional merge onto a list whose
+    // length depends on which controls are on is a bug waiting for the first
+    // reader who turns one off.
+    const mesh = view.mesh !== false;
+    const drawnSeries = [{
+        type: 'surface',
+        name: series.name,
+        dataShape: [g.nx, g.ny],
+        data,
+    }];
+    if (mesh) {
+        for (const [name, points] of [['mesh along x', meshRows],
+                                      ['mesh along y', meshCols]]) {
+            drawnSeries.push({
+                type: 'line3D',
+                name,
+                data: points,
+                lineStyle: { color: SURFACE_MESH_COLOR, width: SURFACE_MESH_WIDTH,
+                             opacity: SURFACE_MESH_OPACITY },
+                silent: true,
+            });
+        }
+    }
+    const floorIdx = drawnSeries.length;
+    drawnSeries.push({
+        type: 'surface',
+        name: 'floor',
+        dimensions: ['x', 'y', 'z', 'height'],
+        dataShape: [floorX.length, floorY.length],
+        data: floorData,
+        shading: 'color',
+        itemStyle: { color: SURFACE_FLOOR_INK, opacity: SURFACE_FLOOR_OPACITY },
+        wireframe: { show: false },
+        silent: true,
+    });
+
+    // The wall curves. The marginals are the one thing this view can show that
+    // a heat map cannot: read off a wall they are the two aggregate
+    // distributions on their own. They are the library's exact marginals, off
+    // the object rather than integrated from the reduced and windowed joint,
+    // and they arrive as mass per display cell, so the division by the step is
+    // what makes them densities comparable with each other.
+    const wallInsetX = (coordX(g, g.nx - 1) - coordX(g, 0)) * SURFACE_HAIR;
+    const wallInsetY = (coordY(g, g.ny - 1) - coordY(g, 0)) * SURFACE_HAIR;
+    const xWall = coordX(g, 0) + wallInsetX;
+    const yWall = coordY(g, 0) + wallInsetY;
+    if (view.marginals && g.marginals) {
+        const mx = Array.from(g.marginals.x || [], (m) => m / g.dx);
+        const my = Array.from(g.marginals.y || [], (m) => m / g.dy);
+        const peak = (a) => Math.max(...a.map(Math.abs)) || 1;
+        // One vertical scale for both walls, with the eight-fold cap: see
+        // `wallScale`. The reference is the taller curve, and the whole pair is
+        // drawn at a stated fraction of the box so it reads as an inset rather
+        // than as a competing surface.
+        const fit = wallScale(peak(mx), peak(my));
+        const k = max * SURFACE_MARGINAL_SCALE * fit.scale;
+        // Anything on a wall is scaled independently of the surface, so it can
+        // land outside the box at either end: a marginal is near zero at the
+        // edges of its support and a tight one peaks above the joint's own
+        // maximum. echarts-gl does not clip to the box, so unclamped these
+        // render as lines hanging in space below the floor or above the lid.
+        const onWall = (v) => Math.min(zMax, Math.max(floorH, height(v)));
+        const style = { color: SURFACE_MARGINAL_COLOR, width: 2, opacity: 0.95 };
+        drawnSeries.push({
+            type: 'line3D',
+            name: `marginal in ${xName}`,
+            data: mx.map((v, c) => [coordX(g, c), yWall, onWall(v * k)]),
+            lineStyle: style,
+            silent: true,
+        }, {
+            type: 'line3D',
+            name: `marginal in ${yName}`,
+            data: my.map((v, r) => [xWall, coordY(g, r), onWall(v * k)]),
+            lineStyle: style,
+            silent: true,
+        });
+    }
+
+    // The contours, on the surface and on the floor image at one set of
+    // levels, which is what makes the two read as one drawing. A contour at
+    // level L lies on the surface at height L by construction, so "on the
+    // surface" needs no projection, only a hair of lift to keep it off the skin
+    // it is lying on.
+    if (view.contours) {
+        const heightAt = (i, j) => height(g.z[j * g.nx + i]);
+        let emitted = 0;
+        for (let i = 1; i <= SURFACE_CONTOUR_LEVELS && emitted < SURFACE_CONTOUR_CAP; i++) {
+            const level = zMin + (range * i) / (SURFACE_CONTOUR_LEVELS + 1);
+            for (const path of contourPaths(g, level, heightAt)) {
+                if (emitted >= SURFACE_CONTOUR_CAP) break;
+                for (const at of [level, floorH]) {
+                    emitted += 1;
+                    drawnSeries.push({
+                        type: 'line3D',
+                        name: 'contour',
+                        data: path.map((p) => [p[0], p[1], at + hair]),
+                        lineStyle: { color: SURFACE_CONTOUR_COLOR,
+                                     width: SURFACE_CONTOUR_WIDTH, opacity: 0.9 },
+                        silent: true,
+                    });
+                }
+            }
+        }
+    }
+
+    // Grid lines on the three walls: chrome in the ordinary sense, but the
+    // control that turns them off is the reader's, so the flag is read here.
+    const wallGrid = { splitLine: { show: view.wallGrid !== false } };
     const base = {
-        xAxis3D: { type: 'value', name: xName },
-        yAxis3D: { type: 'value', name: yName },
+        xAxis3D: { type: 'value', name: xName, ...wallGrid },
+        yAxis3D: { type: 'value', name: yName, ...wallGrid },
         // The axis reaches down to the dropped base so the box has a bottom to
         // stand the floor image on; the data still lives between zMin and zMax.
-        zAxis3D: { type: 'value', name: zName, min: zBase, max: zMax },
+        zAxis3D: { type: 'value', name: zName, min: zBase, max: zMax, ...wallGrid },
         // Two maps, both semantic: color encodes the same variable as the
         // height, on the surface through its z and on the floor through the
         // fourth column it carries. The ramp and the placement arrive with the
         // override, and only the first draws a colorbar.
         visualMap: [
             { min: zMin, max: zMax, dimension: 2, seriesIndex: 0 },
-            { min: zMin, max: zMax, dimension: 3, seriesIndex: 3, show: false },
+            { min: zMin, max: zMax, dimension: 3, seriesIndex: floorIdx, show: false },
         ],
-        series: [
-            {
-                type: 'surface',
-                name: series.name,
-                dataShape: [g.nx, g.ny],
-                data,
-            },
-            {
-                type: 'line3D',
-                name: 'mesh along x',
-                data: meshRows,
-                silent: true,
-            },
-            {
-                type: 'line3D',
-                name: 'mesh along y',
-                data: meshCols,
-                silent: true,
-            },
-            {
-                type: 'surface',
-                name: 'floor',
-                dimensions: ['x', 'y', 'z', 'height'],
-                dataShape: [floorX.length, floorY.length],
-                data: floorData,
-                shading: 'color',
-                wireframe: { show: false },
-                silent: true,
-            },
-        ],
+        series: drawnSeries,
     };
     // `grid` and `digits` ride in the context so the chrome can read the height
     // to the precision the encoding actually carried: seven figures on float32,

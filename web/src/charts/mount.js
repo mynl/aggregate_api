@@ -54,7 +54,17 @@ const VIEW_DEFAULTS = {
     invert: false,       // every panel that declares its axes exchange
     refLines: true,      // the document's marks: mean, capital anchors
     kind: null,          // panel realization: a z grid flat or in relief
+    // The relief's own controls, which act on nothing else. Defaults are the
+    // prototype's `app` preset: the mesh and the wall grid on, the marginals
+    // and the contours off until asked for. See `dev/plan-3d-plot.md` 4.4.
+    mesh: true,
+    wallGrid: true,
+    marginals: false,
+    contours: false,
 };
+
+/** Which view keys the relief owns, for the reset button to put back. */
+const SURFACE_KEYS = ['mesh', 'wallGrid', 'marginals', 'contours'];
 
 let view = (() => {
     try {
@@ -112,6 +122,39 @@ const CONTROLS = [
         label: 'reference lines',
         title: 'Show the mean and the capital anchors the document marks, '
             + 'drawn on the panels that carry them',
+    },
+];
+
+// The relief's own controls, offered only while a surface is on screen. They
+// are not document readings: nothing in the IR declares that a joint has
+// marginals worth drawing on a wall, and nothing should, because these are
+// decisions about *this* drawing. `dev/plan-3d-plot.md` 4.4 is the list.
+const SURFACE_CONTROLS = [
+    {
+        key: 'marginals',
+        label: 'marginals',
+        title: 'Draw each component\'s own distribution on the wall behind it. '
+            + 'These are the library\'s exact marginals, not an integral of '
+            + 'what is on screen, so they do not move when the window does',
+    },
+    {
+        key: 'contours',
+        label: 'contours',
+        title: 'Contour lines at eight levels, on the surface and on the floor '
+            + 'image at the same levels, which is what makes the two read as '
+            + 'one drawing',
+    },
+    {
+        key: 'mesh',
+        label: 'mesh',
+        title: 'The grid over the skin, every sixth line. Off leaves a bare '
+            + 'surface, which reads the shape more cleanly and the resolution '
+            + 'not at all',
+    },
+    {
+        key: 'wallGrid',
+        label: 'wall grid',
+        title: 'Grid lines on the three walls of the box',
     },
 ];
 
@@ -196,7 +239,7 @@ export function notDrawable(message) {
  * every control governs the whole chart by construction. It used to split
  * across the two panels, because a control belonged to one of them.
  */
-function renderControls(doc, onChange) {
+function renderControls(doc, onChange, onReset) {
     const offered = readings(doc);
     const row = el('div', { className: 'exhibit-controls exhibit-controls-center' });
     const box = el('div', { className: 'exhibit-group' });
@@ -218,6 +261,35 @@ function renderControls(doc, onChange) {
         }, spec.label);
         box.appendChild(btn);
     }
+    // The relief's own controls, between the readings and the realization:
+    // they act on one drawing rather than on the document, and they exist only
+    // while that drawing is the one on screen.
+    if ((view.kind || defaultKind(doc)) === 'surface') {
+        for (const spec of SURFACE_CONTROLS) {
+            const btn = el('button', {
+                type: 'button',
+                className: `exhibit-toggle${view[spec.key] ? ' active' : ''}`,
+                title: spec.title,
+                onClick: () => {
+                    setView({ [spec.key]: !view[spec.key] });
+                    btn.classList.toggle('active', Boolean(view[spec.key]));
+                    onChange();
+                },
+            }, spec.label);
+            box.appendChild(btn);
+        }
+        // Reset, last of the group. Back to the preset, camera included, which
+        // is why it goes through its own handler rather than through
+        // `onChange`: the camera lives in the renderer instance and survives an
+        // ordinary redraw by design.
+        box.appendChild(el('button', {
+            type: 'button',
+            className: 'exhibit-toggle',
+            title: 'Back to the default view, camera included',
+            onClick: () => onReset && onReset(),
+        }, 'reset'));
+    }
+
     // The realization control, last, per the house order: axis readings before
     // panel realizations.
     for (const kind of offered.kinds) {
@@ -543,9 +615,16 @@ function draw(container, tools, host, doc) {
         });
     }
 
+    // Which realization the strip was built for. The relief's controls exist
+    // only while the relief is on screen, so a switch to the flat reading has
+    // to rebuild the strip rather than leave four buttons that act on a
+    // drawing nobody is looking at.
+    let stripKind = view.kind || defaultKind(doc);
+
     function renderTools() {
         empty(tools);
-        const strip = renderControls(doc, () => { if (ready) onToggle(); });
+        const strip = renderControls(doc, () => { if (ready) onToggle(); },
+                                     () => { if (ready) onReset(); });
         if (strip) tools.appendChild(strip);
     }
     renderTools();
@@ -555,9 +634,29 @@ function draw(container, tools, host, doc) {
     // Turning a 3-D realization on for the first time has to fetch its
     // renderer, so a toggle is not always a synchronous redraw.
     async function onToggle() {
-        if ((view.kind || defaultKind(doc)) === 'surface' && !surfaceReady) {
+        const kind = view.kind || defaultKind(doc);
+        if (kind === 'surface' && !surfaceReady) {
             if (await loadSurface()) surfaceReady = true;
         }
+        if (kind !== stripKind) { stripKind = kind; renderTools(); }
+        render();
+    }
+
+    /**
+     * Back to the preset, camera included.
+     *
+     * The camera is the reason this is not just a view reset and a redraw. It
+     * lives in the renderer instance and survives `setOption` deliberately, so
+     * that a reading toggled while the reader is looking at the ridge does not
+     * swing the box back to the default angle. Which makes the one control
+     * whose whole job is to swing it back need a new instance.
+     */
+    function onReset() {
+        const patch = {};
+        for (const key of SURFACE_KEYS) patch[key] = VIEW_DEFAULTS[key];
+        setView(patch);
+        if (renderer) { renderer.dispose(); renderer = null; }
+        renderTools();
         render();
     }
 

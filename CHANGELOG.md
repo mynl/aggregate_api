@@ -4,6 +4,51 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a78
+
+**The relief gets controls of its own, and two of the things they turn on.**
+`dev/plan-3d-plot.md` section 4.4. Five buttons, offered only while the relief
+is the drawing on screen, and rebuilt away when the reader switches to the flat
+reading, because four toggles acting on a picture nobody is looking at are
+worse than none.
+
+They are deliberately **not document readings**. Nothing in the chart IR
+declares that a joint has marginals worth drawing on a wall, and nothing
+should: these are decisions about this drawing, which is the app's half of the
+split. The strip keeps them in the house order, between the readings the
+document declares and the realization control.
+
+**marginals**, off by default, draws each component's own distribution on the
+wall behind it. They are the library's exact marginals, off the object rather
+than integrated from the reduced and windowed joint, so they do not move when
+the window does. One vertical scale for **both** walls with the eight-fold cap
+from a74: scaling each to its own peak draws them at identical heights every
+time, whatever the two distributions are, and a reader takes equal heights to
+mean something. Both are clamped into the box, since echarts-gl does not clip
+and an unclamped wall curve renders as a line hanging in space below the floor.
+
+**contours**, off by default, at eight levels, on the surface *and* on the
+floor image at the same levels, which is what makes the two read as one
+drawing. Marching squares, with the two saddle cases resolved on the average of
+the four corners rather than picked arbitrarily, which keeps a contour from
+crossing itself where two modes nearly touch. `contourPaths` lives in the
+tested leaf module beside the rest of the geometry, so the plan's "level lines
+on rectangular grids" invariant is checked rather than eyeballed.
+
+**mesh** and **wall grid**, both on by default, and **reset**, which is the one
+control that disposes the renderer rather than redrawing: the camera lives in
+the instance and survives `setOption` deliberately, so that toggling a reading
+while looking at the ridge does not swing the box back to the default angle,
+which makes the control whose whole job is to swing it back need a new
+instance.
+
+One structural change behind them. The chrome dict now styles the skin and
+nothing else. Everything drawn over the surface is optional, so the series list
+length depends on which controls are on, and a positional merge onto it would
+style the wrong series the moment a reader turned one off. The mesh, the floor,
+the wall curves and the contours carry their style where they are built, from
+the same preset.
+
 ## 1.0.0a77
 
 **The relief starts looking like the draft.** `dev/plan-3d-plot.md` section 4.6
