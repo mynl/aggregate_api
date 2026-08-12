@@ -310,14 +310,18 @@ def test_the_sharpen_audit_frames_appear_with_the_flag(client):
 
 
 def test_reins_bases_says_what_the_object_can_be_calibrated_on(client):
-    """The list the "calibrate on" row greys from, known at build time.
+    """The list the two basis rows grey from, known at build time.
 
     All three buttons used to be offered to anything reinsured, and at least one
     of them was wrong on most objects: an occurrence-only program's net occ *is*
-    its net, so it would be a third column repeating one already on screen, and
-    a portfolio's `reins_density_df` carries no `p_agg_net_occ` at all, so the
-    button 400'd. Empty with no cession, which is what greys the whole row
-    rather than hiding it.
+    its net, so it would be a third column repeating one already on screen.
+    Empty with no cession, which is what greys the whole row rather than hiding
+    it.
+
+    Read off the library's `reins_views` since a85, filtered to the whole program
+    views. The ceded ones are a cession priced as a position in its own right,
+    which is the seller's question; both forms here ask the insurer's, and the
+    library serves the ceded rows in the `pricing.allocate` raw reading.
     """
     _, plain = _build(client, "agg")
     assert plain["capability"]["reins_bases"] == []
@@ -326,12 +330,14 @@ def test_reins_bases_says_what_the_object_can_be_calibrated_on(client):
     bases = reinsured["capability"]["reins_bases"]
     assert bases, "a reinsured object offers at least one basis"
     assert set(bases) <= {"gross", "net occ", "net"}
+    assert bases == sorted(bases, key=["gross", "net occ", "net"].index), (
+        "the order is the order the forms draw the buttons in")
     # And it agrees with what the pricing route will accept, which is the point
     # of hoisting it: a lit button that 400s is worse than a dark one.
-    priced = client.post(f"/v1/objects/{reinsured['id']}/reins_price",
-                         json={"p": 0.99, "coc": 0.15, "basis": bases[0]})
-    assert priced.status_code == 200, priced.text
-    assert priced.json()["bases"] == bases
+    for basis in bases:
+        priced = client.post(f"/v1/objects/{reinsured['id']}/pricing/calibrate",
+                             json={"p": 0.99, "coc": 0.15, "basis": basis})
+        assert priced.status_code == 200, f"{basis}: {priced.text}"
 
 
 def test_has_premium_follows_the_exposure(client):

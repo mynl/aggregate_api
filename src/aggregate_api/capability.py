@@ -234,21 +234,33 @@ def has_sharpen(obj: Any) -> bool:
     return df is not None and not df.empty
 
 
+#: The whole program views, in the order the two pricing forms draw them.
+#:
+#: A subset of ``Aggregate.reins_views``, which also carries ``ceded`` and
+#: ``ceded occ``: those are a cession read as a position in its own right, which
+#: is the seller's question, and both forms here ask the insurer's. The library
+#: serves the ceded rows in the ``pricing.allocate`` RAW reading, which is where
+#: that perspective belongs until there is a REINSURER one.
+_CALIBRATION_BASES = ("gross", "net occ", "net")
+
+
 def reins_bases_for(obj: Any) -> list[str]:
     """Which reinsurance bases this object can be calibrated on.
 
-    Consumer: the Pricing group's "calibrate on" row, which offered all three of
-    gross, net occ and net to any reinsured object. A portfolio's
-    ``reins_density_df`` carries no ``p_agg_net_occ``, and an occurrence-only
-    program's net occ *is* its net, so on most objects at least one of the three
+    Consumers: the Pricing group's "calibrate on" row, and the Evaluate form's
+    "premium is" row. Both offered all three of gross, net occ and net to any
+    reinsured object before a52, and on most objects at least one of the three
     was a button that either 400'd or repeated a column already on screen.
 
-    The list is the same one ``pricing.reins_bases`` computes and the reins
-    pricing response already reports, hoisted onto the capability block so the
-    app knows it at **build** time. The response's copy arrives after a price
-    has been asked for, which is too late to grey a button you press to ask.
+    Read straight off ``obj.reins_views`` since a85, filtered to the whole
+    program views and put in the order the forms draw them. That property is the
+    library's own answer to what distributions a program has, so ``net occ``
+    appears exactly on the two-stage programs that have a distinct one, and the
+    app no longer has to know why. It replaces a local list of
+    ``reins_density_df`` column names, which knew three views where the library
+    knows five and had to reason about the stages itself.
 
-    Empty for an object carrying no cession, which is what makes the row grey
+    Empty for an object carrying no cession, which is what makes both rows grey
     out as a whole rather than vanish.
 
     Parameters
@@ -259,22 +271,22 @@ def reins_bases_for(obj: Any) -> list[str]:
     -------
     list of str
     """
-    from .pricing import reins_bases
-
     try:
-        return list(reins_bases(obj))
+        views = set(obj.reins_views or ())
     except Exception:  # noqa: BLE001 -- an object that cannot answer offers none
         return []
+    return [name for name in _CALIBRATION_BASES if name in views]
 
 
 def can_price(obj: Any) -> bool:
     """Can this object answer the pricing forms?
 
-    Consumer: the Pricing group, whose two modes are app behavior rather than
-    a library document, so no exhibit or chart says this.
+    Consumer: the Pricing group's Calibrate and Allocate leaves, which are app
+    behavior rather than a library document, so no exhibit or chart says this.
+    They gate together because one press fills both.
 
     Read off the object as the method the pricing path actually calls, which is
-    the same test :func:`aggregate_api.pricing.run_price_pentagon` makes before
+    the same test :func:`aggregate_api.pricing.run_calibration` makes before
     it raises. A kind list would have been a second declaration of a fact the
     object already carries, and the app had exactly that in
     ``NA_TABS_BY_KIND``.

@@ -48,50 +48,18 @@ PAIRS = {
 }
 
 
-# An object carrying reinsurance, for the reins_price frames.
-REINS_DECL = (
-    "agg ADPTR 5 claims 100 xs 0 sev lognorm 10 cv .75 "
-    "occurrence ceded to 15 xs 5 poisson"
-)
-
-
-def _price_pairs(client, tmp: Path) -> int:
-    """Dump the POST-computed pricing frames beside their documents.
-
-    These are worth their own pass. They are the frames that carry declared
-    formats (a loss ratio is a float, so only ``tables.FORMATS`` knows it reads
-    as a percent), and three of them carry a **string** data column, which is
-    what caught the ``include_raw`` gap: the ``'data'`` shorthand covers numeric
-    columns only, so those documents built fine and then threw in the adapter.
-    """
-    written = 0
-    oid = client.post("/v1/objects", json={"decl": DECL}).json()["id"]
-    price = client.post(
-        f"/v1/objects/{oid}/price?ir=true", json={"p": 0.99, "coc": 0.1}
-    ).json()
-    frames = {"pentagon": price.get("pentagon"),
-              "distortion_df": price.get("distortion_df"),
-              **(price.get("distortions") or {})}
-    for key, doc in (price.get("ir") or {}).items():
-        if frames.get(key) is None:
-            continue
-        (tmp / f"price-{key}.pair.json").write_text(
-            json.dumps({"ir": doc, "frame": frames[key]}), encoding="utf-8")
-        written += 1
-
-    rid = client.post("/v1/objects", json={"decl": REINS_DECL}).json()["id"]
-    rp = client.post(
-        f"/v1/objects/{rid}/reins_price?ir=true",
-        json={"p": 0.99, "coc": 0.1, "basis": "gross"},
-    ).json()
-    rframes = {"table": rp.get("table"), "distortion_df": rp.get("distortion_df")}
-    for key, doc in (rp.get("ir") or {}).items():
-        if rframes.get(key) is None:
-            continue
-        (tmp / f"reinsprice-{key}.pair.json").write_text(
-            json.dumps({"ir": doc, "frame": rframes[key]}), encoding="utf-8")
-        written += 1
-    return written
+# `_price_pairs` came out at a85 with the routes it drove. It dumped the
+# POST-computed pricing frames beside their documents, and the substitution it
+# checked no longer exists: those frames were built here, from the reader's own
+# input, so the same POST could answer with both a `FrameResponse` and a
+# document made from it. The library holds them on a result object now and
+# serves exhibit envelopes, which carry no second rendering to disagree with.
+#
+# One property it covered is worth naming, because it is the reason the pass was
+# added: three of those documents carried a **string** data column, which caught
+# the `include_raw` gap (the `'data'` shorthand covers numeric columns only, so
+# they built fine and then threw in the adapter). `validation_df` and `stats_df`
+# below carry one too, so the case is still exercised.
 
 
 def main() -> int:
@@ -113,7 +81,6 @@ def main() -> int:
                 encoding="utf-8",
             )
             written += 1
-        written += _price_pairs(client, Path(tmp))
         if not written:
             print("nothing to compare")
             return 1

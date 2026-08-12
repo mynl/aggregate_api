@@ -26,6 +26,13 @@ _REINS = (
     "occurrence ceded to 15 xs 5 poisson"
 )
 
+# A small two-unit portfolio, for the per-unit paths.
+_PORT = (
+    "port PF\n"
+    "    agg A 50 claims 50 xs 0 sev lognorm 10 cv 1.2 poisson\n"
+    "    agg B 30 claims 100 xs 0 sev lognorm 20 cv 2.0 poisson\n"
+)
+
 
 # ----------------------------------------------------------------------
 # Build + cache
@@ -620,15 +627,19 @@ def test_the_library_formats_its_own_numbers(client):
     and does not have to: it writes a VaR in the tens of millions as `41.864M`
     where this repo said `41,864,000.00`. Its call.
 
-    What is left in `FORMATS` is `price` / `reins_price` / the `stat_*` slices,
-    computed from the reader's own input so no exhibit can serve them, and the
-    two `sharpen` frames, which have no exhibit registered.
+    The six pricing sets followed at a85. They were held one round longer than
+    the rest only because the frames behind them were computed from the reader's
+    own input and had no exhibit to come from; the library registers the
+    `pricing.*` exhibits on its result objects now, and they do. What is left is
+    the two `sharpen` frames, whose leaf has not moved onto the exhibit the
+    library registered for it at a255.
     """
     from aggregate_api.tables import FORMATS, ROW_FLAGS
 
     assert not ROW_FLAGS, f"row emphasis belongs to the library: {sorted(ROW_FLAGS)}"
     for gone in ("summary", "tail_df", "validation_df", "reins_summary_df",
-                 "bs_window_df"):
+                 "bs_window_df", "price", "reins_price",
+                 "stat_LR", "stat_P", "stat_PQ", "stat_ROE"):
         assert gone not in FORMATS, f"{gone} is a published exhibit; it formats itself"
 
     big = "agg FMT.Big 5000 claims 100000 xs 0 sev lognorm 9000 cv 2.5 poisson"
@@ -931,7 +942,7 @@ def test_bivariate_builds_and_reports(client):
         assert client.get(f"/v1/objects/{oid}/{which}").status_code == 200, which
     # No pricing / reinsurance -> clean 400 (not 500).
     assert client.post(
-        f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.15}
+        f"/v1/objects/{oid}/pricing/calibrate", json={"p": 0.99, "coc": 0.15}
     ).status_code == 400
     assert client.get(f"/v1/objects/{oid}/reins_summary_df").status_code == 400
     # A grid-sizing frame it does have, and this used to 400. The route read
@@ -1267,7 +1278,7 @@ def test_pnl_builds_and_reports(client):
     assert client.get(f"/v1/objects/{oid}/tail_df").status_code == 200
     # No pricing / reinsurance / bs-window -> clean 400 (not 500).
     assert client.post(
-        f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.15}
+        f"/v1/objects/{oid}/pricing/calibrate", json={"p": 0.99, "coc": 0.15}
     ).status_code == 400
     assert client.get(f"/v1/objects/{oid}/reins_summary_df").status_code == 400
     assert client.get(f"/v1/objects/{oid}/bs_window_df").status_code == 400
@@ -1578,285 +1589,6 @@ def test_decl_format_echoes_garbage(client):
     assert r.json()["decl"] == junk
 
 
-# ----------------------------------------------------------------------
-# Pricing -- Aggregate-side rejection
-# ----------------------------------------------------------------------
-
-def test_pricing_rejects_aggregate(client):
-    """pricing_at is Portfolio-only; on an Aggregate -> 400."""
-    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    r = client.post(
-        f"/v1/objects/{oid}/pricing_at",
-        json={"p": 0.99, "ccoc": 0.1},
-    )
-    assert r.status_code == 400
-
-
-# ----------------------------------------------------------------------
-# Price -- pentagon completion + distortion analysis
-# ----------------------------------------------------------------------
-
-# A small two-unit portfolio for the distortion-analysis path.
-_PORT = (
-    "port PF\n"
-    "    agg A 50 claims 50 xs 0 sev lognorm 10 cv 1.2 poisson\n"
-    "    agg B 30 claims 100 xs 0 sev lognorm 20 cv 2.0 poisson\n"
-)
-
-
-def test_price_pentagon_aggregate(client):
-    """An Aggregate gets the one-row pentagon; no distortion slices."""
-    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    r = client.post(f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.1})
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["kind"] == "agg"
-    assert "columns" in body["pentagon"] and "rows" in body["pentagon"]
-    # Pentagon carries the canonical stats.
-    assert {"L", "P", "Q", "LR", "ROE"} <= set(body["pentagon"]["columns"])
-    assert body["distortions"] is None
-
-
-def test_price_requires_exactly_one_target(client):
-    """Neither / both of coc & lr -> 400."""
-    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    assert client.post(
-        f"/v1/objects/{oid}/price", json={"p": 0.99}
-    ).status_code == 400
-    assert client.post(
-        f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.1, "lr": 0.7}
-    ).status_code == 400
-
-
-def test_price_portfolio_distortions(client):
-    """A Portfolio gets the pentagon plus per-distortion LR/P/PQ/ROE slices."""
-    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
-    r = client.post(f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.1})
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["kind"] == "port"
-    # Calibrated-distortions detail: one row per standard distortion.
-    assert body["distortion_df"] is not None
-    assert len(body["distortion_df"]["rows"]) == 5
-    assert body["distortions"] is not None
-    # At least the loss-ratio slice should come back, framed by distortion.
-    assert "LR" in body["distortions"]
-    lr = body["distortions"]["LR"]
-    assert "columns" in lr and len(lr["rows"]) >= 1
-
-
-def test_price_ir_is_opt_in_and_covers_every_frame(client):
-    """Computed frames carry their documents, because no route can fetch them.
-
-    ``frame/{which}`` resolves attributes off the cached object; these frames are
-    produced by this POST and exist nowhere else, so the static view can only get
-    them here. Opt-in, so the default response shape is unchanged.
-    """
-    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
-    plain = client.post(f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.1}).json()
-    assert plain["ir"] is None
-
-    body = client.post(f"/v1/objects/{oid}/price?ir=true",
-                       json={"p": 0.99, "coc": 0.1}).json()
-    ir = body["ir"]
-    assert ir is not None
-    # One document per frame the tab renders: the pentagon, the calibrated set,
-    # and each per-distortion stat slice.
-    assert set(ir) == {"pentagon", "distortion_df", "LR", "P", "PQ", "ROE"}
-    for name, doc in ir.items():
-        assert doc["ir_version"] == 1, name
-        assert doc["body"], name
-
-
-def test_price_ir_keeps_the_index_the_wire_format_flattens(client):
-    """The reason these are built before ``reset_index_safe``, not after.
-
-    ``analyze_distortions`` returns a frame indexed by distortion, which the JSON
-    payload resets into a data column. The document keeps it as a stub, which is
-    what earns the sparsified left edge in the static view.
-    """
-    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
-    body = client.post(f"/v1/objects/{oid}/price?ir=true",
-                       json={"p": 0.99, "coc": 0.1}).json()
-
-    assert body["ir"]["LR"]["n_stub_levels"] >= 1
-    # The flattened payload has it as an ordinary column, and that difference is
-    # the whole point of carrying both.
-    assert body["distortions"]["LR"]["columns"][0] not in ("", None)
-
-
-def test_reins_price_ir_carries_both_frames(client):
-    """Same treatment for the reinsurance pricing table and its parameters."""
-    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
-    r = client.post(f"/v1/objects/{oid}/reins_price?ir=true",
-                    json={"p": 0.99, "coc": 0.1, "basis": "gross"})
-    assert r.status_code == 200, r.text
-    ir = r.json()["ir"]
-    assert ir is not None
-    assert ir["table"]["ir_version"] == 1
-    assert len(ir["table"]["body"]) == len(r.json()["table"]["rows"])
-
-
-def test_reins_price_gross_and_net(client):
-    """Calibrate on gross, price both bases, and difference them.
-
-    The three properties that make the table mean anything:
-
-    1. The calibrated basis hits its target exactly. That is what "calibrated"
-       means, and it is the only row where ROE is an input rather than a result.
-    2. The other basis is priced with the **same** distortion, so any difference
-       between them is attributable to the distribution rather than to two
-       separate fits. Its ROE is therefore free to differ, and generally does.
-    3. The difference row is the levels differenced with the ratios *recomputed*.
-       A difference of two loss ratios is not a loss ratio; the loss ratio of the
-       differenced levels is the rate the cession is being bought at, which is
-       the number this whole endpoint exists to produce.
-    """
-    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
-    r = client.post(
-        f"/v1/objects/{oid}/reins_price",
-        json={"p": 0.99, "coc": 0.15, "basis": "gross"},
-    )
-    assert r.status_code == 200, r.text
-    body = r.json()
-    # An occurrence-only program has no distinct "net occ": it would repeat the
-    # net column under a third name.
-    assert body["bases"] == ["gross", "net"]
-    assert body["basis"] == "gross"
-    assert body["roe"] == pytest.approx(0.15)
-
-    cols = body["table"]["columns"]
-    rows = [dict(zip(cols, row)) for row in body["table"]["rows"]]
-    by = {(r_["distortion"], r_["basis"]): r_ for r_ in rows}
-    # Five distortions x (gross, net, difference).
-    assert len({r_["distortion"] for r_ in rows}) == 5
-    assert len(rows) == 15
-
-    for name in {r_["distortion"] for r_ in rows}:
-        gross = by[(name, "gross*")]
-        net = by[(name, "net")]
-        diff = by[(name, "gross less net")]
-        # 1. calibration hits the target on every family.
-        assert gross["ROE"] == pytest.approx(0.15, abs=5e-3), name
-        # 2. reinsurance strictly reduces both the loss and the premium.
-        assert net["L"] < gross["L"], name
-        assert net["P"] < gross["P"], name
-        # 3. the difference row is the levels differenced ...
-        assert diff["P"] == pytest.approx(gross["P"] - net["P"]), name
-        assert diff["L"] == pytest.approx(gross["L"] - net["L"]), name
-        # ... with LR recomputed on them, not differenced.
-        assert diff["LR"] == pytest.approx(diff["L"] / diff["P"]), name
-
-    assert body["distortion_df"] is not None
-    assert len(body["distortion_df"]["rows"]) == 5
-
-
-def test_reins_price_net_basis_matches_the_object(client):
-    """Calibrating on the ``net`` basis reproduces the object's own calibration.
-
-    ``p_agg_net`` *is* ``density_df.p_total`` for a reinsured object, so the
-    basis view and the object are the same distribution reached two ways. If the
-    view were mis-built (wrong grid, wrong normalization) this is where it would
-    show, and nowhere else would catch it.
-    """
-    from aggregate import build
-
-    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
-    r = client.post(
-        f"/v1/objects/{oid}/reins_price",
-        json={"p": 0.99, "coc": 0.15, "basis": "net"},
-    )
-    assert r.status_code == 200, r.text
-    cols = r.json()["table"]["columns"]
-    rows = [dict(zip(cols, row)) for row in r.json()["table"]["rows"]]
-    got = {r_["distortion"]: r_ for r_ in rows if r_["basis"] == "net*"}
-
-    direct = build(_REINS)
-    direct.calibrate_distortions(0.15, p=0.99)
-    for name, dist in direct.distortions.items():
-        quote = dist.price(direct.density_df["p_total"], a=direct.q(0.99))
-        assert got[name]["P"] == pytest.approx(float(quote.ask), rel=1e-9), name
-        assert got[name]["L"] == pytest.approx(float(quote.el), rel=1e-9), name
-
-
-def test_reins_price_takes_either_capital_anchor(client):
-    """The assets anchor reaches the reinsured path, and agrees with ``p``.
-
-    The Price form has offered both anchors since a44 and `ReinsPriceRequest`
-    took only `p`, so choosing assets on a *reinsured* object was a 422 from the
-    model before any pricing ran, while the same choice on a plain object
-    worked. The two anchors are one `prob_loss_assets` call apart, so asking by
-    the asset level a `p` resolved to must come back to that same `p`.
-    """
-    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
-    by_p = client.post(
-        f"/v1/objects/{oid}/reins_price",
-        json={"p": 0.99, "coc": 0.15, "basis": "gross"},
-    )
-    assert by_p.status_code == 200, by_p.text
-
-    by_a = client.post(
-        f"/v1/objects/{oid}/reins_price",
-        json={"a": by_p.json()["a"], "coc": 0.15, "basis": "gross"},
-    )
-    assert by_a.status_code == 200, by_a.text
-    assert by_a.json()["a"] == pytest.approx(by_p.json()["a"])
-    assert by_a.json()["p"] == pytest.approx(by_p.json()["p"], abs=1e-4)
-    assert by_a.json()["roe"] == pytest.approx(by_p.json()["roe"])
-
-
-def test_reins_price_wants_exactly_one_anchor(client):
-    """Both, or neither, is a question with no answer."""
-    oid = client.post("/v1/objects", json={"decl": _REINS}).json()["id"]
-    for body in ({"coc": 0.15}, {"p": 0.99, "a": 100.0, "coc": 0.15}):
-        r = client.post(f"/v1/objects/{oid}/reins_price", json=body)
-        assert r.status_code == 400, r.text
-        assert "exactly one" in r.json()["detail"]
-
-
-def test_an_aggregate_gets_its_distortion_parameters(client):
-    """The pentagon *and* the fitted set, on a plain aggregate.
-
-    The four pricing cases used to disagree: an aggregate with no reinsurance
-    returned one row of pentagon results and nothing else, while the same
-    aggregate with a cession showed the parameters down the reins path and a
-    portfolio showed them either way. `calibrate_distortions` is on Aggregate
-    too; the non-portfolio path just returned before calling it.
-
-    Allocations stay portfolio-only, and not by preference:
-    `analyze_distortions` reads the `exeqa_*` columns, which a single aggregate
-    has no analogue of.
-    """
-    plain = "agg PX.Plain 100 claims 1000 xs 0 sev lognorm 90 cv 1.5 poisson"
-    oid = client.post("/v1/objects", json={"decl": plain, "log2": 14}).json()["id"]
-    r = client.post(f"/v1/objects/{oid}/price", json={"p": 0.99, "coc": 0.15})
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["kind"] == "agg"
-    assert len(body["pentagon"]["rows"]) == 1
-    assert body["distortion_df"] is not None, "no distortion parameters"
-    assert len(body["distortion_df"]["rows"]) == 5
-    assert body["distortions"] is None, "an aggregate has no per-unit allocation"
-
-
-def test_reins_price_rejects_a_plain_object(client):
-    """No cession, no basis to calibrate on: a clean 400, not a 500."""
-    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    r = client.post(f"/v1/objects/{oid}/reins_price", json={"p": 0.99, "coc": 0.15})
-    assert r.status_code == 400
-    assert "reinsurance" in r.json()["detail"]
-
-
-def test_pricing_at_ccoc_portfolio(client):
-    """ccoc path exercises ``price_ccoc(ccoc, *, p)`` and returns a total row."""
-    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
-    r = client.post(f"/v1/objects/{oid}/pricing_at", json={"p": 0.99, "ccoc": 0.1})
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["ccoc"] == 0.1
-    assert body["a"] is not None
-    assert len(body["rows"]) >= 1
-
 
 # ----------------------------------------------------------------------
 # GET /v1/objects/{id}/frame/{which}?format=ir  (the table document)
@@ -2105,25 +1837,30 @@ def test_raw_moment_rows_are_dropped_on_every_path(client):
     assert "ex1" not in texts
 
 
-def test_price_documents_carry_the_declared_formats(client):
-    """Percents are a server-side declaration, so both views resolve one answer.
+def test_the_pricing_documents_declare_their_own_percents(client):
+    """Percents resolve into the document, and the library is what resolves them.
 
     A loss ratio is a float and nothing in the dtype says it reads as a percent.
-    ``tables.FORMATS`` says so once, in the document, and ``irToGridInput`` maps
-    it into the grid's format language, which is what retired the SPA's three
-    hand-written maps.
+    ``tables.FORMATS`` said so for the pricing frames until a85, when the six
+    entries went with the frames they described: the library registers the
+    ``pricing.*`` exhibits and ships their formats resolved. The assertion is the
+    same as before and the source of the answer is not, which is the whole of
+    what that phase changed.
     """
     oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
-    ir = client.post(f"/v1/objects/{oid}/price?ir=true",
-                     json={"p": 0.99, "coc": 0.1}).json()["ir"]
+    body = client.post(f"/v1/objects/{oid}/pricing/calibrate",
+                       json={"p": 0.99, "coc": 0.1})
+    assert body.status_code == 200, body.text
+    blocks = body.json()["exhibits"]["pricing.allocate"]["insurer"]["blocks"]
 
-    pent = {"/".join(c["name"]): c.get("format") for c in ir["pentagon"]["columns"]}
-    assert pent["LR"]["kind"] == "pct"
-    assert pent["ROE"]["kind"] == "pct"
+    target = {"/".join(c["name"]): c.get("format") for c in blocks[0]["columns"]}
+    assert target["LR"]["kind"] == "pct"
+    assert target["ROE"]["kind"] == "pct"
 
     # A per-distortion slice's columns are units, so the whole slice takes the
-    # statistic's format rather than a per-name one.
-    for col in ir["LR"]["columns"]:
+    # statistic's format rather than a per-name one. The LR slice is the second
+    # block of the insurer reading.
+    for col in blocks[1]["columns"]:
         if (col.get("role") or "data") == "data":
             assert col["format"]["kind"] == "pct", col["name"]
 

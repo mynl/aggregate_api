@@ -4,6 +4,53 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a85
+
+**Phase A3, the deletions the plan exists to make.** Nothing new works; a great
+deal stops being this repo's opinion.
+
+**`pricing.py` is thin runners and no pandas.** Out: `_BasisView`, the duck type
+that presented one column of `reins_density_df` to an unbound
+`Aggregate.calibrate_distortions`; `_REINS_BASES` and `reins_bases`;
+`_pentagon_row`, `_pentagon_diff` and `_sub`, which completed a pentagon row by
+row and differenced two of them; `run_price_pentagon`, `run_reins_price`,
+`run_evaluate`, the legacy `run_pricing`, and the `_document` helper that told
+four frames how to print. What is left is validate the body, call the method,
+serve the envelope.
+
+The shim is not merely replaced, it is outclassed:
+`calibrate_distortions(reins_view=...)` landed upstream at a223 and was fixed
+for these shapes at a250, and the library knows five views where the shim knew
+three.
+
+**Four routes go**: `POST /price`, `/reins_price`, `/evaluate` and the legacy
+`/pricing_at`, with their eight request and response models. The SPA has not
+called any of them since a84, and never called `pricing_at`.
+
+**`tables.FORMATS` loses its six pricing keys**, `price`, `reins_price` and the
+four `stat_*` slices. They said how a premium, a margin, a loss ratio and a
+return on capital print, which is the library's statement to make, and it makes
+it now. `frame_document_dict` is `bounds.py`-only. The two `sharpen` entries
+stay: that leaf has not moved onto the exhibit the library registered for it at
+a255, and when it does, `FORMATS` empties.
+
+**`capability.reins_bases_for` reads `obj.reins_views`** and filters to the
+whole program views, in the order the two forms draw them. It replaces a local
+list of `reins_density_df` column names that had to reason about the program's
+stages itself; the library's property already knows, so `net occ` appears
+exactly on the two-stage programs that have a distinct one.
+
+**Tests follow the routes.** The pricing block of `test_objects.py` and all of
+`test_evaluate.py` are gone, their coverage in `test_pricing_exhibits.py`, which
+gained the tower and severity cases. The declared-formats test asserts the same
+thing about the same numbers and reads them out of an exhibit envelope. The
+reins-bases test now posts every basis it reports to the calibrate route, which
+is the promise the row makes.
+
+`dev/scripts/check-adapter.py` loses its pricing pass: it compared a document
+against the `FrameResponse` for the same frame, and an envelope has no second
+rendering to disagree with.
+
 ## 1.0.0a84
 
 **Phase A2: the Pricing pane becomes `Calibrate  Allocate | Evaluate`, and

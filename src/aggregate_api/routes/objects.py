@@ -26,7 +26,6 @@ The /v1/objects/* family covers everything object-shaped:
   static view (``?format=ir``), built from the DataFrame rather than the
   flattened wire format.
 * ``GET    /v1/objects/{id}/plot``        -- SVG/PNG image (native .plot()).
-* ``POST   /v1/objects/{id}/pricing_at``  -- distortion / ccoc pricing.
 * ``POST   /v1/objects/{id}/pricing/preview``   -- the pentagon as scalars.
 * ``POST   /v1/objects/{id}/pricing/calibrate`` -- the ``pricing.calibrate`` and
   ``pricing.allocate`` exhibit envelopes, both perspectives.
@@ -99,15 +98,7 @@ from ..bounds import run_allocation, run_envelope, run_pricing_bounds
 from ..capability import can_sharpen, capability_for, narrative_for
 from ..config import Settings, get_settings
 from ..library_notes import from_library
-from ..pricing import (
-    run_calibration,
-    run_evaluate,
-    run_evaluation,
-    run_price_pentagon,
-    run_pricing,
-    run_pricing_preview,
-    run_reins_price,
-)
+from ..pricing import run_calibration, run_evaluation, run_pricing_preview
 from ..tables import MAX_ROWS, frame_document
 from ..serializers import (
     bin_density,
@@ -2963,101 +2954,3 @@ def post_pricing_evaluate(
                               p=req.p, a=req.a)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-# ----------------------------------------------------------------------
-# POST /v1/objects/{id}/pricing_at
-# ----------------------------------------------------------------------
-
-@router.post("/objects/{oid}/price", response_model=models.PriceResponse)
-def post_price(
-    oid: str,
-    req: models.PriceRequest,
-    ir: bool = Query(False, description="Also return table documents for the static view."),
-    entry: CacheEntry = Depends(_locked_entry),
-) -> dict:
-    """Pricing-pentagon completion (+ distortion analysis for Portfolios).
-
-    Fix the capital level with ``p`` and supply exactly one target (``coc``
-    or ``lr``); see :func:`aggregate_api.pricing.run_price_pentagon`.
-
-    Notes
-    -----
-    These frames are *computed* here, so the generic ``frame/{which}`` document
-    route cannot reach them and ``?ir=true`` carries them in the response
-    instead. The SPA always asks, so flipping the table view after a pricing run
-    never costs a re-POST.
-    """
-    try:
-        return run_price_pentagon(entry.obj, p=req.p, a=req.a, coc=req.coc,
-                                  lr=req.lr, ir=ir)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-
-@router.post("/objects/{oid}/evaluate", response_model=models.EvaluateResponse)
-def post_evaluate(
-    oid: str,
-    req: models.EvaluateRequest,
-    ir: bool = Query(False, description="Also return a table document for the static view."),
-    entry: CacheEntry = Depends(_locked_entry),
-) -> dict:
-    """The breakeven acceptability panel for a position already held.
-
-    The evaluation half of the Pricing group. Where ``price`` asks what an
-    obligation is worth at a chosen capital level, this asks how much stress
-    the position survives: per distortion family, the shape at which the
-    risk-adjusted margin reaches zero, indexed by Cherny and Madan's
-    ``gini_p``.
-
-    See :func:`aggregate_api.pricing.run_evaluate` for the three shapes and
-    why the warnings travel with the frame instead of being swallowed.
-    """
-    try:
-        return run_evaluate(entry.obj, premium=req.premium, ir=ir)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-
-@router.post("/objects/{oid}/reins_price", response_model=models.ReinsPriceResponse)
-def post_reins_price(
-    oid: str,
-    req: models.ReinsPriceRequest,
-    ir: bool = Query(False, description="Also return table documents for the static view."),
-    entry: CacheEntry = Depends(_locked_entry),
-) -> dict:
-    """Price every reinsurance basis off one calibration.
-
-    Calibrate the standard distortion set on ``basis`` (gross, net of the
-    occurrence program, or the object's own net) and apply that same set to the
-    others. The difference between the gross and the net premium is the implied
-    **allowance for reinsurance in the rate**, which is the question this answers
-    and which no single-basis pricing can.
-
-    See :func:`aggregate_api.pricing.run_reins_price`.
-    """
-    try:
-        return run_reins_price(
-            entry.obj, p=req.p, a=req.a, coc=req.coc, lr=req.lr,
-            basis=req.basis, ir=ir,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-
-@router.post("/objects/{oid}/pricing_at", response_model=models.PricingResponse)
-def post_pricing(
-    oid: str,
-    req: models.PricingRequest,
-    entry: CacheEntry = Depends(_locked_entry),
-) -> dict:
-    try:
-        return run_pricing(
-            entry.obj,
-            p=req.p,
-            a=req.a,
-            ccoc=req.ccoc,
-            distortion=req.distortion,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))

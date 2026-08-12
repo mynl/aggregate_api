@@ -28,6 +28,9 @@ PORT = ("port PX.Basic agg A dfreq [1] sev gamma 12 cv 0.3 "
         "agg B dfreq [1] sev gamma 10 cv 0.5")
 PNL = ("pnl PX.Pnl 1000 prem less "
        "agg PX.PnlL 1000 prem at 70% lr sev lognorm 100 cv 2 poisson")
+XPNL = ("xpnl PX.Tower 1000 prem less "
+        "agg PX.TowerL 1000 prem at 70% lr sev lognorm 100 cv 2 "
+        "occurrence ceded to 500 xs 500 deposit 100 poisson")
 SEV = "sev PX.Sev lognorm 50 cv 1.5"
 
 PERSPECTIVES = {"raw", "insurer"}
@@ -346,6 +349,35 @@ def test_a_pnl_evaluates_its_ledger_and_takes_nothing_else(client):
                               json=refused_body)
         assert refused.status_code == 400, refused_body
         assert word in refused.json()["detail"]
+
+
+def test_a_tower_evaluates_every_margin_row(client):
+    """The case the panel says the most about.
+
+    A walk evaluates the gross deal, each layer as a position in its own right,
+    and the running net after each purchase, so it carries several ``Step``
+    blocks where a plain P&L carries one. That is the whole reading: a layer
+    whose breakeven sits above the net row over it is priced above the holder's
+    own acceptability.
+    """
+    def panel(decl):
+        oid, _ = _build(client, decl)
+        r = client.post(f"/v1/objects/{oid}/pricing/evaluate", json={})
+        assert r.status_code == 200, r.text
+        return r.json()["exhibits"]["pricing.evaluate"]["raw"]["blocks"][0]
+
+    plain = panel(PNL)
+    tower = panel(XPNL)
+    assert len(tower["body"]) > len(plain["body"])
+
+
+def test_a_severity_has_no_position_to_evaluate(client):
+    """No position, no panel, and a clean 400 rather than a 500."""
+    oid, body = _build(client, SEV)
+    assert body["capability"]["can_evaluate"] is False
+    assert body["capability"]["needs_premium"] is False
+    r = client.post(f"/v1/objects/{oid}/pricing/evaluate", json={})
+    assert r.status_code == 400
 
 
 def test_a_position_with_no_consideration_still_has_to_state_one(client):

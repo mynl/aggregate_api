@@ -91,9 +91,9 @@ def level_value(df: pd.DataFrame, row: int, name: str) -> Any:
 #: repo had 1-in-200 and 1-in-250 written down as a fact about it, and the copy
 #: had already gone stale by a68 without anybody noticing.
 #:
-#: The mechanism stays because `frame_document` takes a key and the pricing
-#: frames still go through it. Nothing should be added here for a frame the
-#: library publishes an exhibit for; that is what the exhibit is.
+#: The mechanism stays because `frame_document` takes a key and the grid audit
+#: still goes through it. Nothing should be added here for a frame the library
+#: publishes an exhibit for; that is what the exhibit is.
 ROW_FLAGS: dict[str, Callable[[pd.DataFrame, int], Sequence[str]]] = {}
 
 #: Per-frame column formats, for the columns whose dtype does not say enough.
@@ -106,9 +106,10 @@ ROW_FLAGS: dict[str, Callable[[pd.DataFrame, int], Sequence[str]]] = {}
 #: hand-written maps, which is what this replaces.
 #:
 #: A value is either a mapping of column name to spec, or a single spec that
-#: applies to **every** column. The second form is for the per-distortion slices,
-#: whose columns are unit names rather than statistics: the whole slice is one
-#: statistic, so one format covers it.
+#: applies to **every** column. The second form is for a frame whose columns are
+#: not statistics: the sharpen score grid's are steps in log2, so one spec covers
+#: the lot.
+#:
 #: Money, everywhere money appears. Grouped, and to the cent.
 #:
 #: It was ``,d`` through a50, and on a real book that made the whole pricing
@@ -129,26 +130,6 @@ MONEY = ",.2f"
 # `PROBABILITY` came out at a71 with the `tail_df` entry that was its only user.
 
 FORMATS: dict[str, dict[str, object] | str] = {
-    # The pricing pentagon, whose columns are the statistics themselves.
-    # L loss, M margin, P premium, Q capital, a assets; LR, PQ and ROE the
-    # three ratios between them.
-    "price": {
-        "L": MONEY, "M": MONEY, "P": MONEY, "Q": MONEY, "a": MONEY,
-        "LR": ".1%", "PQ": ".3f", "ROE": ".1%",
-    },
-    # Gross / ceded / net by distortion, plus the difference rows. The same
-    # statistics as the pentagon, so deliberately the same formats: the two
-    # tables sit on the same tab and a number must not change shape between
-    # them.
-    "reins_price": {
-        "a": MONEY, "L": MONEY, "M": MONEY, "P": MONEY, "Q": MONEY,
-        "LR": ".1%", "PQ": ".3f", "ROE": ".1%",
-    },
-    # One per-distortion slice each, columns being units.
-    "stat_LR": ".1%",
-    "stat_P": MONEY,
-    "stat_PQ": ".3f",
-    "stat_ROE": ".1%",
     # ---- what is left, and why each is left -------------------------------
     #
     # `summary`, `tail_df`, `validation_df`, `reins_summary_df` and
@@ -159,6 +140,14 @@ FORMATS: dict[str, dict[str, object] | str] = {
     # direct api use; it renders them by dtype inference now, and if that reads
     # badly the answer is to fetch the exhibit, which is what the app does.
     #
+    # The six pricing sets came out at a85: `price`, `reins_price` and the four
+    # `stat_*` slices, which between them said how a premium, a margin, a loss
+    # ratio and a return on capital print. The library registers `pricing.*`
+    # exhibits now and resolves its own formats into them, so those six were the
+    # same second opinion the a71 batch was, held one round longer only because
+    # the frames behind them were computed from the reader's input and had no
+    # exhibit to come from. They do now.
+    #
     # The grid audit's per-cell detail. The `u_*` columns are relative errors
     # against the analytic moments and run from about 1e-7 to a few percent, so
     # they need a scientific format rather than a fixed one: at `.4f` a good cell
@@ -166,11 +155,11 @@ FORMATS: dict[str, dict[str, object] | str] = {
     # table exists to support. `score` is the number that decides, and gets the
     # digits to separate two cells that are close.
     #
-    # **The last two entries in this table**, and they are here only because the
-    # library registers no `sharpen` exhibit. Every other leaf draws a document
-    # the library built, formats included. When that exhibit lands, these two go
-    # and `FORMATS` is `price` and the bounds frames alone, which are computed
-    # from the reader's own input and have no exhibit to come from.
+    # **The only two entries left**, and they are here because the app's Sharpen
+    # leaf still takes the frame route. The library registered a `sharpen`
+    # exhibit at 1.0.0a255; moving `loadSharpenAudit` onto it deletes these two
+    # and empties this map, and that cutover is its own item in `dev/TODO.md`
+    # rather than part of the pricing plan.
     "sharpen_df": {
         "score": ".5f", "extent": MONEY, "x_min": MONEY, "bs": ",.4g",
         "u_sev_mean": ".2e", "u_sev_cv": ".2e", "u_sev_skew": ".2e",

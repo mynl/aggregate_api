@@ -855,19 +855,24 @@ function showTab(name) {
 //
 // **What is left, and none of it is a table the library publishes.**
 //
-//   More Sharpen    the library registers no `sharpen` exhibit. The registry is
-//                   eleven entries and sharpen is not one, so there is nothing
-//                   to draw; `register_simple_exhibit` makes it a one-liner
-//                   upstream. Until then this holds the two ledes and the last
-//                   two `FORMATS` entries in `tables.py`.
-//   Pricing (2)     computed from what the reader typed, so not keyed on the
-//   Bounds (2)      object and not registry exhibits in the current sense. The
+//   More Sharpen    the library registered a `sharpen` exhibit at a255 and this
+//                   leaf has not moved onto it yet. Until it does, this holds
+//                   the two ledes and the last two `FORMATS` entries in
+//                   `tables.py`; that cutover empties both.
+//   Bounds (2)      computed from what the reader typed, so not keyed on the
+//                   object and not registry exhibits in the current sense. The
 //                   author is adding a bounds summary upstream. The documents
 //                   are built here meanwhile, which is the last pandas in the
 //                   table pipeline.
 //   both densities  bulk, permanently the grid's, and the one agreed exception,
 //                   scoped out by the author. A table of thousands of rows is
 //                   not a reading experience.
+//
+// **Pricing left this list at a85.** Its three leaves draw `pricing.calibrate`,
+// `pricing.allocate` and `pricing.evaluate`, which the library registers on the
+// result objects `calibrate_distortions` and `evaluate` return. They are not in
+// `LOADERS` because they are forms rather than fetches: a leaf here would run on
+// activation, and pricing is work.
 //
 // Nothing else is allowed on the frame route. If a leaf here starts fetching a
 // DataFrame and formatting it, that is the bug.

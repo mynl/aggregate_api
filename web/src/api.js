@@ -176,21 +176,12 @@ export const api = {
     pricingEvaluate: (id, body) =>
         _json('POST', `/v1/objects/${id}/pricing/evaluate`, body),
 
-    /**
-     * `?ir=true` always: the Price frames are computed by this POST, so the
-     * generic document route cannot reach them and they have to travel with the
-     * response. Asking up front is what keeps the table view instant in both
-     * directions instead of costing a re-POST on the flip.
-     */
-    price:        (id, body)        => _json('POST', `/v1/objects/${id}/price?ir=true`, body),
-    /** Reinsured objects: calibrate on one basis, price them all. */
-    reinsPrice:   (id, body)        => _json('POST', `/v1/objects/${id}/reins_price?ir=true`, body),
-    pricing_at:   (id, body)        => _json('POST', `/v1/objects/${id}/pricing_at`, body),
-    /**
-     * The evaluation half of Pricing: the breakeven acceptability panel for a
-     * premium already set. `?ir=true` for the same reason `price` asks.
-     */
-    evaluate:     (id, body)        => _json('POST', `/v1/objects/${id}/evaluate?ir=true`, body),
+    //
+    // `price`, `reinsPrice`, `evaluate` and `pricing_at` went at a85 with the
+    // routes behind them. Each fetched a frame the api had assembled and
+    // formatted, and `?ir=true` existed to carry table documents the generic
+    // route could not reach, because nothing on the object held those frames.
+    // A result object holds them now, and it holds the exhibits too.
 
     // The derivations. Each answers with the DecL that reproduces the object
     // *and* the object, so the editor and the panes move together and the id
