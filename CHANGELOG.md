@@ -4,6 +4,50 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a83
+
+**Phase A1 of `dev/plan-pricing-exhibits.md`: three routes that hold a result
+object and serve the exhibits registered on it.** The library half landed at
+`aggregate` 1.0.0a259 to a263, where `calibrate_distortions` and `evaluate`
+started returning `CalibrationResult` and `EvaluationResult` and three exhibits
+(`pricing.calibrate`, `pricing.allocate`, `pricing.evaluate`) were registered on
+those results. This is the api coding against that.
+
+**`POST /v1/objects/{id}/pricing/preview`** completes the pentagon and answers
+with scalars: the five levels and three ratios under wire names, plus the
+probability the caller named. No distortion is fitted and nothing is allocated,
+because this feeds a line that updates as the reader types.
+
+**`POST /v1/objects/{id}/pricing/calibrate`** fits the standard set and returns
+the `pricing.calibrate` and `pricing.allocate` envelopes, each under both
+perspectives. Two exhibits from one call because one press fills two subtabs;
+both perspectives because the frames are small and the alternative is caching a
+result object server side so a second request can answer the other reading of a
+calibration already made.
+
+**`POST /v1/objects/{id}/pricing/evaluate`** returns the `pricing.evaluate`
+envelope the same way. It takes an asset anchor now, which is what closes the
+round trip: evaluating a family's own implied premium at the level its
+calibration was struck at recovers that family's parameters. An anchored panel
+reports five families and an unanchored one four, since `ccoc` needs an asset
+level. A P&L takes neither the anchor nor a premium, and says so rather than
+passing a number the library would have to guess about.
+
+**Three library refusals arrive as HTTP 400 with the sentence intact**: the
+`p=1` unbounded anchor guard, a loss-ratio target implying a premium above the
+assets, and the "exactly one of" validations. All three are written to be shown
+to a reader, and the first two land in the preview line.
+
+**The capability block gains `premium`**, the object's own resolved premium or
+null, for the Evaluate form to prefill with. `has_premium` is now derived from
+it, so the flag and the number cannot disagree.
+
+The old `price`, `reins_price` and `evaluate` routes are untouched and still
+serve the SPA; they and the pandas assembly behind them go at A3. One bridge was
+needed meanwhile: `run_evaluate` reaches the panel through
+`EvaluationResult.evaluation_df`, since the library's return type changed under
+it.
+
 ## 1.0.0a82
 
 **Four small things on the page, three on the relief.**

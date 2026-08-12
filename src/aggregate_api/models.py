@@ -102,6 +102,10 @@ class Capability(BaseModel):
     # Flags for the leaves that are app behavior rather than a library
     # document; each names its consumer in ``capability.py``.
     has_premium: bool = False
+    # The premium itself, for the Evaluate form to prefill. `has_premium` is the
+    # yes or no the PnL form asks; this is the number, and null wherever that
+    # flag is false, so the two cannot disagree.
+    premium: float | None = None
     can_sharpen: bool = False
     # Whether a probe has already **run**, which is a different question from
     # whether running one is worth offering: an object can answer True to both.
@@ -599,6 +603,119 @@ class EvaluateResponse(BaseModel):
             "the request asks with ?ir=true."
         ),
     )
+
+
+class PricingPreviewRequest(BaseModel):
+    """Body for ``POST /v1/objects/{id}/pricing/preview``.
+
+    The same anchor and target the calibration takes, because the preview's job
+    is to say what that calibration is about to be struck at. ``basis`` names the
+    reinsurance view for a reinsured Aggregate and is rejected elsewhere.
+    """
+
+    p: float | None = Field(
+        None, gt=0, le=1, description="VaR probability in (0, 1] fixing capital.")
+    a: float | None = Field(
+        None, gt=0, description="Asset level fixing capital; snapped to the grid.")
+    coc: float | None = Field(None, gt=0, description="Cost-of-capital (ROE) target.")
+    lr: float | None = Field(None, gt=0, description="Loss-ratio target.")
+    basis: str | None = Field(
+        None, description="Reinsurance view: 'gross', 'net occ' or 'net'.")
+
+
+class PricingPreviewResponse(BaseModel):
+    """The completed pentagon as scalars, for the Calibrate form's preview line.
+
+    The octet under wire names: ``loss``, ``margin``, ``premium``, ``capital``
+    and ``assets`` are the five levels (``L``, ``M``, ``P``, ``Q``, ``a``), and
+    ``lr``, ``pq``, ``coc`` the three ratios between them. ``p`` echoes the
+    probability the caller named, and is null when they anchored on assets.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    p: float | None = None
+    assets: float | None = None
+    loss: float | None = None
+    margin: float | None = None
+    premium: float | None = None
+    capital: float | None = None
+    lr: float | None = None
+    pq: float | None = None
+    coc: float | None = None
+
+
+class PricingCalibrateRequest(BaseModel):
+    """Body for ``POST /v1/objects/{id}/pricing/calibrate``.
+
+    Exactly one capital anchor (``p`` or ``a``) and exactly one pricing target
+    (``coc`` or ``lr``). The library owns the loss-ratio conversion, so ``lr``
+    travels as itself rather than being turned into a cost of capital here.
+    """
+
+    p: float | None = Field(
+        None, gt=0, le=1, description="VaR probability in (0, 1] fixing capital.")
+    a: float | None = Field(
+        None, gt=0, description="Asset level fixing capital; snapped to the grid.")
+    coc: float | None = Field(None, gt=0, description="Cost-of-capital (ROE) target.")
+    lr: float | None = Field(None, gt=0, description="Loss-ratio target.")
+    basis: str | None = Field(
+        None, description="Calibration basis: 'gross', 'net occ' or 'net'.")
+
+
+class PricingEvaluateRequest(BaseModel):
+    """Body for ``POST /v1/objects/{id}/pricing/evaluate``.
+
+    Every field is optional and every field is refused for a P&L, which carries
+    its premium in its ledger and evaluates each row on that row's own terms.
+    ``basis`` names **which premium is being input** on a reinsured Aggregate,
+    which is a narrower question than the gross versus net comparison the
+    Economics group answers.
+    """
+
+    premium: float | None = Field(
+        None,
+        gt=0,
+        description=(
+            "The consideration held against this position. Omit to use the "
+            "object's own; rejected for a P&L, whose ledger carries it."
+        ),
+    )
+    basis: str | None = Field(
+        None,
+        description=("Which premium this is: 'gross', 'net occ' or 'net'. "
+                     "A reinsured Aggregate only."),
+    )
+    p: float | None = Field(
+        None, gt=0, le=1,
+        description="VaR probability fixing the asset level the panel is solved at.")
+    a: float | None = Field(
+        None, gt=0, description="Asset level the panel is solved at.")
+
+
+class PricingExhibitsResponse(BaseModel):
+    """One or more library exhibits, each under both perspectives.
+
+    The shape both ``pricing/calibrate`` and ``pricing/evaluate`` answer with.
+    ``exhibits`` maps the registry name (``pricing.calibrate``,
+    ``pricing.allocate``, ``pricing.evaluate``) to a map of perspective to
+    envelope, the same envelope ``GET /objects/{id}/exhibit/{name}`` serves.
+
+    Bundling both perspectives is deliberate. The frames are small, the pane's
+    RAW / INSURER toggle then flips with no recompute, and the alternative would
+    be caching a result object server side so a second request could answer the
+    other reading of a calibration that has already been made.
+
+    ``warnings`` carries what the library said on the way, verbatim. A distortion
+    it declines to allocate is the standing case: the table shows the families
+    that answered and this says which one did not, and why.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    kind: str
+    exhibits: dict[str, dict[str, Any]]
+    warnings: list[str] = []
 
 
 class ReinsPriceRequest(BaseModel):

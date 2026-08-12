@@ -27,6 +27,11 @@ The /v1/objects/* family covers everything object-shaped:
   flattened wire format.
 * ``GET    /v1/objects/{id}/plot``        -- SVG/PNG image (native .plot()).
 * ``POST   /v1/objects/{id}/pricing_at``  -- distortion / ccoc pricing.
+* ``POST   /v1/objects/{id}/pricing/preview``   -- the pentagon as scalars.
+* ``POST   /v1/objects/{id}/pricing/calibrate`` -- the ``pricing.calibrate`` and
+  ``pricing.allocate`` exhibit envelopes, both perspectives.
+* ``POST   /v1/objects/{id}/pricing/evaluate``  -- the ``pricing.evaluate``
+  envelope, both perspectives.
 
 Build pipeline (POST /v1/objects)
 ---------------------------------
@@ -95,9 +100,12 @@ from ..capability import can_sharpen, capability_for, narrative_for
 from ..config import Settings, get_settings
 from ..library_notes import from_library
 from ..pricing import (
+    run_calibration,
     run_evaluate,
+    run_evaluation,
     run_price_pentagon,
     run_pricing,
+    run_pricing_preview,
     run_reins_price,
 )
 from ..tables import MAX_ROWS, frame_document
@@ -2869,6 +2877,92 @@ def get_exhibit(
         media_type="application/json",
         headers={"ETag": etag, "Cache-Control": "no-cache"},
     )
+
+
+# ----------------------------------------------------------------------
+# POST /v1/objects/{id}/pricing/{preview,calibrate,evaluate}
+# ----------------------------------------------------------------------
+# The Pricing group, served through the official channel. Where the three older
+# routes below build pandas frames here and hand them over with this repo's
+# opinion about how they print, these hold the result object the library returns
+# and serve the exhibits registered on it. The frames, the formats, the captions
+# and the row emphasis are all the library's, which is the purist ruling applied
+# to the last pane that was making its own.
+#
+# Every library ``ValueError`` on this path is written to be shown to a reader as
+# a sentence, so all three routes turn one into a 400 whose ``detail`` is the
+# message verbatim. Three reach the app: the unbounded anchor guard on ``p=1``,
+# the loss-ratio target that implies a premium above the assets, and the
+# "exactly one of" validations. The first two land in the preview line.
+
+@router.post("/objects/{oid}/pricing/preview",
+             response_model=models.PricingPreviewResponse)
+def post_pricing_preview(
+    oid: str,
+    req: models.PricingPreviewRequest,
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """The pentagon this anchor and target imply, as scalars.
+
+    The cheapest question in the group and the only one that answers with
+    numbers rather than documents: no distortion is fitted and nothing is
+    allocated. It feeds the Calibrate form's live preview line, which is also
+    where a refusal belongs, since a reader who has typed an impossible anchor
+    should learn it where they are looking rather than after pressing a button.
+
+    See :func:`aggregate_api.pricing.run_pricing_preview`.
+    """
+    try:
+        return run_pricing_preview(entry.obj, p=req.p, a=req.a, coc=req.coc,
+                                   lr=req.lr, basis=req.basis)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/objects/{oid}/pricing/calibrate",
+             response_model=models.PricingExhibitsResponse)
+def post_pricing_calibrate(
+    oid: str,
+    req: models.PricingCalibrateRequest,
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """Fit the standard distortion set, and serve the two exhibits it supports.
+
+    One press fills two subtabs. ``pricing.calibrate`` is the per-family receipt
+    and ``pricing.allocate`` spreads that calibration across views (a reinsured
+    Aggregate) or units (a Portfolio), so both come back from one POST and
+    stepping between the two leaves costs nothing.
+
+    See :func:`aggregate_api.pricing.run_calibration`.
+    """
+    try:
+        return run_calibration(entry.obj, p=req.p, a=req.a, coc=req.coc,
+                               lr=req.lr, basis=req.basis)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/objects/{oid}/pricing/evaluate",
+             response_model=models.PricingExhibitsResponse)
+def post_pricing_evaluate(
+    oid: str,
+    req: models.PricingEvaluateRequest,
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """The breakeven acceptability panel for a premium already held.
+
+    Pricing asks what an obligation is worth at a chosen capital level; this asks
+    how much stress the position survives. Anchored at the level a calibration
+    was struck at, the two close a round trip: evaluating a family's own implied
+    premium recovers that family's calibrated parameters.
+
+    See :func:`aggregate_api.pricing.run_evaluation`.
+    """
+    try:
+        return run_evaluation(entry.obj, premium=req.premium, basis=req.basis,
+                              p=req.p, a=req.a)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ----------------------------------------------------------------------

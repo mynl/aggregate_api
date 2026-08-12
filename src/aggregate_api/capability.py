@@ -138,13 +138,38 @@ def has_premium(obj: Any) -> bool:
     -------
     bool
     """
+    return premium_for(obj) is not None
+
+
+def premium_for(obj: Any) -> float | None:
+    """This object's own premium, or None when its exposure states none.
+
+    Consumer: the Pricing group's Evaluate form, which prefills the premium box
+    from it. ``needs_premium`` says whether the reader **must** type one; this
+    says what to put in the box when they need not, so an exposure that states a
+    consideration is evaluated as it stands with the number visible rather than
+    with an empty field that silently means "use your own".
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    float or None
+        The total, summed over units on a portfolio. None where there is no
+        ``exp_premium`` at all (a ``PnL`` keeps its premium in its ledger) and
+        where the total is zero, which is the library's own reading of an
+        exposure written without a consideration.
+    """
     premium = getattr(obj, "exp_premium", None)
     if premium is None:
-        return False
+        return None
     try:
-        return float(np.sum(np.asarray(premium, dtype=float))) > 0.0
+        total = float(np.sum(np.asarray(premium, dtype=float)))
     except (TypeError, ValueError):
-        return False
+        return None
+    return total if total > 0.0 else None
 
 
 def can_sharpen(obj: Any) -> bool:
@@ -535,6 +560,7 @@ def capability_for(obj: Any) -> dict:
         "charts": charts_for(obj),
         "primary_chart": primary_chart_for(obj),
         "has_premium": has_premium(obj),
+        "premium": premium_for(obj),
         "can_sharpen": can_sharpen(obj),
         "has_sharpen": has_sharpen(obj),
         "can_pnl": can_pnl(obj),
