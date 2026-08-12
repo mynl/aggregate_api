@@ -98,8 +98,14 @@ test('pan is camera relative, scaled by distance, and follows the hand', () => {
     // surface follow the hand rather than slide away from it.
     assert.ok(Math.abs(right.center[0] + step) < 1e-9);
     assert.equal(right.center[1], 0);
-    const up = cameraStep(facing, axes({ tz: 1 }), NAV_DEFAULTS, 1);
-    assert.ok(Math.abs(up.center[1] + step) < 1e-9);
+    // The vertical is the other sign, because the device's is: it reports a
+    // press as positive TZ, so a press has to raise the target, which sends
+    // the picture down with the hand. Measured on the author's unit at a90,
+    // after a88 shipped it backwards.
+    const press = cameraStep(facing, axes({ tz: 1 }), NAV_DEFAULTS, 1);
+    assert.ok(Math.abs(press.center[1] - step) < 1e-9);
+    const lift = cameraStep(facing, axes({ tz: -1 }), NAV_DEFAULTS, 1);
+    assert.ok(Math.abs(lift.center[1] + step) < 1e-9);
     // Swung round, the same slide moves the target along a different box axis:
     // the basis is the camera's, not the data's.
     const swung = cameraStep({ ...facing, beta: 90 }, axes({ tx: 1 }), NAV_DEFAULTS, 1);

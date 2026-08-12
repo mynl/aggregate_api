@@ -209,12 +209,19 @@ export function cameraStep(camera, axes, settings = NAV_DEFAULTS, dt = 1 / 60) {
         const { right, up } = panBasis(camera.alpha, camera.beta);
         const center = Array.isArray(camera.center) ? camera.center.slice(0, 3) : [0, 0, 0];
         const step = distance * how.pan * dt;
-        // Minus, so the surface follows the hand: sliding the cap right sends
-        // the camera's target left, which is the direction `OrbitControl`'s own
-        // mouse pan moves it too.
+        // The picture follows the hand, which is the author's rule and the
+        // same one the mouse pan obeys: press the cap down and the surface
+        // goes down with it.
+        //
+        // The two signs differ because the device's do. Moving the camera's
+        // target one way sends the picture the other, so a hand-following pan
+        // is minus the axis; and the puck reports **press** as positive TZ,
+        // which is a second minus on that one. Measured, not assumed: shipped
+        // as one minus on both at a88 and the vertical came out backwards,
+        // which is what the author saw and named.
         patch.center = [0, 1, 2].map((k) => (center[k] || 0)
             - right[k] * shaped.tx * step
-            - up[k] * shaped.tz * step);
+            + up[k] * shaped.tz * step);
     }
     return Object.keys(patch).length ? patch : null;
 }

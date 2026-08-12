@@ -46,6 +46,28 @@ test('report 3 is the button mask, however many bytes it takes', () => {
     assert.deepEqual(parseReport(3, body(0x00, 0x01)), { buttons: 256 });
 });
 
+test('a long button report cannot invent a press', () => {
+    // The author's unit sends report 3 as twelve bytes with one byte of
+    // content. Read with a shift per byte, byte 4 is shifted by 32, which in
+    // JavaScript wraps onto bits 0 to 7: a stray value there would read as
+    // button 1, which is the camera reset. So the mask stops at four bytes.
+    const long = (...bytes) => body(...bytes, ...new Array(12 - bytes.length).fill(0));
+    assert.deepEqual(parseReport(3, long()), { buttons: 0 });
+    assert.deepEqual(parseReport(3, long(0x03)), { buttons: 3 });
+    assert.deepEqual(parseReport(3, body(0, 0, 0, 0, 0x01, 0, 0, 0, 0, 0, 0, 0)),
+                     { buttons: 0 });
+    // The top byte of the four is still read, and read unsigned.
+    assert.deepEqual(parseReport(3, body(0, 0, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0)),
+                     { buttons: 0x80000000 });
+});
+
+test('the battery report is not an axis report', () => {
+    // Id 23, byte 0 a percentage, every few seconds. Nothing here asks how
+    // full the puck is, and reading it as axes would jam the camera at a
+    // constant deflection.
+    assert.equal(parseReport(23, body(0x64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)), null);
+});
+
 test('a report this does not know is dropped rather than guessed at', () => {
     // The battery report is the common case, and it is not an error: it is a
     // report about something else.

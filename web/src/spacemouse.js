@@ -11,11 +11,17 @@
 // `node --test` hold it down against reports captured by
 // `public/dev/spacemouse-probe.html` rather than against a device.
 //
-// Two layouts are read, because the family ships both and the author's unit
-// has not been read yet (`dev/plan-spacemouse.md` phase 2 findings, open):
-// report 1 as three translations with report 2 as three rotations, or a single
-// combined report carrying all six. The report's own length chooses, so
-// confirming the layout is a test fixture rather than a rewrite.
+// Two layouts are read, because the family ships both: report 1 as three
+// translations with report 2 as three rotations, or a single combined report
+// carrying all six. The report's own length chooses.
+//
+// **The author's SpaceMouse Wireless sends the combined form** (probe run
+// 2026-08-12, recorded in `dev/plan-spacemouse.md`): one collection, usage
+// page 0x01 usage 0x08, input reports 1, 3 and 23; report 1 twelve bytes
+// carrying all six axes at about 55 a second; report 3 the buttons, also
+// twelve bytes; report 23 the battery. Travel is exactly plus or minus 350 on
+// every axis, which is where `TUNING.scale` comes from rather than from the
+// documentation it happens to agree with.
 //
 // One device, one module state. The chooser grant is per origin rather than
 // per chart, only one surface is ever on screen, and a second handle on the
@@ -97,10 +103,20 @@ export function parseReport(reportId, view) {
         return { axes: { rx: w[0], ry: w[1], rz: w[2] } };
     }
     if (reportId === 3) {
+        // Four bytes at most, and this is not tidiness. The author's unit
+        // sends report 3 as **twelve** bytes, and JavaScript's bitwise
+        // operators work on int32: a loop over all twelve shifts byte 4 by 32,
+        // which wraps it back onto bits 0 to 7 and invents a press of button
+        // 1, which is the camera reset. Thirty-two buttons is more than any of
+        // these have.
         let mask = 0;
-        for (let i = 0; i < view.byteLength; i += 1) mask |= view.getUint8(i) << (8 * i);
-        return { buttons: mask };
+        const width = Math.min(4, view.byteLength);
+        for (let i = 0; i < width; i += 1) mask |= view.getUint8(i) << (8 * i);
+        return { buttons: mask >>> 0 };
     }
+    // Report 23 is the battery, byte 0 a percentage, arriving every few
+    // seconds. Dropped rather than surfaced: nothing here asks how full the
+    // puck is, and a report about something else is not an error.
     return null;
 }
 

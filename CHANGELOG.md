@@ -4,6 +4,36 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a90
+
+**The probe met the puck, and it found two things.** The author ran
+`/dev/spacemouse-probe.html` on the SpaceMouse Wireless; the findings are
+written into `dev/plan-spacemouse.md` phase 2, which closes the last open
+deliverable of that phase.
+
+**A button report that could press its own reset.** This unit sends report 3 as
+**twelve** bytes with one byte of content. The mask was read with a shift per
+byte, and JavaScript's bitwise operators work on int32: byte 4 shifts by 32 and
+wraps onto bits 0 to 7, so anything appearing there would read as button 1,
+which is the camera reset, firing itself in the reader's hands. The mask now
+stops at four bytes and is read unsigned, with a test that fails on the old
+arithmetic.
+
+**The vertical pan ran the wrong way.** The rule is that the picture follows
+the hand: press the cap down and the surface goes down with it. The puck
+reports a press as *positive* TZ, so the vertical needs the opposite sign from
+the horizontal, and a88 shipped one sign for both. Corrected, with the
+measurement recorded beside it rather than a convention asserted.
+
+**What the run confirmed and left alone**: the combined report layout, chosen
+by length with no change (report 2 never appears on this unit); the single
+multi axis collection, so there is nothing for `preferred()` to choose between;
+travel of exactly plus or minus 350, which is where `TUNING.scale` now comes
+from rather than from documentation that happens to agree; buttons at bits 0
+and 1 as phase 3 assumed; and no double action from 3DxWare, whose service was
+live throughout, so the driver stays installed and nothing needs configuring.
+Report 23 is the battery, and dropping it silently was right.
+
 ## 1.0.0a89
 
 **Phase 4 of `dev/plan-spacemouse.md`: the feel, which is the difference

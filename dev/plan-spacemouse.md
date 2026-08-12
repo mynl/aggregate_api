@@ -167,7 +167,7 @@ vertices, a 1.08 MB STL and a 652 kB OBJ. **Open question for the author,
 after the viewer**: whether a 21k triangle mesh is the right density or
 whether the export should offer the coarser grid the floor image uses.
 
-### Phase 2 `[SpaceMouse-Probe]` **page landed a87, findings open**
+### Phase 2 `[SpaceMouse-Probe]` **page landed a87, findings recorded a90**
 
 A standalone probe page, `web/public/dev/spacemouse-probe.html`, self
 contained (inline script, no bundle imports), served by `npm run dev` or the
@@ -197,32 +197,58 @@ the built app alike (Vite copies `public/` verbatim, and the service worker
 takes navigations network first, so it never serves a stale copy). It is not
 linked from anywhere.
 
-#### Findings, to be recorded from the author's unit
+#### Findings, from the author's unit, 2026-08-12
 
-**OPEN.** The page is the deliverable this phase can produce without the
-hardware; the five readings below need the puck, Chrome and the author's
-machine, which is the one thing an agent cannot run. Press Connect, move every
-axis to its stop, press both buttons, then Copy findings and paste the block
-in here.
+Run by the author on the SpaceMouse Wireless, `256f:c62e`, with 3DxWare
+installed and its service live. Answered at a90, which fixed the two things
+they turned up.
 
-1. Report IDs, lengths and layout: _pending_.
-2. Which `HIDDevice` entry is the multi axis collection (usage page `0x01`,
-   usage `0x08`): _pending_. The page prints every collection of every granted
-   device, and opens the multi axis one by preference.
-3. `3DxService` running versus stopped, and whether the KMJ emulator
-   double acts in Chrome: _pending_. If it does, the one-time configuration
-   that silences it is applied and written here.
-4. Sleep, wake and replug: _pending_. The log is timestamped, and the
-   `connect` and `disconnect` events are logged whether or not a device is
-   open, which is the reading.
-5. Starting gains at the observed ranges: _pending_.
+1. **Report IDs, lengths and layout.** Three input reports, all twelve bytes:
 
-**Until they land, phase 3 parses both documented candidate layouts** rather
-than waiting: report 1 as three translations with report 2 as three rotations,
-or a single combined report 1 carrying all six, chosen by the report's own
-length. The probe's `Record three seconds` button writes deduplicated report
-lines in exactly the form the parser tests take, so confirming or correcting
-the layout is a test fixture rather than a rewrite.
+   | id | bytes | rate | what |
+   |---|---|---|---|
+   | 1 | 12 | ~55 a second | all six axes, int16 little endian, `TX TY TZ RX RY RZ` |
+   | 3 | 12 | on change | the button mask, in byte 0 |
+   | 23 | 12 | every few seconds | the battery, byte 0 a percentage |
+
+   So this unit sends the **combined** form, and report 2 never appears. The
+   parser chose it correctly by length with no change. Travel is exactly plus
+   or minus 350 on every axis, which confirms `TUNING.scale`. Buttons read
+   `0x3`: bit 0 the left, bit 1 the right, which is the mapping phase 3
+   assumed.
+
+   **Bug this found.** Report 3 being twelve bytes broke the mask loop: a
+   shift per byte puts byte 4 at 32 bits, JavaScript's bitwise operators are
+   int32, and it wraps onto bits 0 to 7. A stray byte there would have read
+   as button 1, which is the camera reset, firing itself in the reader's
+   hands. Capped at four bytes and read unsigned at a90, with a test.
+
+2. **The device entry.** One `HIDDevice` and one collection, usage page
+   `0x01` usage `0x08`, the multi axis controller. The receiver exposes no
+   extra collections on this unit, so `preferred()` has nothing to choose
+   between and picks the right thing either way.
+
+3. **3DxWare coexistence: no double action.** With `3DxService` running, the
+   raw reports reach WebHID and the KMJ emulator does not also scroll or zoom
+   the page. Nothing to configure, and the driver stays installed, which is
+   what the export phase wanted.
+
+4. **Sleep, wake and replug**: not yet observed. Nothing hangs on it: the
+   `connect` and `disconnect` handlers are armed whether or not a device is
+   open, and a disconnect forgets the handle and repaints the control.
+   Worth a note here when it is seen.
+
+5. **Gains.** Untouched. The observed range is exactly the one the defaults
+   were written against, so `orbit 90`, `elevate 55`, `zoom 0.9`, `pan 0.7`
+   stand until the author says otherwise, and the feel panel moves them.
+
+**Direction, corrected at a90.** The author's rule is that the picture follows
+the hand: press the cap down and the surface goes down with it. The puck
+reports a press as **positive** TZ, so the vertical pan needs the opposite
+sign from the horizontal, which a88 did not have and which showed up as the
+image running away upward from a downward press. The horizontal was already
+right. The zoom and twist directions are unconfirmed; both are one reverse
+flag away in the feel panel if they turn out backwards.
 
 ### Phase 3 `[SpaceMouse-WebHID]` **landed a88**
 
