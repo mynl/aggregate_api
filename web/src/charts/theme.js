@@ -13,7 +13,7 @@
 //    values the style ships today, so the page still draws.
 
 import * as echarts from 'echarts/core';
-import { LineChart, HeatmapChart } from 'echarts/charts';
+import { CustomChart, LineChart, HeatmapChart } from 'echarts/charts';
 import {
     GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent,
     MarkLineComponent, TitleComponent, VisualMapContinuousComponent,
@@ -29,8 +29,14 @@ import { api } from '../api.js';
 // umbrella `DataZoomComponent` / `VisualMapComponent` pulls both halves of each.
 // `AxisPointerComponent` is what draws the cross-hair tracking lines; the
 // tooltip's own `axisPointer` option is inert without it in a tree-shaken build.
+//
+// `CustomChart` earns its place for one drawing: the contours over the flat
+// image. A heatmap needs category axes, and a category axis cannot place a
+// point between two categories, so a contour vertex at "cell 12.4" collapses.
+// A custom series renders in pixels, where the grid is uniform and 12.4 is a
+// position like any other.
 echarts.use([
-    LineChart, HeatmapChart,
+    CustomChart, LineChart, HeatmapChart,
     GridComponent, TooltipComponent, LegendComponent, DataZoomInsideComponent,
     MarkLineComponent, TitleComponent, VisualMapContinuousComponent,
     AxisPointerComponent, CanvasRenderer,

@@ -4,6 +4,53 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a82
+
+**Four small things on the page, three on the relief.**
+
+**The two versions ride in the header**, left of the hamburger, small and
+quiet: which library built the numbers on screen is the first question of any
+session that spans a bump, and the api one answers "did the deploy take"
+without opening a panel. Filled from `/v1/meta`, blank if it does not answer,
+since a wrong version is worse than none. Hidden on a phone, where the header
+has no room and the About panel still carries them.
+
+**One Download models.** The raw form served the programs as typed, straight
+off the object cache, and the two sat next to each other asking a reader to
+know the difference. The canonical one is the one that reloads.
+
+**Download plot** is labeled by what it does. It has saved a PNG since the
+matplotlib route left at a60, and a 3-D relief is a WebGL canvas, so ".svg" was
+promising a vector form of a picture that has none.
+
+**"all digits"** rather than "every meaningful digit" under Static, full
+precision, which is what it does.
+
+**A `tips` toggle on the relief.** The hover tooltip reads one cell under the
+cursor; the strip above the chart carries the cut's own numbers either way, and
+that strip neither moves nor covers what it describes.
+
+**The strip is two lines now**: where the cut is (each component, the total,
+the density there) and then what it leaves (the conditional means, or kappa
+against the even split). The duplicate "total cut" went: when a total cut is on
+it *is* the total, so it replaces the components' sum rather than sitting
+beside it saying the same thing twice. Every row carries a hint on hover,
+including the one that prompted the question: the **even split** is half the
+total to each, where the split would sit if the two components shared it
+equally, and it is the hollow ring on the chart. The gap between it and the
+filled dot is how far from even this total actually splits.
+
+**The flat contours are redrawn in pixel space, and smoothed.** They were line
+series on the panel's own axes, and a heatmap needs category axes: a category
+axis cannot place a point between two categories, because
+`OrdinalScale.normalize` indexes its tick table with the value, so a contour
+vertex at "cell 12.4" reads `undefined` and collapses. That is why they looked
+like torn paper. One `custom` series now renders them in pixels, where the grid
+is uniform and a fractional cell is a position like any other, and zrender's
+polyline smooths the facets that a contour off a lattice always has.
+
+`contours` is one control for both readings and it is **on** by default now.
+
 ## 1.0.0a81
 
 **The second look, six more.**

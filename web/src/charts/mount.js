@@ -60,8 +60,14 @@ const VIEW_DEFAULTS = {
     mesh: true,
     wallGrid: true,
     marginals: false,
-    contours: false,
+    // Contours on by default, in both readings. The prototype's preset had them
+    // off for the relief, which was right while they were the only thing the
+    // control could add; now that the flat image wants them too, one key with
+    // one default is worth more than matching the preset exactly, and it is one
+    // click to a bare surface.
+    contours: true,
     lights: true,
+    tips: true,
     cut: 'none',         // none | components | total | all
     // Where each cut sits, as a fraction of its own range. Three rather than
     // one because a click places a cut where the reader pointed, which is two
@@ -74,7 +80,7 @@ const VIEW_DEFAULTS = {
 
 /** Which view keys the relief owns, for the reset button to put back. */
 const SURFACE_KEYS = ['mesh', 'wallGrid', 'marginals', 'contours', 'lights',
-                      'cut', 'cutX', 'cutY', 'cutS'];
+                      'tips', 'cut', 'cutX', 'cutY', 'cutS'];
 
 /** The cut control cycles rather than branching into four buttons. */
 const CUT_MODES = ['none', 'components', 'total', 'all'];
@@ -157,18 +163,21 @@ const CONTROLS = [
 // decisions about *this* drawing. `dev/plan-3d-plot.md` 4.4 is the list.
 const SURFACE_CONTROLS = [
     {
+        key: 'contours',
+        label: 'contours',
+        title: 'Contour lines at eight levels. In relief they run on the '
+            + 'surface and on the floor image at the same levels, which is what '
+            + 'makes the two read as one drawing; flat, they run over the image',
+        // The one control that means something in both readings of a grid, so
+        // it is offered in both. The rest are about a box drawn in perspective.
+        flat: true,
+    },
+    {
         key: 'marginals',
         label: 'marginals',
         title: 'Draw each component\'s own distribution on the wall behind it. '
             + 'These are the library\'s exact marginals, not an integral of '
             + 'what is on screen, so they do not move when the window does',
-    },
-    {
-        key: 'contours',
-        label: 'contours',
-        title: 'Contour lines at eight levels, on the surface and on the floor '
-            + 'image at the same levels, which is what makes the two read as '
-            + 'one drawing',
     },
     {
         key: 'mesh',
@@ -181,6 +190,13 @@ const SURFACE_CONTROLS = [
         key: 'wallGrid',
         label: 'wall grid',
         title: 'Grid lines on the three walls of the box',
+    },
+    {
+        key: 'tips',
+        label: 'tips',
+        title: 'The hover tooltip, which reads one cell under the cursor. The '
+            + 'strip above the chart carries the cut\'s own numbers either way, '
+            + 'and it neither moves nor covers what it describes',
     },
     {
         key: 'lights',
@@ -370,8 +386,11 @@ function renderControls(doc, onChange, onReset, onWindow, walking, onWalk) {
     // The relief's own controls, between the readings and the realization:
     // they act on one drawing rather than on the document, and they exist only
     // while that drawing is the one on screen.
-    if ((view.kind || defaultKind(doc)) === 'surface') {
+    const realized = view.kind || defaultKind(doc);
+    const grid = (doc.panels || []).some((p) => p.kind === 'surface' || p.kind === 'heatmap');
+    if (grid && (realized === 'surface' || realized === 'heatmap')) {
         for (const spec of SURFACE_CONTROLS) {
+            if (realized !== 'surface' && !spec.flat) continue;
             const btn = el('button', {
                 type: 'button',
                 className: `exhibit-toggle${view[spec.key] ? ' active' : ''}`,
@@ -384,6 +403,10 @@ function renderControls(doc, onChange, onReset, onWindow, walking, onWalk) {
             }, spec.label);
             box.appendChild(btn);
         }
+    }
+    // The cuts and the camera are the relief's alone: a flat image has no wall
+    // to draw a conditional on and no camera to put back.
+    if (grid && realized === 'surface') {
         // The cut is a choice among four rather than a toggle, and cycling one
         // button through them keeps the strip one row: none, each component
         // held in turn, the total, and all three at once.
@@ -635,20 +658,33 @@ function draw(container, tools, host, doc, spec = null) {
      */
     function writeCutReadout(rows) {
         empty(readout);
-        if (!rows || !rows.length) {
+        const where = (rows && rows.where) || [];
+        const leaves = (rows && rows.leaves) || [];
+        if (!where.length && !leaves.length) {
             readout.appendChild(el('span', { className: 'chart-readout-head is-idle' },
                                    'click the surface to cut it'));
             return;
         }
-        for (const row of rows) {
-            const chip = el('span', { className: 'chart-readout-item' });
-            chip.appendChild(el('i', {
-                className: 'chart-readout-swatch',
-                style: `background:${row.color}`, 'aria-hidden': 'true',
-            }));
-            chip.appendChild(el('span', { className: 'chart-readout-name' }, row.name));
-            chip.appendChild(el('b', {}, row.value));
-            readout.appendChild(chip);
+        // Two lines: where the cut is, then what it leaves. One row would put
+        // the position of the cut and the answer it produces in the same
+        // sentence, and they are not the same kind of thing.
+        for (const group of [where, leaves]) {
+            if (!group.length) continue;
+            const line = el('div', { className: 'chart-readout-line' });
+            for (const row of group) {
+                const chip = el('span', {
+                    className: 'chart-readout-item',
+                    title: row.hint || row.name,
+                });
+                chip.appendChild(el('i', {
+                    className: 'chart-readout-swatch',
+                    style: `background:${row.color}`, 'aria-hidden': 'true',
+                }));
+                chip.appendChild(el('span', { className: 'chart-readout-name' }, row.name));
+                chip.appendChild(el('b', {}, row.value));
+                line.appendChild(chip);
+            }
+            readout.appendChild(line);
         }
     }
 
@@ -997,7 +1033,9 @@ function overridesFor(doc) {
     return grid
         ? ((ctx) => (ctx.logZ === undefined
             ? null
-            : surfaceOverrides({ ...ctx, lights: view.lights !== false })))
+            : surfaceOverrides({ ...ctx,
+                                 lights: view.lights !== false,
+                                 tips: view.tips !== false })))
         : null;
 }
 

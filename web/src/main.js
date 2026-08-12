@@ -2860,14 +2860,22 @@ api.meta().then((meta) => {
     // Not a build-time constant like the rest: the static-table walker is served
     // from the installed Python package, so the server is what knows its version.
     $('about-tables').textContent = meta.tables_version;
+    // The same two in the header, where they can be read without opening
+    // anything. `agg` first, because which library built the numbers is the
+    // question this answers most often.
+    const strip = $('nav-versions');
+    if (strip) strip.textContent = `agg ${meta.aggregate_version} · api ${meta.version}`;
 }).catch(() => {
     $('about-api').textContent = '(api offline)';
 });
 
-// Download every DecL program built this session: raw (as typed, from the object
-// cache) or agg (canonical, re-loadable, from the underwriter's session
-// knowledge). The attachment header makes the browser save the file.
-$('dl-raw')?.addEventListener('click', () => window.open(api.sessionModelsUrl('raw')));
+// Download every DecL program built this session, canonical and re-loadable,
+// from the underwriter's session knowledge. The attachment header makes the
+// browser save the file.
+//
+// The raw form went at a82. It served the programs as typed, straight off the
+// object cache, and the two sat next to each other in the menu asking a reader
+// to know the difference; the canonical one is the one that reloads.
 $('dl-agg')?.addEventListener('click', () => window.open(api.sessionModelsUrl('agg')));
 
 // ----------------------------------------------------------------------

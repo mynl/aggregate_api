@@ -33,6 +33,14 @@
                     </div>
                 </a>
                 <div class="nav-meta">
+                    <!-- The two versions that matter, in the header rather than
+                         behind About. Which library built the numbers on screen
+                         is the first question of any session that spans a
+                         version bump, and the api one answers "did the deploy
+                         take" without a round trip through a panel. Filled from
+                         /v1/meta; blank until it answers, and blank if it does
+                         not, since a wrong version is worse than none. -->
+                    <span class="nav-versions mono" id="nav-versions" title="aggregate and api versions"></span>
                     <div class="dropdown">
                         <button type="button" class="hamburger-btn" data-bs-toggle="dropdown"
                                 aria-expanded="false" aria-label="menu" title="Menu">
@@ -64,7 +72,7 @@
                                 <small class="text-muted">book-quality, printed</small></button></li>
                             <li><button type="button" class="dropdown-item menu-check-item" data-table-view="precise">
                                 <i class="bi bi-check2"></i><span>Static, full precision</span>
-                                <small class="text-muted">every meaningful digit</small></button></li>
+                                <small class="text-muted">all digits</small></button></li>
                             <li><button type="button" class="dropdown-item menu-check-item" data-table-view="interactive">
                                 <i class="bi bi-check2"></i><span>Interactive</span>
                                 <small class="text-muted">sort, filter, search</small></button></li>
@@ -99,13 +107,13 @@
                                 <small class="text-muted">Ctrl+A/E/K/Y, N/P, F/B/D</small></button></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><button type="button" class="dropdown-item" data-bs-toggle="offcanvas" data-bs-target="#helpPanel">Help</button></li>
-                            <li><button type="button" class="dropdown-item" id="dl-raw">Download models (raw)</button></li>
-                            <li><button type="button" class="dropdown-item" id="dl-agg">Download models (.agg)</button></li>
-                            <!-- The object's native matplotlib figure. It left
-                                 the navigation when Overview grew its own Plot
-                                 leaf, but the route stays and the file is worth
-                                 having, so it sits with the other downloads. -->
-                            <li><button type="button" class="dropdown-item" data-plot-download>Download plot (.svg)</button></li>
+                            <li><button type="button" class="dropdown-item" id="dl-agg">Download models</button></li>
+                            <!-- The chart on screen, as it is drawn. Labeled by
+                                 what it does rather than by a format: it has
+                                 saved a PNG since the matplotlib route left,
+                                 and a 3-D relief is a WebGL canvas, so there is
+                                 no vector form of it to promise. -->
+                            <li><button type="button" class="dropdown-item" data-plot-download>Download plot</button></li>
                             <li><button type="button" class="dropdown-item" data-bs-toggle="offcanvas" data-bs-target="#aboutPanel">About</button></li>
                         </ul>
                     </div>
@@ -234,7 +242,7 @@
                  choice. -->
             <span class="fb-right d-none d-sm-flex">
                 <span class="fb-text">Ctrl+Enter build<span class="sep">·</span>Ctrl+Space complete</span>
-                <span class="fb-text">Ctrl+↑↓ history<span class="sep">·</span>Alt+1…6 groups<span class="sep">·</span>Ctrl+Shift+U tables</span>
+                <span class="fb-text">Ctrl+↑↓ history<span class="sep">·</span>Ctrl+Shift+U tables</span>
             </span>
         </div>
 

@@ -1119,31 +1119,70 @@ function heatmapPanel(doc, panel, i, axes, view, box) {
     const zLabel = zAxis.label || 'z';
     const xTicks = categoryTicks(x);
     const yTicks = categoryTicks(y);
-    // Contours over the image, at the same eight levels the relief draws, so
-    // the two readings of one grid are the same drawing seen twice. The axes
-    // here are categories, so a path in data coordinates becomes one in
-    // fractional cell indices, which is what a category axis takes.
-    const toI = (v) => (v - g.x0) / g.dx;
-    const toJ = (v) => (v - g.y0) / g.dy;
-    const heightAt = (ci, rj) => {
-        const value = g.z[rj * g.nx + ci];
-        return useLog ? Math.log10(Math.max(value, floor)) : value;
-    };
+    // Contours over the image, at the same levels the relief draws, so the two
+    // readings of one grid are the same drawing seen twice.
+    //
+    // Drawn as **one custom series in pixel space**, not as line series on the
+    // panel's own axes. A heatmap needs category axes, and a category axis
+    // cannot place a point between two categories: `OrdinalScale.normalize`
+    // indexes its tick table with the value, so a contour vertex at "cell 12.4"
+    // reads `undefined` and collapses. That is what made the first attempt at
+    // these look like torn paper. In pixels the grid is uniform, so a fractional
+    // cell is a position like any other, and zrender's polyline smooths.
     const lines = [];
-    const top = Number.isFinite(max) ? max : min + 1;
-    for (let level = 1; level <= SURFACE_CONTOUR_LEVELS; level++) {
-        const at = min + ((top - min) * level) / (SURFACE_CONTOUR_LEVELS + 1);
-        for (const path of contourPaths(g, at, heightAt)) {
-            if (lines.length >= SURFACE_CONTOUR_CAP) break;
+    if (view.contours !== false) {
+        const heightAt = (ci, rj) => {
+            const value = g.z[rj * g.nx + ci];
+            return useLog ? Math.log10(Math.max(value, floor)) : value;
+        };
+        const top = Number.isFinite(max) ? max : min + 1;
+        const paths = [];
+        for (let level = 1; level <= SURFACE_CONTOUR_LEVELS; level++) {
+            const at = min + ((top - min) * level) / (SURFACE_CONTOUR_LEVELS + 1);
+            for (const path of contourPaths(g, at, heightAt)) {
+                if (paths.length >= SURFACE_CONTOUR_CAP) break;
+                // Into cell indices, which is what the pixel mapping below is
+                // in: the category axis places cell `c` at a fixed pixel and
+                // the spacing is uniform, so index space and pixel space differ
+                // by one affine map.
+                paths.push(path.map((p) => [(p[0] - g.x0) / g.dx, (p[1] - g.y0) / g.dy]));
+            }
+        }
+        if (paths.length) {
             lines.push({
-                type: 'line', name: 'contour', silent: true,
+                type: 'custom', name: 'contour', silent: true,
                 xAxisIndex: i, yAxisIndex: i,
-                showSymbol: false, smooth: false,
-                data: path.map((p) => [toI(p[0]), toJ(p[1])]),
-                lineStyle: { color: SURFACE_CONTOUR_COLOR,
-                             width: SURFACE_CONTOUR_WIDTH,
-                             opacity: SURFACE_CONTOUR_OPACITY },
+                data: [0],
                 tooltip: { show: false },
+                renderItem: (params, apiRef) => {
+                    const origin = apiRef.coord([0, 0]);
+                    const far = apiRef.coord([g.nx - 1, g.ny - 1]);
+                    const sx = g.nx > 1 ? (far[0] - origin[0]) / (g.nx - 1) : 0;
+                    const sy = g.ny > 1 ? (far[1] - origin[1]) / (g.ny - 1) : 0;
+                    return {
+                        type: 'group',
+                        children: paths.map((path) => ({
+                            type: 'polyline',
+                            shape: {
+                                points: path.map(([ci, rj]) => [origin[0] + ci * sx,
+                                                                origin[1] + rj * sy]),
+                                // A contour off a lattice is a chain of short
+                                // segments meeting at cell edges, so it reads as
+                                // faceted however fine the grid is. Rounding the
+                                // corners is honest: the underlying field is
+                                // continuous and the facets are the sampling.
+                                smooth: 0.4,
+                            },
+                            style: {
+                                stroke: SURFACE_CONTOUR_COLOR,
+                                lineWidth: SURFACE_CONTOUR_WIDTH,
+                                opacity: SURFACE_CONTOUR_OPACITY,
+                                fill: null,
+                            },
+                            silent: true,
+                        })),
+                    };
+                },
             });
         }
     }
@@ -1664,14 +1703,16 @@ const CUT_COLORS = { x: '#dc3545', y: '#0d6efd', s: '#198754' };
  */
 function cutSeries(g, ctx, view) {
     const mode = view.cut || 'none';
-    if (mode === 'none') return { series: [], readout: [] };
+    if (mode === 'none') return { series: [], readout: { where: [], leaves: [] } };
     const { height, zMax, floorH, hair, xWall, yWall, k, dataMax,
             xName, yName, digits } = ctx;
     const out = [];
-    // Two groups, so the strip reads left to right in the order a reader asks
-    // the questions in: where the cut is, then what it leaves.
+    // Two lines, in the order a reader asks the questions: where the cut is,
+    // then what it leaves.
     const where = [];
     const leaves = [];
+    let totalAt = null;
+    let densityAtCut = null;
     const shown = (v) => (Number.isFinite(v) ? fmt(v) : '');
     const shownZ = (v) => (Number.isFinite(v)
         ? Number(v).toExponential(Math.max(1, digits - 3)) : '');
@@ -1781,11 +1822,10 @@ function cutSeries(g, ctx, view) {
         }
         // The joint density where the two component cuts cross, which is the z
         // the reader is pointing at when they click.
-        const at = densityAt(g,
+        densityAtCut = densityAt(g,
             Math.max(0, Math.min(g.nx - 1, Math.round((heldX - g.x0) / g.dx))),
             Math.max(0, Math.min(g.ny - 1, Math.round((heldY - g.y0) / g.dy))));
-        where.push({ name: 'x + y', color: '#6c757d', value: shown(heldX + heldY) },
-                   { name: 'density', color: '#6c757d', value: shownZ(at) });
+        totalAt = heldX + heldY;
     }
 
     if (mode === 'total' || mode === 'all') {
@@ -1861,13 +1901,41 @@ function cutSeries(g, ctx, view) {
                 itemStyle: { color: 'rgba(0,0,0,0)', borderColor: color, borderWidth: 1.6 },
                 silent: true,
             });
-            where.push({ name: 'total cut', color, value: shown(xs[0] + ys[0]) });
-            leaves.push({ name: `kappa ${xName}`, color, value: shown(k1) },
-                        { name: `kappa ${yName}`, color, value: shown(k2) },
-                        { name: 'even split', color, value: shown(half) });
+            // The total the cut is at, which is the number the whole reading
+            // is conditioned on, so it replaces the components' sum rather
+            // than sitting beside it saying the same thing twice.
+            totalAt = xs[0] + ys[0];
+            if (densityAtCut === null) densityAtCut = interpAt(xs, zs, k1);
+            leaves.push({
+                name: `kappa ${xName}`, color, value: shown(k1),
+                hint: `E[${xName} | total = ${shown(totalAt)}]: how much of a `
+                    + 'total that size falls to this component, on average',
+            }, {
+                name: `kappa ${yName}`, color, value: shown(k2),
+                hint: 'The other half of the same split. The two sum to the '
+                    + 'total exactly, at every cut',
+            }, {
+                name: 'even split', color, value: shown(half),
+                hint: 'Half the total to each, which is where the split would '
+                    + 'sit if the two components shared it equally. The hollow '
+                    + 'ring on the chart. The gap between it and the filled dot '
+                    + 'is how far from even this total actually splits',
+            });
         }
     }
-    return { series: out, readout: [...where, ...leaves] };
+    if (totalAt !== null) {
+        where.push({
+            name: 'total', color: CUT_COLORS.s, value: shown(totalAt),
+            hint: 'The sum of the two components at the cut',
+        });
+    }
+    if (densityAtCut !== null) {
+        where.push({
+            name: 'density', color: '#6c757d', value: shownZ(densityAtCut),
+            hint: 'The joint density where the cut sits',
+        });
+    }
+    return { series: out, readout: { where, leaves } };
 }
 
 /**

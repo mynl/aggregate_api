@@ -171,6 +171,12 @@ header .navbar { min-height: 56px; }
 .nav-meta a:hover { color: var(--primary); }
 .nav-meta .dot  { color: var(--mut); font-family: var(--mono); }
 .nav-meta .mono { font-family: var(--mono); }
+/* The two versions, left of the hamburger. Small and quiet: they are reference
+   rather than navigation, and they should not compete with the brand. Hidden on
+   a narrow viewport, where the header has no room to spare and the About panel
+   still carries them. */
+.nav-versions { font-size: .68rem; letter-spacing: -.01em; white-space: nowrap; }
+@media (max-width: 575.98px) { .nav-versions { display: none; } }
 
 /* ---- Header menu (hamburger dropdown) + Help/About offcanvas panels ---- */
 .hamburger-btn { border: 0; background: transparent; color: var(--mut); cursor: pointer;
@@ -821,6 +827,13 @@ header .navbar { min-height: 56px; }
    not a series, so it reads as the question the rest of the row answers. Grey
    and italic while nothing is under the cursor, which is the whole of the idle
    state now that the names stand on their own. */
+/* The relief writes two lines into the same strip: where the cut is, then what
+   it leaves. Each is a row of its own, so the two do not run together into one
+   sentence, and the container stops being a single wrapping line. */
+.chart-readout-line {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem 1rem;
+    width: 100%;
+}
 .chart-readout-head { font-weight: 700; }
 .chart-readout-head.is-idle { font-weight: 400; color: var(--mut); font-style: italic; }
 /* A button, because clicking one shows or hides its series, which is what the

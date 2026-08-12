@@ -131,7 +131,7 @@ function tick(v) {
 export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
                                    quantized = false, side = 420,
                                    hostHeight = 480, camera = null,
-                                   lights = true } = {}) {
+                                   lights = true, tips = true } = {}) {
     const s = houseStyle();
     // Read the height to the precision the wire carried and no further. The
     // log-quantized encoding recovers a density to about four significant
@@ -147,6 +147,12 @@ export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
         textStyle: { fontSize: Math.max(10, s.font_size + 2), color: s.text_color },
         animation: false,
         tooltip: {
+            // The strip above the chart carries the cut's numbers whatever this
+            // says: it is the reading, and it does not move or cover anything.
+            // This is the hover reading of a single cell, which is a different
+            // question and one a reader may not want asked every time the
+            // cursor crosses the box.
+            show: tips,
             confine: true,
             backgroundColor: 'rgba(255,255,255,.96)',
             borderColor: s.grid_color,
