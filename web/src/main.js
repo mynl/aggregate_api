@@ -189,6 +189,11 @@ function adoptBuild(res) {
     // carries it, so there is no reason to refetch a frame to find it.
     state.mean = res.mean;
     state.hasReins = Boolean(res.has_reins);
+    // A calibration is about the object it was made on, so a new object drops
+    // both held pricing answers. `clearPanes` cannot do this: it also runs on a
+    // perspective flip, where holding them is exactly what makes the toggle a
+    // redraw rather than a second calibration.
+    forgetPricing();
     applyCapability(res.capability);
     renderSummary(res);
     clearPanes();
@@ -199,6 +204,7 @@ function adoptBuild(res) {
 function forgetBuild() {
     state.id = state.kind = state.name = state.mean = null;
     state.hasReins = false;
+    forgetPricing();
     applyCapability(null);
 }
 
@@ -543,6 +549,10 @@ function renderSummary(res) {
     empty(inner);
     applyCapabilityGating();
     renderPriceBasis();
+    // Both pricing forms take the shape of the object in front of them, and the
+    // preview line answers for it, before either leaf has been visited.
+    syncEvaluateForm();
+    renderPricePreview();
     const kindLabel = KIND_LABEL[res.kind] || 'Aggregate';
     const bits = [el('span', { className: 'nm' }, res.name || '(anonymous)')];
     const add = (text) => bits.push(sep(), el('span', { className: 'mono' }, text));
@@ -775,14 +785,15 @@ window.addEventListener('resize', syncSummaryMore);
 // Tabs -- lazy load + cache per built object
 // ----------------------------------------------------------------------
 // Where a group's content goes, and where its errors land. Pricing is the one
-// group with two panes rather than one, because its two leaves are two forms
-// with two results rather than two views of the same payload.
+// group with three panes rather than one. Calibrate and Allocate are two
+// readings of one calibration and share a form, but they are two documents and
+// so two panes; Evaluate is a second form asking the opposite question.
 const PANE_OF = {
     overview: 'pane-overview', economics: 'pane-economics',
-    reinsurance: 'pane-reinsurance', pricing: 'pane-price',
+    reinsurance: 'pane-reinsurance', pricing: 'pane-calibrate',
     bounds: 'pane-bounds', more: 'pane-more',
 };
-const ALL_PANES = [...Object.values(PANE_OF), 'pane-evaluate'];
+const ALL_PANES = [...Object.values(PANE_OF), 'pane-allocate', 'pane-evaluate'];
 
 function clearPanes() {
     destroyAllGrids();
@@ -895,7 +906,8 @@ const LOADERS = {
         ['reinsurance', 'density']),
     'reinsurance:plot': () => loadReinsPlot(),
 
-    'pricing:determine': () => showPricingLeaf('determine'),
+    'pricing:calibrate': () => showPricingLeaf('calibrate'),
+    'pricing:allocate': () => showPricingLeaf('allocate'),
     'pricing:evaluate': () => showPricingLeaf('evaluate'),
 
     'bounds:bounds': () => showBoundsLeaf('bounds'),
@@ -964,6 +976,12 @@ function activeLeaf(group) {
  * The leaf hint no longer appears here. It moved into the exhibit lede, which
  * sits on the table it describes rather than up in the menu; a hint to the
  * right of the row read as a third kind of item inside the row.
+ *
+ * A leaf declaring `dividerBefore` gets a thin rule to its left, which splits
+ * the row into groups without splitting it into two rows. Pricing is the one
+ * user: Calibrate and Allocate are two readings of one calculation and Evaluate
+ * asks the opposite question, so the row reads `Calibrate Allocate | Evaluate`
+ * rather than as three equal siblings.
  */
 function renderSubTabs(group) {
     const row = $(`sub-${group}`);
@@ -972,6 +990,13 @@ function renderSubTabs(group) {
     const current = activeLeaf(group);
     for (const [key, leaf] of Object.entries(NAV_GROUPS[group].leaves)) {
         const off = !leafAvailable(group, key);
+        // Presentational, so `aria-hidden`: a screen reader walking the tab
+        // list should hear three tabs, not three tabs and a piece of furniture.
+        if (leaf.dividerBefore) {
+            const rule = el('span', { className: 'sub-divider' });
+            rule.setAttribute('aria-hidden', 'true');
+            row.appendChild(rule);
+        }
         const btn = el('button', {
             type: 'button',
             className: `sub-link${key === current ? ' active' : ''}`
@@ -1841,27 +1866,36 @@ async function replacePaneTable(paneId, which, opts = GRID_FULL, bulk = null,
     draw();
 }
 
+/**
+ * What an error says, as a sentence.
+ *
+ * Split out of `errorNode` at a84 because the pricing preview line prints the
+ * message rather than mounting a node: a library refusal is written to be read,
+ * and the reader should meet it in the line under the form they are typing in.
+ * Both callers get the same reading of the same body, which is the point of
+ * having one function.
+ */
+function errorMessage(err) {
+    if (!(err instanceof ApiError)) return err.message;
+    const detail = err.body && (err.body.detail || err.body);
+    if (Array.isArray(detail)) {
+        // FastAPI 422 validation errors: [{loc:[...,field], msg, type}, ...].
+        // Show "<field>: <msg>" per entry so the real reason (a bad p, an
+        // over-cap log2) is legible instead of a bare "HTTP 422".
+        return detail
+            .map((e) => {
+                const field = Array.isArray(e.loc) ? e.loc[e.loc.length - 1] : null;
+                return field ? `${field}: ${e.msg}` : e.msg;
+            })
+            .join('; ');
+    }
+    return (detail && detail.message)
+        || (typeof detail === 'string' ? detail : err.message);
+}
+
 function errorNode(err) {
     if (err instanceof ApiError && err.status === 429) return renderRateLimit(err.retryAfter);
-    if (err instanceof ApiError) {
-        const detail = err.body && (err.body.detail || err.body);
-        let msg;
-        if (Array.isArray(detail)) {
-            // FastAPI 422 validation errors: [{loc:[...,field], msg, type}, ...].
-            // Show "<field>: <msg>" per entry so the real reason (a bad p, an
-            // over-cap log2) is legible instead of a bare "HTTP 422".
-            msg = detail
-                .map((e) => {
-                    const field = Array.isArray(e.loc) ? e.loc[e.loc.length - 1] : null;
-                    return field ? `${field}: ${e.msg}` : e.msg;
-                })
-                .join('; ');
-        } else {
-            msg = (detail && detail.message) || (typeof detail === 'string' ? detail : err.message);
-        }
-        return el('div', { className: 'text-muted small' }, msg);
-    }
-    return el('div', { className: 'text-muted small' }, err.message);
+    return el('div', { className: 'text-muted small' }, errorMessage(err));
 }
 
 // ---- Reins tab: description line + gross/ceded/net exhibit + per-layer frame ----
@@ -2238,78 +2272,132 @@ async function loadReinsExhibit(block, leaf) {
 // this repo's second opinion on a table it does not own. If the orientation is
 // wrong, it is wrong in the library.
 
+// ----------------------------------------------------------------------
+// Pricing: Calibrate, Allocate and Evaluate
+// ----------------------------------------------------------------------
+// Every table on this pane is a library exhibit. `calibrate_distortions` and
+// `evaluate` return result objects, the library registers `pricing.calibrate`,
+// `pricing.allocate` and `pricing.evaluate` on those, and the api serves the
+// envelopes. So this file holds no title, no caption, no format and no
+// arithmetic about a price: it posts a form and draws a document, which is what
+// the other twelve table leaves have done since a71.
+//
+// The last of that assembly, in this file and in the api's `pricing.py`, goes at
+// a85. See `dev/plan-pricing-exhibits.md`.
+
 /**
- * Pricing / Determine and Pricing / Evaluate: show one form, hide the other.
+ * The last answer from each of the two pricing POSTs, held so a leaf never
+ * computes on activation.
  *
- * The one group whose leaves are two forms rather than two views of a payload,
- * so both live in the markup and the leaf chooses. Neither runs on activation:
- * pricing and evaluation are both work, and a leaf that computed on arrival
- * would spend it every time you passed through.
+ * Both perspectives ride in each response, which is what makes the RAW /
+ * INSURER toggle a redraw rather than a recalculation: `refetchTables` clears
+ * every pane and reloads the group, and the loader here paints from these
+ * rather than asking the server for a calibration it has already made.
+ *
+ * Dropped when the **object** changes, not when a pane is cleared. Those are
+ * different events, and clearing on the second would blank the pane on every
+ * flip of the perspective, which is the thing holding them is for.
  */
-async function showPricingLeaf(which) {
-    $('leaf-determine').classList.toggle('d-none', which !== 'determine');
-    $('leaf-evaluate').classList.toggle('d-none', which !== 'evaluate');
-    // The premium input is for a position carrying no consideration of its own.
-    // A P&L keeps its premium in its ledger and never asks; an exposure that
-    // states one does not either.
-    $('evaluate-premium-field').classList.toggle('d-none', !can('needsPremium'));
+let _calibration = null;
+let _evaluation = null;
+
+function forgetPricing() {
+    _calibration = null;
+    _evaluation = null;
+    // The typed premium goes with them. It was a number about the previous
+    // object, and left in the box it would be relabeled as this one's by the
+    // basis row beside it, which is worse than an empty field.
+    const premium = $('evaluate-premium');
+    if (premium) premium.value = '';
 }
 
-// ----------------------------------------------------------------------
-// Price tab -- pentagon form (p + CoC/LR); Portfolios also get the
-// per-distortion LR/P/PQ/ROE slices from analyze_distortions.
-// ----------------------------------------------------------------------
-// Column formats are the server's business now, declared per frame in
-// `tables.FORMATS` and resolved into the document. Both views read them from
-// there, so a loss ratio is a percent in the static table and in the grid
-// without the two being told separately. `PRICE_FMT_CODE` and `statFormats`
-// lived here until a35.
-const PRICE_TITLE = {
-    LR: 'Loss ratio', P: 'Premium', PQ: 'Premium / capital', ROE: 'Return on capital',
+/**
+ * Pricing: reveal one leaf, and draw what is held for it.
+ *
+ * Calibrate and Allocate share a form and a press, so they share the wrapper
+ * and differ only in which pane is visible. Evaluate is the other form.
+ *
+ * Nothing computes here. Pricing and evaluation are both work, and a leaf that
+ * ran on arrival would spend it every time you passed through, so the panes stay
+ * as the last press left them and the button is the only thing that asks.
+ */
+async function showPricingLeaf(which) {
+    const evaluating = which === 'evaluate';
+    $('leaf-price').classList.toggle('d-none', evaluating);
+    $('leaf-evaluate').classList.toggle('d-none', !evaluating);
+    $('pane-calibrate').classList.toggle('d-none', which !== 'calibrate');
+    $('pane-allocate').classList.toggle('d-none', which !== 'allocate');
+    if (evaluating) {
+        syncEvaluateForm();
+        drawPricingPane('evaluate');
+    } else {
+        renderPricePreview();
+        drawPricingPane(which);
+    }
+}
+
+/** Which exhibit each leaf draws, and out of which held response. */
+const PRICING_LEAF = {
+    calibrate: ['pane-calibrate', 'pricing.calibrate', () => _calibration,
+                'Calibrate'],
+    allocate: ['pane-allocate', 'pricing.allocate', () => _calibration,
+               'Calibrate'],
+    evaluate: ['pane-evaluate', 'pricing.evaluate', () => _evaluation,
+               'Evaluate'],
 };
 
-// Render the Price payload straight into pane-price: pentagon + (Portfolios
-// only) calibrated distortions and the per-stat distortion slices. Everything
-// registers under 'pane-price' so a rebuild tears it down together.
-function renderPrice(payload) {
-    const paneId = 'pane-price';
-    const ir = payload.ir || {};
+/**
+ * Draw one Pricing leaf from the response already in hand.
+ *
+ * Shaped like `loadExhibitLeaf`, and deliberately: blocks in order, the caption
+ * lifted out of each block and drawn under its table, then whatever the library
+ * said on the way. The only difference is where the envelope came from, which is
+ * a POST carrying a form's answer rather than a GET on the object.
+ */
+function drawPricingPane(which) {
+    const [paneId, name, held, button] = PRICING_LEAF[which];
+    const payload = held();
+    const views = payload?.exhibits?.[name] || null;
+    // The perspective the reader has chosen, out of the pair the response
+    // carries. `insurer` as the fallback matches the app's own default.
+    const envelope = views ? (views[_perspective] || views.insurer) : null;
     const draw = () => {
-        const root = el('div', { className: 'price-result' });
-        replacePane(paneId, root);      // clears prior tables + attaches root
-
-        // `frame` is the fallback: these come from a POST, so if the document
-        // could not be built the plain payload is still there to show.
-        const section = (title, frame, key, opts, cls = 'price-section-title') => {
-            root.appendChild(el('div', { className: cls }, title));
+        const root = el('div', { className: 'overview-exhibits exhibit-blocks' });
+        replacePane(paneId, root);
+        const lede = ledeFor('pricing', which);
+        if (lede) root.appendChild(lede);
+        if (!envelope) {
+            root.appendChild(el('div', { className: 'text-muted small' },
+                `Press ${button}.`));
+            onTableViewChange(paneId, draw, root);
+            return;
+        }
+        for (const block of envelope.blocks || []) {
+            // The caption rides inside the block, so it is lifted out and drawn
+            // by the page: the walker prints one and the interactive grid does
+            // not, and the library's own sentence about what a frame means must
+            // not depend on which renderer is switched on.
+            const { caption, ...doc } = block;
             const host = el('div');
             root.appendChild(host);
-            mountTable(paneId, host, ir[key] ? { doc: ir[key] } : { frame }, opts);
-        };
-
-        section('Pricing pentagon', payload.pentagon, 'pentagon', GRID_FULL);
-        if (payload.distortion_df) {
-            section('Calibrated distortions', payload.distortion_df, 'distortion_df',
-                GRID_FULL, 'price-section-title mt-3');
-        }
-        for (const w of payload.warnings || []) {
-            root.appendChild(el('div', { className: 'text-muted small fst-italic mt-1' }, `⚠ ${w}`));
-        }
-        if (payload.distortions) {
-            for (const stat of ['LR', 'P', 'PQ', 'ROE']) {
-                const frame = payload.distortions[stat];
-                if (!frame) continue;
-                section(`${PRICE_TITLE[stat]} (${stat}) by distortion`, frame, stat,
-                    GRID_FULL, 'price-section-title mt-3');
+            mountTable(paneId, host, { doc }, GRID_FULL);
+            if (caption) {
+                root.appendChild(el('div', { className: 'exhibit-caption' }, caption));
             }
         }
-        // Against the root just built, not the pane: see `replacePaneTable`.
+        // A distortion the library declined to allocate, most often the mass
+        // distortion on an unbounded book. The rows that answered are above;
+        // this says which family is not among them, and why.
+        for (const warning of payload.warnings || []) {
+            root.appendChild(el('div', { className: 'text-muted small fst-italic mt-1' },
+                `⚠ ${warning}`));
+        }
         onTableViewChange(paneId, draw, root);
     };
     draw();
 }
 
-// ---- Reinsurance-aware pricing ----
+// ---- The calibration basis ----
 // Which basis the distortion set is calibrated on. Sticky per browser, and only
 // offered when the object carries a cession.
 const PRICE_BASES = [
@@ -2380,6 +2468,10 @@ function renderPriceBasis() {
                 try { localStorage.setItem('aggapi.priceBasis', value); }
                 catch { /* private mode */ }
                 renderPriceBasis();
+                // Both legs of the anchor come off the chosen view, so the
+                // preview is a different reading and not a relabeling of the
+                // one already on screen.
+                renderPricePreview();
             });
         }
         group.appendChild(b);
@@ -2388,79 +2480,117 @@ function renderPriceBasis() {
 }
 
 /**
- * Render the reinsurance pricing table.
+ * The calibration the form is currently describing, or null if it describes none.
  *
- * One row per (distortion, basis) plus a difference row per non-calibrated
- * basis. The difference is the point: it is the premium the cession costs, and
- * its `LR` is the loss ratio the reinsurance is being bought at.
+ * One body for all three pricing calls, since the preview answers the same
+ * question the calibration is about to be asked. `basis` travels only where it
+ * means something: a portfolio calibrates on its output basis and the library
+ * refuses a `reins_view` there, so sending one would turn a greyed control into
+ * a 400.
  */
-function renderReinsPrice(payload) {
-    const paneId = 'pane-price';
-    const ir = payload.ir || {};
-    const draw = () => {
-        const root = el('div', { className: 'price-result' });
-        replacePane(paneId, root);
+function priceFormBody() {
+    const anchor = document.querySelector('input[name="price-anchor"]:checked')?.value || 'p';
+    const anchorVal = parseFloat($('price-anchor-val').value);
+    const target = document.querySelector('input[name="price-target"]:checked')?.value || 'coc';
+    const val = parseFloat($('price-target-val').value);
+    if (!Number.isFinite(anchorVal) || !Number.isFinite(val)) return null;
+    const body = {};
+    body[anchor] = anchorVal;      // 'p' (a VaR probability) or 'a' (assets)
+    body[target] = val;            // 'coc' or 'lr'
+    const bases = state.caps.flags.reinsBases || [];
+    if (bases.includes(priceBasis)) body.basis = priceBasis;
+    return body;
+}
 
-        root.appendChild(el('div', { className: 'price-section-title' },
-            `Gross and net by distortion, calibrated on ${payload.basis}`));
-        root.appendChild(el('div', { className: 'exhibit-caption mb-2' },
-            `Distortions fitted to the ${payload.basis} basis at p = ${payload.p} `
-            + `(a = ${fmt(payload.a)}, CoC ${(payload.roe * 100).toFixed(1)}%), then `
-            + 'applied unchanged to the others. The starred row is the calibrated '
-            + 'one. A "less" row is the difference: the implied allowance for '
-            + 'reinsurance in the rate, and its LR is the loss ratio the cover is '
-            + 'being bought at.'));
-        const host = el('div');
-        root.appendChild(host);
-        // Money grouped, ratios as percents, PQ to 3dp: declared server side in
-        // `tables.FORMATS['reins_price']` and resolved into the document, so
-        // both views read one answer.
-        mountTable(paneId, host,
-            ir.table ? { doc: ir.table } : { frame: payload.table },
-            { ...GRID_FULL, maxRows: 30 });
-
-        if (payload.distortion_df) {
-            root.appendChild(el('div', { className: 'price-section-title mt-3' },
-                'Distortion parameters'));
-            const dhost = el('div');
-            root.appendChild(dhost);
-            mountTable(paneId, dhost,
-                ir.distortion_df ? { doc: ir.distortion_df } : { frame: payload.distortion_df },
-                GRID_FULL);
-        }
-        for (const w of payload.warnings || []) {
-            root.appendChild(el('div', { className: 'text-muted small fst-italic mt-1' }, `⚠ ${w}`));
-        }
-        // Against the root just built, not the pane: see `replacePaneTable`.
-        onTableViewChange(paneId, draw, root);
+/**
+ * The pentagon this form would complete, under the form, kept current as you type.
+ *
+ * The Quick Re treatment, for the same reasons and with the same three guards.
+ * Debounced at 350 ms on the trailing edge, because a keystroke is not a
+ * question. Ticketed against out-of-order answers, since the boxes move while a
+ * request is in flight and an older reading must not overwrite a newer one.
+ * Dimmed rather than blanked after 120 ms, so the last good reading stays on
+ * screen and says it is not current instead of flickering on every digit.
+ *
+ * **A refusal is the preview text.** The library's unbounded anchor guard
+ * (`p = 1` on a book whose count has no maximum) is a sentence written to be
+ * read, and the preview line is where the reader is already looking. That is the
+ * whole reason this line answers before the button is pressed rather than after.
+ *
+ * Silent, not an error, when the object cannot price or the form is incomplete:
+ * an empty box is not a mistake, it is a box you have not finished typing in.
+ */
+let _pricePreviewTicket = 0;
+async function renderPricePreview() {
+    const node = $('price-preview');
+    if (!node) return;
+    const blank = () => {
+        node.textContent = '';
+        node.classList.remove('is-pending');
     };
-    draw();
+    if (!state.id || !can('canPrice')) return blank();
+    const body = priceFormBody();
+    if (!body) return blank();
+
+    const ticket = ++_pricePreviewTicket;
+    const pending = setTimeout(() => {
+        if (ticket === _pricePreviewTicket) node.classList.add('is-pending');
+    }, 120);
+    const settle = (text) => {
+        clearTimeout(pending);
+        if (ticket !== _pricePreviewTicket) return;
+        node.textContent = text;
+        node.classList.remove('is-pending');
+    };
+    try {
+        const q = await api.pricingPreview(state.id, body);
+        // PQ as a ratio to three places, matching every table on the pane: it is
+        // premium over capital, and a leverage of 4.6 reads as 4.6 rather than
+        // as 460%.
+        settle(`Preview: premium ${money(q.premium)}, assets ${money(q.assets)}, `
+            + `loss ratio ${percent(q.lr)}, PQ ${q.pq?.toFixed(3) ?? ''}, `
+            + `and CoC ${percent(q.coc)}`);
+    } catch (err) {
+        settle(errorMessage(err));
+    }
+}
+
+const pricePreviewSoon = debounce(renderPricePreview, 350);
+
+/** Money, grouped and to the cent, the same reading the tables give it. */
+function money(value) {
+    return Number.isFinite(value)
+        ? value.toLocaleString('en-US', { minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2 })
+        : '';
+}
+
+/** A ratio as a percent to one place. */
+function percent(value) {
+    return Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : '';
 }
 
 const priceBtn = $('price-btn');
 priceBtn?.addEventListener('click', async () => {
     if (!state.id) return;
-    const anchor = document.querySelector('input[name="price-anchor"]:checked')?.value || 'p';
-    const anchorVal = parseFloat($('price-anchor-val').value);
-    const target = document.querySelector('input[name="price-target"]:checked')?.value || 'coc';
-    const val = parseFloat($('price-target-val').value);
-    if (!Number.isFinite(anchorVal) || !Number.isFinite(val)) return;
-    const body = {};
-    body[anchor] = anchorVal;      // 'p' (a VaR probability) or 'a' (assets)
-    body[target] = val;            // 'coc' or 'lr'
+    const body = priceFormBody();
+    if (!body) return;
     priceBtn.disabled = true;
-    priceBtn.textContent = 'Pricing…';
+    priceBtn.textContent = 'Calibrating…';
     try {
-        if (state.hasReins) {
-            renderReinsPrice(await api.reinsPrice(state.id, { ...body, basis: priceBasis }));
-        } else {
-            renderPrice(await api.price(state.id, body));
-        }
+        _calibration = await api.pricingCalibrate(state.id, body);
+        // One press, two panes. Only the visible one is drawn: a CsvGrid
+        // measures itself as it mounts, and mounting one inside a `d-none`
+        // wrapper measures nothing. The other leaf redraws from the same held
+        // response the moment it is shown, which costs no request.
+        drawPricingPane(activeLeaf('pricing'));
     } catch (err) {
-        replacePane('pane-price', errorNode(err));
+        _calibration = null;
+        replacePane(activeLeaf('pricing') === 'allocate'
+            ? 'pane-allocate' : 'pane-calibrate', errorNode(err));
     } finally {
         priceBtn.disabled = false;
-        priceBtn.textContent = 'Price';
+        priceBtn.textContent = 'Calibrate';
     }
 });
 
@@ -2477,6 +2607,9 @@ document.querySelectorAll('input[name="price-anchor"]').forEach((radio) => {
         if (isP) input.max = '1'; else input.removeAttribute('max');
         input.value = isP ? '0.99' : '';
         if (!isP) input.focus();
+        // The switch changes the whole question, so the line answers at once
+        // rather than through the debounce that exists to absorb typing.
+        renderPricePreview();
     });
 });
 
@@ -2486,8 +2619,13 @@ document.querySelectorAll('input[name="price-target"]').forEach((radio) => {
         const isCoc = radio.value === 'coc';
         $('price-target-label').textContent = isCoc ? 'CoC' : 'LR';
         $('price-target-val').value = isCoc ? '0.15' : '0.9';
+        renderPricePreview();
     });
 });
+
+for (const id of ['price-anchor-val', 'price-target-val']) {
+    $(id)?.addEventListener('input', pricePreviewSoon);
+}
 
 // ----------------------------------------------------------------------
 // Bounds: how much of the price the choice of distortion decides
@@ -2594,60 +2732,145 @@ boundsBtn?.addEventListener('click', async () => {
 // ----------------------------------------------------------------------
 // Pricing / Evaluate: the breakeven acceptability panel
 // ----------------------------------------------------------------------
+// The other direction. Calibrate asks what an obligation is worth at a chosen
+// capital level; this starts from a premium already held and reports what stress
+// it survives. Anchored at the level a calibration was struck at, the two close
+// a round trip: evaluating a family's own implied premium recovers that family's
+// calibrated parameters.
+
+//: Which premium is in the box. Not the calibration basis and not sticky, for
+//: the same reason: this one labels the number beside it, and a basis remembered
+//: from the last object over a premium typed for this one is a mislabel rather
+//: than a preference. Defaults to the object's own final distribution.
+let evaluateBasis = 'net';
+
 /**
- * Render the evaluation panel.
+ * The Evaluate form's basis row: which premium is being input.
  *
- * One tidy frame whose reading depends on what was evaluated. An aggregate or a
- * portfolio gives one block, a row per distortion family. A P&L gives one block
- * per margin row of its ledger, which for a tower is the whole story: the gross
- * deal, each layer as a position, and the running net after each purchase.
+ * Deliberately narrow. It names what the number in the box **is**, so the panel
+ * measures it against the right distribution; the fuller gross versus net
+ * evaluation story overlaps the Economics group and stays there.
+ *
+ * Always drawn, never emptied, and greyed with a reason where it does not apply,
+ * which is the house rule the calibration basis above follows for the same
+ * reason: a reader learns the choice exists and that this object does not offer
+ * it.
  */
-function renderEvaluate(payload) {
-    const paneId = 'pane-evaluate';
-    const ir = payload.ir || {};
-    const draw = () => {
-        const root = el('div', { className: 'price-result' });
-        replacePane(paneId, root);
-        root.appendChild(el('div', { className: 'price-section-title' },
-            'Breakeven acceptability'));
-        root.appendChild(el('div', { className: 'exhibit-caption mb-2' },
-            'The distortion in each family whose risk-adjusted margin is zero: '
-            + 'the stress this position survives. `gini_p` is the '
-            + 'family-agnostic index, so it compares across families and, for a '
-            + 'walk, down the steps. A layer whose figure sits above the net row '
-            + 'over it is priced above the holder’s own acceptability.'));
-        const host = el('div');
-        root.appendChild(host);
-        mountTable(paneId, host,
-            ir.panel ? { doc: ir.panel } : { frame: payload.panel },
-            { ...GRID_FULL, maxRows: 30 });
-        for (const warning of payload.warnings || []) {
-            root.appendChild(el('div', { className: 'exhibit-caption mt-2' }, warning));
+function renderEvaluateBasis() {
+    const host = $('evaluate-basis');
+    if (!host) return;
+    empty(host);
+    const live = state.kind === 'pnl' ? [] : (state.caps.flags.reinsBases || []);
+    host.appendChild(el('span', { className: 'exhibit-group-label' }, 'premium is'));
+    const group = el('div', { className: 'btn-group btn-group-sm', role: 'group' });
+    group.setAttribute('aria-label', 'which premium is being evaluated');
+    if (live.length && !live.includes(evaluateBasis)) evaluateBasis = live[live.length - 1];
+
+    for (const [value, label] of PRICE_BASES) {
+        const off = !live.includes(value);
+        const why = state.kind === 'pnl'
+            ? 'a P&L states a premium on every row of its ledger'
+            : (state.hasReins
+                ? 'this program has no distinct basis of that kind'
+                : 'needs a cession; add one on the Reinsurance tab');
+        const b = el('button', {
+            type: 'button',
+            title: off ? why : `the premium above is the ${label.toLowerCase()} one`,
+            className: 'btn btn-outline-secondary'
+                + (value === evaluateBasis && !off ? ' active' : ''),
+        }, label);
+        if (off) {
+            b.disabled = true;
+            b.setAttribute('aria-label', `${label}, ${why}`);
+        } else {
+            b.addEventListener('click', () => {
+                evaluateBasis = value;
+                renderEvaluateBasis();
+            });
         }
-        onTableViewChange(paneId, draw, root);
-    };
-    draw();
+        group.appendChild(b);
+    }
+    host.appendChild(group);
+}
+
+/**
+ * Put the Evaluate form in the shape this object calls for.
+ *
+ * A P&L carries a premium and an asset level per ledger row, so neither the
+ * premium box nor the anchor means anything for it and both go; the api refuses
+ * them rather than guessing, and a form that can only produce a 400 is worse
+ * than one control fewer.
+ *
+ * Everything else shows the premium box either way, prefilled from the object's
+ * own consideration when it states one. Through a83 it appeared only when the
+ * object carried none, so an exposure written with a premium was evaluated
+ * against a number the reader never saw.
+ */
+function syncEvaluateForm() {
+    const isPnl = state.kind === 'pnl';
+    $('evaluate-premium-field').classList.toggle('d-none', isPnl);
+    $('evaluate-anchor-field').classList.toggle('d-none', isPnl);
+    for (const id of ['evaluate-anc-p', 'evaluate-anc-a']) {
+        $(id).closest('.btn-group')?.classList.toggle('d-none', isPnl);
+    }
+    renderEvaluateBasis();
+    const input = $('evaluate-premium');
+    const own = state.caps.flags.premium;
+    // Prefill, do not overwrite: a reader who has typed a premium and stepped
+    // away to look at a table has to find it still there.
+    if (!isPnl && !input.value && Number.isFinite(own)) {
+        input.value = String(own);
+    }
 }
 
 const evaluateBtn = $('evaluate-btn');
 evaluateBtn?.addEventListener('click', async () => {
     if (!state.id) return;
     const body = {};
-    if (can('needsPremium')) {
+    if (state.kind !== 'pnl') {
         const premium = parseFloat($('evaluate-premium').value);
-        if (!Number.isFinite(premium)) return;
-        body.premium = premium;
+        // Required only where the object states none of its own. With one, an
+        // empty box means "as it stands", which is what the library does with
+        // no premium argument.
+        if (Number.isFinite(premium)) body.premium = premium;
+        else if (can('needsPremium')) return;
+
+        const anchor = document.querySelector('input[name="evaluate-anchor"]:checked')?.value || 'p';
+        const anchorVal = parseFloat($('evaluate-anchor-val').value);
+        // Blank is not incomplete here. It is the library's unlimited reading,
+        // which solves over the whole distribution and reports four families
+        // rather than five, since `ccoc` needs an asset level to read.
+        if (Number.isFinite(anchorVal)) body[anchor] = anchorVal;
+
+        const bases = state.caps.flags.reinsBases || [];
+        if (bases.includes(evaluateBasis)) body.basis = evaluateBasis;
     }
     evaluateBtn.disabled = true;
     evaluateBtn.textContent = 'Evaluating…';
     try {
-        renderEvaluate(await api.evaluate(state.id, body));
+        _evaluation = await api.pricingEvaluate(state.id, body);
+        drawPricingPane('evaluate');
     } catch (err) {
+        _evaluation = null;
         replacePane('pane-evaluate', errorNode(err));
     } finally {
         evaluateBtn.disabled = false;
         evaluateBtn.textContent = 'Evaluate';
     }
+});
+
+// The anchor pair, matching the Calibrate form's: a probability steps by a
+// thousandth and stops at 1, an asset level is money and does neither.
+document.querySelectorAll('input[name="evaluate-anchor"]').forEach((radio) => {
+    radio.addEventListener('change', () => {
+        const input = $('evaluate-anchor-val');
+        const isP = radio.value === 'p';
+        $('evaluate-anchor-label').textContent = isP ? 'p' : 'assets';
+        input.step = isP ? '0.001' : '1';
+        if (isP) input.max = '1'; else input.removeAttribute('max');
+        input.value = isP ? '0.99' : '';
+        if (!isP) input.focus();
+    });
 });
 
 // ----------------------------------------------------------------------

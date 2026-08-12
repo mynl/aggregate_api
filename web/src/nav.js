@@ -27,6 +27,10 @@
  * `soon: true` greys a leaf that is designed but not built. Per the house rule
  * nothing is hidden, so what is coming is visible and plainly not ready.
  *
+ * `dividerBefore: true` draws a thin rule to the left of a leaf, splitting its
+ * row into groups. One user, Pricing, where the first two leaves are two
+ * readings of one calculation and the third asks the opposite question.
+ *
  * `why` is what a dark leaf says on hover. It states what *does* answer, not
  * what this object lacks, because the reader is deciding what to build next.
  * See `whyLeaf` / `whyGroup`.
@@ -130,13 +134,30 @@ export const NAV_GROUPS = {
             },
         },
     },
+    // Three leaves, and the row reads `Calibrate  Allocate | Evaluate`. The
+    // first two are one story told twice: Calibrate determines the distortion
+    // parameters, Allocate spreads that same calibration across the views of a
+    // cession or the units of a book, and one press of the button fills both.
+    // Evaluate runs the other way, starting from a premium already held and
+    // reporting what stress it survives, which is why it sits behind a divider
+    // rather than beside them.
     pricing: {
         label: 'Pricing',
         leaves: {
-            determine: { label: 'Determine', flag: 'canPrice',
-                         why: 'an aggregate or a portfolio only' },
+            calibrate: { label: 'Calibrate', flag: 'canPrice',
+                         why: 'an aggregate or a portfolio only',
+                         hint: 'one row per distortion family, each fitted to '
+                             + 'the same premium target' },
+            allocate: { label: 'Allocate', flag: 'canPrice',
+                        why: 'an aggregate or a portfolio only',
+                        hint: 'that calibration spread across the views of a '
+                            + 'cession, or the units of a book' },
             evaluate: { label: 'Evaluate', flag: 'canEvaluate',
-                        why: 'needs an object that can be priced' },
+                        dividerBefore: true,
+                        why: 'needs an object that can be priced',
+                        hint: 'the stress a premium already held survives: the '
+                            + 'distortion in each family that values the '
+                            + 'margin at zero' },
         },
     },
     economics: {
@@ -374,6 +395,10 @@ export function capsFromResponse(capability, built = true) {
             canBounds: Boolean(cap.can_bounds),
             canAllocate: Boolean(cap.can_allocate),
             hasPremium: Boolean(cap.has_premium),
+            // The number, not the flag: the Evaluate form prefills its premium
+            // box from it. Null wherever `hasPremium` is false, since the two
+            // are one fact and the api derives one from the other.
+            premium: cap.premium ?? null,
             needsPremium: Boolean(cap.needs_premium),
         },
     };

@@ -71,7 +71,11 @@ const EXPECTED = {
     'reinsurance:stats': ['agg_reins'],
     'reinsurance:density': ['agg_reins'],
     'reinsurance:plot': ['agg_reins'],
-    'pricing:determine': ['agg', 'agg_reins', 'port'],
+    // Calibrate and Allocate gate together on `canPrice`: they are two readings
+    // of one calibration and one press fills both, so a live Calibrate with a
+    // dark Allocate would be a promise the pane cannot keep.
+    'pricing:calibrate': ['agg', 'agg_reins', 'port'],
+    'pricing:allocate': ['agg', 'agg_reins', 'port'],
     'pricing:evaluate': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl'],
     // Bounds takes an Aggregate or a Portfolio, which is the library's own
     // accepted set; allocation needs the per-unit conditional expectations only

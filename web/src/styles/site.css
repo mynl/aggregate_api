@@ -433,9 +433,21 @@ header .navbar { min-height: 56px; }
 .sub-tabs .sub-link:first-of-type { padding-left: 0; }
 .sub-tabs .sub-link:hover { color: var(--ink); }
 .sub-tabs .sub-link.active { color: var(--primary); font-weight: 700; }
+/* A hairline splitting one row into groups, for a leaf declaring
+   `dividerBefore` in nav.js. Pricing is the only user: Calibrate and Allocate
+   are two readings of one calibration and Evaluate asks the opposite question,
+   so the row reads as a pair and a single rather than as three siblings. Short
+   of the row's full height on purpose, so it separates without ruling a line
+   through the strip. */
+.sub-tabs .sub-divider {
+    width: 1px; height: .9rem; background: var(--line);
+    margin: 0 .5rem 0 .35rem;
+}
 /* The panes are indented to match, so a table starts under the first tab's
    label rather than at the page edge. */
-.pane, .reins-desc, .tab-tools, .exhibit-controls { padding-left: var(--tabpad); }
+.pane, .reins-desc, .tab-tools, .exhibit-controls, .price-preview {
+    padding-left: var(--tabpad);
+}
 
 /* Keyboard navigation is only as good as its focus ring, and the browser
    default is invisible against a filled tab. No radius: a folder tab is not a
@@ -572,13 +584,48 @@ header .navbar { min-height: 56px; }
     color: var(--mut); text-align: center; padding: 1rem; font-size: .78rem;
 }
 
-/* ---- Price tab (pentagon form + distortion slices) ---- */
-.price-form { gap: .6rem; }
+/* ---- The pricing forms ----
+   One height for every control on the row, the Quick Re solution applied here.
+   `--price-h` is set once on the form and taken by the inputs, the segmented
+   controls and the button alike. They disagreed before a84: the inputs carried a
+   hard 1.7rem and the buttons were padding-derived, which is exactly the kind of
+   difference the eye reads as a mistake without being able to name it. */
+.price-form { gap: .6rem; --price-h: 1.8rem; }
 .price-field { display: inline-flex; align-items: center; gap: .35rem; margin: 0; font-size: .78rem; }
-.price-field input { width: 5rem; height: 1.7rem; font-size: .78rem; }
-/* Fixed width so toggling CoC<->LR doesn't reflow the value input + button. */
-#price-target-label { display: inline-block; min-width: 2.3rem; }
+.price-field input { width: 5rem; height: var(--price-h); font-size: .78rem; }
+.price-form .btn-group .btn {
+    height: var(--price-h); display: inline-flex; align-items: center;
+    padding: 0 .6rem;
+}
+.price-form > .btn {
+    height: var(--price-h); display: inline-flex; align-items: center;
+    padding: 0 .8rem;
+}
+/* Fixed widths so toggling p<->assets or CoC<->LR does not reflow the value
+   input and the button beside it. The anchor label had none through a83, so the
+   whole row shifted every time the capital anchor changed. */
+#price-target-label, #price-anchor-label, #evaluate-anchor-label {
+    display: inline-block; min-width: 2.3rem;
+}
 .price-section-title { font-size: .8rem; font-weight: 600; color: var(--ink-2); margin: .2rem 0 .45rem; }
+/* The preview line under the Calibrate form: the pentagon this form would
+   complete, rewritten as you type.
+
+   The same behavior as the Quick Re preview and deliberately not the same rule,
+   because the two are in the code face for different reasons. That one prints
+   DecL. This one is prose, and it is mono because it is prose made almost
+   entirely of digits: in a proportional face every keystroke would change the
+   width of five numbers at once and the line would jitter under the cursor.
+
+   Holds its line height when empty so the pane below does not move as it fills,
+   and dims rather than blanks while a request is in flight, so the last good
+   reading stays on screen and says it is not current. */
+.price-preview {
+    font-family: var(--mono); font-size: var(--fs-meta); color: var(--mut);
+    line-height: 1.45; min-height: 1.2em;
+    margin: .4rem 0 .8rem; transition: opacity .12s;
+}
+.price-preview.is-pending { opacity: .35; }
 
 /* ---- Narrative ----
    Prose, so it gets a reading measure rather than the pane's full width, and

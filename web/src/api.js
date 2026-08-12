@@ -146,7 +146,36 @@ export const api = {
      */
     frameOf:      (id, which, p = {}) => _json('GET', `/v1/objects/${id}/${which}?${qs(p)}`),
 
-    // Pricing
+    // Pricing.
+    //
+    // Three routes, and two of them answer with exhibit envelopes rather than
+    // frames: `calibrate_distortions` and `evaluate` return result objects, and
+    // the library registers `pricing.calibrate`, `pricing.allocate` and
+    // `pricing.evaluate` on those. So the app posts a form and draws a
+    // document, exactly as every other table leaf does; nothing on this pane is
+    // assembled here or formatted here.
+    /**
+     * The pentagon this form would complete, as scalars, with no calibration.
+     *
+     * The one pricing call that answers with numbers, because it feeds a line
+     * of prose that updates as the reader types. It is also where the library's
+     * unbounded anchor guard reaches them: a refusal is the preview text.
+     */
+    pricingPreview: (id, body) =>
+        _json('POST', `/v1/objects/${id}/pricing/preview`, body),
+    /**
+     * Fit the distortion set: the `pricing.calibrate` and `pricing.allocate`
+     * envelopes, each under both perspectives.
+     *
+     * One press fills two subtabs, and both readings travel, so stepping
+     * between the leaves and flipping RAW to INSURER are both free.
+     */
+    pricingCalibrate: (id, body) =>
+        _json('POST', `/v1/objects/${id}/pricing/calibrate`, body),
+    /** The breakeven acceptability panel, as the `pricing.evaluate` envelope. */
+    pricingEvaluate: (id, body) =>
+        _json('POST', `/v1/objects/${id}/pricing/evaluate`, body),
+
     /**
      * `?ir=true` always: the Price frames are computed by this POST, so the
      * generic document route cannot reach them and they have to travel with the

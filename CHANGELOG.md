@@ -4,6 +4,60 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a84
+
+**Phase A2: the Pricing pane becomes `Calibrate  Allocate | Evaluate`, and
+draws only what the library serves.**
+
+**Three leaves where there were two.** Calibrate and Allocate are two readings
+of one calculation and share a form and a press: the button fits the standard
+distortion set, and the two panes are the per family receipt and that same
+calibration spread across the views of a cession or the units of a book.
+Evaluate runs the other way, which is why it sits behind a thin divider rather
+than beside them. `dividerBefore` on a leaf is how `nav.js` says so; Pricing is
+its only user.
+
+**A live preview line under the Calibrate form**, updating as you type: the
+pentagon this form would complete, in the Quick Re treatment. Debounced at
+350 ms, ticketed against out-of-order answers, dimmed rather than blanked while
+in flight. PQ reads as a ratio to three places, the same as in the tables.
+
+It is also where a refusal lands. The library's unbounded anchor guard, `p=1` on
+a book whose claim count has no maximum, is a sentence written to be read, and
+the reader meets it in the line under the box they are typing in rather than as
+a broken pane after a press.
+
+**`[Price]` is `[Calibrate]`**, because that is what it does.
+
+**One envelope renderer for all three leaves**, shaped like `loadExhibitLeaf`:
+blocks in order, the caption lifted out of each block and drawn under its table,
+then whatever the library warned about. `renderPrice`, `renderReinsPrice` and
+`renderEvaluate` are gone, and with them every title, caption and section
+heading this file used to write about a price. A distortion the library declines
+to allocate now says so under the table it is missing from.
+
+**Both perspectives ride in each response, so the RAW / INSURER toggle is a
+redraw.** The two answers are held per object rather than per pane, which is
+what lets the toggle flip and the leaves swap without a second calibration.
+They are dropped when the object changes, not when a pane is cleared.
+
+**The Evaluate form grew three things.** The premium box now shows for every
+object that takes one, prefilled from the object's own consideration; through
+a83 it appeared only when the object carried none, so an exposure written with
+a premium was evaluated against a number the reader never saw. A
+`Gross | Net occ | Net` group names **which** premium is in the box, live for a
+reinsured Aggregate and greyed with a reason otherwise. And a `p | assets`
+anchor pair, matching the Calibrate form: evaluating at the level a calibration
+was struck at is what closes the round trip. Left blank it is the library's
+unlimited reading, which reports four families rather than five. All three are
+hidden for a P&L, which states a premium on every row of its ledger.
+
+**One height for every control on both pricing forms**, `--price-h`, the Quick
+Re solution applied here. The inputs carried a hard `1.7rem` and the buttons
+were padding-derived, which is the kind of difference the eye reads as a mistake
+without being able to name it. `#price-anchor-label` gains the fixed width its
+target sibling already had, so switching `p` to `assets` stops reflowing the row.
+
 ## 1.0.0a83
 
 **Phase A1 of `dev/plan-pricing-exhibits.md`: three routes that hold a result
