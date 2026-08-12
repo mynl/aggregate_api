@@ -25,6 +25,23 @@ import { fmt } from '../utils/format.js';
 let pending = null;
 
 /**
+ * Viridis, the ramp the prototype settled on.
+ *
+ * Not the house blue. A density read as relief is a height field first, and
+ * viridis is the ramp that stays ordered under a shaded surface: the house
+ * ramp runs white to one hue, so the lit and unlit faces of the same height
+ * read as two different values. Perceptually uniform and colorblind safe are
+ * the usual arguments and they hold here too.
+ */
+const VIRIDIS = ['#440154', '#414487', '#2a788e', '#22a884', '#7ad151', '#fde725'];
+
+/** The mesh lines and the floor, from the prototype's `app` preset. */
+const MESH_COLOR = '#f8f9fa';
+const MESH_WIDTH = 0.9;
+const MESH_OPACITY = 0.5;
+const FLOOR_OPACITY = 0.5;
+
+/**
  * Register echarts-gl's surface pieces, once.
  *
  * Returns
@@ -37,11 +54,15 @@ let pending = null;
 export function loadSurface() {
     if (!pending) {
         pending = (async () => {
-            const [{ SurfaceChart }, { Grid3DComponent }] = await Promise.all([
+            // `Line3DChart` as well as the surface: the mesh over the skin and
+            // the curves on the walls are real line geometry rather than the
+            // surface's built-in wireframe, which cannot be thinned and cannot
+            // carry its own opacity.
+            const [{ Line3DChart, SurfaceChart }, { Grid3DComponent }] = await Promise.all([
                 import('echarts-gl/charts'),
                 import('echarts-gl/components'),
             ]);
-            echarts.use([SurfaceChart, Grid3DComponent]);
+            echarts.use([Line3DChart, SurfaceChart, Grid3DComponent]);
             return true;
         })().catch(() => false);
     }
@@ -100,15 +121,23 @@ export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
                     + (quantized ? '<br><i>height is quantized</i>' : '');
             },
         },
-        visualMap: {
-            calculable: true,
-            right: 4, top: 20, itemHeight: Math.max(90, side - 90),
-            textStyle: { fontSize: 10, color: '#6c757d' },
-            // Sequential, light to the primary: a density is one-directional, so
-            // a diverging ramp would imply a midpoint that does not exist.
-            inRange: { color: ['#ffffff', fade(s.colors[0], 0.55), s.colors[0]] },
-            formatter: (v) => (logZ ? `1e${Math.round(v)}` : Number(v).toExponential(1)),
-        },
+        // Two maps: the surface's, which draws the colorbar, and the floor
+        // image's, which reads the same scale through the fourth column and
+        // shows no bar of its own. Merged element-wise onto the pair the
+        // adapter builds, so the order here is the order there.
+        visualMap: [
+            {
+                calculable: true,
+                right: 4, top: 20, itemHeight: Math.max(90, side - 90),
+                textStyle: { fontSize: 10, color: '#6c757d' },
+                inRange: { color: VIRIDIS },
+                formatter: (v) => (logZ ? `1e${Math.round(v)}` : Number(v).toExponential(1)),
+            },
+            {
+                show: false,
+                inRange: { color: VIRIDIS },
+            },
+        ],
         xAxis3D: {
             nameTextStyle: { fontSize: 11, color: '#6c757d' },
             axisLabel: { fontSize: 9, color: '#6c757d', formatter: (v) => fmt(v) },
@@ -126,12 +155,14 @@ export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
         },
         grid3D: {
             boxWidth: 100, boxDepth: 100, boxHeight: 62,
-            // Wall projections: the two vertical walls carry the marginals as
-            // shadows of the surface, which is most of why the 3-D view earns
-            // its bundle. Reading a marginal off a heatmap is not possible.
             axisPointer: { show: true, lineStyle: { color: s.grid_color } },
             light: {
-                main: { intensity: 1.15, shadow: true, alpha: 40, beta: 40 },
+                // **No cast shadow.** It is a dark shape thrown across the floor
+                // picture by the thing you are trying to read, and on a density,
+                // which covers its whole domain, it lands on the tail every
+                // time. The key light and the ambient fill carry the shading
+                // without it.
+                main: { intensity: 1.15, shadow: false, alpha: 40, beta: 40 },
                 ambient: { intensity: 0.35 },
             },
             viewControl: {
@@ -143,9 +174,14 @@ export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
             },
             environment: '#ffffff',
         },
-        series: [{
-            wireframe: { show: false },
-            shading: 'lambert',
-        }],
+        series: [
+            // The skin. Its own `wireframe` stays off: the mesh is drawn as
+            // real geometry two series down, which can be thinned and can carry
+            // an opacity of its own.
+            { wireframe: { show: false }, shading: 'lambert' },
+            { lineStyle: { color: MESH_COLOR, width: MESH_WIDTH, opacity: MESH_OPACITY } },
+            { lineStyle: { color: MESH_COLOR, width: MESH_WIDTH, opacity: MESH_OPACITY } },
+            { itemStyle: { opacity: FLOOR_OPACITY } },
+        ],
     };
 }

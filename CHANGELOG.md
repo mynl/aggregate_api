@@ -4,6 +4,52 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a77
+
+**The relief starts looking like the draft.** `dev/plan-3d-plot.md` section 4.6
+and the prototype's `app` preset, which is the state the author picked after
+looking at the four real surfaces. Every constant is copied from it rather than
+reinterpreted: the lab is the reference implementation, and a value invented
+here would be a second opinion about a question already answered.
+
+Five changes, and the lab records the diff itself as `app` against `shipped`:
+
+**The floor image.** The same grid laid flat at the base, carrying its real
+height in a fourth column so a second visualMap colors by it. On by default and
+continuous rather than stepped, because a density covers its whole domain, so
+the interesting part of the base is pressed flat against the floor and the
+image is the only thing that says what is down there. The stepped form reads as
+a contour map and is a different claim, so it stays an option rather than the
+default.
+
+**The base drop**, 0.32 of the drawn range. The box gets a visible bottom,
+which it never had, and the floor's picture slides down the screen relative to
+the surface's, so a band of it clears the silhouette along the near edges and
+the image underneath stops being an opaque lid's worth of wasted work.
+
+**No cast shadow.** It is a dark shape thrown across the floor picture by the
+thing you are trying to read, and on a density it lands on the tail every time.
+The key light and the ambient fill carry the shading without it.
+
+**Viridis**, not the house blue. A density in relief is a height field first,
+and the house ramp runs white to one hue, so the lit and unlit faces of one
+height read as two different values.
+
+**A mesh of its own**, every sixth line, pale and half transparent, lifted a
+hair off the skin and capped so the lift cannot push a vertex through the lid
+at the peak. Real `line3D` geometry rather than the surface's built-in
+`wireframe`: that one is drawn inside the surface's fragment shader, so it
+inherits the skin's opacity, and it traces the data mesh, so at ninety cells a
+side it is a solid block of ink with no way to thin it.
+
+**And the log floor is a stated depth**, eight decades under the peak rather
+than wherever the data stops. A joint lognormal runs twelve decades from its
+mode to its corner, and on a log axis that spends most of the box on mass
+nobody will ever look at, which is its own way of pressing the interesting part
+flat.
+
+`loadSurface` now registers `Line3DChart` beside the surface and the grid.
+
 ## 1.0.0a76
 
 **The joint surface draws in relief again, and there is a control for the flat

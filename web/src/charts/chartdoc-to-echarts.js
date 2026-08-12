@@ -1450,6 +1450,87 @@ function resolveOverrides(overrides, ctx) {
     return typeof overrides === 'function' ? overrides(ctx) : overrides;
 }
 
+// ---- the relief, as the prototype settled it ---------------------------
+//
+// Every constant below is the `app` preset of
+// `dev/prototypes/joint-surface/surface-lab.html`, which is the state the
+// author picked after looking at the four real surfaces. Copied rather than
+// reinterpreted: the lab is the reference implementation and the numbers in it
+// were arrived at by looking, so a value invented here would be a second
+// opinion about a question already answered.
+
+/** How many decades under the peak a log height reaches before it floors.
+ *
+ * A stated depth, not wherever the data stops. A joint lognormal runs twelve
+ * decades from its mode to its corner, and on a log axis that spends most of
+ * the box on mass nobody will ever look at, which is its own way of pressing
+ * the interesting part flat. */
+const SURFACE_DECADES = 8;
+
+/** The base, pushed below the data as a fraction of the drawn range.
+ *
+ * Two things follow. The box gets a visible bottom, which it never had. And
+ * the floor's picture slides down the screen relative to the surface's, so a
+ * band of it clears the silhouette along the near edges and the image
+ * underneath becomes visible instead of being an opaque lid's worth of wasted
+ * work. */
+const SURFACE_BASE_DROP = 0.32;
+
+/** The floor image's opacity, and the target cells per axis it is decimated to. */
+const SURFACE_FLOOR_OPACITY = 0.5;
+const SURFACE_FLOOR_CELLS = 90;
+
+/** Every sixth mesh line, lifted a hair off the skin so it is not z-fighting.
+ *
+ * The mesh is real `line3D` geometry rather than the surface's built-in
+ * `wireframe`, and that is not a preference. The built-in one is drawn inside
+ * the surface's fragment shader, which mixes the line color into the color and
+ * leaves the alpha alone, so it inherits the skin's opacity; and it traces the
+ * data mesh, so at ninety cells a side it is a solid block of ink with no way
+ * to thin it. `line3D` has its own color, width, opacity and spacing. */
+const SURFACE_MESH_COARSE = 6;
+const SURFACE_MESH_LIFT = 0.0018;
+
+/** A hair: what anything standing just clear of something else gets. */
+const SURFACE_HAIR = 0.004;
+
+/**
+ * Every k-th line of the grid, as one connected polyline per family.
+ *
+ * A `line3D` series is a single polyline, so the selected rows are walked
+ * boustrophedon and the turn at the end of a row traces the boundary column
+ * point by point instead of cutting straight across it. Every segment that
+ * comes out is a real edge of the mesh, so this is a wireframe rather than a
+ * wireframe plus a set of chords through the surface.
+ */
+function meshPolylines(g, k, at) {
+    const every = (count) => {
+        const idx = [];
+        for (let i = 0; i < count; i += k) idx.push(i);
+        if (idx[idx.length - 1] !== count - 1) idx.push(count - 1);
+        return idx;
+    };
+    const rows = [];
+    every(g.ny).forEach((r, i, all) => {
+        const fwd = i % 2 === 0;
+        for (let j = 0; j < g.nx; j++) rows.push(at(fwd ? j : g.nx - 1 - j, r));
+        if (i < all.length - 1) {
+            const edge = fwd ? g.nx - 1 : 0;
+            for (let rr = r + 1; rr < all[i + 1]; rr++) rows.push(at(edge, rr));
+        }
+    });
+    const cols = [];
+    every(g.nx).forEach((c, i, all) => {
+        const fwd = i % 2 === 0;
+        for (let j = 0; j < g.ny; j++) cols.push(at(c, fwd ? j : g.ny - 1 - j));
+        if (i < all.length - 1) {
+            const edge = fwd ? g.ny - 1 : 0;
+            for (let cc = c + 1; cc < all[i + 1]; cc++) cols.push(at(cc, edge));
+        }
+    });
+    return [rows, cols];
+}
+
 /** The 3-D path: one 'surface' panel, the bivariate joint in relief. */
 function surfaceOption(doc, opts, view) {
     const panel = (doc && doc.panels && doc.panels[0]) || null;
@@ -1464,26 +1545,65 @@ function surfaceOption(doc, opts, view) {
     // reading and the control does not apply.
     const useLog = axisScale(axes[panel.z_axis] || {}, view.log) === 'log';
     const { max, min } = zExtent(g, LOG_FLOOR);
-    const zMin = useLog ? Math.floor(Math.log10(min)) : 0;
     const zMax = useLog ? Math.ceil(Math.log10(max)) : max;
+    const zMin = useLog
+        ? Math.max(Math.floor(Math.log10(min)), zMax - SURFACE_DECADES)
+        : 0;
+
+    // The drawn range, and the two heights that stand below the data. The data
+    // floor stays `zMin` and keeps its jobs, the color scale and the log clamp;
+    // only the axis minimum and the things standing on it move down.
+    const range = zMax - zMin || 1;
+    const hair = range * SURFACE_HAIR;
+    const zBase = zMin - range * SURFACE_BASE_DROP;
+    // Half a hair, because the grid3D draws its own bottom plane at exactly the
+    // axis minimum and two coplanar opaque surfaces fight.
+    const floorH = zBase + hair * 0.5;
+
+    // On the log view a zero cell rests exactly on the floor, `SURFACE_DECADES`
+    // under the peak, never a hole: an FFT-built joint is full of exact zeros
+    // and as holes the mesh arrives moth-eaten.
+    const height = (v) => (useLog
+        ? (v > LOG_FLOOR ? Math.max(zMin, Math.log10(v)) : zMin)
+        : v);
 
     // Flat vertex list + dataShape, never the parametric form: the two axes
     // have their own grids (independently built components routinely land on
     // different bucket sizes), so there is no single step describing both.
     // The decoded grid is row major over (y, x), so cell `(c, r)` sits at
     // `(coordX(c), coordY(r))`.
-    //
-    // On the log view a zero cell rests exactly on the floor, one decade under
-    // the smallest density present, never a hole: an FFT-built joint is full
-    // of exact zeros and as holes the mesh arrives moth-eaten.
     const data = [];
     for (let c = 0; c < g.nx; c++) {
         for (let r = 0; r < g.ny; r++) {
-            const v = g.z[r * g.nx + c];
-            const height = useLog
-                ? (v > LOG_FLOOR ? Math.max(zMin, Math.log10(v)) : zMin)
-                : v;
-            data.push([coordX(g, c), coordY(g, r), height]);
+            data.push([coordX(g, c), coordY(g, r), height(g.z[r * g.nx + c])]);
+        }
+    }
+
+    // The mesh, lifted a hair and capped so the lift cannot push a vertex
+    // through the lid at the peak, where the surface is already at the top.
+    const lift = range * SURFACE_MESH_LIFT;
+    const meshAt = (c, r) => [coordX(g, c), coordY(g, r),
+                              Math.min(zMax, height(g.z[r * g.nx + c]) + lift)];
+    const [meshRows, meshCols] = meshPolylines(g, SURFACE_MESH_COARSE, meshAt);
+
+    // The floor image: the same grid laid flat at the base, carrying its real
+    // height in a fourth column so a second visualMap can color by it. The
+    // dimensions are declared rather than inferred, which is what guarantees
+    // echarts keeps that column around for `dimension: 3` to reach.
+    //
+    // On by default and continuous rather than stepped. A density covers its
+    // whole domain, so the interesting part of the base is pressed flat against
+    // the floor and the image is the only thing that says what is down there.
+    const step = Math.max(1, Math.round(Math.max(g.nx, g.ny) / SURFACE_FLOOR_CELLS));
+    const floorX = [];
+    const floorY = [];
+    for (let c = 0; c < g.nx; c += step) floorX.push(c);
+    for (let r = 0; r < g.ny; r += step) floorY.push(r);
+    const floorData = [];
+    for (const c of floorX) {
+        for (const r of floorY) {
+            floorData.push([coordX(g, c), coordY(g, r), floorH,
+                            height(g.z[r * g.nx + c])]);
         }
     }
 
@@ -1496,16 +1616,47 @@ function surfaceOption(doc, opts, view) {
     const base = {
         xAxis3D: { type: 'value', name: xName },
         yAxis3D: { type: 'value', name: yName },
-        zAxis3D: { type: 'value', name: zName, min: zMin, max: zMax },
-        // min/max/dimension are semantic (color encodes the same variable as
-        // the height); the ramp and placement arrive with the override.
-        visualMap: { min: zMin, max: zMax, dimension: 2, seriesIndex: 0 },
-        series: [{
-            type: 'surface',
-            name: series.name,
-            dataShape: [g.nx, g.ny],
-            data,
-        }],
+        // The axis reaches down to the dropped base so the box has a bottom to
+        // stand the floor image on; the data still lives between zMin and zMax.
+        zAxis3D: { type: 'value', name: zName, min: zBase, max: zMax },
+        // Two maps, both semantic: color encodes the same variable as the
+        // height, on the surface through its z and on the floor through the
+        // fourth column it carries. The ramp and the placement arrive with the
+        // override, and only the first draws a colorbar.
+        visualMap: [
+            { min: zMin, max: zMax, dimension: 2, seriesIndex: 0 },
+            { min: zMin, max: zMax, dimension: 3, seriesIndex: 3, show: false },
+        ],
+        series: [
+            {
+                type: 'surface',
+                name: series.name,
+                dataShape: [g.nx, g.ny],
+                data,
+            },
+            {
+                type: 'line3D',
+                name: 'mesh along x',
+                data: meshRows,
+                silent: true,
+            },
+            {
+                type: 'line3D',
+                name: 'mesh along y',
+                data: meshCols,
+                silent: true,
+            },
+            {
+                type: 'surface',
+                name: 'floor',
+                dimensions: ['x', 'y', 'z', 'height'],
+                dataShape: [floorX.length, floorY.length],
+                data: floorData,
+                shading: 'color',
+                wireframe: { show: false },
+                silent: true,
+            },
+        ],
     };
     // `grid` and `digits` ride in the context so the chrome can read the height
     // to the precision the encoding actually carried: seven figures on float32,
