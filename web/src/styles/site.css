@@ -969,6 +969,55 @@ header .navbar { min-height: 56px; }
 .exhibit-toggle.active {
     color: #fff; background: var(--primary); border-color: var(--primary);
 }
+/* ---- The puck's feel panel ----
+   A full width row under the control strip rather than a popover: nothing
+   floats over the chart, nothing has to be positioned against a button, and
+   the panel can be as tall as it needs. `flex-basis: 100%` is what breaks it
+   onto its own line inside the wrapping strip. Hidden with the `hidden`
+   attribute, so the button's pressed state and the panel cannot disagree. */
+.spacemouse-feel {
+    flex-basis: 100%; margin: .35rem 0 .2rem;
+    padding: .6rem .7rem; border: 1px solid var(--line);
+    border-radius: var(--bs-border-radius, .375rem); background: #fff;
+    text-align: left;
+}
+.spacemouse-feel[hidden] { display: none; }
+.spacemouse-feel-note {
+    font-size: var(--fs-meta); color: var(--mut); max-width: var(--measure);
+    margin-bottom: .5rem;
+}
+/* Label, slider, value: three columns, so every row lines up down the panel
+   and the numbers can be read as a column rather than hunted for. */
+.spacemouse-feel-grid {
+    display: grid; grid-template-columns: 5.5rem minmax(6rem, 16rem) 3.2rem;
+    gap: .3rem .6rem; align-items: center; font-size: .78rem; color: var(--mut);
+}
+.spacemouse-feel-grid input[type=range] { width: 100%; }
+.spacemouse-feel-value { font-family: var(--mono); font-size: .74rem; color: var(--ink-2); }
+.spacemouse-feel-flags {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .8rem;
+    margin-top: .55rem; font-size: .78rem; color: var(--mut);
+}
+.spacemouse-feel-check { display: inline-flex; align-items: center; gap: .3rem; margin: 0; }
+/* The live readout, which is the tuning loop made visible. Same three columns
+   as the sliders above it, so the axis bars sit under the gains that drive
+   them. */
+.spacemouse-readout {
+    display: grid; grid-template-columns: 5.5rem minmax(6rem, 16rem) 3.2rem;
+    gap: .25rem .6rem; align-items: center; margin-top: .6rem;
+    padding-top: .5rem; border-top: 1px solid var(--line);
+    font-size: .74rem; color: var(--mut);
+}
+.spacemouse-bar {
+    position: relative; height: 10px; background: #f1f3f5;
+    border: 1px solid var(--line); border-radius: 2px; overflow: hidden;
+}
+.spacemouse-bar i { position: absolute; top: 0; bottom: 0; left: 50%; background: var(--primary); }
+.spacemouse-readout-camera {
+    grid-column: 1 / -1; font-family: var(--mono); font-size: .72rem;
+    color: var(--ink-2);
+}
+
 /* The rubric under a control row: what the buttons above are choosing between,
    in the reader's terms. Set as a caption rather than as body, because it is
    read once and then ignored, and capped at the measure like every other run of

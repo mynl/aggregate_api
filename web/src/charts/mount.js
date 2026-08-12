@@ -27,6 +27,7 @@ import {
     chartdocToEcharts, panelLayout, readings, rungAt, surfaceCuts,
 } from './chartdoc-to-echarts.js';
 import { fileStem, meshToObj, meshToStl, surfaceMesh } from './mesh-export.js';
+import { feelControls, feelForNav } from './spacemouse-panel.js';
 import { createSurfaceNav } from './surface-nav.js';
 import { loadSurface, readCamera, surfaceOverrides } from './surface.js';
 import { echarts, loadStyle } from './theme.js';
@@ -423,10 +424,14 @@ function spaceMouseButton(onSpaceMouse, register) {
 
 function renderControls(doc, hooks) {
     const { onChange, onReset, onWindow, walking, onWalk, onExport, canExport,
-            onSpaceMouse, register } = hooks;
+            onSpaceMouse, register, nav, camera } = hooks;
     const offered = readings(doc);
     const row = el('div', { className: 'exhibit-controls exhibit-controls-center' });
     const box = el('div', { className: 'exhibit-group' });
+    // The feel panel, when there is a puck to have one: a full width row under
+    // the buttons rather than a popover, so nothing floats over the chart and
+    // nothing has to be positioned.
+    let feelPanel = null;
     for (const spec of CONTROLS) {
         // `offer` names the declaration that decides whether the button exists,
         // where it differs from the view key the button sets. Only reference
@@ -541,6 +546,12 @@ function renderControls(doc, hooks) {
         // Safari and the iPad, so the control still says the feature exists
         // and that this browser is not covered, per the never-hide rule.
         box.appendChild(spaceMouseButton(onSpaceMouse, register));
+        // Its feel, behind one more button: the gains, the reverses, the
+        // deadzone, the curve and a live readout are a page of controls, and
+        // they are set once and then left alone. The row keeps one line.
+        const feel = feelControls({ nav, camera, register });
+        box.appendChild(feel.button);
+        feelPanel = feel.panel;
         // The window, last, and a number rather than a toggle: it is the one
         // control that is a new request rather than a new drawing.
         if (onWindow) box.appendChild(windowBox(onWindow));
@@ -560,6 +571,7 @@ function renderControls(doc, hooks) {
     }
     if (!box.childNodes.length) return null;
     row.appendChild(box);
+    if (feelPanel) row.appendChild(feelPanel);
     return row;
 }
 
@@ -921,11 +933,12 @@ function draw(container, tools, host, doc, spec = null) {
      * makes the loop harmless there: the axes still arrive, nothing is driven,
      * and it stops as soon as the reader lets go.
      */
+    const liveCamera = () => {
+        const chart = renderer && renderer.chart;
+        return (ready && chart && drawn && drawn.is3d) ? readCamera(chart) : null;
+    };
     const nav = createSurfaceNav({
-        read: () => {
-            const chart = renderer && renderer.chart;
-            return (ready && chart && drawn && drawn.is3d) ? readCamera(chart) : null;
-        },
+        read: liveCamera,
         write: (patch) => {
             const chart = renderer && renderer.chart;
             if (!ready || !chart) return;
@@ -941,7 +954,7 @@ function draw(container, tools, host, doc, spec = null) {
             if (!ready || !chart) return;
             chart.setOption({ grid3D: { viewControl: { projection, animation: false } } });
         },
-    });
+    }, feelForNav());
     const navOff = spacemouse.subscribe((message) => nav.input(message));
 
     // Whether the page has already looked for a device it was granted. Once
@@ -1095,6 +1108,8 @@ function draw(container, tools, host, doc, spec = null) {
                 ? spacemouse.disconnect()
                 : spacemouse.connect()),
             register: (off) => stripOff.push(off),
+            nav,
+            camera: liveCamera,
         });
         if (strip) tools.appendChild(strip);
     }

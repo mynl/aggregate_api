@@ -1,7 +1,12 @@
 # Plan [SpaceMouse-Surface]: a 6DOF puck for the joint surface, in the app and out of it
 
-> **Status: ready for execution, 2026-08-12.** Author has decided the WebHID
-> route and asked for the mesh export folded in. App repo only: no LIB work,
+> **Status: executed a86 to a89, 2026-08-12.** All four phases have landed.
+> What is open is what needs the hardware: the phase 2 findings block, and
+> acceptance items 1 and 2. The plan stays in `dev/` until those are written
+> in, then moves to `dev/done/`.
+>
+> **Original status, ready for execution, 2026-08-12.** Author has decided the
+> WebHID route and asked for the mesh export folded in. App repo only: no LIB work,
 > no server work, no wire change, so no symlink into `aggregate_REFACTOR`.
 > Layers on the `plan-3d-plot.md` surface (modules landed a73 to a76) and must
 > not disturb it: no echarts-gl version change, no change to the iPad path,
@@ -290,7 +295,7 @@ in, `rz` positive orbits right, `rx` positive raises the camera, and a slide
 moves the target against the hand so the surface follows it. Each is one
 `invert` flag away from its opposite, and phase 4 puts those flags in the UI.
 
-### Phase 4 `[SpaceMouse-Feel]`
+### Phase 4 `[SpaceMouse-Feel]` **landed a89**
 
 The difference between working and wanting to use it:
 
@@ -306,6 +311,21 @@ The difference between working and wanting to use it:
 - A debug overlay (toggle in the settings affordance): live axis bars and the
   current camera numbers, which is the tuning loop made visible. Off by
   default.
+
+**Execution notes, a89.** As planned, with three decisions worth recording.
+
+1. **A row under the strip, not a popover.** Nothing floats over the chart,
+   nothing is positioned against a button, and the panel is as tall as it
+   needs to be. `flex-basis: 100%` inside the wrapping strip is the whole
+   mechanism.
+2. **The readout lives in the panel** rather than over the canvas. It is
+   there to justify the sliders above it, and the canvas is the thing being
+   tuned: numbers about a picture, drawn on that picture, is the wrong trade.
+3. **The deadzone stays in the device layer**, where the axes are normalized,
+   and the panel calls `setTuning`. Everything else is `nav.settings`, read
+   every tick, so a slider moved with the cap held takes effect on the next
+   frame. Roll gets no reverse flag: it drives nothing, and a control over
+   nothing is worse than no control.
 
 ## Acceptance
 
@@ -324,6 +344,38 @@ The difference between working and wanting to use it:
 4. **Tests**: the node suite passes with the new parser, integrator and
    writer tests; `check-nav.mjs` untouched (no new leaves, the controls ride
    the existing surface leaf).
+
+### Where acceptance stands, 2026-08-12 (a89)
+
+**Item 4, met.** 52 node tests pass, 19 of them new across the writers, the
+parser and the integrator. `check-nav.mjs` untouched: no leaf moved.
+
+**Item 3, met except in other browsers.** The bundle moved 151.8 kB to
+163.2 kB, which is the four new modules and nothing else; the `echarts-gl`
+chunk is byte for byte the same and the pin was not touched. The greyed path
+is written and reads its state from `navigator.hid`, but it has only been seen
+in a browser that has WebHID, so the Firefox, Safari and iPad reading is
+unconfirmed.
+
+**Item 1, half.** Both writers were exercised in the running app on
+`CopulaWindFlood`: a 1.4 MB STL of 28,000 triangles, exactly `84 + 50n` bytes,
+header and filename correct, and an 817 kB OBJ recording the box and the drawn
+height axis. Whether they *open well* in the 3Dconnexion viewer, Windows 3D
+Viewer and a slicer is the author's, and it is the reading the color stretch
+above waits on. Expect a slicer to note an open shell: a height field is not a
+solid, deliberately.
+
+**Item 2, open, and it is the one that needs the hardware.** Nothing in the
+device path has met a device. The probe page is the first thing to run, and
+its findings block above is where its answers go.
+
+**Also observed, not reproduced**: one zrender exception
+(`eachBuiltinLayer`, reading `'0'` of null) during a first draw in a session
+where a second build was fired at a chart mid render. It is inside the 2-D
+instance, on the path where the relief falls back to the flat reading until
+the gl chunk lands, which predates this plan. A clean load, build and draw
+produced an empty console, so it is recorded here rather than chased, and it
+earns a punchlist entry only if it recurs on a path a reader can take.
 
 ## Out of scope, recorded so they are choices rather than gaps
 
@@ -346,3 +398,7 @@ Four phases, four `[aNN]` bumps, one-line commits, CHANGELOG sections as the
 real descriptions, `dev/TODO.md` ticked as phases land. Probe findings are
 written into this plan at phase 2, and the plan moves to `dev/done/` when
 phase 4 lands.
+
+**As executed**: a86 the mesh export, a87 the probe page, a88 the device layer
+and the integrator, a89 the feel. The move to `dev/done/` waits on the findings
+block, which is the one deliverable a machine without the puck cannot write.

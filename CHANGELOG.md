@@ -4,6 +4,45 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a89
+
+**Phase 4 of `dev/plan-spacemouse.md`: the feel, which is the difference
+between working and wanting to use it.** A `feel` button on the surface row
+opens `web/src/charts/spacemouse-panel.js`: four gain sliders (twist, tilt,
+zoom, pan), the shaping curve, the deadzone, a reverse flag for each of the
+five axes that drive something, the one axis at a time option, a live readout,
+and a reset to defaults. Sticky under `aggapi.spacemouse`, in the same try and
+catch the chart view state uses, so a browser that refuses the write gets a
+control that works and forgets.
+
+Every gain is per second at full deflection, which is the only unit in which a
+number here means anything you can feel, and the panel says so. A slider moved
+with the cap held takes effect on the next frame: the panel writes
+`nav.settings`, which the loop reads every tick, rather than at the next
+connection. The deadzone goes to the device layer instead, where the axes are
+normalized, so it is held once rather than twice.
+
+Roll has no reverse flag, because it drives nothing: an orbit camera has no
+roll, and a control over nothing is worse than no control.
+
+**A row under the strip rather than a popover.** Nothing floats over the chart,
+nothing has to be positioned against a button, and the panel can be as tall as
+it needs. The live readout sits inside it for the same reason: it is the tuning
+loop made visible, so it belongs beside the sliders it justifies, and covering
+a corner of the canvas with numbers about itself is the wrong trade. It writes
+straight into its nodes on each report, and only while the puck is moving.
+
+**Browser pass, on `CopulaWindFlood`.** The relief draws with the four new
+controls on the row; both writers run in the page, producing a 1.4 MB STL of
+28,000 triangles at exactly `84 + 50n` bytes with the header and the document's
+own title in the filename, and an 817 kB OBJ whose second line records the box
+and the drawn height axis; the panel opens with its six sliders at their
+defaults and redraws with the readout without leaking its subscription;
+switching to the flat reading and back, and toggling contours and marginals,
+leaves the strip and the console clean. What could not be exercised is the
+device itself, which needs the author's puck: that is the phase 2 findings
+block and the acceptance list in the plan.
+
 ## 1.0.0a88
 
 **Phase 3 of `dev/plan-spacemouse.md`: the puck drives the relief.** A
