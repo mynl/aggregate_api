@@ -2250,6 +2250,11 @@ function surfaceOption(doc, opts, view) {
         y0: coordY(g, 0), dy: g.dy,
         z: heights,
         zRange: [zBox.min, zBox.max],
+        // What the colorbar spans, which is the data rather than the box: the
+        // box reaches below `zMin` so the relief has a floor to stand on, and
+        // a mesh colored against it would carry a ramp shifted off the one on
+        // screen. These are the two numbers the visualMap is given.
+        colorRange: [zMin, zMax],
         box: {
             width: drawnBox.boxWidth || 100,
             depth: drawnBox.boxDepth || 100,

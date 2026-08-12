@@ -26,11 +26,11 @@ import { el, empty } from '../utils/dom.js';
 import {
     chartdocToEcharts, panelLayout, readings, rungAt, surfaceCuts,
 } from './chartdoc-to-echarts.js';
-import { fileStem, meshToObj, meshToStl, surfaceMesh } from './mesh-export.js';
+import { fileStem, meshToGlb, meshToObj, meshToStl, surfaceMesh } from './mesh-export.js';
 import { feelControls, feelForNav } from './spacemouse-panel.js';
 import { createSurfaceNav } from './surface-nav.js';
 import { loadSurface, readCamera, surfaceOverrides } from './surface.js';
-import { echarts, loadStyle } from './theme.js';
+import { VIRIDIS, echarts, loadStyle } from './theme.js';
 
 // Set once `loadSurface()` has resolved. Read synchronously inside a build,
 // which must stay pure, so the async part happens in the mount and this is the
@@ -524,21 +524,28 @@ function renderControls(doc, hooks) {
         // No round trip and no wire change: this writes the same drawn heights
         // ECharts is holding, which is what makes it a rendering of the served
         // document rather than a second opinion about it.
-        for (const [ext, what] of [['stl', 'a slicer or Windows 3D Viewer'],
-                                   ['obj', 'a viewer or Blender']]) {
+        box.appendChild(el('span', { className: 'exhibit-group-label' }, 'mesh'));
+        for (const [ext, what] of [
+            ['glb', 'one file, colored by height in the chart\'s own viridis, '
+                + 'which is what makes it read as the picture rather than as a '
+                + 'gray sheet'],
+            ['obj', 'geometry only, which every viewer and Blender read'],
+            ['stl', 'geometry only, and the format a slicer wants'],
+        ]) {
             const can = canExport();
             const btn = el('button', {
                 type: 'button',
                 className: 'exhibit-toggle',
                 title: can
-                    ? `Save the drawn surface as ${ext.toUpperCase()}, for `
-                        + `${what}. The file is the box on screen: the log `
-                        + 'reading and the proportions come with it, and masked '
-                        + 'cells are holes rather than invented geometry'
+                    ? `Save the drawn surface as ${ext.toUpperCase()}: ${what}. `
+                        + 'The file is the box on screen, so the log reading and '
+                        + 'the proportions come with it; masked cells are holes '
+                        + 'rather than invented geometry, so it is a surface and '
+                        + 'not a solid'
                     : 'No surface is drawn yet, so there is nothing to save',
                 'aria-disabled': can ? 'false' : 'true',
                 onClick: () => onExport(ext),
-            }, `download .${ext}`);
+            }, `.${ext}`);
             btn.disabled = !can;
             box.appendChild(btn);
         }
@@ -877,7 +884,7 @@ function draw(container, tools, host, doc, spec = null) {
      * Parameters
      * ----------
      * format : str
-     *     'stl' or 'obj'.
+     *     'glb', 'obj' or 'stl'.
      *
      * Notes
      * -----
@@ -900,8 +907,16 @@ function draw(container, tools, host, doc, spec = null) {
             return;
         }
         const stem = fileStem(source.name);
-        const body = format === 'obj' ? meshToObj(mesh, stem) : meshToStl(mesh, stem);
-        const type = format === 'obj' ? 'text/plain' : 'model/stl';
+        // The ramp is the chart's, passed in rather than restated, so the file
+        // and the colorbar cannot disagree about what a height looks like.
+        const writers = {
+            glb: [() => meshToGlb(mesh, stem, { ramp: VIRIDIS, colorRange: source.colorRange }),
+                  'model/gltf-binary'],
+            obj: [() => meshToObj(mesh, stem), 'text/plain'],
+            stl: [() => meshToStl(mesh, stem), 'model/stl'],
+        };
+        const [write, type] = writers[format] || writers.stl;
+        const body = write();
         const url = URL.createObjectURL(new Blob([body], { type }));
         const link = el('a', { href: url, download: `${stem}-surface.${format}` });
         document.body.appendChild(link);

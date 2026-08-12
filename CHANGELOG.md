@@ -4,6 +4,40 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a91
+
+**The exported surface gets its color, and stays a surface.** The author opened
+the a86 OBJ in 3Dconnexion's viewer and named what was missing: it is just the
+surface element. The ruling, 2026-08-12, is that the shell is right and the
+color is what it wanted, so the phase 1 stretch in `dev/plan-spacemouse.md` is
+settled as **GLB with vertex colors**: `meshToGlb` writes a glTF 2.0 binary
+carrying positions, per vertex viridis and a double sided material.
+
+**One file, which is the argument against OBJ with an MTL.** A material file is
+a second download that has to land in the same folder under the name the OBJ
+writes, and a texture would be a third; a reader who saves one of three has a
+mesh that renders untextured and no way to know why. STL cannot carry color at
+all. So `.obj` and `.stl` stay geometry and the colored reading is its own
+format.
+
+**Colored by the numbers the colorbar uses**, not by the box. `surfaceMesh` now
+returns the drawn height beside each vertex, and `meshSource` carries
+`colorRange`, the visualMap's own `[zMin, zMax]`. The box reaches below `zMin`
+so the relief has a floor to stand on, and coloring against it would shift
+every hue off the screen's. The ramp is passed in from `theme.js` rather than
+restated, so the file and the colorbar cannot disagree, and the values are
+written **linear**, as glTF requires: raw hex would read washed out in every
+viewer that gets the transfer function right.
+
+The mesh row is now `mesh | .glb | .obj | .stl`, three short buttons under one
+label rather than three sentences.
+
+Verified in the running app on `CopulaWindFlood`: a 679 kB GLB, 14,238
+vertices, 28,000 triangles, a valid container end to end (magic, total length,
+padded chunks, `BIN`, POSITION bounds), and a color spread that runs the ramp
+from the floor to 0.8 of the way up at the mode, which is the picture on
+screen: mostly dark, with the peak bright.
+
 ## 1.0.0a90
 
 **The probe met the puck, and it found two things.** The author ran

@@ -19,7 +19,9 @@
 // What is written is a height field and nothing more. Masked cells leave holes
 // rather than inventing geometry to close them, so the mesh is an open shell
 // and not a solid: a slicer will offer to close it, and closing it is a
-// modeling decision this has no business making.
+// modeling decision this has no business making. The author saw the bare shell
+// in 3Dconnexion's viewer on 2026-08-12 and settled it: the shell stays, and
+// what it wanted was color, which is what the GLB writer is for.
 //
 // Z is up in both writers, which is the STL convention and what a slicer
 // assumes. Viewers that hold OBJ to be Y up will lay the box on its side, and
@@ -121,12 +123,18 @@ export function surfaceMesh(field, options = {}) {
 
     const index = new Int32Array(nx * ny).fill(-1);
     const vertices = [];
+    const values = [];
     const triangles = [];
     const vertexAt = (i, j) => {
         const k = j * nx + i;
         if (index[k] < 0) {
             index[k] = vertices.length / 3;
             vertices.push(atX(i), atY(j), atZ(z[k]));
+            // The drawn height as it arrived, beside the display coordinate it
+            // became. The color is a reading of the height rather than of the
+            // box, and the two ranges are not the same: the box reaches below
+            // the data so the relief has a floor to stand on.
+            values.push(z[k]);
         }
         return index[k];
     };
@@ -154,6 +162,7 @@ export function surfaceMesh(field, options = {}) {
     }
     return {
         vertices: Float64Array.from(vertices),
+        values: Float64Array.from(values),
         triangles: Uint32Array.from(triangles),
         counts: { vertices: vertices.length / 3, triangles: triangles.length / 3 },
         box,
@@ -249,12 +258,184 @@ function num(v) {
 }
 
 /**
+ * A color off a ramp, at `t` in [0, 1], as linear RGB in [0, 1].
+ *
+ * Parameters
+ * ----------
+ * ramp : Array
+ *     Hex stops, `['#440154', ...]`, evenly spaced. The chart's own viridis is
+ *     passed in rather than restated here, which is what keeps the file and
+ *     the screen showing one ramp.
+ * t : float
+ *     Clamped to the ends, so a height outside the color range takes the
+ *     nearest stop rather than wrapping.
+ *
+ * Returns
+ * -------
+ * Array
+ *     `[r, g, b]`, **linear**, not sRGB. glTF says vertex colors are linear
+ *     and a conformant viewer converts them back for display, so writing the
+ *     hex values raw would show a washed out ramp everywhere that gets it
+ *     right and the correct one everywhere that does not.
+ */
+export function rampColor(ramp, t) {
+    const stops = ramp && ramp.length ? ramp : ['#000000', '#ffffff'];
+    const u = Math.min(1, Math.max(0, Number.isFinite(t) ? t : 0)) * (stops.length - 1);
+    const i = Math.min(stops.length - 2, Math.floor(u));
+    const f = stops.length > 1 ? u - i : 0;
+    const rgb = (hex) => {
+        const v = parseInt(String(hex).replace('#', ''), 16);
+        return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+    };
+    const a = rgb(stops[i]);
+    const b = rgb(stops[Math.min(stops.length - 1, i + 1)]);
+    // sRGB to linear, the standard transfer function.
+    const linear = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+    return [0, 1, 2].map((k) => linear(((a[k] + (b[k] - a[k]) * f) / 255)));
+}
+
+/**
+ * The mesh as a self contained GLB, colored by height.
+ *
+ * Parameters
+ * ----------
+ * mesh : object
+ *     A `surfaceMesh` result, whose `values` carry the drawn height per
+ *     vertex.
+ * name : str
+ *     The node and mesh name.
+ * options : object
+ *     `ramp`, the color stops, and `colorRange`, the `[min, max]` the ramp
+ *     spans. The color range is the **data** floor and ceiling, which is what
+ *     the on screen visualMap uses; the box reaches below it, so coloring
+ *     against the box would shift every hue.
+ *
+ * Returns
+ * -------
+ * Uint8Array
+ *     A glTF 2.0 binary: the twelve byte header, a JSON chunk and a binary
+ *     chunk, each padded to four bytes as the format requires.
+ *
+ * Notes
+ * -----
+ * One file, which is the whole argument for GLB over OBJ with an MTL. A
+ * material file is a second download that has to land in the same folder under
+ * the name the OBJ writes, and a texture would be a third; a reader who saves
+ * one of the three has a mesh that renders untextured and no way to know why.
+ *
+ * Indices are `UNSIGNED_INT`: a display grid runs to tens of thousands of
+ * vertices, well past what a `UNSIGNED_SHORT` index can address.
+ *
+ * `doubleSided` because a height field is an open shell and the underside is
+ * a face a reader will look at.
+ */
+export function meshToGlb(mesh, name = 'surface', options = {}) {
+    const ramp = options.ramp;
+    const [lo, hi] = options.colorRange || mesh.zRange;
+    const span = (hi - lo) || 1;
+    const count = mesh.counts.vertices;
+
+    const positions = Float32Array.from(mesh.vertices);
+    const colors = new Float32Array(count * 3);
+    for (let v = 0; v < count; v += 1) {
+        const [r, g, b] = rampColor(ramp, ((mesh.values[v] || 0) - lo) / span);
+        colors[v * 3] = r;
+        colors[v * 3 + 1] = g;
+        colors[v * 3 + 2] = b;
+    }
+    const indices = Uint32Array.from(mesh.triangles);
+
+    const min = [Infinity, Infinity, Infinity];
+    const max = [-Infinity, -Infinity, -Infinity];
+    for (let v = 0; v < count; v += 1) {
+        for (let k = 0; k < 3; k += 1) {
+            const c = positions[v * 3 + k];
+            if (c < min[k]) min[k] = c;
+            if (c > max[k]) max[k] = c;
+        }
+    }
+
+    const posBytes = positions.byteLength;
+    const colorBytes = colors.byteLength;
+    const indexBytes = indices.byteLength;
+    const json = {
+        asset: { version: '2.0', generator: 'aggregate Loss Lab' },
+        scene: 0,
+        scenes: [{ nodes: [0] }],
+        nodes: [{ mesh: 0, name }],
+        meshes: [{
+            name,
+            primitives: [{
+                attributes: { POSITION: 0, COLOR_0: 1 },
+                indices: 2,
+                material: 0,
+            }],
+        }],
+        materials: [{
+            name: 'viridis',
+            doubleSided: true,
+            pbrMetallicRoughness: {
+                baseColorFactor: [1, 1, 1, 1],
+                metallicFactor: 0,
+                roughnessFactor: 0.85,
+            },
+        }],
+        buffers: [{ byteLength: posBytes + colorBytes + indexBytes }],
+        bufferViews: [
+            { buffer: 0, byteOffset: 0, byteLength: posBytes, target: 34962 },
+            { buffer: 0, byteOffset: posBytes, byteLength: colorBytes, target: 34962 },
+            { buffer: 0, byteOffset: posBytes + colorBytes, byteLength: indexBytes, target: 34963 },
+        ],
+        accessors: [
+            // POSITION must state its bounds; the others must not bother.
+            { bufferView: 0, componentType: 5126, count, type: 'VEC3', min, max },
+            { bufferView: 1, componentType: 5126, count, type: 'VEC3' },
+            { bufferView: 2, componentType: 5125, count: indices.length, type: 'SCALAR' },
+        ],
+    };
+
+    const jsonBytes = pad(new TextEncoder().encode(JSON.stringify(json)), 0x20);
+    const binBytes = new Uint8Array(posBytes + colorBytes + indexBytes);
+    binBytes.set(new Uint8Array(positions.buffer), 0);
+    binBytes.set(new Uint8Array(colors.buffer), posBytes);
+    binBytes.set(new Uint8Array(indices.buffer), posBytes + colorBytes);
+    const bin = pad(binBytes, 0);
+
+    const total = 12 + 8 + jsonBytes.length + 8 + bin.length;
+    const out = new Uint8Array(total);
+    const view = new DataView(out.buffer);
+    view.setUint32(0, 0x46546c67, true);        // 'glTF'
+    view.setUint32(4, 2, true);
+    view.setUint32(8, total, true);
+    view.setUint32(12, jsonBytes.length, true);
+    view.setUint32(16, 0x4e4f534a, true);       // 'JSON'
+    out.set(jsonBytes, 20);
+    let at = 20 + jsonBytes.length;
+    view.setUint32(at, bin.length, true);
+    view.setUint32(at + 4, 0x004e4942, true);   // 'BIN\0'
+    out.set(bin, at + 8);
+    return out;
+}
+
+/** A chunk padded to four bytes with `filler`, which the format specifies per
+ *  chunk: spaces for JSON so it stays parseable, zeros for binary. */
+function pad(bytes, filler) {
+    const short = (4 - (bytes.length % 4)) % 4;
+    if (!short) return bytes;
+    const out = new Uint8Array(bytes.length + short);
+    out.set(bytes, 0);
+    out.fill(filler, bytes.length);
+    return out;
+}
+
+/**
  * The mesh as an OBJ.
  *
  * Geometry only: vertices and faces, no normals and no material. A viewer
- * computes the shading it wants from the winding, and the color question (a
- * viridis strip as a texture, or vertex colors in a GLB) is the author-gated
- * stretch in `dev/plan-spacemouse.md` phase 1.
+ * computes the shading it wants from the winding. Color lives in the GLB
+ * instead, which is one file rather than the three an OBJ with a material and
+ * a texture would be; the author took that decision 2026-08-12, after seeing
+ * the monochrome mesh in 3Dconnexion's viewer.
  */
 export function meshToObj(mesh, name = 'surface') {
     const v = mesh.vertices;

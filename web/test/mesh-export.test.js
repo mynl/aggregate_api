@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-    fileStem, meshToObj, meshToStl, surfaceMesh,
+    fileStem, meshToGlb, meshToObj, meshToStl, rampColor, surfaceMesh,
 } from '../src/charts/mesh-export.js';
 
 /** A grid of drawn heights, `fill(i, j)` per point. */
@@ -147,6 +147,59 @@ test('a lattice too small to triangulate is refused, loudly', () => {
     const short = field(3, 3, () => 1);
     short.z = new Float64Array(4);
     assert.throws(() => surfaceMesh(short), /4 heights for a 3 by 3 grid/);
+});
+
+test('the ramp is read at both ends and interpolated between', () => {
+    const ramp = ['#000000', '#808080', '#ffffff'];
+    // Linear, not sRGB: glTF says vertex colors are linear, so black and white
+    // are still 0 and 1 but the mid stop is well under a half.
+    assert.deepEqual(rampColor(ramp, 0), [0, 0, 0]);
+    assert.deepEqual(rampColor(ramp, 1), [1, 1, 1]);
+    const mid = rampColor(ramp, 0.5);
+    assert.ok(mid[0] > 0.2 && mid[0] < 0.25, `mid grey linearized to ${mid[0]}`);
+    // Outside the range takes the nearest stop rather than wrapping.
+    assert.deepEqual(rampColor(ramp, -3), [0, 0, 0]);
+    assert.deepEqual(rampColor(ramp, 9), [1, 1, 1]);
+});
+
+test('the GLB is a valid container, and its colors read the height', () => {
+    const mesh = surfaceMesh(field(3, 3, (i, j) => i + j));
+    const ramp = ['#000000', '#ffffff'];
+    const glb = meshToGlb(mesh, 'ramp', { ramp, colorRange: [0, 4] });
+    const view = new DataView(glb.buffer, glb.byteOffset, glb.byteLength);
+    assert.equal(view.getUint32(0, true), 0x46546c67);      // 'glTF'
+    assert.equal(view.getUint32(4, true), 2);
+    assert.equal(view.getUint32(8, true), glb.byteLength);
+    assert.equal(glb.byteLength % 4, 0);
+    const jsonLength = view.getUint32(12, true);
+    assert.equal(view.getUint32(16, true), 0x4e4f534a);     // 'JSON'
+    assert.equal(jsonLength % 4, 0);
+    const json = JSON.parse(new TextDecoder().decode(glb.slice(20, 20 + jsonLength)));
+    assert.equal(json.asset.version, '2.0');
+    assert.equal(json.accessors[0].count, mesh.counts.vertices);
+    assert.equal(json.accessors[1].count, mesh.counts.vertices);
+    assert.equal(json.accessors[2].count, mesh.counts.triangles * 3);
+    // POSITION must carry its bounds; an accessor without them is a file some
+    // viewers refuse outright.
+    assert.deepEqual(json.accessors[0].min, [-50, -50, 0]);
+    assert.deepEqual(json.accessors[0].max, [50, 50, 62]);
+    // An open shell is looked at from underneath, so both faces are drawn.
+    assert.equal(json.materials[0].doubleSided, true);
+
+    const binOffset = 20 + jsonLength;
+    assert.equal(view.getUint32(binOffset + 4, true), 0x004e4942);   // 'BIN\0'
+    const binLength = view.getUint32(binOffset, true);
+    assert.equal(binLength, json.buffers[0].byteLength);
+    const bin = glb.slice(binOffset + 8, binOffset + 8 + binLength);
+    const bytes = new DataView(bin.buffer, bin.byteOffset, bin.byteLength);
+    const colorsAt = json.bufferViews[1].byteOffset;
+    // The lowest cell is 0 and the highest is 4, which is the stated color
+    // range, so the ramp is spanned end to end by the corners of the grid.
+    const colorOf = (v) => [0, 1, 2].map((k) => bytes.getFloat32(colorsAt + v * 12 + k * 4, true));
+    const first = colorOf(0);
+    const last = colorOf(mesh.counts.vertices - 1);
+    assert.deepEqual(first, [0, 0, 0]);
+    assert.deepEqual(last, [1, 1, 1]);
 });
 
 test('a file stem survives a title with punctuation in it', () => {

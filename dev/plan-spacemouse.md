@@ -139,6 +139,21 @@ hand-written GLB with vertex colors (self-contained, ~150 lines). Decide
 after seeing the monochrome mesh in the 3Dconnexion viewer; record the
 verdict here.
 
+**Verdict, author, 2026-08-12: GLB with vertex colors, and the shell stays.**
+The OBJ opened in the viewer and read as "just the surface element". Offered a
+solid (a skirt to a base plane and a bottom cap), a solid with color, color
+alone, or leaving it, the author took **color alone**: the file is a rendering
+of a height field, not a model of a block, and a slicer's complaint about an
+open shell is the slicer's business. Landed a91.
+
+Why GLB rather than OBJ with an MTL: one file. A material file is a second
+download that has to land in the same folder under the name the OBJ writes,
+and a texture would be a third, so a reader who saves one of three gets an
+untextured mesh and no explanation. STL carries no color at all, so `.obj` and
+`.stl` stay geometry and the colored reading is its own format. Colors are
+written linear, as glTF requires, against the visualMap's own `[zMin, zMax]`
+rather than the drawn box, which reaches lower.
+
 **Execution notes, a86.** As planned, with four things worth recording.
 
 1. The heights come from a named array in `surfaceOption`
@@ -383,13 +398,15 @@ is written and reads its state from `navigator.hid`, but it has only been seen
 in a browser that has WebHID, so the Firefox, Safari and iPad reading is
 unconfirmed.
 
-**Item 1, half.** Both writers were exercised in the running app on
-`CopulaWindFlood`: a 1.4 MB STL of 28,000 triangles, exactly `84 + 50n` bytes,
-header and filename correct, and an 817 kB OBJ recording the box and the drawn
-height axis. Whether they *open well* in the 3Dconnexion viewer, Windows 3D
-Viewer and a slicer is the author's, and it is the reading the color stretch
-above waits on. Expect a slicer to note an open shell: a height field is not a
-solid, deliberately.
+**Item 1, met for the OBJ, and it produced the color ruling.** All three
+writers were exercised in the running app on `CopulaWindFlood`: a 1.4 MB STL
+of 28,000 triangles at exactly `84 + 50n` bytes, an 817 kB OBJ recording the
+box and the drawn height axis, and (a91) a 679 kB GLB that parses end to end
+with its viridis spanning the ramp. The author opened the OBJ in
+3Dconnexion's viewer: it loads, and it is bare, which is what settled the
+stretch above. The GLB in that viewer, and a slicer's opinion of the STL, are
+still unread. Expect the slicer to note an open shell: a height field is not
+a solid, deliberately and now by ruling.
 
 **Item 2, open, and it is the one that needs the hardware.** Nothing in the
 device path has met a device. The probe page is the first thing to run, and
