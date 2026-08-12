@@ -4,6 +4,62 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a80
+
+**Nine fixes from the first real look at the relief**, author 2026-08-12.
+
+**The camera stays where the reader put it.** This was the big one and it was
+behind two of the complaints. `viewControl` is what the camera is set from, and
+echarts-gl writes the live angles back into that same object as the reader
+drags, so a rebuild that re-sent the option's original alpha, beta and distance
+snapped the box back to the default angle. Every control did that. And the
+walk, which rebuilds many times a second, re-sent it on every frame, fighting
+the reader for the camera and winning, which is why it produced a picture
+mostly outside the viewport that could not be watched. `readCamera` reads the
+live one before each rebuild and the next option carries it back. The
+prototype's `syncCamera`, which had solved this already.
+
+**Click to place a cut.** All three cuts go through the clicked point: x held
+there, y held there, and the total through it. On the total the two coordinates
+do not matter separately, only their sum, so a click anywhere along one
+anti-diagonal gives the same cut. Clicking with no cut showing turns them on,
+or the gesture reads as dead. Hover picking on a surface is O(n^2) per event in
+echarts-gl, which stalls a software renderer, so a click is both the cheaper
+gesture and the one that leaves the cut where it was put.
+
+The three cut positions are now held separately, as fractions of their own
+ranges, because a click is two independent coordinates. The walk still drives
+all three from one parameter on the diagonal, which is what keeps them crossing
+at the point being walked to.
+
+**The walk** also runs at twenty frames a second rather than sixty, and does
+not write a position nobody chose to storage on every one of them. Where it
+stops is saved, once.
+
+**Drag has damping**, 0.85, from the same preset: a drag with weight rather
+than one that snaps to the cursor and stops dead.
+
+**Contours in white**, wider, at 0.85 opacity. Viridis runs dark purple to
+yellow and the prototype's mid gray reads on neither end; over the floor image
+it disappeared.
+
+**The colorbar is half the height of the viewport**, not nearly all of it. At
+full height it read as the second half of a two-panel chart.
+
+**The floor drops further**, 0.45 of the drawn range against 0.32, so more of
+the image clears the surface silhouette.
+
+**The host is 40% taller** for the relief than for the flat panel it shares a
+layout with. The 3-D box spends height on perspective and on the base drop
+before it spends any on the surface, so at the flat panel's size the picture is
+mostly chrome. The one place the app sizes a chart by what it is rather than by
+the document's aspect, and a drawing decision rather than a semantic one.
+
+**The z axis prints four significant figures.** At one, a density axis stepping
+1.5e-6, 2.0e-6, 2.5e-6 reads "2e-6" three times, which says the axis is not
+moving. The prototype's `tick`, which is exponential only where a decimal would
+be unreadable.
+
 ## 1.0.0a79
 
 **The cuts, the marks and the walk.** `dev/plan-3d-plot.md` sections 4.4 and

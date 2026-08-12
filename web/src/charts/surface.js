@@ -85,8 +85,63 @@ export function loadSurface() {
  *     and placement, lighting, and the camera. Axis names, ranges, the mesh
  *     and its shape all come from the document.
  */
+/**
+ * The camera as it stands, so a redraw can put it back.
+ *
+ * `viewControl` in the option is what the camera is *set* from, and echarts-gl
+ * writes the live angles back into that same object as the reader drags. So a
+ * rebuild that re-sends the option's original alpha, beta and distance snaps
+ * the box back to the default angle, and one that re-sends them sixty times a
+ * second, which is what an animation does, fights the reader for the camera and
+ * wins. Read it here, send it back in the next option, and adjusting a control
+ * changes the picture without moving the point of view.
+ *
+ * Wrapped, because it reaches through `getModel` into a component's option:
+ * a version that stops writing back leaves the camera where it was, which is
+ * the same failure as before this existed and not a worse one.
+ *
+ * Parameters
+ * ----------
+ * chart : object
+ *     A live ECharts instance, or null.
+ *
+ * Returns
+ * -------
+ * object or null
+ *     `{alpha, beta, distance}`, or null when there is nothing to read.
+ */
+export function readCamera(chart) {
+    try {
+        const vc = chart.getModel().getComponent('grid3D').option.viewControl;
+        if (!vc || !Number.isFinite(vc.alpha)) return null;
+        return {
+            alpha: vc.alpha,
+            beta: vc.beta,
+            distance: Number.isFinite(vc.distance) ? vc.distance : undefined,
+        };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Axis tick text.
+ *
+ * The default prints an axis endpoint at full float precision, which on a
+ * density puts "0.00000033263996616838" beside the box, and rounding it to one
+ * figure prints "2e-6" three times down the axis. Four significant figures,
+ * exponential only where a decimal would be unreadable. The prototype's `tick`.
+ */
+function tick(v) {
+    if (v === 0) return '0';
+    const a = Math.abs(v);
+    if (a >= 1e5 || a < 1e-3) return v.toExponential(1);
+    return String(+v.toPrecision(4));
+}
+
 export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
-                                   quantized = false, side = 420 } = {}) {
+                                   quantized = false, side = 420,
+                                   hostHeight = 480, camera = null } = {}) {
     const s = houseStyle();
     // Read the height to the precision the wire carried and no further. The
     // log-quantized encoding recovers a density to about four significant
@@ -126,10 +181,12 @@ export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
         visualMap: [
             {
                 calculable: true,
-                right: 4, top: 20, itemHeight: Math.max(90, side - 90),
+                // Half the box, not nearly all of it. A colorbar as tall as the
+                // picture reads as the second half of a two-panel chart.
+                right: 4, top: 20, itemHeight: Math.max(80, Math.round(hostHeight * 0.5)),
                 textStyle: { fontSize: 10, color: '#6c757d' },
                 inRange: { color: VIRIDIS },
-                formatter: (v) => (logZ ? `1e${Math.round(v)}` : Number(v).toExponential(1)),
+                formatter: (v) => (logZ ? `1e${Math.round(v)}` : tick(v)),
             },
             {
                 show: false,
@@ -148,7 +205,10 @@ export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
             nameTextStyle: { fontSize: 11, color: '#6c757d' },
             axisLabel: {
                 fontSize: 9, color: '#6c757d',
-                formatter: (v) => (logZ ? `1e${Math.round(v)}` : Number(v).toExponential(0)),
+                // `tick`, not one significant figure: a density axis stepping
+                // 1.5e-6, 2.0e-6, 2.5e-6 printed at one figure reads "2e-6"
+                // three times, which says the axis is not moving.
+                formatter: (v) => (logZ ? `1e${Math.round(v)}` : tick(v)),
             },
         },
         grid3D: {
@@ -166,9 +226,14 @@ export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
             viewControl: {
                 // Looking down the diagonal: dependence between the two
                 // components is a ridge along it, so this is the angle that
-                // shows whether there is one.
+                // shows whether there is one. Overridden by the camera the
+                // reader is holding, when there is one.
                 alpha: 24, beta: 40, distance: 190,
+                // Damping is what makes a drag feel like it has weight rather
+                // than snapping to the cursor and stopping dead.
+                damping: 0.85,
                 autoRotate: false, zoomSensitivity: 1,
+                ...(camera || {}),
             },
             environment: '#ffffff',
         },

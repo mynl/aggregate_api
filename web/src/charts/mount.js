@@ -25,7 +25,7 @@ import { el, empty } from '../utils/dom.js';
 import {
     chartdocToEcharts, panelLayout, readings, rungAt,
 } from './chartdoc-to-echarts.js';
-import { loadSurface, surfaceOverrides } from './surface.js';
+import { loadSurface, readCamera, surfaceOverrides } from './surface.js';
 import { echarts, loadStyle } from './theme.js';
 
 // Set once `loadSurface()` has resolved. Read synchronously inside a build,
@@ -62,18 +62,30 @@ const VIEW_DEFAULTS = {
     marginals: false,
     contours: false,
     cut: 'none',         // none | components | total | all
-    cutU: 0.5,           // where the cuts sit, on the diagonal, 0 to 1
+    // Where each cut sits, as a fraction of its own range. Three rather than
+    // one because a click places a cut where the reader pointed, which is two
+    // independent coordinates; the walk drives all three off the diagonal.
+    cutX: 0.5,
+    cutY: 0.5,
+    cutS: 0.5,
     window: null,        // quantile depth asked of the library; null takes its default
 };
 
 /** Which view keys the relief owns, for the reset button to put back. */
-const SURFACE_KEYS = ['mesh', 'wallGrid', 'marginals', 'contours', 'cut', 'cutU'];
+const SURFACE_KEYS = ['mesh', 'wallGrid', 'marginals', 'contours',
+                      'cut', 'cutX', 'cutY', 'cutS'];
 
 /** The cut control cycles rather than branching into four buttons. */
 const CUT_MODES = ['none', 'components', 'total', 'all'];
 
-/** One pass of the walk, in milliseconds. */
+/** One pass of the walk, and how often it redraws.
+ *
+ * Twenty frames a second, not sixty. Each step rebuilds the option and hands
+ * echarts a new one, which is far more work than moving a line, and a walk that
+ * drops the browser to a crawl cannot be watched at all, which is the only
+ * thing it is for. */
 const WALK_PERIOD = 13000;
+const WALK_INTERVAL = 50;
 
 let view = (() => {
     try {
@@ -83,8 +95,12 @@ let view = (() => {
     }
 })();
 
-function setView(patch) {
+function setView(patch, persist = true) {
     view = { ...view, ...patch };
+    // The walk moves a cut twenty times a second and every one of those is a
+    // position nobody chose, so it does not go to storage. Where it stopped
+    // does, once, when it stops.
+    if (!persist) return;
     try { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch { /* private mode */ }
 }
 
@@ -248,6 +264,42 @@ export function notDrawable(message) {
  * every control governs the whole chart by construction. It used to split
  * across the two panels, because a control belonged to one of them.
  */
+/**
+ * A point in the box, as the three cut positions it implies.
+ *
+ * Each cut is held as a fraction of its own range, because a fraction survives
+ * a rebuild at a different window and a data coordinate does not. Holding x at
+ * `xv` and y at `yv` is two of them; the third is the total through that point,
+ * which is what makes a click on the surface place all three cuts through the
+ * place that was clicked.
+ */
+function cutFractions(box, xv, yv) {
+    const span = (lo, hi, v) => (hi > lo ? Math.min(1, Math.max(0, (v - lo) / (hi - lo))) : 0.5);
+    const [x0, x1] = box.x;
+    const [y0, y1] = box.y;
+    return {
+        cutX: span(x0, x1, xv),
+        cutY: span(y0, y1, yv),
+        cutS: span(x0 + y0, x1 + y1, xv + yv),
+    };
+}
+
+/**
+ * Where the walk is at `u`, as the same three fractions.
+ *
+ * Parameterized on the segment of `y = x` inside the box: hold x at `v`, hold y
+ * at `v`, hold the total at `2v`. Where the two axes do not overlap there is no
+ * such segment, and the walk falls back to sweeping each axis by `u`, which
+ * still moves the picture and no longer claims the three cuts meet.
+ */
+function walkPositions(box, u) {
+    const lo = Math.max(box.x[0], box.y[0]);
+    const hi = Math.min(box.x[1], box.y[1]);
+    if (!(hi > lo)) return { cutX: u, cutY: u, cutS: u };
+    const v = lo + (hi - lo) * u;
+    return cutFractions(box, v, v);
+}
+
 /**
  * The window box: a number the reader turns, which is a new request.
  *
@@ -515,10 +567,19 @@ function draw(container, tools, host, doc, spec = null) {
     let walking = false;
     let walkFrame = null;
 
+    // The camera the reader is holding. Read off the live chart before every
+    // rebuild and sent back in the next option, so adjusting a control changes
+    // the picture and leaves the point of view where it was. Without this,
+    // every toggle snaps the box back to the default angle, and the walk, which
+    // rebuilds twenty times a second, fights the reader for the camera and
+    // wins.
+    let camera = null;
+
     const options = () => ({
         view: { ...view, kind: view.kind || defaultKind(doc) },
         width: host.clientWidth || 0,
         zoom,
+        camera,
         overrides: overridesFor(doc),
     });
 
@@ -634,6 +695,7 @@ function draw(container, tools, host, doc, spec = null) {
     }
 
     function render() {
+        if (renderer && renderer.chart) camera = readCamera(renderer.chart) || camera;
         const next = build();
         if (!next) return false;
         drawn = useStrip(next);
@@ -683,6 +745,30 @@ function draw(container, tools, host, doc, spec = null) {
         if (!chart) return;
         chart.off('globalout');
         chart.on('globalout', () => writeReadout(null));
+        // Click to place the cuts. Hover picking on a surface is O(n^2) per
+        // event in echarts-gl, which stalls a software renderer, so a click is
+        // both the cheaper gesture and the one that leaves the cut where it was
+        // put rather than under wherever the cursor drifted to.
+        //
+        // All three cuts go through the clicked point: x held there, y held
+        // there, and the total through it. On the total the two coordinates do
+        // not matter separately, only their sum, which is why a click anywhere
+        // on one anti-diagonal gives the same total cut.
+        chart.off('click');
+        chart.on('click', (params) => {
+            const box = drawn && drawn.surfaceBox;
+            const value = params && params.value;
+            if (!box || !Array.isArray(value) || value.length < 2) return;
+            if (!Number.isFinite(value[0]) || !Number.isFinite(value[1])) return;
+            setWalk(false);
+            const patch = cutFractions(box, value[0], value[1]);
+            // A click with no cut showing has to show one, or it does nothing
+            // visible and reads as a dead gesture.
+            if (view.cut === 'none') patch.cut = 'all';
+            setView(patch);
+            renderTools();
+            render();
+        });
         const zr = chart.getZr();
         zr.off('dblclick');
         zr.on('dblclick', () => {
@@ -800,22 +886,25 @@ function draw(container, tools, host, doc, spec = null) {
         if (walking === on) return;
         walking = on;
         if (!on) {
-            if (walkFrame) cancelAnimationFrame(walkFrame);
+            if (walkFrame) clearInterval(walkFrame);
             walkFrame = null;
+            setView({});                // persist where it stopped
             return;
         }
         if (view.cut === 'none') setView({ cut: 'all' });
-        let last = null;
-        const tick = (now) => {
-            if (!walking || !ready) return;
-            if (last === null) last = now;
-            const step = (now - last) / WALK_PERIOD;
-            last = now;
-            setView({ cutU: (view.cutU + step) % 1 });
+        // The walk is one parameter, and the three cuts are derived from it, so
+        // they cross at the point being walked to. Setting each to the same
+        // fraction of its own range does not: the two axes cover different
+        // intervals and the total is parameterized by a third range again, so
+        // three cuts that are supposed to meet drift apart instead.
+        let u = 0;
+        walkFrame = setInterval(() => {
+            const box = drawn && drawn.surfaceBox;
+            if (!walking || !ready || !box) return;
+            u = (u + WALK_INTERVAL / WALK_PERIOD) % 1;
+            setView(walkPositions(box, u), false);
             render();
-            walkFrame = requestAnimationFrame(tick);
-        };
-        walkFrame = requestAnimationFrame(tick);
+        }, WALK_INTERVAL);
     }
 
     ready = true;

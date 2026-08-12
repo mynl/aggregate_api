@@ -1478,7 +1478,19 @@ const SURFACE_DECADES = 8;
  * band of it clears the silhouette along the near edges and the image
  * underneath becomes visible instead of being an opaque lid's worth of wasted
  * work. */
-const SURFACE_BASE_DROP = 0.32;
+const SURFACE_BASE_DROP = 0.45;
+
+/**
+ * How much taller the relief's host is than a flat square panel's.
+ *
+ * The 3-D box spends height on perspective and on the base drop before it
+ * spends any on the surface, so at the flat panel's size the picture is all
+ * chrome. This is the one place the app sizes a chart by what it is rather
+ * than by the document's aspect, and it is a drawing decision, not a semantic
+ * one.
+ */
+const SURFACE_HOST_SCALE = 1.4;
+const SURFACE_HOST_MAX = 760;
 
 /** The floor image's opacity, and the target cells per axis it is decimated to. */
 const SURFACE_FLOOR_OPACITY = 0.5;
@@ -1504,8 +1516,11 @@ const SURFACE_MESH_WIDTH = 0.9;
 const SURFACE_MESH_OPACITY = 0.5;
 const SURFACE_FLOOR_INK = '#e9ecef';
 const SURFACE_MARGINAL_COLOR = '#6c757d';
-const SURFACE_CONTOUR_COLOR = '#868e96';
-const SURFACE_CONTOUR_WIDTH = 1;
+// White, not the prototype's gray. Viridis runs dark purple to yellow, and a
+// mid gray reads on neither end; on the floor image it disappears entirely.
+const SURFACE_CONTOUR_COLOR = '#ffffff';
+const SURFACE_CONTOUR_WIDTH = 1.4;
+const SURFACE_CONTOUR_OPACITY = 0.85;
 
 /** How many contour levels, and the cap on the polylines they may emit. */
 const SURFACE_CONTOUR_LEVELS = 8;
@@ -1565,8 +1580,11 @@ const CUT_COLORS = { x: '#dc3545', y: '#0d6efd', s: '#198754' };
  *     Everything the surface already computed: `height`, the box heights, the
  *     wall positions, the wall scale `k`, and `dataMax`, the joint's own peak.
  * view : object
- *     Reads `cut` ('none' | 'components' | 'total' | 'all') and `cutU`, the
- *     position on the diagonal.
+ *     Reads `cut` ('none' | 'components' | 'total' | 'all') and the three
+ *     positions `cutX`, `cutY`, `cutS`, each a fraction of its own range.
+ *     Three rather than one because a click places a cut where the reader
+ *     pointed, which is two independent coordinates; the walk drives all three
+ *     from the diagonal, which is what keeps them crossing at one point.
  *
  * Returns
  * -------
@@ -1592,9 +1610,14 @@ function cutSeries(g, ctx, view) {
     const { height, zMax, floorH, hair, xWall, yWall, k, dataMax } = ctx;
     const out = [];
     const onWall = (v) => Math.min(zMax, Math.max(floorH, height(v)));
-    const seg = diagonalSegment(g);
-    const u = Number.isFinite(view.cutU) ? Math.min(1, Math.max(0, view.cutU)) : 0.5;
-    const v = seg ? seg.lo + (seg.hi - seg.lo) * u : coordX(g, Math.floor(g.nx / 2));
+    const frac = (value, fallback) => (Number.isFinite(value)
+        ? Math.min(1, Math.max(0, value)) : fallback);
+    const along = (lo, hi, f) => lo + (hi - lo) * f;
+    const heldX = along(coordX(g, 0), coordX(g, g.nx - 1), frac(view.cutX, 0.5));
+    const heldY = along(coordY(g, 0), coordY(g, g.ny - 1), frac(view.cutY, 0.5));
+    const total = along(coordX(g, 0) + coordY(g, 0),
+                        coordX(g, g.nx - 1) + coordY(g, g.ny - 1),
+                        frac(view.cutS, 0.5));
 
     // A conditional is put on the marginal's scale on purpose: both are
     // densities in the same variable, so their heights are comparable and the
@@ -1638,9 +1661,9 @@ function cutSeries(g, ctx, view) {
         // named by what is held, the mean by what is left.
         const held = [
             { tag: 'x', color: CUT_COLORS.x, alongY: true,
-              curve: columnAt(g, v), coords: yCoords(g), step: g.dy },
+              curve: columnAt(g, heldX), coords: yCoords(g), step: g.dy },
             { tag: 'y', color: CUT_COLORS.y, alongY: false,
-              curve: rowAt(g, v), coords: xCoords(g), step: g.dx },
+              curve: rowAt(g, heldY), coords: xCoords(g), step: g.dx },
         ];
         for (const a of held) {
             const raw = Array.from(a.curve.values);
@@ -1685,7 +1708,7 @@ function cutSeries(g, ctx, view) {
         // across the part in view, because the mass off the picture is what
         // decides how the total splits.
         const color = CUT_COLORS.s;
-        const path = levelLine(g, 2 * v, { count: Math.max(g.nx, g.ny) });
+        const path = levelLine(g, total, { count: Math.max(g.nx, g.ny) });
         if (path.length >= 2) {
             const xs = path.map((p) => p[0]);
             const ys = path.map((p) => p[1]);
@@ -1953,7 +1976,8 @@ function surfaceOption(doc, opts, view) {
                         name: 'contour',
                         data: path.map((p) => [p[0], p[1], at + hair]),
                         lineStyle: { color: SURFACE_CONTOUR_COLOR,
-                                     width: SURFACE_CONTOUR_WIDTH, opacity: 0.9 },
+                                     width: SURFACE_CONTOUR_WIDTH,
+                                     opacity: SURFACE_CONTOUR_OPACITY },
                         silent: true,
                     });
                 }
@@ -1987,12 +2011,23 @@ function surfaceOption(doc, opts, view) {
     // `grid` and `digits` ride in the context so the chrome can read the height
     // to the precision the encoding actually carried: seven figures on float32,
     // four on the log-quantized form, and a tooltip that says so.
+    // The relief gets a taller host than the flat panel it shares a layout
+    // with, and the colorbar is sized from that rather than from the square.
+    const hostHeight = Math.min(SURFACE_HOST_MAX,
+                                Math.round(box.hostHeight * SURFACE_HOST_SCALE));
     const ctx = { doc, view, box, xName, yName, zName, logZ: useLog, zMin, zMax,
                   grid: g, digits: g.digits, quantized: g.quantized,
-                  side: box.panelW };
+                  camera: opts.camera || null,
+                  hostHeight, side: box.panelW };
     const option = merge(base, resolveOverrides(opts.overrides, ctx));
-    option.hostHeight = box.hostHeight;
+    option.hostHeight = hostHeight;
     option.is3d = true;
+    // The box in data coordinates, so the mount can turn a click into cut
+    // positions and walk them without decoding the grid a second time.
+    option.surfaceBox = {
+        x: [coordX(g, 0), coordX(g, g.nx - 1)],
+        y: [coordY(g, 0), coordY(g, g.ny - 1)],
+    };
     option.readings = readings(doc);
     return option;
 }
