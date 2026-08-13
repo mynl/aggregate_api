@@ -17,10 +17,13 @@
  *                                        produces new URLs, safe to keep)
  *   - activate                        -> delete caches from older CACHE_VERSIONs
  *
- * Bump CACHE_VERSION on any change to the caching behavior to evict old caches.
+ * Bump CACHE_VERSION on any change to the caching behavior to evict old caches,
+ * and also when a file served at a stable URL is replaced in place. The icons
+ * are the case that arises: they are not content hashed, so a returning visitor
+ * keeps serving the previous artwork out of the cache until the version moves.
  */
 
-const CACHE_VERSION = 'agg-pwa-v1';
+const CACHE_VERSION = 'agg-pwa-v2';
 
 self.addEventListener('install', () => {
     // Take over as soon as installed; we don't precache, so nothing to wait on.
