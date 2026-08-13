@@ -728,23 +728,22 @@ one version bump each.
       for a composite distortion whose spec holds constructed `Distortion`
       objects. Worked around with a stored-program fallback.
 
-- [ ] **Round 5's four asks, written up in full for the library agent** at
-      `T:\worktrees\aggregate_REFACTOR\dev\note-from-aggregate-api-round-5.md`.
-      In the order they block work here:
-      1. `build_exhibit(..., spec_extra=)`, merged into each block's
-         `TableSpec` kwargs and accepting a callable so `include_raw` can be
-         computed per block. **Blocks a66.** Without it every exhibit-route pane
-         (Economics x3, More Tail behavior, More Dependency) is unrenderable in
-         the interactive view, because `irToGridInput` refuses a document with no
-         raw values, and full precision cannot reach them either.
-      2. Round the premium in `_pnl_consideration`, which currently writes
-         `pnl X_PnL 7037.883281186453 premium` into a program a person reads.
-      3. `PnL.value_type` as a constant `payoff`. The app asserts it locally at
-         a65 on the author's ruling ("PnLs are ALWAYS payoff") and deletes the
-         special case when this lands.
-      4. The `agg` chart's density panel to carry the mean, 1-in-100 and
-         1-in-200 marks; 1-in-250 comes off both panels. Chart marks only, not
-         `CAPITAL_ANCHOR_PERIODS`.
+- [x] **Round 5's four asks, all resolved** (the note is
+      `aggregate_REFACTOR/dev/note-from-aggregate-api-round-5.md`).
+      1. Landed better than asked: raw values travel in every exhibit
+         (`include_raw`, LIB a246) with caller-set extent (`max_rows`, a247),
+         so `spec_extra=` was never needed.
+      2. Consideration rounding landed upstream at LIB a251
+         (`_pnl_consideration` rounds at the source); the app's
+         `_round_pnl_premium` text rewrite, idempotent since then, deleted at
+         a95.
+      3. `PnL.value_type` landed at LIB a248; the app's local special case is
+         gone.
+      4. Superseded 2026-08-13 by `[Chart-Marks-Mean-Only]`
+         (`dev/plan-no-reference-lines.md`): the percentile reference lines
+         come off entirely, the readout strip answers the same question by
+         hover, and the mean stays, so the redesign this ask requested is
+         moot.
 
 ## Raised with `csv-grid` (not fixed here)
 

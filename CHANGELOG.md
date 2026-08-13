@@ -4,6 +4,29 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a95
+
+**`_round_pnl_premium` deletes, on the terms its own docstring set.** The
+route rewrote `pnl_program` text to round the consideration before build,
+because the library sized an uninherited premium at full precision and the
+author wanted the rounding immediately. The rule moved upstream at
+`aggregate` 1.0.0a251, where `_pnl_consideration` rounds the number where it
+is produced, and that release's note already said the app's pass "is
+idempotent... so it can be deleted on the sync that picks this up". This is
+that sync: the function, its `_PNL_PREMIUM` regex and the call in `post_pnl`
+go, and the route docstring points at the upstream home. Nothing observable
+moves; the library hands the route an already-round premium.
+
+**The round 5 ledger closes in `dev/TODO.md`.** The entry sat unchecked with
+all four asks open; every one is resolved. Item 1 landed better than asked
+(raw values in every exhibit at LIB a246, caller-set `max_rows` at a247, so
+`spec_extra=` was never needed), item 2 is the deletion above, item 3
+(`PnL.value_type`) landed at a248, and item 4, the density-panel reference
+marks, is superseded by `[Chart-Marks-Mean-Only]`
+(`dev/plan-no-reference-lines.md`, author 2026-08-13): the percentile lines
+come off entirely and the readout strip answers by hover, so the redesign
+that ask requested is moot.
+
 ## 1.0.0a94
 
 **The Sharpen leaf joins the exhibit route, which was the last table drawn
