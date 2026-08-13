@@ -1,5 +1,16 @@
 # Plan [Pricing-Exhibits]: Calibrate, Allocate, Evaluate through the official channels
 
+> **EXECUTED BOTH SIDES, moved to done 2026-08-13.** The five LIB phases
+> landed at `aggregate` 1.0.0a259 to a263, one bump per phase, with execution
+> notes and nine recorded divergences in the LIB repo's
+> `dev/done/plan-pricing-exhibits-LIB.md` (read that before treating any
+> detail below as shipped). The three API phases landed at a83 (A1, routes),
+> a84 (A2, the pane) and a85 (A3, the deletions): `pricing.py` is thin
+> runners, `_BasisView`, `_REINS_BASES` and the pentagon arithmetic are gone,
+> four routes deleted, and `tables.FORMATS` lost its six pricing keys. This
+> closes round 6 item 4. The LIB-side pointer file moved to the LIB repo's
+> `dev/done/` alongside it.
+
 > **Status: FINAL, 2026-08-12.** Written up from the author's specification
 > and reviewed by the author the same day: the four review questions (the PQ
 > display, `ccoc` in evaluate, `bid`, the Evaluate basis) are ruled and the
