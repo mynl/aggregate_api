@@ -72,17 +72,17 @@ serves. The `[Exhibits-App-Cleanup]` decision above is therefore taken: the
 migrated entries are deleted, and the frame routes stay as the raw / CSV api
 path, rendered by inference.
 
-What is left, and none of it is a published table: **More Sharpen** (the
-library registered `sharpen` at a255; the app-side cutover, `loadSharpenAudit`
-to `loadExhibitLeaf` plus deleting the two `FORMATS` entries and ledes, is
-owed on the next sync), **Pricing** (was "computed from the reader's input, so
-not keyed on the object"; superseded 2026-08-12 by `[Pricing-Keyed-On-Result]`
-and planned end to end in `dev/plan-pricing-exhibits.md`, three subtabs served
-by three exhibits on result objects), **Bounds** (stays with the library's
-`dev/plan-exhibit-official-channels.md` phase 10), and the **two densities**,
-bulk and the one exception the author scoped out. The asks were written up as
+What is left, and none of it is a published table: **Bounds** (stays with the
+library's `dev/plan-exhibit-official-channels.md` phase 10, the one open item
+of that plan), and the **two densities**, bulk and the one exception the
+author scoped out. **More Sharpen** closed at a94: `loadSharpenAudit` became
+`loadExhibitLeaf` on the a255 `sharpen` exhibit, the two block ledes went
+with it, and `tables.FORMATS` is empty. **Pricing** closed at a83 to a85 via
+`dev/plan-pricing-exhibits.md` (three subtabs served by three exhibits on
+result objects, `[Pricing-Keyed-On-Result]`). The asks were written up as
 `aggregate_REFACTOR/dev/note-from-aggregate-api-round-6.md`; items 1, 2, 3, 5
-and 6 closed upstream at a251 to a256.
+and 6 closed upstream at a251 to a256, and item 4 closed through the pricing
+plan.
 
 ### b) Consolidate the graphs on ECharts, and fix the options
 

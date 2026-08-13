@@ -4,6 +4,37 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a94
+
+**The Sharpen leaf joins the exhibit route, which was the last table drawn
+from a frame this repo formatted itself.** More Sharpen now draws the
+`sharpen` exhibit the library registered at `aggregate` 1.0.0a255: INSURER
+leads with the score grid unstacked by `d_log2` (the library's ruling
+`[Sharpen-Grid-Is-A-Reading]`: the score is a column read as a grid, not a
+second fact), then the per-cell walk with its working, each block captioned
+and formatted upstream, scientific notation on the six `u_*` moment-error
+columns included. `loadSharpenAudit` and the two hardcoded block ledes it
+carried ("Score grid", "Every cell") delete; the leaf goes through
+`loadExhibitLeaf` like every other published table, so it answers the
+page-wide Raw / Insurer switch for free, which the frame route never did.
+
+**`tables.FORMATS` is empty, and the comment now says why it stays that
+way.** The `sharpen_df` and `sharpen_score` entries were the last two, held
+since a71 only because this leaf had not moved. Every entry the map ever held
+was this repo asserting how the library's own numbers print; all of them are
+gone the same way, a71 then a85 then now. `ROW_FLAGS` has been empty since
+a71, so the app now carries no per-frame formats and no row emphasis at all.
+
+**Nothing moves on the wire.** The `frame/{which}` route still serves
+`sharpen_score` and `sharpen_df` for direct api use, rendered by dtype
+inference like every other frame, and `test_capability`'s pinned agreement
+between the `has_sharpen` gate and the frames behind it is untouched. The
+leaf's nav hint, gate and lede are unchanged; only where the table comes from
+moved. The frame-route inventory comments above `LOADERS` and on the
+perspective switch update to match: what is left outside the exhibit loader
+is Bounds, awaiting the library's registration, and the two densities,
+permanently the grid's.
+
 ## 1.0.0a93
 
 The author's round 7 punch list, nine items of it, all app side. One of the ten

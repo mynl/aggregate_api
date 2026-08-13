@@ -860,12 +860,13 @@ function showTab(name) {
 // author's ruling, and it is the standing rule: publish what the library says,
 // and if it is wrong, change the library.
 //
+// More Sharpen followed at a94, onto the `sharpen` exhibit the library
+// registered at a255: INSURER leads with the score grid, then the walk with
+// its working, each block captioned upstream. That cutover deleted the two
+// hardcoded block ledes this file carried and emptied `tables.FORMATS`.
+//
 // **What is left, and none of it is a table the library publishes.**
 //
-//   More Sharpen    the library registered a `sharpen` exhibit at a255 and this
-//                   leaf has not moved onto it yet. Until it does, this holds
-//                   the two ledes and the last two `FORMATS` entries in
-//                   `tables.py`; that cutover empties both.
 //   Bounds (2)      computed from what the reader typed, so not keyed on the
 //                   object and not registry exhibits in the current sense. The
 //                   author is adding a bounds summary upstream. The documents
@@ -962,7 +963,12 @@ const LOADERS = {
         ['more', 'window']),
     'more:dependency': () => loadExhibitLeaf('pane-more', 'dependency',
         ['more', 'dependency']),
-    'more:sharpen': () => loadSharpenAudit(),
+    // The `sharpen` exhibit (LIB a255): INSURER leads with the score grid
+    // unstacked (`[Sharpen-Grid-Is-A-Reading]`), then the per-cell walk, each
+    // block captioned by the library. The frame route still serves
+    // `sharpen_score` / `sharpen_df` for direct api use.
+    'more:sharpen': () => loadExhibitLeaf('pane-more', 'sharpen',
+        ['more', 'sharpen']),
     'more:narrative': () => loadNarrative(),
 };
 
@@ -1259,12 +1265,12 @@ function frameDoc(which) {
  * The library owns the translation, so this is a passthrough on the exhibit
  * route and nothing here knows what either perspective does to a frame.
  *
- * Twelve of the nineteen table leaves take one, which is every leaf drawing a
+ * Thirteen of the nineteen table leaves take one, which is every leaf drawing a
  * published exhibit: Overview Summary, Tail and Validation; Economics Ledger,
  * Ratios and Waterfall; Reinsurance Summary and Stats; More Stats, Tail
- * behavior, Window and Dependency. The other seven are the two densities, More
- * Sharpen, and the four Pricing and Bounds tables, and the reason each is still
- * on a frame route is above `LOADERS`.
+ * behavior, Window, Dependency and Sharpen (since a94). The other six are the
+ * two densities and the four Pricing and Bounds tables, and the reason each is
+ * still outside the generic exhibit loader is above `LOADERS`.
  */
 const PERSPECTIVE_KEY = 'aggapi.perspective';
 let _perspective = (() => {
@@ -1722,59 +1728,6 @@ function ledeFor(group, key) {
     const p = el('p', { className: 'exhibit-lede' }, el('b', {}, leaf.label));
     p.appendChild(document.createTextNode(`: ${leaf.hint}`));
     return p;
-}
-
-/**
- * More \ Sharpen: what the grid audit tried, and what it decided.
- *
- * Two blocks, because the probe answers at two levels. The score grid first,
- * `sharpen_df.score.unstack('d_log2')`, which is the library's own documented
- * picture of the walk: rows are steps in bs, columns steps in log2, cells the
- * score, lower better, and the NaN corners are directions the probe ran out of
- * budget before reaching. Then the full frame, one row per cell with its
- * realized moments, its validation verdict, the time it took, and the
- * `selected` flag marking the winner.
- *
- * The audit was computed and thrown away through a50: Sharpen wrote its
- * one-line verdict into the status strip and `sharpen_df` was reachable from
- * nothing, so the reader was told a grid had moved and never shown the search
- * that moved it.
- */
-async function loadSharpenAudit() {
-    const [score, full] = await Promise.all([
-        frameDoc('sharpen_score').catch(() => null),
-        frameDoc('sharpen_df').catch(() => null),
-    ]);
-    const draw = () => {
-        const root = el('div', { className: 'overview-exhibits exhibit-blocks' });
-        replacePane('pane-more', root);
-        const lede = ledeFor('more', 'sharpen');
-        if (lede) root.appendChild(lede);
-        if (!score && !full) {
-            root.appendChild(el('div', { className: 'text-muted small' },
-                'No audit on this object. Press Sharpen on the action row.'));
-            return;
-        }
-        if (score) {
-            root.appendChild(el('p', { className: 'exhibit-lede' },
-                el('b', {}, 'Score grid'),
-                ': every cell the probe walked, as steps in bs down and steps '
-                + 'in log2 across. Blank cells are where it stopped.'));
-            const host = el('div');
-            root.appendChild(host);
-            mountTable('pane-more', host, { doc: score }, GRID_FULL);
-        }
-        if (full) {
-            root.appendChild(el('p', { className: 'exhibit-lede' },
-                el('b', {}, 'Every cell'),
-                ': the same walk with its working, one row per grid tried.'));
-            const host = el('div');
-            root.appendChild(host);
-            mountTable('pane-more', host, { doc: full }, GRID_FULL);
-        }
-        onTableViewChange('pane-more', draw, root);
-    };
-    draw();
 }
 
 /**

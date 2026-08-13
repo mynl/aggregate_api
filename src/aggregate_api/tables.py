@@ -106,9 +106,9 @@ ROW_FLAGS: dict[str, Callable[[pd.DataFrame, int], Sequence[str]]] = {}
 #: hand-written maps, which is what this replaces.
 #:
 #: A value is either a mapping of column name to spec, or a single spec that
-#: applies to **every** column. The second form is for a frame whose columns are
-#: not statistics: the sharpen score grid's are steps in log2, so one spec covers
-#: the lot.
+#: applies to **every** column. The second form was for a frame whose columns
+#: are not statistics: the sharpen score grid's were steps in log2, so one
+#: spec covered the lot.
 #:
 #: Money, everywhere money appears. Grouped, and to the cent.
 #:
@@ -130,45 +130,21 @@ MONEY = ",.2f"
 # `PROBABILITY` came out at a71 with the `tail_df` entry that was its only user.
 
 FORMATS: dict[str, dict[str, object] | str] = {
-    # ---- what is left, and why each is left -------------------------------
+    # ---- empty, and staying that way --------------------------------------
     #
+    # Every entry this map ever held named the formats for a frame whose table
+    # the library publishes as an exhibit, which ships its formats resolved, so
+    # each was this repo asserting how the library's own numbers print.
     # `summary`, `tail_df`, `validation_df`, `reins_summary_df` and
-    # `bs_window_df` came out at a71. Each named the formats for a frame whose
-    # table the library publishes as an exhibit, which ships its formats
-    # resolved, so every one of them was this repo asserting how the library's
-    # own numbers print. The `frame/{which}` route still serves those frames for
-    # direct api use; it renders them by dtype inference now, and if that reads
-    # badly the answer is to fetch the exhibit, which is what the app does.
+    # `bs_window_df` came out at a71; the six pricing sets (`price`,
+    # `reins_price` and the four `stat_*` slices) at a85; the last two,
+    # `sharpen_df` and `sharpen_score`, at a94 when the Sharpen leaf moved
+    # onto the `sharpen` exhibit the library registered at 1.0.0a255.
     #
-    # The six pricing sets came out at a85: `price`, `reins_price` and the four
-    # `stat_*` slices, which between them said how a premium, a margin, a loss
-    # ratio and a return on capital print. The library registers `pricing.*`
-    # exhibits now and resolves its own formats into them, so those six were the
-    # same second opinion the a71 batch was, held one round longer only because
-    # the frames behind them were computed from the reader's input and had no
-    # exhibit to come from. They do now.
-    #
-    # The grid audit's per-cell detail. The `u_*` columns are relative errors
-    # against the analytic moments and run from about 1e-7 to a few percent, so
-    # they need a scientific format rather than a fixed one: at `.4f` a good cell
-    # and a perfect cell both print 0.0000, which is exactly the comparison the
-    # table exists to support. `score` is the number that decides, and gets the
-    # digits to separate two cells that are close.
-    #
-    # **The only two entries left**, and they are here because the app's Sharpen
-    # leaf still takes the frame route. The library registered a `sharpen`
-    # exhibit at 1.0.0a255; moving `loadSharpenAudit` onto it deletes these two
-    # and empties this map, and that cutover is its own item in `dev/TODO.md`
-    # rather than part of the pricing plan.
-    "sharpen_df": {
-        "score": ".5f", "extent": MONEY, "x_min": MONEY, "bs": ",.4g",
-        "u_sev_mean": ".2e", "u_sev_cv": ".2e", "u_sev_skew": ".2e",
-        "u_agg_mean": ".2e", "u_agg_cv": ".2e", "u_agg_skew": ".2e",
-        "aliasing": ".4f", "deficit": ".2e", "seconds": ".3f",
-    },
-    # The score grid, whose columns are steps in log2 rather than statistics, so
-    # one spec covers all of them.
-    "sharpen_score": ".5f",
+    # The `frame/{which}` route still serves the frames for direct api use; it
+    # renders them by dtype inference, and if that reads badly the answer is to
+    # fetch the exhibit, which is what the app does. Nothing belongs here for a
+    # frame the library publishes an exhibit for; that is what the exhibit is.
 }
 
 
