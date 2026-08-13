@@ -1,11 +1,31 @@
 # Plan [Chart-Reflected-Reading]: the app half, a sixth reading and its button
 
-Status: **not started.** Written 2026-08-13 against LIB
-`dev\plan-chart-reflect.md` (drafted the same day, targeting `1.0.0a267`, not
-yet executed). The two documents are a **paired plan**, each repo owning its
-half, the `plan-chart-ir` with `plan-plot-ir-api` arrangement rather than the
-one canonical copy and a symlink. Work here starts after the LIB bump lands
-and this repo syncs.
+> **Status: EXECUTED at a96, moved to done 2026-08-13.** All five parts landed
+> as written: A1 the probe and the adapter default, A2 `panelAxes` with the
+> composed map and the flag split, A3 the two behaviors rekeyed on `xPeriod`,
+> A4 the button between `full range` and `return period`, A5 the
+> `reading-map.js` leaf with its node tests and the smoke block. Both
+> considered divergences were taken: `VIEW_KEY` stays `v4` and the map name is
+> not the return-period flag.
+>
+> **The upstream question settled the app's way.** The LIB half is at
+> `aggregate` 1.0.0a269, in that repo's working tree and not yet committed
+> (version bumped, CHANGELOG written, its own copy of this plan moved to LIB
+> `dev\done\`). Its entry states the composition as one flip, "an axis already
+> read reflected takes the plain reciprocal whatever the document declares", so
+> ruling 4's double flip is gone and `REFLECTED_RETURN_PERIOD_MAP` was never
+> built. The table in the section below is what shipped on both sides.
+>
+> **Verification steps 1 to 3 ran clean on the a269 sync**, same day:
+> `dev\fixtures\charts.json` re-captured and `smoke-charts.mjs` all clear,
+> with `reflect` offered on exactly the six documents predicted below and
+> absent from `port`. Step 4, the browser pass, is still owed and is tracked
+> in `dev\TODO.md`.
+
+Written 2026-08-13 against LIB `dev\plan-chart-reflect.md`. The two documents
+are a **paired plan**, each repo owning its half, the `plan-chart-ir` with
+`plan-plot-ir-api` arrangement rather than the one canonical copy and a
+symlink.
 
 ## Context
 
