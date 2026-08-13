@@ -215,15 +215,19 @@ def test_pnl_text_is_self_contained(client):
         assert "agg." not in program and "port." not in program, program
 
 
-def test_pnl_inherits_a_premium_when_the_exposure_states_one(client):
-    """And sizes one from the loss ratio when it does not."""
+def test_pnl_derives_a_premium_when_the_exposure_states_one(client):
+    """And sizes one from the loss ratio when it does not.
+
+    ``derive premium`` since ``aggregate`` 1.0.0a270: the engine's technical
+    premium grossed up for the expense clause, ``inherit premium`` before.
+    """
     priced = _build(client, PRICED)
     r = client.post(f"/v1/objects/{priced['id']}/pnl", json={})
-    assert "inherit premium" in r.json()["program"]
+    assert "derive premium" in r.json()["program"]
 
     bare = _build(client, AGG)
     r = client.post(f"/v1/objects/{bare['id']}/pnl", json={"loss_ratio": 0.65})
-    assert "inherit premium" not in r.json()["program"]
+    assert "derive premium" not in r.json()["program"]
     assert "premium" in r.json()["program"]
 
 

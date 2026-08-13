@@ -122,9 +122,11 @@ def has_premium(obj: Any) -> bool:
     """Does this object's exposure state a premium?
 
     Consumer: the PnL button's form. :meth:`Aggregate.pnl_program` writes
-    ``inherit premium`` when there is one and sizes it from a loss ratio when
-    there is not, so this decides whether the app offers a loss-ratio input at
-    all rather than showing one that will be ignored.
+    ``derive premium`` when there is one (the technical premium grossed up
+    for the expense clause; upstream since ``aggregate`` 1.0.0a270) and sizes
+    it from a loss ratio when there is not, so this decides whether the app
+    offers a loss-ratio input at all rather than showing one that will be
+    ignored.
 
     Mirrors the library's own test in ``aggregate._program._pnl_consideration``:
     the sum of ``exp_premium``, which is an array on a portfolio and a scalar

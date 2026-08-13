@@ -4,6 +4,45 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a97
+
+**The PnL button emits `derive premium`, and the button chain did not change.**
+The button posts an empty body; the server calls the library's
+`pnl_program(loss_ratio=0.70, expense_ratio=0.25)` and the app echoes the text
+back. Upstream at `aggregate` 1.0.0a270 that method writes `derive premium`
+whenever the engine states a premium: the technical premium T grossed up for
+the expense clause the program already carries, `P = (T + fixed) / (1 -
+premium ratios)`, so premium net of expenses returns exactly T and the
+expected underwriting result is the risk load. With the default 25% clause
+the booked premium is T/0.75 where it used to be T. An engine without premium
+keeps the loss ratio sized head and the button behaves as before. Zero code
+change in the chain is the purist ruling working as designed: the library owns
+the meaning, the app draws what it is served, and the switch reached the
+button by sync alone.
+
+**The words moved where they were quoted.** The `post_pnl` route docstring,
+the `has_premium` capability gloss and the `loss_ratio` field description all
+said `inherit premium`; they now describe the derive head. The test pinning
+the button's program renamed and asserts the new keyword.
+
+**`decl-keywords.json` gains a `pnl` group, the file's first pnl vocabulary.**
+`pnl`, `xpnl`, `inherit`, `derive`, `retro`, `peel`, `less`, `expense`,
+`expenses`: the editor now highlights the whole clause and the offline
+completion pool offers it, where before none of those words were known to the
+client at all. `decl-mode.js` and `completion.js` flatten every group
+automatically, so the JSON edit is the whole change. Server side completion
+needed nothing: `derive` flows from the library's `_TERMINAL_LABELS` through
+`/v1/decl/complete` on its own.
+
+**One stale test corrected at the sync.** Upstream `[Allocation-Default-Linear]`
+(`aggregate` 1.0.0a265) made `ccoc` allocate on an unbounded book at a finite
+anchor, so the calibrate route's warning about the skipped family legitimately
+stopped firing, and the test pinning that warning had been failing since the
+library moved. It now pins the improved reality: `ccoc` rows present in the
+allocation, warnings empty. Verified against the live route.
+
+Synced against `aggregate` 1.0.0a270. Plan: `dev/done/plan-pnl-button.md`.
+
 ## 1.0.0a96
 
 **A sixth declared reading, `reflect`, and the button that asks for it.** The

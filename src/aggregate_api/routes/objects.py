@@ -2472,9 +2472,12 @@ def post_pnl(
 
     ``pnl NAME_PnL <premium> less <engine> less <expense>``, with the object's
     own body inlined as the engine, so the text is self-contained and builds
-    anywhere rather than only in the session that wrote it. The premium is
-    ``inherit premium`` when the exposure states one, and otherwise expected
-    loss over ``loss_ratio``, rounded where the number is produced
+    anywhere rather than only in the session that wrote it. The premium head
+    is ``derive premium`` when the exposure states one (the engine's technical
+    premium grossed up for the expense clause, so premium net of expenses
+    returns the technical premium exactly; upstream since ``aggregate``
+    1.0.0a270, ``inherit premium`` before that), and otherwise expected loss
+    over ``loss_ratio``, rounded where the number is produced
     (``aggregate._program._pnl_consideration``, upstream since ``aggregate``
     1.0.0a251; this route rewrote the text itself until a95).
 

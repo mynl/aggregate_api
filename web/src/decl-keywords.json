@@ -25,6 +25,10 @@
         "xs", "po", "share", "tower",
         "and", "inf"
     ],
+    "pnl": [
+        "pnl", "xpnl", "inherit", "derive", "retro", "peel",
+        "less", "expense", "expenses"
+    ],
     "distortions": [
         "tvar", "ph", "wang", "proportional", "linear",
         "constant", "convex", "biTVaR", "blend"

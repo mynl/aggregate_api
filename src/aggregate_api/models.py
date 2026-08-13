@@ -270,7 +270,7 @@ class PnlProgramRequest(BaseModel):
 
     loss_ratio: float = Field(
         0.70, gt=0, le=1,
-        description="Sizes the premium as expected loss over this, when there is none to inherit.")
+        description="Sizes the premium as expected loss over this, when there is none to derive from.")
     expense_ratio: float = Field(
         0.25, ge=0, lt=1,
         description="Gross expense as a fraction of premium; 0 omits the clause.")

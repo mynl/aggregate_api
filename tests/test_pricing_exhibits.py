@@ -14,6 +14,8 @@ readable refusals arrives as an HTTP 400 with the sentence intact.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from greater_tables import TableDoc
 
@@ -237,18 +239,23 @@ def test_a_portfolio_allocates_across_its_units(client):
     assert len(allocate["insurer"]["blocks"]) == 5, "the target, then four slices"
 
 
-def test_a_skipped_distortion_is_a_warning_and_not_a_failure(client):
-    """The mass distortion on an unbounded book: the table still draws.
+def test_ccoc_allocates_on_an_unbounded_book(client):
+    """The mass distortion on an unbounded book: every family answers.
 
-    The library declines to allocate ``ccoc`` there and says so. The rows that
-    did answer are the answer, and the warning is what tells the reader which
-    family is missing from them.
+    This test used to pin the opposite: the library declined to allocate
+    ``ccoc`` on an unbounded book and the route surfaced its warning. Upstream
+    `[Allocation-Default-Linear]` (``aggregate`` 1.0.0a265) made ``ccoc``
+    allocate at a finite anchor instead, so the warning legitimately stopped
+    firing; caught at the 1.0.0a270 sync. The warnings passthrough itself is
+    exercised by whatever family next declines.
     """
     oid, _ = _build(client, PORT)
     r = _calibrate(client, oid)
     assert r.status_code == 200, r.text
-    assert r.json()["exhibits"]["pricing.allocate"]["insurer"]["blocks"]
-    assert any("ccoc" in w for w in r.json()["warnings"]), r.json()["warnings"]
+    body = r.json()
+    assert body["exhibits"]["pricing.allocate"]["insurer"]["blocks"]
+    assert "ccoc" in json.dumps(body["exhibits"]["pricing.allocate"])
+    assert body["warnings"] == [], body["warnings"]
 
 
 def test_calibrate_refuses_an_object_that_cannot_price(client):
