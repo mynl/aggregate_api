@@ -642,24 +642,34 @@ one version bump each.
       `CopulaWindFlood`, is the log floor the right depth, and do the wall
       projections show the marginals usefully or just add clutter.
 
-- [ ] **The reflected reading**: `dev/plan-chart-reflect.md`, the app half of
-      the library's plan of the same name, paired rather than symlinked since
-      each repo owns its side. **The app half landed at a96** and is inert
-      until the library ships `ChartAxis.complement_of`: the probe finds no
-      paired complement axis, so no button appears. On the sync that picks it
-      up, re-capture `dev/fixtures/charts.json` so the smoke test's `reflect`
-      block stops skipping, then make the browser pass in the plan's
-      verification section, whose load-bearing check is that `reflect` with
-      `return period` opens out the *other* end of the curve. If it changes
-      nothing there, the library kept the double flip.
+- [x] **The percentile reference lines come off**:
+      `dev/done/plan-no-reference-lines.md`, canonical here and pointed at from
+      the library's `dev/done/`. Executed both sides the day it was written,
+      2026-08-13: LIB a271 deleted `CAPITAL_ANCHOR` and `LEE_ANCHORS` and the
+      marks they built, app a98 is one tooltip and two stale comments, since
+      the app draws what it is served. What is left is the mean, and break
+      even on a P&L. Browser pass done on all three kinds. One thing to know:
+      the mean's label changes side, taking the right as the only vertical
+      under the `rightmost` rule, and the rule was left alone. *(done)*
 
-      **Open upstream, raised 2026-08-13**: the library's ruling 4 flips twice
-      (mirror the coordinate *and* exchange the map), which cancels exactly, so
-      `reflect` would do nothing whenever `return period` is on. Its phase 5
-      asserts two composition cases that cannot both hold; the first is the
-      double flip. This repo flips once and its `reading-map.js` tests pin the
-      table. If the library rules differently, that is one line and one test
-      here.
+- [ ] **The reflected reading, verification only**:
+      `dev/done/plan-chart-reflect.md`, the app half of the library's plan of
+      the same name, paired rather than symlinked since each repo owns its
+      side. **Both halves are written**: the app at a96, the library at a269,
+      which is in the library's working tree rather than committed. The
+      upstream question closed the app's way, a269 composing the two
+      probability readings with one flip and no `REFLECTED_RETURN_PERIOD_MAP`,
+      so `reading-map.js` and its tests need no edit.
+
+      Verification steps 1 to 3 ran clean on the a269 sync, 2026-08-13:
+      `dev/fixtures/charts.json` re-captured and `smoke-charts.mjs` all clear,
+      with `reflect` offered on exactly the six documents that declare a
+      complement axis (`agg`, `severity`, `distortion`, `pnl`, `reins`,
+      `envelope`) and absent from `port` and the joint surface.
+
+      **What is left is the browser pass**, step 4, whose load-bearing check is
+      that `reflect` with `return period` opens out the *other* end of the
+      curve. If it changes nothing there, a double flip is back somewhere.
 
 - [ ] **The joint surface, end to end**: `dev/plan-3d-plot.md`, three parties,
       the canonical copy here and a symlink in the library. In flight rather
@@ -758,8 +768,9 @@ one version bump each.
          a95.
       3. `PnL.value_type` landed at LIB a248; the app's local special case is
          gone.
-      4. Superseded 2026-08-13 by `[Chart-Marks-Mean-Only]`
-         (`dev/plan-no-reference-lines.md`): the percentile reference lines
+      4. Superseded 2026-08-13 by `[Chart-Marks-Mean-Only]`, executed the same
+         day (`dev/done/plan-no-reference-lines.md`, LIB a271 and app a98):
+         the percentile reference lines
          come off entirely, the readout strip answers the same question by
          hover, and the mean stays, so the redesign this ask requested is
          moot.

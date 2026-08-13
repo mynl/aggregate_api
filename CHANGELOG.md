@@ -4,6 +4,48 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a98
+
+**The percentile reference lines leave the browser, and the app deleted
+nothing to make it happen.** Upstream at `aggregate` 1.0.0a271
+(`[Chart-Marks-Mean-Only]`) the emitters stopped marking return periods: the
+`agg` density panel's 1-in-200, the faint 1-in-100 and 1-in-250 on the `agg`
+and `pnl` Lee panels, and the 1-in-200 on both `port` panels. What survives is
+the mean and, on a P&L, break even at zero. The app renders `doc.marks` and
+holds none of its own, so the lines vanish on the sync. The purist ruling
+working the way it is supposed to, for the second release running.
+
+**Why they went: the readout strip already answers the question better.** A
+percentile is a point on a curve the chart draws, and `readoutModel` writes
+every series value at the hovered coordinate into the legend strip, printing a
+return-period axis as `1-in-N`. A permanent dashed vertical asserting the same
+number bought a label collision rule, a side rule and a place in every punch
+up round, and returned a number that hovering gives for free. The mean stays
+because it is a property of the whole distribution, and break even because
+zero is where the sign of a signed outcome changes; neither is a coordinate a
+reader can point at.
+
+**What actually changed here is three strings.** The `reference lines` control
+keeps its key, its `offer: 'marks'` gate, its default and its place in
+`aggapi.chartView.v4`, so a stored `false` is still honored: only its tooltip
+and the comment above it stop naming capital anchors. `state.mean`'s two
+comments, stale since a62, now say what the value feeds, which is the Bounds
+premium field and not a reference line the exhibit stopped drawing.
+
+**The `rightmost` side rule stays, and one thing to know about it.** It gives
+the right side to the vertical mark with the largest `at`, which used to be
+the 1-in-200 and is now the mean, so the mean's label changes side on the
+density panel. The rule is correct for one mark and correct again if a second
+ever returns, so it is left alone rather than special cased for the count it
+happens to see today.
+
+Fixtures re-captured and `node dev/scripts/smoke-charts.mjs` clean:
+`doc.marks` is 1 for `agg` and `port` and 3 for `pnl`, from 4, 3 and 5. Two
+punch list items close with it, the button governing mean plus 100 plus 200
+(partly: the button governs what is left) and the 1-in-200 label side (fully:
+there is nothing left to overlap). Round 5 ask 4 closes by supersession, so
+that note is fully done. Plan: `dev/done/plan-no-reference-lines.md`.
+
 ## 1.0.0a97
 
 **The PnL button emits `derive premium`, and the button chain did not change.**

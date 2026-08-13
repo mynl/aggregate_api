@@ -63,7 +63,7 @@ const VIEW_DEFAULTS = {
     reflect: false,      // the complement of a probability axis, 1 - v
     returnPeriod: false, // the paired reading of a probability axis
     invert: false,       // every panel that declares its axes exchange
-    refLines: true,      // the document's marks: mean, capital anchors
+    refLines: true,      // the document's marks: the mean, break even
     kind: null,          // panel realization: a z grid flat or in relief
     // The relief's own controls, which act on nothing else. Defaults are the
     // prototype's `app` preset: the mesh and the wall grid on, the marginals
@@ -185,17 +185,17 @@ const CONTROLS = [
         title: 'Exchange the axes of a panel that says they exchange. A '
             + 'quantile plot inverted is the distribution function',
     },
-    // Offered whenever the document publishes marks, and **on** by default: the
-    // mean and the capital anchors are what most readers came to see, and this
-    // is the button for taking them away rather than for asking for them. It
-    // existed before a62, did not survive the rewrite onto chart documents, and
-    // its absence is punch item G3.
+    // Offered whenever the document publishes marks, and **on** by default: a
+    // mark is a reading a reader cannot hover for, so it is what they came to
+    // see, and this is the button for taking it away rather than for asking
+    // for it. It existed before a62, did not survive the rewrite onto chart
+    // documents, and its absence is punch item G3.
     {
         key: 'refLines',
         offer: 'marks',
         label: 'reference lines',
-        title: 'Show the mean and the capital anchors the document marks, '
-            + 'drawn on the panels that carry them',
+        title: 'Show the marks the document carries, the mean and break '
+            + 'even, drawn on the panels that carry them',
     },
 ];
 

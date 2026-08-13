@@ -224,7 +224,12 @@ Punchups Round III
 
 #### Overview->Plot:
 * ref lines button should control all ref lines; mean, 100 and 200 year quantiles (ie q(.99), q(0.995).
+  (Partly superseded, `[Chart-Marks-Mean-Only]`, LIB a271 and app a98: the
+  button stays and governs every mark the document carries, but the quantile
+  marks came off the library, so what it governs is the mean and break even.)
 * label for 1-in-200 is like 1 in 100 (within plot figure) but to the right of its vertical line so they do not overlap
+  (Superseded by the same: one vertical per panel, so there is nothing left
+  to overlap. A percentile is a hover on the readout strip now.)
 * log y on rh plot triggers reshape/draw of left plot; left plot should not move/change
 * right plot: get rid of second rhs y axis - that's the point of S vs RP. we don't need to show both; that triggers some of the redraw problems.
 * all plots: when you scale do NOT bother putting a label on the lowest / highest x axis value - this comes through with more decimals and looks silly. presumably this is an echarts setting.

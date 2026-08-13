@@ -62,7 +62,7 @@ const state = {
     id: null,
     kind: null,
     name: null,
-    mean: null,             // headline mean, for the exhibit's reference line
+    mean: null,             // headline mean, seeding the Bounds premium field
     hasReins: false,        // the Price basis selector; the Reins tab reads `exhibits`
     // What the object can answer, straight off the build response and already
     // in the shape `nav.js` takes: `{built, exhibits, charts, flags}`. The app
@@ -192,8 +192,9 @@ function adoptBuild(res) {
     state.id = res.id;
     state.kind = res.kind;
     state.name = res.name;
-    // The exhibit draws a mean reference line; the build response already
-    // carries it, so there is no reason to refetch a frame to find it.
+    // A Bounds leaf starts its premium field above the expected loss, and the
+    // build response already carries the mean, so there is no reason to
+    // refetch a frame to find it. The summary chips read the response direct.
     state.mean = res.mean;
     state.hasReins = Boolean(res.has_reins);
     // A calibration is about the object it was made on, so a new object drops
