@@ -60,6 +60,7 @@ const VIEW_KEY_PREVIOUS = 'aggapi.chartView.v3';
 const VIEW_DEFAULTS = {
     log: false,          // every axis that declares a log reading
     fullRange: false,    // every axis that declares a full extent
+    reflect: false,      // the complement of a probability axis, 1 - v
     returnPeriod: false, // the paired reading of a probability axis
     invert: false,       // every panel that declares its axes exchange
     refLines: true,      // the document's marks: mean, capital anchors
@@ -140,6 +141,14 @@ function setView(patch, persist = true) {
 // the strip does not reorder itself between charts and a reader's hand learns
 // one layout.
 //
+// The canonical order is `log, full range, reflect, return period, invert,
+// reference lines`, stated the same way in the library's
+// `dev/plan-chart-reflect.md`. `reflect` is the one entry that did not simply
+// append: it sits *before* the return period because the two act on the same
+// probability axis and the period reading composes on top of the reflection,
+// so reading the strip left to right is reading the coordinate changes in the
+// order they apply. Worth the one time cost of moving three buttons.
+//
 // `key` names the reading in the view state; `offer` reads the document's
 // declaration, which is what decides whether the button exists at all.
 const CONTROLS = [
@@ -156,6 +165,13 @@ const CONTROLS = [
         title: 'Show everything, on both axes: the whole extent where the '
             + 'document declares one, and as far as the data reaches where it '
             + 'does not, instead of the window the library computed',
+    },
+    {
+        key: 'reflect',
+        label: 'reflect',
+        title: 'Read a probability axis as its complement, 1 - v. A '
+            + 'distribution function reflected is the survival function; with '
+            + 'the return period it opens out the other end of the curve',
     },
     {
         key: 'returnPeriod',

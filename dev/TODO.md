@@ -642,6 +642,25 @@ one version bump each.
       `CopulaWindFlood`, is the log floor the right depth, and do the wall
       projections show the marginals usefully or just add clutter.
 
+- [ ] **The reflected reading**: `dev/plan-chart-reflect.md`, the app half of
+      the library's plan of the same name, paired rather than symlinked since
+      each repo owns its side. **The app half landed at a96** and is inert
+      until the library ships `ChartAxis.complement_of`: the probe finds no
+      paired complement axis, so no button appears. On the sync that picks it
+      up, re-capture `dev/fixtures/charts.json` so the smoke test's `reflect`
+      block stops skipping, then make the browser pass in the plan's
+      verification section, whose load-bearing check is that `reflect` with
+      `return period` opens out the *other* end of the curve. If it changes
+      nothing there, the library kept the double flip.
+
+      **Open upstream, raised 2026-08-13**: the library's ruling 4 flips twice
+      (mirror the coordinate *and* exchange the map), which cancels exactly, so
+      `reflect` would do nothing whenever `return period` is on. Its phase 5
+      asserts two composition cases that cannot both hold; the first is the
+      double flip. This repo flips once and its `reading-map.js` tests pin the
+      table. If the library rules differently, that is one line and one test
+      here.
+
 - [ ] **The joint surface, end to end**: `dev/plan-3d-plot.md`, three parties,
       the canonical copy here and a symlink in the library. In flight rather
       than pending: a72 landed the api half (section 3, the three query

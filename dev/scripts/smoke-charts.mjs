@@ -176,6 +176,28 @@ function checkReadings(label, doc, base) {
             || full.yAxis.some((a, i) => wider(a, base.yAxis[i]));
         if (!widened) fail(label, 'full range is declared but no window widened');
     }
+    if (offered.reflect) {
+        const rf = at({ reflect: true });
+        if (!checkDrawable(`${label} [reflect]`, doc, rf)) return;
+        // The reflected axis is a declared axis of its own, so it arrives with
+        // its own name off the document.
+        const named = rf.xAxis.some((a, i) => a.name !== base.xAxis[i].name)
+            || rf.yAxis.some((a, i) => a.name !== base.yAxis[i].name);
+        if (!named) fail(label, 'reflect is declared but no axis took the reading');
+        const moved = rf.series.some((s, i) => (
+            base.series[i] && JSON.stringify(s.data) !== JSON.stringify(base.series[i].data)));
+        if (!moved) fail(label, 'reflect left every coordinate untouched');
+        // The assertion the other readings do not make, and the reason it is
+        // here: a reflection is a bijection of [0, 1] onto itself, so unlike a
+        // return period it keeps its window. Whichever axes were bounded
+        // before must still be bounded, or the panel has lost its bounds, its
+        // nice interval and its zoom extent to the return period's rule.
+        const bounded = (o) => [...o.xAxis, ...o.yAxis]
+            .filter((a) => Number.isFinite(a.min) && Number.isFinite(a.max)).length;
+        if (bounded(rf) < bounded(base)) {
+            fail(label, 'reflect dropped an axis window it should have kept');
+        }
+    }
     if (offered.returnPeriod) {
         const rp = at({ returnPeriod: true });
         if (!checkDrawable(`${label} [rp]`, doc, rp)) return;

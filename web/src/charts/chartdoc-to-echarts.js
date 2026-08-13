@@ -26,6 +26,7 @@ import {
     columnAt, contourPaths, diagonalSegment, interpAt, levelLine, rowAt,
     wallScale, weightedMean,
 } from './surface-geometry.js';
+import { readingMap } from './reading-map.js';
 import {
     LOG_FLOOR, VIRIDIS, axisStyle, baseOption, fade, houseStyle, lineWidth,
     seriesColor,
@@ -169,23 +170,6 @@ function coords(series, key) {
 }
 
 /**
- * Return periods from the probabilities on a paired axis.
- *
- * `T = 1 / v` under the 'reciprocal' map, `T = 1 / (1 - v)` under
- * 'complement'. The quantile function saturates at its far end, where T
- * diverges, so a non-finite or non-positive result becomes a gap: the curve
- * stops where the grid stops knowing rather than running out to an invented
- * bound. `_chartdoc._return_periods`.
- */
-function returnPeriods(values, how) {
-    return values.map((v) => {
-        if (v == null) return null;
-        const t = how === 'complement' ? 1 / (1 - v) : 1 / v;
-        return (Number.isFinite(t) && t > 0) ? t : null;
-    });
-}
-
-/**
  * The decade at or under the smallest value worth drawing, or null.
  *
  * A log view of a window whose declared low end is zero needs a bottom, and
@@ -255,9 +239,13 @@ function axisWindow(axis, full, drawn = null) {
     return Array.isArray(axis.suggested_range) ? axis.suggested_range : null;
 }
 
-/** The paired return-period axis for `axisId`, if the document has one. */
-function pairedReading(doc, axisId) {
-    return (doc.axes || []).find((a) => a.reciprocal_of === axisId) || null;
+/**
+ * The paired axis declaring an alternative reading of `axisId`, if there is
+ * one. `attr` names which reading: `reciprocal_of` for the return period,
+ * `complement_of` for the reflection. `_chartdoc._paired_reading`.
+ */
+function pairedReading(doc, axisId, attr = 'reciprocal_of') {
+    return (doc.axes || []).find((a) => a[attr] === axisId) || null;
 }
 
 /**
@@ -296,10 +284,10 @@ function squareWindow(xWindow, yWindow, allX, allY) {
  * Returns
  * -------
  * object
- *     `{log, fullRange, returnPeriod, invert, kinds}`. The first four are
- *     booleans saying whether to offer the switch; `kinds` is the set of panel
- *     realizations the document declares beyond one, empty when there is no
- *     choice to make.
+ *     `{log, fullRange, reflect, returnPeriod, invert, kinds}`. The first five
+ *     are booleans saying whether to offer the switch; `kinds` is the set of
+ *     panel realizations the document declares beyond one, empty when there is
+ *     no choice to make.
  */
 export function readings(doc) {
     const axes = (doc && doc.axes) || [];
@@ -321,8 +309,9 @@ export function readings(doc) {
     return {
         log: axes.some((a) => drawn.has(a.id) && (a.scales || []).length > 1),
         fullRange: axes.some((a) => drawn.has(a.id) && Array.isArray(a.full_range)),
-        // A paired axis is named by no panel by construction, so the pairing is
-        // read off the axis rather than off what is drawn.
+        // Both pairings: a paired axis is named by no panel by construction, so
+        // each is read off the axis rather than off what is drawn.
+        reflect: axes.some((a) => a.complement_of),
         returnPeriod: axes.some((a) => a.reciprocal_of),
         invert: panels.some((p) => p.invertible),
         // Not a *reading* in the sense the other four are: the document does not
@@ -718,29 +707,51 @@ function compactPeriod(T) {
 /**
  * The axes one panel is drawn against, after the declared readings apply.
  *
- * Two changes of coordinates, in the order the library renderer applies them.
- * A paired return-period reading substitutes the axis and records the map its
- * values go through; inverting exchanges the two axes, which is what turns a
- * quantile function into the distribution function it inverts.
+ * Three changes of coordinates, in the order the library renderer applies
+ * them. A paired reflection substitutes the axis and mirrors its values; a
+ * paired return-period reading substitutes the axis again and sends the values
+ * through the document's map; inverting exchanges the two axes, which is what
+ * turns a quantile function into the distribution function it inverts. Both
+ * pairings are looked up against the panel's own axis id, because both point
+ * at the drawn axis rather than at each other.
+ *
+ * Returns `{xMap, yMap}`, the composed map or null, and `{xPeriod, yPeriod}`,
+ * the return-period map name or null. Those are **not** the same question:
+ * two behaviors in the panel realizer are specific to a diverging T and must
+ * not fire for a reflection, so they read the period rather than the map.
  */
 function panelAxes(doc, panel, axes, view) {
     let xAxis = axes[panel.x_axis];
     let yAxis = axes[panel.y_axis];
-    let xMap = null;
-    let yMap = null;
+    let xReflected = false;
+    let yReflected = false;
+    let xPeriod = null;
+    let yPeriod = null;
+    if (view.reflect) {
+        const cx = pairedReading(doc, panel.x_axis, 'complement_of');
+        if (cx) { xAxis = cx; xReflected = true; }
+        const cy = pairedReading(doc, panel.y_axis, 'complement_of');
+        if (cy) { yAxis = cy; yReflected = true; }
+    }
     if (view.returnPeriod) {
+        // The document's own map, applied to whichever coordinate is being
+        // read. Deliberately not flipped when reflected: mirroring the value
+        // *is* the flip, and doing both cancels. See `reading-map.js`.
         const how = (doc.meta || {}).return_period_map || 'reciprocal';
         const px = pairedReading(doc, panel.x_axis);
-        if (px) { xAxis = px; xMap = how; }
+        if (px) { xAxis = px; xPeriod = how; }
         const py = pairedReading(doc, panel.y_axis);
-        if (py) { yAxis = py; yMap = how; }
+        if (py) { yAxis = py; yPeriod = how; }
     }
+    let xMap = readingMap(xReflected, xPeriod);
+    let yMap = readingMap(yReflected, yPeriod);
     const inverted = Boolean(view.invert) && Boolean(panel.invertible);
     if (inverted) {
         [xAxis, yAxis] = [yAxis, xAxis];
         [xMap, yMap] = [yMap, xMap];
+        [xPeriod, yPeriod] = [yPeriod, xPeriod];
     }
-    return { xAxis, yAxis, xMap, yMap, inverted };
+    return { xAxis, yAxis, xMap, yMap, xPeriod, yPeriod, inverted };
 }
 
 /**
@@ -753,10 +764,12 @@ function panelAxes(doc, panel, axes, view) {
  * whichever axis it was attached to.
  */
 function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
-    const { xAxis, yAxis, xMap, yMap, inverted } = panelAxes(doc, panel, axes, view);
+    const {
+        xAxis, yAxis, xMap, yMap, xPeriod, yPeriod, inverted,
+    } = panelAxes(doc, panel, axes, view);
     const members = (doc.series || []).filter((s) => s.panel_id === panel.id);
 
-    const map = (values, how) => (how ? returnPeriods(values, how) : values);
+    const map = (values, how) => (how ? how(values) : values);
     const drawn = [];
     for (const s of members) {
         const rawX = coords(s, 'x');
@@ -785,12 +798,19 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
 
     const declaredX = axisWindow(xAxis, releaseX, allX);
     let xWindow = declaredX || extentOf(allX) || [0, 1];
-    if (xMap && !declaredX) xWindow = [xWindow[0], Math.min(xWindow[1], MAX_RETURN_PERIOD)];
-    // A paired reading re-slices the panel: the deep tail a return-period axis
-    // exists to show sits far outside the window computed for the probability
-    // reading, so the companion axis follows the data instead.
-    let yWindow = yMap ? null : axisWindow(yAxis, releaseY, allY);
-    let xOnly = xMap ? null : xWindow;
+    // Keyed on the *period*, not on "a map is present": the cap exists because
+    // the quantile function saturates and T diverges, and a reflected
+    // probability axis is bounded in [0, 1] and needs no cap.
+    if (xPeriod && !declaredX) xWindow = [xWindow[0], Math.min(xWindow[1], MAX_RETURN_PERIOD)];
+    // Also keyed on the period, and for the same kind of reason. A
+    // return-period reading re-slices the panel: the deep tail it exists to
+    // show sits far outside the window computed for the probability reading,
+    // so the companion axis follows the data instead. A reflection is a
+    // bijection of [0, 1] onto itself and its axis carries its own window from
+    // the emitter, which is the whole point of declaring it as a paired axis,
+    // so that window stands.
+    let yWindow = yPeriod ? null : axisWindow(yAxis, releaseY, allY);
+    let xOnly = xPeriod ? null : xWindow;
     if (panel.aspect === 'equal' && xScale === yScale) {
         xOnly = squareWindow(xOnly, yWindow, allX, allY);
         yWindow = xOnly;
@@ -949,7 +969,7 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
         const how = orient === 'v' ? xMap : yMap;
         let at = m.at;
         if (how) {
-            [at] = returnPeriods([at], how);
+            [at] = how([at]);
             if (at == null) continue;
         }
         placed.push({ m, orient, at });
@@ -1307,8 +1327,9 @@ export function chartdocToEcharts(doc, opts = {}) {
     const panels = (doc && doc.panels) || [];
     if (!panels.length) return null;
     if (doc.ir_version > CHART_IR_VERSION) return null;
-    const view = { log: false, fullRange: false, returnPeriod: false,
-                   invert: false, kind: null, ...(opts.view || {}) };
+    const view = { log: false, fullRange: false, reflect: false,
+                   returnPeriod: false, invert: false, kind: null,
+                   ...(opts.view || {}) };
     const realized = panels.map((p) => realization(p, view.kind));
     // The bifurcation, split by RENDERER CAPABILITY rather than by panel kind.
     // A heatmap is a 2-D drawing of the same grid a surface draws in relief, so

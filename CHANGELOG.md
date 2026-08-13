@@ -4,6 +4,81 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a96
+
+**A sixth declared reading, `reflect`, and the button that asks for it.** The
+library is adding `ChartAxis.complement_of`, a paired axis declaring that a
+probability axis may be read as its complement, `1 - v`. On a Lee panel that
+turns the non-exceeding probability into the exceeding one, so the drawn curve
+becomes the survival function, which with `invert` is `(x, 1 - F(x))`, the
+reading the author wanted on the right-hand panel of the Overview plot. On the
+unit square of a distortion or an envelope it reflects both axes and gives the
+dual. Planned in `dev/plan-chart-reflect.md`, the app half of the library's
+plan of the same name.
+
+Nothing changes on the wire. `reflect` is a renderer switch, so the chart
+route, its options, its cache key and its ETag are untouched, and toggling the
+button re-realizes the document already in hand.
+
+**The flip has to happen exactly once, and the library's plan does it twice.**
+Its ruling 4 says that where both readings are asked for, reflect maps the
+values *and* exchanges `complement` with `reciprocal`, "so the two compose".
+They do not compose, they cancel: `complement(1 - v)` is `reciprocal(v)` and
+`reciprocal(1 - v)` is `complement(v)`, so doing both returns the original
+number on every document and `reflect` quietly stops acting wherever the
+return period is on. This repo does one: it mirrors the coordinate and leaves
+the document's map name alone. There is no flipped-map table, and the absence
+is the point.
+
+What that buys is the reading asked for, which is choosing **which end of the
+curve the return period opens out**. A log return-period axis stretches
+whichever end sends `T` to infinity, so on a loss, where the map is
+`complement`, the period alone opens the right end and adding `reflect` opens
+the left; on a signed payoff, where the map is `reciprocal`, the pair swaps the
+shortfall for the upside. Raised upstream: the library's phase 5 asserts both
+"identical to return period alone" on a `complement` document and `1 / (1 - p)`
+on a `reciprocal` one, and those cannot both hold. The first is the double flip
+written down as an expectation.
+
+**`web/src/charts/reading-map.js`**, a new leaf importing nothing, holds
+`readingMap` and the `returnPeriods` map moved out of the adapter, so the
+composition is arithmetic in one place with a `node --test` over it
+(`web/test/reading-map.test.js`, seven cases). The last of them is the guard
+that would have caught the double flip on paper: on neither document may the
+two readings draw the same curve.
+
+**The map and the return period stop being the same variable.** `panelAxes`
+returned `xMap`/`yMap` holding a map *name*, and two behaviors in the panel
+realizer read their truthiness to mean "a return-period reading is live": the
+`MAX_RETURN_PERIOD` cap, which exists because the quantile function saturates
+and `T` diverges, and the companion-window release, which exists because a
+return-period reading re-slices the panel into the deep tail. Neither is true
+of a reflection, which is a bijection of `[0, 1]` onto itself whose axis
+carries its own window from the emitter. So `panelAxes` now returns the
+composed map and the period separately, and those two sites read the period.
+Without that split a reflected panel would lose its bounds, its nice interval
+and its zoom extent.
+
+The button sits **between `full range` and `return period`**, making the
+canonical order `log, full range, reflect, return period, invert, reference
+lines`: the two probability readings together, and the strip read left to
+right is the coordinate changes in the order they apply. Three buttons moved
+once, which is stated in the `CONTROLS` preamble since the house rule there is
+otherwise to append. No `VIEW_KEY` bump: the stored view already loads over
+`VIEW_DEFAULTS`, so a new key takes its default on its own, and a bump exists
+for when a stored key would mean something *wrong*, which `reflect: false`
+does not. Bumping would have discarded every reader's sticky log, invert,
+reference lines and surface preferences to no purpose.
+
+**Inert until the library lands.** `readings.reflect` probes for
+`complement_of`, which no served document carries yet, so no button appears
+and no drawing changes. The smoke test's new block is skipped for the same
+reason and the other ten fixtures stay clean, which is what proves the
+`panelAxes` refactor changed nothing. The path itself is exercised against a
+hand-built document carrying the field, confirming the axis substitutes, the
+window survives, and `reflect` with `return period` reads `T = 1 / p` where
+the period alone reads `T = 1 / (1 - p)`.
+
 ## 1.0.0a95
 
 **`_round_pnl_premium` deletes, on the terms its own docstring set.** The
