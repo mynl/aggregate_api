@@ -117,7 +117,9 @@ editor.view.dom.addEventListener('keydown', (ev) => {
 });
 
 function navigateHistory(dir) {
-    const text = dir === 'prev' ? history.prev() : history.next();
+    // `prev` is told what is on screen: it skips the newest entry when that is
+    // already the text in the editor, so the first press back always moves.
+    const text = dir === 'prev' ? history.prev(editor.getText()) : history.next();
     if (text !== null) {
         editor.setText(text);
         clearCessionDraft();
@@ -2789,12 +2791,13 @@ document.querySelector('[data-plot-download]').addEventListener('click', () => {
 // ----------------------------------------------------------------------
 // Examples dropdown + Ctrl+Shift-↑/↓ ring navigation
 // ----------------------------------------------------------------------
-// A flat ring of every example decl, seeded from the same /v1/examples
-// payload (cached server-side). Independent of build history; navigated by
-// Ctrl+Shift-↑/↓ for quick inspection of the whole library, and documented in
-// the feedback line and the Help panel since a37. It was an undisclosed Alt-
-// binding before that, which is a working feature nobody could find.
-const exampleRing = { decls: [], cursor: -1 };
+// A ring over the same /v1/examples payload (cached server-side) that fills the
+// dropdown, holding the item rows themselves. Independent of build history;
+// navigated by Ctrl+Shift-↑/↓ for quick inspection of the whole library, and
+// documented in the feedback line and the Help panel since a37. It was an
+// undisclosed Alt- binding before that, which is a working feature nobody could
+// find.
+const exampleRing = { items: [], cursor: -1 };
 
 // Load a program into the editor. A library example arrives as `Recipe.decl`,
 // already canonical spread-form DecL carrying its hints, so there is nothing to
@@ -2814,8 +2817,12 @@ function loadExample(decl, formatted = true) {
     }).catch(() => { /* keep raw */ });
 }
 
+// Sync the ring on the row's own identity, so an entry filed under two topics
+// resumes from the showing that was clicked rather than from its first one. The
+// palette and the search view hand back the first showing, which is the right
+// answer there: they are not showing you a place in the groups.
 function pickExample(item) {
-    exampleRing.cursor = exampleRing.decls.indexOf(item.decl);  // sync the ring
+    exampleRing.cursor = exampleRing.items.indexOf(item);
     loadExample(item.decl);
 }
 
@@ -2826,17 +2833,15 @@ mountExamples($('examples-menu'), pickExample);
 // with focus in the editor.
 mountPalette(pickExample);
 
-// The ring walks every example in the library, flattened out of the grouped
-// payload. An entry tagged in two topics appears in two groups, so dedupe on the
-// decl to keep the ring a genuine cycle.
+// The ring is the dropdown read top to bottom: every row of every group, in the
+// payload's own order (topics in teaching order, entries name-sorted inside
+// one). An entry tagged in two topics is a row under each, so it is a stop under
+// each. Through a101 the ring deduped on the decl, which dropped 20 of the 209
+// rows and left the alphabet inside the later groups gap-toothed, and a walk
+// that silently omits rows you can see on screen is what reads as random order.
 loadExamples().then((data) => {
-    const seen = new Set();
     for (const cat of data.categories || []) {
-        for (const item of cat.items || []) {
-            if (seen.has(item.decl)) continue;
-            seen.add(item.decl);
-            exampleRing.decls.push(item.decl);
-        }
+        for (const item of cat.items || []) exampleRing.items.push(item);
     }
 }).catch(() => { /* dropdown still works; the ring just stays empty */ });
 
@@ -2880,13 +2885,19 @@ renderActionRow();
 
 loadLanding();
 
+// From the unset cursor the two directions land on the two ends of the ring:
+// forward on the first row, back on the last. The modular step alone cannot do
+// that, because `-1` would have to mean "at 0" going forward and "at n" going
+// back, and reading it as 0 both ways cost the last entry its turn on the first
+// press backwards. `pickExample` can also leave the cursor unset, when the row
+// picked is not one of the ring's own, so this is not only the opening press.
 function exampleStep(dir) {
-    const n = exampleRing.decls.length;
+    const n = exampleRing.items.length;
     if (!n) return;
-    exampleRing.cursor = dir === 'prev'
-        ? (exampleRing.cursor + 1) % n
-        : (exampleRing.cursor - 1 + n) % n;
-    loadExample(exampleRing.decls[exampleRing.cursor]);
+    const at = exampleRing.cursor;
+    if (at < 0) exampleRing.cursor = dir === 'prev' ? 0 : n - 1;
+    else exampleRing.cursor = dir === 'prev' ? (at + 1) % n : (at - 1 + n) % n;
+    loadExample(exampleRing.items[exampleRing.cursor].decl);
 }
 
 // ----------------------------------------------------------------------

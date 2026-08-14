@@ -4,6 +4,40 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a102
+
+**The two keyboard walks land where you can see they should.** Both fixes are
+about the same thing, a cursor that starts unset and a step that read it as one
+place when it is two.
+
+**Ctrl+Shift+↑/↓ now steps the example library in the dropdown's own order.**
+It always followed that order, topics in teaching order with the entries
+name-sorted inside one, but it deduped on the decl as it flattened the groups,
+on the argument that a repeat is not a ring. An entry filed under two topics is
+a row under each, so 20 of the 209 rows never got a turn, and they are not
+spread evenly: 7 come out of P&L, 7 out of Numerics, 4 out of Bivariate. The
+effect is an alphabet that runs cleanly through Aggregate and Severity and then
+goes gap-toothed exactly where the cross-tagged entries are, so the walk reads
+as an arbitrary order rather than as the list on screen. It now walks every row
+of every group, a repeated entry included, which is what the dropdown shows.
+Picking a row syncs the walk to that row's identity rather than to the first
+entry with the same program, so resuming from a second showing resumes there.
+
+**The first press of Ctrl+↑ no longer does nothing.** `history.prev` read the
+unset cursor as "start at the newest entry", and straight after a build the
+newest entry is the program already in the editor, so the opening press replaced
+the text with itself and moved the readout from `[1/n]` to `[1/n]`. It is told
+what is on screen now and skips that one entry when it matches, which makes the
+first press land on `[2/n]`, the behavior `position` has documented since a68.
+Nothing changes for the other reading of an unset cursor: once you have typed,
+the newest entry is somewhere the walk has not been and stays the first stop,
+which is what a shell does with a half-typed line. The example ring had the same
+fault in its own dialect, where `-1` stepped backwards to the second-to-last
+entry and the last one was unreachable on an opening press.
+
+`web/test/history-walk.test.js` covers the walk in both readings of the unset
+cursor, the stops in each direction and the two refusals at the ends.
+
 ## 1.0.0a101
 
 **The Bounds pane answers before you press it.** The pricing form's preview

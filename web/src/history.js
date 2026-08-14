@@ -3,9 +3,10 @@
 // Stored shape:
 //   { entries: ["agg X …", "agg Y …", …], cursor: -1 }
 //
-// cursor === -1 means "no nav in progress" (next prev() returns the
-// most recent entry). Each successful build pushes the program onto
-// the front, dedup-against-latest, capped at MAX entries.
+// cursor === -1 means "no nav in progress". The next prev() returns the most
+// recent entry, unless that is the text already in the editor, in which case it
+// returns the one behind it (see prev()). Each successful build pushes the
+// program onto the front, dedup-against-latest, capped at MAX entries.
 //
 // Browser-local by design -- per-user history would need an account.
 
@@ -40,11 +41,25 @@ export function record(text) {
     save(state);
 }
 
-/** Step back one entry; returns text or null if no further history. */
-export function prev() {
-    if (state.entries.length === 0) return null;
-    if (state.cursor + 1 >= state.entries.length) return null;
-    state.cursor += 1;
+/**
+ * Step back one entry; returns text or null if no further history.
+ *
+ * `current` is the text in the editor, and it settles which of two places the
+ * unset cursor is in. Straight after a build the editor holds `entries[0]`, so a
+ * step back is a step to `entries[1]`: through a101 the first press handed back
+ * the program already on screen, which is a keystroke that visibly does nothing.
+ * Once the text has been edited it is a program the walk has not visited, so the
+ * newest entry is a real destination and stays the first stop, which is how a
+ * shell behaves with a half-typed line.
+ */
+export function prev(current = '') {
+    const n = state.entries.length;
+    if (n === 0) return null;
+    const at = (state.cursor === -1 && (current || '').trim() === state.entries[0])
+        ? 0
+        : state.cursor;
+    if (at + 1 >= n) return null;
+    state.cursor = at + 1;
     save(state);
     return state.entries[state.cursor];
 }
