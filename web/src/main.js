@@ -3012,18 +3012,24 @@ renderActionRow();
 
 loadLanding();
 
-// From the unset cursor the two directions land on the two ends of the ring:
-// forward on the first row, back on the last. The modular step alone cannot do
-// that, because `-1` would have to mean "at 0" going forward and "at n" going
-// back, and reading it as 0 both ways cost the last entry its turn on the first
-// press backwards. `pickExample` can also leave the cursor unset, when the row
-// picked is not one of the ring's own, so this is not only the opening press.
+// The arrows move on the dropdown, not on the history walk beside them: up goes
+// up the list, towards the first row of the first group, and down goes down it.
+// The two walks share a pair of keys and read their direction the opposite way
+// round, which sounds like a trap and is not: history's up is older, because the
+// list it moves on is not on screen, while this one is looking at the menu.
+//
+// From the unset cursor the two directions land on the two ends of the ring, as
+// they would if the cursor sat just above the first row: down on that first row,
+// up wrapping round to the last. The modular step alone cannot do that, because
+// `-1` would have to mean "at 0" for one direction and "at n" for the other.
+// `pickExample` can also leave the cursor unset, when the row picked is not one
+// of the ring's own, so this is not only the opening press.
 function exampleStep(dir) {
     const n = exampleRing.items.length;
     if (!n) return;
     const at = exampleRing.cursor;
-    if (at < 0) exampleRing.cursor = dir === 'prev' ? 0 : n - 1;
-    else exampleRing.cursor = dir === 'prev' ? (at + 1) % n : (at - 1 + n) % n;
+    if (at < 0) exampleRing.cursor = dir === 'prev' ? n - 1 : 0;
+    else exampleRing.cursor = dir === 'prev' ? (at - 1 + n) % n : (at + 1) % n;
     loadExample(exampleRing.items[exampleRing.cursor].decl);
 }
 
