@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import pytest
 
-from .conftest import needs_split_allocation
 
 # One object of each kind the api builds, small enough to stay quick, plus an
 # aggregate carrying a cession and a P&L walk, since both light exhibits their
@@ -336,7 +335,6 @@ def test_reins_bases_says_what_the_object_can_be_calibrated_on(client):
         "the order is the order the forms draw the buttons in")
 
 
-@needs_split_allocation
 def test_every_offered_basis_calibrates(client):
     """The other half of the list above: a lit button must not 400.
 

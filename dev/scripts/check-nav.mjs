@@ -81,15 +81,12 @@ const EXPECTED = {
     // is the whole, so both are dark there while the two beside them are lit:
     // the narrower gate is the point of the split.
     'pricing:allocate': ['agg_reins', 'port'],
-    // **Empty on purpose, and temporarily.** Plot is a chart leaf, gated on the
-    // library registering `kappa`, which is phase N5 of
-    // `dev/plan-pricing-natural-allocation.md` and has not landed; the api half
-    // went first by the author's instruction. It belongs to the same set as
-    // `pricing:allocate` above and flips to `['agg_reins', 'port']` in the
-    // commit that syncs against the landed library, alongside deleting
-    // `needs_split_allocation` from `tests/conftest.py` and recapturing this
-    // script's fixture.
-    'pricing:plot': [],
+    // Plot is a chart leaf and lights from `kappa`, which the library registers
+    // against the same two shapes: a book, whose unit curves the overview plot
+    // already draws on its right hand side, and an occurrence program, whose
+    // band chart is its own emitter. So this row equals the one above it, and
+    // that agreement is the assertion rather than a coincidence.
+    'pricing:plot': ['agg_reins', 'port'],
     'pricing:evaluate': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl'],
     // Bounds takes an Aggregate or a Portfolio, which is the library's own
     // accepted set; allocation needs the per-unit conditional expectations only

@@ -559,9 +559,14 @@ function renderSummary(res) {
     const inner = $('summary-inner');
     empty(inner);
     applyCapabilityGating();
-    // All three forms take the shape of the object in front of them, and the
-    // preview line answers for it, before any leaf has been visited.
+    // Every form takes the shape of the object in front of it, and its preview
+    // line answers for it, before any leaf has been visited. A form left out of
+    // this list draws the *previous* object's basis row until something else
+    // redraws it, which is a control that lies rather than one that is merely
+    // stale: the Allocate row greyed all three views, on a cession, saying to
+    // add one.
     priceForm.sync();
+    allocateForm.sync();
     syncEvaluateForm();
     boundsForm.sync();
     const kindLabel = KIND_LABEL[res.kind] || 'Aggregate';
@@ -2495,6 +2500,17 @@ function holdPricing(body, octet) {
     };
 }
 
+/**
+ * Which of the Calibrate press's own two panes is on screen.
+ *
+ * Not `activeLeaf('pricing')`, which since a104 can answer `allocate` or
+ * `plot`: neither is this press's to fill, and `plot` has no entry in
+ * `PRICING_LEAF` at all, so handing it over threw where a pane should have been
+ * drawn. The press fills two panes and names them itself.
+ */
+const calibratedLeaf = () => (
+    activeLeaf('pricing') === 'standalone' ? 'standalone' : 'calibrate');
+
 const priceForm = createPricingForm($('price-form'), {
     verb: 'Calibrate',
     basisLabel: 'calibrate on',
@@ -2510,10 +2526,10 @@ const priceForm = createPricingForm($('price-form'), {
             // measures itself as it mounts, and mounting one inside a `d-none`
             // wrapper measures nothing. The other leaf redraws from the same
             // held response the moment it is shown, which costs no request.
-            drawPricingPane(activeLeaf('pricing'));
+            drawPricingPane(calibratedLeaf());
         } catch (err) {
             _calibration = null;
-            replacePane(activeLeaf('pricing') === 'standalone'
+            replacePane(calibratedLeaf() === 'standalone'
                 ? 'pane-standalone' : 'pane-calibrate', errorNode(err));
         } finally {
             priceForm.setBusy(false);

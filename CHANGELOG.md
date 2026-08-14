@@ -4,6 +4,49 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a105
+
+**The library caught up, so the scaffolding comes down.** `aggregate` 1.0.0a281
+to a285 landed phases N1 to N5 of `dev/plan-pricing-natural-allocation.md`, on
+top of a277 to a280 from the companion notes, which is everything a103 and a104
+were written against. `needs_split_allocation` is deleted from
+`tests/conftest.py` and from all seven tests that carried it,
+`check-nav.mjs` expects `pricing:plot` live for a reinsured aggregate and a
+book, and `dev/fixtures/capability.json` is recaptured: `kappa` is registered
+for exactly those two. Nothing is skipped and nothing is pending.
+
+**Two assertions were wrong about the library rather than about the app**, and
+both for the same reason. `aggregate` 1.0.0a286 to a288 turned the column
+formats into a raw sheet with an insurer overlay, so RAW and INSURER now hash
+apart wherever they carry the same frame: the plain aggregate's stand-alone row
+and the whole occurrence allocation, both of which had asserted hash equality
+inherited from a85. The claim they were making is still true and is now made
+against the values, through a `_raws` helper, with the formats free to differ.
+That is the correct reading of the two perspectives under the purist ruling:
+the values are the calculation, the formats are how it reads.
+
+**Two bugs the browser found that the suite could not.** The Allocate form was
+left out of `renderSummary`'s per-build sync, so its basis row drew the previous
+object's answer: on a program with an occurrence cession it greyed all three
+views and said to add one. And the Calibrate press drew `activeLeaf('pricing')`,
+which since a104 can answer `plot`, a leaf with no table and no `PRICING_LEAF`
+entry, so the destructuring threw where a pane should have been drawn. Not
+reachable through the UI, because the form is hidden whenever Plot is the active
+leaf, but it is a crash sitting behind one wrapper's `d-none`. The press now
+names its own two panes, which is also the truer statement of what it fills.
+
+**Every acceptance criterion of the plan is met**, checked in the browser on
+both reference programs. On `BasicBookRe` calibrated gross at `coc=0.15,
+p=0.99`: Stand-alone carries the starred basis and the `gross less net`
+difference rows unchanged, Allocate foots ceded plus net to a gross row constant
+down the table, and Plot draws the two-panel band chart, cession against gross
+outcome with its conditional band beside the same reading as a share under the
+single-layer ceiling. On the two-unit book: Stand-alone shows the units, the sum
+of parts and the total with the diversification difference row under INSURER,
+sum above total for every concave family, and Plot draws the unit kappa curves
+with the total. The Allocate basis row offers Gross alone on a cession, saying
+"net and ceded are this tab's outputs, not its inputs" on the view it refuses.
+
 ## 1.0.0a104
 
 **The Pricing row becomes `Calibrate  Stand-alone  Allocate  Plot |

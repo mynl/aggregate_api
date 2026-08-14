@@ -783,24 +783,21 @@ one version bump each.
          hover, and the mean stays, so the redesign this ask requested is
          moot.
 
-- [ ] **Five Pricing subtabs, and the natural allocation**:
+- [x] **Five Pricing subtabs, and the natural allocation**:
       `dev/plan-pricing-natural-allocation.md` (canonical here, symlinked in
       the library), drafted 2026-08-14. The pane becomes `Calibrate
       Stand-alone  Allocate  Plot | Evaluate`. Stand-alone prices the parts
       alone, Allocate splits the whole across them, Plot draws the kappa
-      curves behind the split. Two api phases, both landed: **B1 the routes
-      (a103), B2 the pane (a104)**. What is left here is the sync against the
-      library. The library half is phases N1 to N5 plus the phases of
-      `aggregate_REFACTOR/dev/notes-net-natural-allocation.md`, and the api
-      went first by the author's instruction, so B1's tests carry
-      `needs_split_allocation` (`tests/conftest.py`) until the sibling
-      checkout registers `pricing.stand_alone`. **That marker, and every use
-      of it, is deleted in the sync commit.** Owed at the same sync:
-      `check-nav.mjs` expects `pricing:plot` dark for every kind and flips to
-      `['agg_reins', 'port']`, and `dev/fixtures/capability.json` is
-      recaptured (`capture-capability.py`) so the script sees the `kappa`
-      chart. Until then a Calibrate press 500s, because the calibrate bundle
-      names an exhibit the installed library does not register.
+      curves behind the split. **Three api phases, all landed: B1 the routes
+      (a103), B2 the pane (a104), the sync (a105).** The library half is
+      phases N1 to N5 (`aggregate` 1.0.0a281 to a285) plus the phases of
+      `aggregate_REFACTOR/dev/notes-net-natural-allocation.md` (a277 to a280).
+      The api went first by the author's instruction and carried a
+      `needs_split_allocation` marker and a temporarily dark `pricing:plot`
+      row meanwhile; both are deleted at a105. Every acceptance criterion of
+      the plan is met, checked in the browser on both reference programs.
+      **The plan doc has not moved to `dev/done/`**: the library symlinks the
+      canonical copy, so the two moves have to happen together.
 
 ## Raised with `csv-grid` (not fixed here)
 

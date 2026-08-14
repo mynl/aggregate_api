@@ -25,7 +25,6 @@ import json
 import pytest
 from greater_tables import TableDoc
 
-from .conftest import needs_split_allocation
 
 # The author's reference programs, from the plan. `BasicBook` is unbounded
 # despite the 1000 xs 0 severity limit, because a Poisson count has no maximum:
@@ -84,6 +83,21 @@ def _cells(row) -> str:
         cell["text"] if isinstance(cell, dict) else str(cell)
         for cell in row["cells"]
     )
+
+
+def _raws(block) -> list:
+    """Every raw value of a block, in reading order.
+
+    What two perspectives of the same frame have to agree on. They no longer
+    agree on the *document*: since library 1.0.0a287 the column formats come off
+    a raw sheet with an insurer overlay, so INSURER declares a money column
+    differently from RAW and the two hash apart even where nothing was
+    restructured. The values are the calculation and the formats are how it
+    reads, so this is the assertion that "these are the same table" survives
+    into.
+    """
+    return [cell.get("raw") if isinstance(cell, dict) else cell
+            for row in block["body"] for cell in row["cells"]]
 
 
 # ----------------------------------------------------------------------
@@ -179,7 +193,6 @@ def test_a_premium_is_the_third_pricing_target(client):
         assert by_premium.json()[key] == pytest.approx(value, rel=1e-9), key
 
 
-@needs_split_allocation
 def test_a_premium_target_calibrates_what_its_own_coc_does(client):
     """The round trip, through the calibrate route.
 
@@ -253,7 +266,6 @@ def test_a_loss_ratio_that_leaves_no_capital_is_refused(client):
 # calibrate: two exhibits, both perspectives, per source shape
 # ----------------------------------------------------------------------
 
-@needs_split_allocation
 def test_calibrate_serves_both_exhibits_under_both_perspectives(client):
     oid, _ = _build(client, BASIC_BOOK)
     r = _calibrate(client, oid)
@@ -272,17 +284,16 @@ def test_calibrate_serves_both_exhibits_under_both_perspectives(client):
             assert envelope["title"].endswith("PX.BasicBook")
 
 
-@needs_split_allocation
 def test_a_plain_aggregate_stands_alone_as_its_calibration_line(client):
     """One part, and it is the whole, so the stand-alone story is one row."""
     oid, _ = _build(client, BASIC_BOOK)
     alone = _calibrate(client, oid).json()["exhibits"]["pricing.stand_alone"]
     assert len(alone["raw"]["blocks"]) == 1
-    assert alone["raw"]["hash"] == alone["insurer"]["hash"], (
-        "nothing to restructure, so the two readings are the same document")
+    assert len(alone["insurer"]["blocks"]) == 1
+    assert _raws(alone["raw"]["blocks"][0]) == _raws(alone["insurer"]["blocks"][0]), (
+        "nothing to restructure, so the two readings are the same table")
 
 
-@needs_split_allocation
 def test_a_reinsured_aggregate_reads_wider_raw_than_insurer(client):
     """The first exhibit where RAW carries strictly more rows than INSURER.
 
@@ -353,7 +364,6 @@ def test_ccoc_allocates_on_an_unbounded_book(client):
     assert body["warnings"] == [], body["warnings"]
 
 
-@needs_split_allocation
 def test_an_occurrence_program_splits_its_gross_premium(client):
     """The plan's acceptance 1: ceded plus net foot to gross, per family.
 
@@ -371,19 +381,25 @@ def test_an_occurrence_program_splits_its_gross_premium(client):
     r = _allocate(client, oid, basis="gross")
     assert r.status_code == 200, r.text
     allocate = r.json()["exhibits"]["pricing.allocate"]
-    assert allocate["raw"]["hash"] == allocate["insurer"]["hash"], (
+    assert (_raws(allocate["raw"]["blocks"][0])
+            == _raws(allocate["insurer"]["blocks"][0])), (
         "the allocation is already the cedent's one basis reading, so there is "
         "nothing for INSURER to restructure")
 
     block = allocate["raw"]["blocks"][0]
-    premium = [column["name"][-1] for column in block["columns"]].index("P")
+    # **Counted from the end, not from the start.** The stub is sparsified, so a
+    # family's first row carries both index cells and its other two carry only
+    # the view, which shifts every column one to the left on those rows. The
+    # data columns are the fixed tail of the row either way.
+    names = [column["name"][-1] for column in block["columns"]]
+    premium = len(names) - names.index("P")
     # The view is the inner index level, so it names itself on every row even
     # where the family above it is sparsified away.
     priced = []
     for row in block["body"]:
         words = _cells(row).split()
         view = next((v for v in ("gross", "ceded", "net") if v in words), None)
-        cell = row["cells"][premium]
+        cell = row["cells"][-premium]
         if view and isinstance(cell, dict) and cell.get("raw") is not None:
             priced.append((view, cell["raw"]))
 
@@ -633,7 +649,6 @@ def test_the_capability_carries_the_premium_to_prefill_with(client):
 # the standing envelope contract
 # ----------------------------------------------------------------------
 
-@needs_split_allocation
 def test_every_served_block_reconstructs_hash_for_hash(client):
     """The contract every exhibit route on this service answers to.
 
