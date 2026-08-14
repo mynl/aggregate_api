@@ -783,6 +783,21 @@ one version bump each.
          hover, and the mean stays, so the redesign this ask requested is
          moot.
 
+- [ ] **Five Pricing subtabs, and the natural allocation**:
+      `dev/plan-pricing-natural-allocation.md` (canonical here, symlinked in
+      the library), drafted 2026-08-14. The pane becomes `Calibrate
+      Stand-alone  Allocate  Plot | Evaluate`. Stand-alone prices the parts
+      alone, Allocate splits the whole across them, Plot draws the kappa
+      curves behind the split. Two api phases: **B1 the routes (a103)**, B2
+      the pane. The library half is phases N1 to N5 plus the phases of
+      `aggregate_REFACTOR/dev/notes-net-natural-allocation.md`, and the api
+      went first by the author's instruction, so B1's tests carry
+      `needs_split_allocation` (`tests/conftest.py`) until the sibling
+      checkout registers `pricing.stand_alone`. **That marker, and every use
+      of it, is deleted in the sync commit.** Also owed at the sync: regenerate
+      `dev/fixtures/capability.json` (`capture-capability.py`) so
+      `check-nav.mjs` sees the `kappa` chart.
+
 ## Raised with `csv-grid` (not fixed here)
 
 - [ ] **No way to default the export to raw values.** CsvGrid 3.9.0 builds the

@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import pytest
 
+from .conftest import needs_split_allocation
+
 # One object of each kind the api builds, small enough to stay quick, plus an
 # aggregate carrying a cession and a P&L walk, since both light exhibits their
 # plain forms do not.
@@ -58,7 +60,7 @@ def test_every_kind_carries_a_capability_block(client, label):
                         "premium", "can_sharpen", "has_sharpen", "can_pnl",
                         "can_reins", "can_views", "reins_bases", "can_price",
                         "can_evaluate", "can_bounds", "can_allocate",
-                        "needs_premium"}
+                        "can_natural_allocation", "needs_premium"}
     # The flag and the number cannot disagree: one is derived from the other.
     assert cap["has_premium"] is (cap["premium"] is not None), label
     # Every first-class kind has its own picture as of library a244, and the
@@ -321,7 +323,7 @@ def test_reins_bases_says_what_the_object_can_be_calibrated_on(client):
     Read off the library's `reins_views` since a85, filtered to the whole program
     views. The ceded ones are a cession priced as a position in its own right,
     which is the seller's question; both forms here ask the insurer's, and the
-    library serves the ceded rows in the `pricing.allocate` raw reading.
+    library serves the ceded rows in the `pricing.stand_alone` raw reading.
     """
     _, plain = _build(client, "agg")
     assert plain["capability"]["reins_bases"] == []
@@ -332,9 +334,18 @@ def test_reins_bases_says_what_the_object_can_be_calibrated_on(client):
     assert set(bases) <= {"gross", "net occ", "net"}
     assert bases == sorted(bases, key=["gross", "net occ", "net"].index), (
         "the order is the order the forms draw the buttons in")
-    # And it agrees with what the pricing route will accept, which is the point
-    # of hoisting it: a lit button that 400s is worse than a dark one.
-    for basis in bases:
+
+
+@needs_split_allocation
+def test_every_offered_basis_calibrates(client):
+    """The other half of the list above: a lit button must not 400.
+
+    That is the whole point of hoisting the basis list into the capability
+    block, so it is asserted against the route the button actually drives rather
+    than against the cheaper preview one beside it.
+    """
+    _, reinsured = _build(client, "agg_reins")
+    for basis in reinsured["capability"]["reins_bases"]:
         priced = client.post(f"/v1/objects/{reinsured['id']}/pricing/calibrate",
                              json={"p": 0.99, "coc": 0.15, "basis": basis})
         assert priced.status_code == 200, f"{basis}: {priced.text}"

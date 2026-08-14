@@ -241,8 +241,8 @@ def has_sharpen(obj: Any) -> bool:
 #: A subset of ``Aggregate.reins_views``, which also carries ``ceded`` and
 #: ``ceded occ``: those are a cession read as a position in its own right, which
 #: is the seller's question, and both forms here ask the insurer's. The library
-#: serves the ceded rows in the ``pricing.allocate`` RAW reading, which is where
-#: that perspective belongs until there is a REINSURER one.
+#: serves the ceded rows in the ``pricing.stand_alone`` RAW reading, which is
+#: where that perspective belongs until there is a REINSURER one.
 _CALIBRATION_BASES = ("gross", "net occ", "net")
 
 
@@ -468,6 +468,53 @@ def can_allocate(obj: Any) -> bool:
     return isinstance(obj, Portfolio)
 
 
+def can_natural_allocation(obj: Any) -> bool:
+    """Does this object have parts to split one premium across?
+
+    Consumer: the Pricing group's Allocate leaf, and the route behind it. An
+    app leaf rather than an exhibit one, because ``pricing.allocate`` dispatches
+    on a ``CalibrationResult`` and never appears in :func:`exhibits_for`, so the
+    exhibit list cannot light this pill.
+
+    Two shapes qualify. A ``Portfolio`` allocates the book's premium across its
+    units, which is what ``analyze_distortions`` has always done. An
+    ``Aggregate`` carrying an occurrence program allocates the gross premium
+    across the two halves of that program, ceded and net, off the joint
+    distribution.
+
+    **Not** :func:`can_allocate`, which is the Bounds group's per-unit range and
+    is a ``Portfolio`` alone. The names are close because the questions are
+    cousins; the flags are separate because one lights a pricing subtab and the
+    other a bounds leaf, and tying them would tie a future change in one to the
+    other.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    bool
+
+    Notes
+    -----
+    An aggregate cession is deliberately not enough. The natural allocation
+    reads the kappa curve off the joint distribution of gross and ceded, which
+    the library builds per occurrence; a program that only cedes in the
+    aggregate has no such joint to condition on. ``occ_reins`` is the library's
+    own public record of whether an occurrence stage was placed, so this asks it
+    rather than reasoning about the program text.
+
+    The basis is a second gate and it is not here: the allocation splits a
+    **gross** premium, so a fit struck on net has nothing to split. That is a
+    property of the calibration rather than of the object, which is why it lives
+    on the route and in the library's own availability predicate.
+    """
+    if isinstance(obj, Portfolio):
+        return True
+    return isinstance(obj, Aggregate) and obj.occ_reins is not None
+
+
 def needs_premium(obj: Any) -> bool:
     """Must the Evaluate form ask for a premium before it can run?
 
@@ -603,5 +650,6 @@ def capability_for(obj: Any) -> dict:
         "can_evaluate": can_evaluate(obj),
         "can_bounds": can_bounds(obj),
         "can_allocate": can_allocate(obj),
+        "can_natural_allocation": can_natural_allocation(obj),
         "needs_premium": needs_premium(obj),
     }

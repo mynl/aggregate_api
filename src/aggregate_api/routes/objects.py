@@ -28,7 +28,9 @@ The /v1/objects/* family covers everything object-shaped:
 * ``GET    /v1/objects/{id}/plot``        -- SVG/PNG image (native .plot()).
 * ``POST   /v1/objects/{id}/pricing/preview``   -- the pentagon as scalars.
 * ``POST   /v1/objects/{id}/pricing/calibrate`` -- the ``pricing.calibrate`` and
-  ``pricing.allocate`` exhibit envelopes, both perspectives.
+  ``pricing.stand_alone`` exhibit envelopes, both perspectives.
+* ``POST   /v1/objects/{id}/pricing/allocate``  -- the ``pricing.allocate``
+  exhibit envelope, both perspectives.
 * ``POST   /v1/objects/{id}/pricing/evaluate``  -- the ``pricing.evaluate``
   envelope, both perspectives.
 
@@ -98,7 +100,10 @@ from ..bounds import run_allocation, run_envelope, run_pricing_bounds
 from ..capability import can_sharpen, capability_for, narrative_for
 from ..config import Settings, get_settings
 from ..library_notes import from_library
-from ..pricing import run_calibration, run_evaluation, run_pricing_preview
+from ..pricing import (
+    run_calibration, run_evaluation, run_natural_allocation,
+    run_pricing_preview,
+)
 from ..tables import MAX_ROWS, frame_document
 from ..serializers import (
     bin_density,
@@ -2801,7 +2806,7 @@ def get_exhibit(
 
 
 # ----------------------------------------------------------------------
-# POST /v1/objects/{id}/pricing/{preview,calibrate,evaluate}
+# POST /v1/objects/{id}/pricing/{preview,calibrate,allocate,evaluate}
 # ----------------------------------------------------------------------
 # The Pricing group, served through the official channel. Where the three older
 # routes below build pandas frames here and hand them over with this repo's
@@ -2851,9 +2856,9 @@ def post_pricing_calibrate(
     """Fit the standard distortion set, and serve the two exhibits it supports.
 
     One press fills two subtabs. ``pricing.calibrate`` is the per-family receipt
-    and ``pricing.allocate`` spreads that calibration across views (a reinsured
-    Aggregate) or units (a Portfolio), so both come back from one POST and
-    stepping between the two leaves costs nothing.
+    and ``pricing.stand_alone`` prices each part on its own with those same
+    fitted families, the views of a cession or the units of a book, so both come
+    back from one POST and stepping between the two leaves costs nothing.
 
     See :func:`aggregate_api.pricing.run_calibration`.
     """
@@ -2861,6 +2866,37 @@ def post_pricing_calibrate(
         return run_calibration(entry.obj, p=req.p, a=req.a, coc=req.coc,
                                lr=req.lr, premium=req.premium,
                                basis=req.basis)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/objects/{oid}/pricing/allocate",
+             response_model=models.PricingExhibitsResponse)
+def post_pricing_allocate(
+    oid: str,
+    req: models.PricingAllocateRequest,
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """Split one calibrated premium across the parts of the object.
+
+    The other half of the calibrate press's old bundle, and the opposite reading
+    of it. Where ``pricing/calibrate`` prices each part as a distribution in its
+    own right, this decomposes one premium: the book's total across its units,
+    or an occurrence program's gross premium into its ceded and net halves, with
+    the two footing to the whole exactly.
+
+    Its own press because it is its own cost. On an occurrence program the
+    library builds the joint distribution of gross and ceded to read the kappa
+    curve off, which is real work and is not what a reader asking for a
+    calibration ordered.
+
+    See :func:`aggregate_api.pricing.run_natural_allocation`, whose longer name
+    keeps ``bounds.run_allocation`` beside it meaning what it always has.
+    """
+    try:
+        return run_natural_allocation(entry.obj, p=req.p, a=req.a, coc=req.coc,
+                                      lr=req.lr, premium=req.premium,
+                                      basis=req.basis)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

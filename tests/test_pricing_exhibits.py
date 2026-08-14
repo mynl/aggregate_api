@@ -1,9 +1,15 @@
 """The Pricing group, served through the library's official channel.
 
-Three routes and one shape. ``pricing/preview`` answers with scalars because a
-preview line prints numbers; ``pricing/calibrate`` and ``pricing/evaluate``
-answer with exhibit envelopes, because everything else on this pane is a table
-the library owns.
+Four routes and one shape. ``pricing/preview`` answers with scalars because a
+preview line prints numbers; ``pricing/calibrate``, ``pricing/allocate`` and
+``pricing/evaluate`` answer with exhibit envelopes, because everything else on
+this pane is a table the library owns.
+
+Calibrate and allocate are the pane's two readings of one calculation and they
+are two presses. Calibrate serves the receipt and the parts priced on their own
+(``pricing.calibrate``, ``pricing.stand_alone``); allocate serves the one
+premium split across those parts (``pricing.allocate``), which on an occurrence
+program means building the joint distribution of gross and ceded.
 
 What these assert is the seam, not the arithmetic. Whether a calibration is
 right is the library's business and is tested there; what belongs here is that
@@ -18,6 +24,8 @@ import json
 
 import pytest
 from greater_tables import TableDoc
+
+from .conftest import needs_split_allocation
 
 # The author's reference programs, from the plan. `BasicBook` is unbounded
 # despite the 1000 xs 0 severity limit, because a Poisson count has no maximum:
@@ -51,6 +59,12 @@ def _calibrate(client, oid, **body):
     body.setdefault("p", 0.99)
     body.setdefault("coc", 0.15)
     return client.post(f"/v1/objects/{oid}/pricing/calibrate", json=body)
+
+
+def _allocate(client, oid, **body):
+    body.setdefault("p", 0.99)
+    body.setdefault("coc", 0.15)
+    return client.post(f"/v1/objects/{oid}/pricing/allocate", json=body)
 
 
 def _text(block) -> str:
@@ -165,6 +179,7 @@ def test_a_premium_is_the_third_pricing_target(client):
         assert by_premium.json()[key] == pytest.approx(value, rel=1e-9), key
 
 
+@needs_split_allocation
 def test_a_premium_target_calibrates_what_its_own_coc_does(client):
     """The round trip, through the calibrate route.
 
@@ -238,13 +253,14 @@ def test_a_loss_ratio_that_leaves_no_capital_is_refused(client):
 # calibrate: two exhibits, both perspectives, per source shape
 # ----------------------------------------------------------------------
 
+@needs_split_allocation
 def test_calibrate_serves_both_exhibits_under_both_perspectives(client):
     oid, _ = _build(client, BASIC_BOOK)
     r = _calibrate(client, oid)
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["kind"] == "agg"
-    assert set(body["exhibits"]) == {"pricing.calibrate", "pricing.allocate"}
+    assert set(body["exhibits"]) == {"pricing.calibrate", "pricing.stand_alone"}
     for name, views in body["exhibits"].items():
         assert set(views) == PERSPECTIVES, name
         for perspective, envelope in views.items():
@@ -256,15 +272,17 @@ def test_calibrate_serves_both_exhibits_under_both_perspectives(client):
             assert envelope["title"].endswith("PX.BasicBook")
 
 
-def test_a_plain_aggregate_allocates_to_its_calibration_line(client):
-    """No units and no views, so the allocation story is the one target row."""
+@needs_split_allocation
+def test_a_plain_aggregate_stands_alone_as_its_calibration_line(client):
+    """One part, and it is the whole, so the stand-alone story is one row."""
     oid, _ = _build(client, BASIC_BOOK)
-    allocate = _calibrate(client, oid).json()["exhibits"]["pricing.allocate"]
-    assert len(allocate["raw"]["blocks"]) == 1
-    assert allocate["raw"]["hash"] == allocate["insurer"]["hash"], (
+    alone = _calibrate(client, oid).json()["exhibits"]["pricing.stand_alone"]
+    assert len(alone["raw"]["blocks"]) == 1
+    assert alone["raw"]["hash"] == alone["insurer"]["hash"], (
         "nothing to restructure, so the two readings are the same document")
 
 
+@needs_split_allocation
 def test_a_reinsured_aggregate_reads_wider_raw_than_insurer(client):
     """The first exhibit where RAW carries strictly more rows than INSURER.
 
@@ -272,28 +290,46 @@ def test_a_reinsured_aggregate_reads_wider_raw_than_insurer(client):
     seller's price. INSURER keeps the whole program views, stars the calibrated
     one and appends the difference rows, because ``gross less net`` is the
     buyer's reading of what the cover costs in the rate.
+
+    This is the exhibit that was renamed rather than changed. Through 1.0.0a102
+    it answered to ``pricing.allocate``, which was the wrong word for it: every
+    row here is a view priced as a distribution in its own right, and the
+    difference rows are a subtraction of two such prices rather than a
+    decomposition of one. See ``dev/plan-pricing-natural-allocation.md``.
     """
     oid, _ = _build(client, BASIC_BOOK_RE)
-    allocate = _calibrate(client, oid, basis="gross").json()["exhibits"]["pricing.allocate"]
-    assert allocate["raw"]["hash"] != allocate["insurer"]["hash"]
+    alone = (_calibrate(client, oid, basis="gross")
+             .json()["exhibits"]["pricing.stand_alone"])
+    assert alone["raw"]["hash"] != alone["insurer"]["hash"]
 
-    raw = _text(allocate["raw"]["blocks"][0])
-    insurer = _text(allocate["insurer"]["blocks"][0])
+    raw = _text(alone["raw"]["blocks"][0])
+    insurer = _text(alone["insurer"]["blocks"][0])
     assert "ceded" in raw
     assert "ceded" not in insurer, "the seller's price is not the insurer's"
     assert "gross*" in insurer, "the calibrated basis is starred"
     assert "gross less net" in insurer, "the difference row is the buyer's reading"
 
 
+# ----------------------------------------------------------------------
+# allocate: one premium, split across the parts
+# ----------------------------------------------------------------------
+
 def test_a_portfolio_allocates_across_its_units(client):
     """RAW is the whole pricing frame; INSURER is the four stat slices.
 
     The example the RAW / INSURER framework has been waiting for: two genuinely
     different readings of one calculation rather than a subset.
+
+    Unchanged content behind a moved press. This is what a Calibrate press
+    served through 1.0.0a102 and what an Allocate press serves now: the sweep is
+    the expensive question on the pane and a reader asking for a calibration
+    should not pay for it.
     """
     oid, _ = _build(client, PORT)
-    body = _calibrate(client, oid).json()
-    allocate = body["exhibits"]["pricing.allocate"]
+    r = _allocate(client, oid)
+    assert r.status_code == 200, r.text
+    allocate = r.json()["exhibits"]["pricing.allocate"]
+    assert set(allocate) == PERSPECTIVES
     assert len(allocate["raw"]["blocks"]) == 2, "the target, then the allocation"
     assert len(allocate["insurer"]["blocks"]) == 5, "the target, then four slices"
 
@@ -309,12 +345,140 @@ def test_ccoc_allocates_on_an_unbounded_book(client):
     exercised by whatever family next declines.
     """
     oid, _ = _build(client, PORT)
-    r = _calibrate(client, oid)
+    r = _allocate(client, oid)
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["exhibits"]["pricing.allocate"]["insurer"]["blocks"]
     assert "ccoc" in json.dumps(body["exhibits"]["pricing.allocate"])
     assert body["warnings"] == [], body["warnings"]
+
+
+@needs_split_allocation
+def test_an_occurrence_program_splits_its_gross_premium(client):
+    """The plan's acceptance 1: ceded plus net foot to gross, per family.
+
+    The natural allocation off the joint distribution of gross and ceded. Each
+    family's distorted view of the gross sets the weights, the kappa curve says
+    what each half earns under them, and the three rows of a family foot
+    exactly. The gross row is the same number for every family, because one
+    market premium is being split and the families differ only in how.
+
+    Read off the raw values rather than the rendered text, which is what
+    ``include_raw`` is for: a footing test against a display rounding would pass
+    on a table that does not foot.
+    """
+    oid, _ = _build(client, BASIC_BOOK_RE)
+    r = _allocate(client, oid, basis="gross")
+    assert r.status_code == 200, r.text
+    allocate = r.json()["exhibits"]["pricing.allocate"]
+    assert allocate["raw"]["hash"] == allocate["insurer"]["hash"], (
+        "the allocation is already the cedent's one basis reading, so there is "
+        "nothing for INSURER to restructure")
+
+    block = allocate["raw"]["blocks"][0]
+    premium = [column["name"][-1] for column in block["columns"]].index("P")
+    # The view is the inner index level, so it names itself on every row even
+    # where the family above it is sparsified away.
+    priced = []
+    for row in block["body"]:
+        words = _cells(row).split()
+        view = next((v for v in ("gross", "ceded", "net") if v in words), None)
+        cell = row["cells"][premium]
+        if view and isinstance(cell, dict) and cell.get("raw") is not None:
+            priced.append((view, cell["raw"]))
+
+    assert priced, "no priced rows found in the allocation"
+    families = [priced[i:i + 3] for i in range(0, len(priced), 3)]
+    gross_everywhere = set()
+    for family in families:
+        views = dict(family)
+        assert set(views) == {"gross", "ceded", "net"}, family
+        assert views["ceded"] + views["net"] == pytest.approx(
+            views["gross"], rel=1e-12), family
+        gross_everywhere.add(round(views["gross"], 9))
+    assert len(gross_everywhere) == 1, (
+        "one premium is being split, so the gross row is constant")
+
+
+def test_the_capability_says_what_has_parts_to_allocate_across(client):
+    """``can_natural_allocation``, and it is not ``can_allocate``.
+
+    Two shapes qualify and one near miss does not. A book allocates across its
+    units; an occurrence program allocates across its ceded and net halves; an
+    aggregate cession has no per-occurrence joint to condition on, so it lights
+    nothing however much cover it buys.
+    """
+    for decl, expected in (
+        (PORT, True),
+        (BASIC_BOOK_RE, True),
+        (BASIC_BOOK, False),
+        (SEV, False),
+        ("agg PX.AggRe 250 claims 1000 xs 0 sev lognorm 100 cv 1.5 poisson "
+         "aggregate net of 5000 xs 20000", False),
+    ):
+        _, body = _build(client, decl)
+        assert body["capability"]["can_natural_allocation"] is expected, decl
+    # The Bounds group's flag is a different question and keeps its own answer.
+    _, book = _build(client, PORT)
+    _, agg = _build(client, BASIC_BOOK_RE)
+    assert book["capability"]["can_allocate"] is True
+    assert agg["capability"]["can_allocate"] is False
+
+
+def test_allocation_needs_something_to_allocate_across(client):
+    """A single unbroken aggregate has one part, which is the whole."""
+    oid, _ = _build(client, BASIC_BOOK)
+    r = _allocate(client, oid)
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert "nothing to allocate" in detail
+    assert "occurrence" in detail
+
+
+def test_allocation_refuses_an_object_that_cannot_price(client):
+    oid, _ = _build(client, SEV)
+    r = _allocate(client, oid)
+    assert r.status_code == 400
+    assert "Aggregate or a Portfolio" in r.json()["detail"]
+
+
+def test_an_occurrence_allocation_is_struck_on_gross(client):
+    """Structural, not a preference: a net fit has no gross premium to split.
+
+    The refusal names the basis and the tab that sets it, because the reader's
+    next move is one press away on Calibrate. The library makes the same test on
+    the result, so this is the same wall met earlier and in the reader's own
+    terms.
+    """
+    oid, _ = _build(client, BASIC_BOOK_RE)
+    for basis in ("net", "net occ"):
+        r = _allocate(client, oid, basis=basis)
+        assert r.status_code == 400, basis
+        assert "gross premium" in r.json()["detail"], basis
+
+
+def test_a_book_is_allocated_on_its_net_view(client):
+    """The 1.0.0a100 ruling, enforced on this route as on the Calibrate row.
+
+    Reinsurance is placed at the unit level, so a book has no cession of its own
+    to choose. ``net`` is what the form sends for a reinsured book and it is
+    accepted; the other two are refused here rather than reaching the library as
+    a calibration that would be allocated on the net density anyway.
+    """
+    reinsured = ("port PX.ReBook "
+                 "agg PX.ReUnitA 10 claims sev lognorm 100 cv 1.5 "
+                 "occurrence net of 100 xs 100 poisson "
+                 "agg PX.ReUnitB 5 claims sev gamma 50 cv 0.8 poisson")
+    oid, body = _build(client, reinsured, log2=12)
+    assert body["capability"]["reins_bases"] == ["net"]
+
+    ok = _allocate(client, oid, basis="net")
+    assert ok.status_code == 200, ok.text
+
+    for basis in ("gross", "net occ"):
+        r = _allocate(client, oid, basis=basis)
+        assert r.status_code == 400, basis
+        assert "net view" in r.json()["detail"], basis
 
 
 def test_calibrate_refuses_an_object_that_cannot_price(client):
@@ -469,18 +633,29 @@ def test_the_capability_carries_the_premium_to_prefill_with(client):
 # the standing envelope contract
 # ----------------------------------------------------------------------
 
+@needs_split_allocation
 def test_every_served_block_reconstructs_hash_for_hash(client):
     """The contract every exhibit route on this service answers to.
 
     A block is a table document and its hash is over its content, so a document
     that reconstructs to a different hash means the wire lost something. Run
-    over all three exhibits, both perspectives, and all three source shapes,
+    over all four exhibits, both perspectives, and all three source shapes,
     because the pricing exhibits are the first whose blocks depend on what the
     dispatched object was made from.
+
+    The allocation joins on the two sources that have parts. A plain aggregate
+    refuses it, which is asserted where that refusal belongs.
     """
     for decl in (BASIC_BOOK, BASIC_BOOK_RE, PORT):
         oid, _ = _build(client, decl)
         envelopes = list(_calibrate(client, oid).json()["exhibits"].values())
+        allocated = _allocate(client, oid,
+                              **({"basis": "gross"} if decl is BASIC_BOOK_RE
+                                 else {}))
+        if allocated.status_code == 200:
+            envelopes.append(allocated.json()["exhibits"]["pricing.allocate"])
+        else:
+            assert decl is BASIC_BOOK, allocated.text
         evaluated = client.post(f"/v1/objects/{oid}/pricing/evaluate",
                                 json={"premium": 100, "p": 0.99})
         assert evaluated.status_code == 200, evaluated.text

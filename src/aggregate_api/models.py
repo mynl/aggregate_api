@@ -126,6 +126,11 @@ class Capability(BaseModel):
     can_evaluate: bool = False
     can_bounds: bool = False
     can_allocate: bool = False
+    # Are there parts to split one premium across: the units of a book, or the
+    # two halves of an occurrence program? Gates the Pricing group's Allocate
+    # leaf. A near neighbor of `can_allocate` and a different question: that one
+    # is the Bounds group's per-unit range and is a portfolio alone.
+    can_natural_allocation: bool = False
     needs_premium: bool = False
 
 
@@ -544,6 +549,28 @@ class PricingCalibrateRequest(BaseModel):
         None, description="Calibration basis: 'gross', 'net occ' or 'net'.")
 
 
+class PricingAllocateRequest(PricingCalibrateRequest):
+    """Body for ``POST /v1/objects/{id}/pricing/allocate``.
+
+    The calibrate shape exactly, because the allocation is a calibration that is
+    then decomposed: the same anchor and the same target, struck once and split
+    across the parts. It is a separate model rather than a reuse so the basis
+    field can carry the narrower rule this route enforces.
+
+    ``basis`` is gated. The natural allocation splits a **gross** premium across
+    an occurrence program, so an ``Aggregate`` takes ``gross`` or nothing;
+    anything else is an HTTP 400. A ``Portfolio`` takes ``net`` or nothing, the
+    one basis a book answers end to end, matching the row the Calibrate form
+    offers it.
+    """
+
+    basis: str | None = Field(
+        None,
+        description=("Calibration basis: 'gross' for an Aggregate, 'net' for a "
+                     "Portfolio. Omit to take the object's own."),
+    )
+
+
 class PricingEvaluateRequest(BaseModel):
     """Body for ``POST /v1/objects/{id}/pricing/evaluate``.
 
@@ -577,10 +604,11 @@ class PricingEvaluateRequest(BaseModel):
 class PricingExhibitsResponse(BaseModel):
     """One or more library exhibits, each under both perspectives.
 
-    The shape both ``pricing/calibrate`` and ``pricing/evaluate`` answer with.
-    ``exhibits`` maps the registry name (``pricing.calibrate``,
-    ``pricing.allocate``, ``pricing.evaluate``) to a map of perspective to
-    envelope, the same envelope ``GET /objects/{id}/exhibit/{name}`` serves.
+    The shape all three of ``pricing/calibrate``, ``pricing/allocate`` and
+    ``pricing/evaluate`` answer with. ``exhibits`` maps the registry name
+    (``pricing.calibrate``, ``pricing.stand_alone``, ``pricing.allocate``,
+    ``pricing.evaluate``) to a map of perspective to envelope, the same envelope
+    ``GET /objects/{id}/exhibit/{name}`` serves.
 
     Bundling both perspectives is deliberate. The frames are small, the pane's
     RAW / INSURER toggle then flips with no recompute, and the alternative would

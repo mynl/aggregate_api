@@ -1846,9 +1846,12 @@ def test_the_pricing_documents_declare_their_own_percents(client):
     ``pricing.*`` exhibits and ships their formats resolved. The assertion is the
     same as before and the source of the answer is not, which is the whole of
     what that phase changed.
+
+    Read off the allocate route since a103, which is where the book's per-unit
+    allocation moved when Calibrate stopped paying for it.
     """
     oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
-    body = client.post(f"/v1/objects/{oid}/pricing/calibrate",
+    body = client.post(f"/v1/objects/{oid}/pricing/allocate",
                        json={"p": 0.99, "coc": 0.1})
     assert body.status_code == 200, body.text
     blocks = body.json()["exhibits"]["pricing.allocate"]["insurer"]["blocks"]

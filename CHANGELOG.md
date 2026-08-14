@@ -4,6 +4,65 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a103
+
+**Pricing one premium across the parts is its own question, and now its own
+press.** Phase B1 of `dev/plan-pricing-natural-allocation.md`, the api half of
+a plan whose library half is in flight. Two things were living under one name.
+Pricing each part of an object as a distribution in its own right and then
+comparing them is not the same exercise as taking one calibrated premium and
+splitting it across those parts so the pieces foot to the whole. The registry
+called both `pricing.allocate`, and only the second is an allocation.
+
+**The calibrate route serves `pricing.calibrate` and `pricing.stand_alone`.**
+Same press, same two panes, and for a reinsured aggregate the same table to the
+byte: every view priced on its own, the calibrated one starred, the difference
+rows appended because gross less net is the buyer's allowance for reinsurance
+rather than the price of the cession. Only the name moved, and it moved to the
+one that describes it.
+
+**`POST /v1/objects/{id}/pricing/allocate` is new** and serves
+`pricing.allocate` under both perspectives. For a book that is the
+`analyze_distortions` sweep, unchanged, byte for byte what a Calibrate press
+used to return. For an aggregate carrying an occurrence program it is the
+natural allocation off the joint distribution of gross and ceded, where each
+family's distorted view of the gross sets the weights and ceded plus net foot to
+gross exactly. Two costs move with it, both the right way: a book's Calibrate
+press stops paying for a sweep it was not asked for, and the occurrence joint is
+built only when someone asks for the allocation.
+
+Stateless like its siblings, so a press recomputes. Nothing about a
+`CalibrationResult` is cached server side, and holding one would mean a result
+cache keyed on a form body.
+
+**The basis is gated in both directions, structurally.** An occurrence
+allocation splits a *gross* premium, so a fit struck on net has nothing to
+split and the route says so in the reader's terms rather than letting an
+availability predicate refuse it later. A book takes `net` alone, the same
+1.0.0a100 ruling that governs the Calibrate row beside it: reinsurance is placed
+at the unit level, so a book has no cession of its own to choose. An aggregate
+that states no basis at all is read as gross, because the library's own default
+is the object's own distribution, which for a reinsured aggregate is the one
+view that cannot answer.
+
+**New capability flag `can_natural_allocation`**, true for a portfolio and for
+an aggregate whose `occ_reins` is not `None`. An aggregate cession is
+deliberately not enough: the allocation reads the kappa curve off a
+per-occurrence joint, and a program that cedes only in the aggregate has no such
+joint to condition on. It is not `can_allocate`, which is the Bounds group's
+per-unit range and stays a portfolio alone; for the same reason the runner is
+`run_natural_allocation`, so `bounds.run_allocation` beside it in the route
+module keeps meaning what it always has.
+
+**Ahead of the library, on purpose, and the tests say where.** The sibling
+checkout does not register `pricing.stand_alone` yet. Tests that need it carry
+`needs_split_allocation` from `tests/conftest.py`, which reads the registry
+rather than a version number, since the library phases land under numbers
+assigned at execution. That marker and every use of it is deleted in the commit
+that syncs against the landed library. Everything not waiting on it runs: the
+new route's refusals, the capability flag, and the book's allocation through the
+new route, which is content that does not move.
+
 ## 1.0.0a102
 
 **The two keyboard walks land where you can see they should.** Both fixes are

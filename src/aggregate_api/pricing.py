@@ -1,9 +1,19 @@
 """The Pricing group: validate a form, call the method, serve the exhibits.
 
-Three runners, one shape each. ``run_pricing_preview`` completes the pentagon
+Four runners, one shape each. ``run_pricing_preview`` completes the pentagon
 and answers with scalars, because a preview line prints numbers.
-``run_calibration`` and ``run_evaluation`` hand back library exhibit envelopes,
-because everything else on this pane is a table the library owns.
+``run_calibration``, ``run_natural_allocation`` and ``run_evaluation`` hand back
+library exhibit envelopes, because everything else on this pane is a table the
+library owns.
+
+Two of them calibrate and differ only in what they then ask for.
+``run_calibration`` serves the receipt and the parts priced on their own
+(``pricing.calibrate``, ``pricing.stand_alone``); ``run_natural_allocation``
+serves the one premium split across those parts (``pricing.allocate``). They are
+two presses rather than one because the allocation is real work on an
+occurrence program, where it builds the joint distribution of gross and ceded,
+and a reader who wants a calibration should not pay for one they did not ask
+for.
 
 There is no pandas in this file, and that is the point of it. Through 1.0.0a84
 it held the other half of the pane: a ``_BasisView`` duck type presenting one
@@ -14,14 +24,16 @@ was this repo deciding what a price means.
 
 The library owns that now. ``calibrate_distortions`` and ``evaluate`` return
 ``CalibrationResult`` and ``EvaluationResult``; the registry dispatches
-``pricing.calibrate``, ``pricing.allocate`` and ``pricing.evaluate`` on those,
-with the frames materialized on the result, the captions written upstream and
-the formats resolved into the document. ``calibrate_distortions(reins_view=...)``
-does what the shim did and more, since the library knows five views where the
-shim knew three.
+``pricing.calibrate``, ``pricing.stand_alone``, ``pricing.allocate`` and
+``pricing.evaluate`` on those, with the frames materialized on the result, the
+captions written upstream and the formats resolved into the document.
+``calibrate_distortions(reins_view=...)`` does what the shim did and more, since
+the library knows five views where the shim knew three.
 
 See ``dev/plan-pricing-exhibits.md``, and for the shipped contract this codes
 against, ``aggregate_REFACTOR/dev/plan-pricing-exhibits-LIB.md`` section 4.
+The stand-alone / allocate split and the allocation route are
+``dev/plan-pricing-natural-allocation.md`` phase B1.
 
 Notes
 -----
@@ -35,6 +47,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .capability import can_natural_allocation
 from .library_notes import library_warnings
 
 #: Both perspectives travel in every response. The frames are tiny, and bundling
@@ -256,17 +269,25 @@ def run_calibration(
     -------
     dict
         Matches :class:`aggregate_api.models.PricingExhibitsResponse`: the
-        ``pricing.calibrate`` and ``pricing.allocate`` envelopes, each under both
-        perspectives, and any warnings the library raised on the way.
+        ``pricing.calibrate`` and ``pricing.stand_alone`` envelopes, each under
+        both perspectives, and any warnings the library raised on the way.
 
     Notes
     -----
     Two exhibits from one call because the pane draws two subtabs from one press.
-    ``pricing.allocate``'s frames are materialized lazily off the result, so the
-    allocation is computed here, inside the warning capture, rather than on the
+    ``pricing.stand_alone``'s frames are materialized lazily off the result, so
+    the parts are priced here, inside the warning capture, rather than on the
     reader's next click.
 
-    A distortion the library declines to allocate (the mass distortion on an
+    **The second exhibit is the parts priced alone, not the whole split across
+    them.** Through 1.0.0a102 this bundle carried ``pricing.allocate``, and for a
+    book that was the ``analyze_distortions`` sweep, which is the more expensive
+    of the two questions and the one a Calibrate press does not ask. The split
+    moved that sweep behind its own press, :func:`run_natural_allocation`, and
+    put the stand-alone reading here: per-part ``Distortion.price`` calls on
+    families that are already fitted.
+
+    A distortion the library declines to price (the mass distortion on an
     unbounded book) is a warning, not a failure: the exhibit carries the rows
     that did answer and the warning says which did not. That is why the capture
     wraps the envelope building and not just the calibration.
@@ -289,7 +310,134 @@ def run_calibration(
     with library_warnings() as caught:
         result = obj.calibrate_distortions(**target, **anchor, reins_view=basis)
         exhibits = {name: _envelopes(result, name)
-                    for name in ("pricing.calibrate", "pricing.allocate")}
+                    for name in ("pricing.calibrate", "pricing.stand_alone")}
+    warns.extend(caught)
+    return {"kind": _kind_of(obj), "exhibits": exhibits, "warnings": warns}
+
+
+def _allocation_basis(obj: Any, basis: str | None) -> str | None:
+    """The one reinsurance view an allocation can be struck on, or a refusal.
+
+    Parameters
+    ----------
+    obj : Aggregate | Portfolio
+        The live object, already known to have parts to allocate across.
+    basis : str or None
+        What the form sent, which is ``None`` where the object offers no basis
+        row at all.
+
+    Returns
+    -------
+    str or None
+        The view to pass as ``reins_view``.
+
+    Notes
+    -----
+    Structural rather than a preference, in both directions. An occurrence
+    program's allocation splits the **gross** premium into its ceded and net
+    parts, so a fit struck on net has no gross premium to split and there is
+    nothing for the tab to say; the library's own availability predicate makes
+    the same test on the result. A book is locked to net by the 1.0.0a100 ruling
+    that governs the Calibrate row beside this one: reinsurance is placed at the
+    unit level, so a book has no cession of its own to choose.
+
+    An ``Aggregate`` that states nothing is read as gross rather than as the
+    library's default. That default is the object's own distribution, which for
+    a reinsured aggregate is the net view, and answering a request for the
+    allocation by striking the one calibration that cannot produce it would be a
+    refusal wearing a 500. The app always states a basis here; this is for
+    everyone else.
+    """
+    if _kind_of(obj) == "port":
+        if basis not in (None, "net"):
+            raise ValueError(
+                "a book is allocated on its net view: reinsurance is placed at "
+                "the unit level, so there is no book-wide basis to choose. Pass "
+                "net, or drop the basis")
+        return basis
+    if basis is None:
+        return "gross"
+    if basis != "gross":
+        raise ValueError(
+            "the natural allocation splits a gross premium; calibrate on gross")
+    return basis
+
+
+def run_natural_allocation(
+    obj: Any,
+    *,
+    p: float | None = None,
+    a: float | None = None,
+    coc: float | None = None,
+    lr: float | None = None,
+    premium: float | None = None,
+    basis: str | None = None,
+) -> dict:
+    """Split one calibrated premium across the parts, and serve the exhibit.
+
+    Parameters
+    ----------
+    obj : Aggregate | Portfolio
+        The live object. A book, whose parts are its units, or an aggregate
+        carrying an occurrence program, whose parts are the ceded and net halves
+        of it.
+    p, a : float, optional
+        Exactly one capital anchor, as :func:`run_calibration` takes it.
+    coc, lr, premium : float, optional
+        Exactly one pricing target, as :func:`run_calibration` takes it.
+    basis : str, optional
+        The calibration basis, narrowed by :func:`_allocation_basis`.
+
+    Returns
+    -------
+    dict
+        Matches :class:`aggregate_api.models.PricingExhibitsResponse`, carrying
+        the ``pricing.allocate`` envelope under both perspectives.
+
+    Notes
+    -----
+    **Not** ``bounds.run_allocation``, which sweeps every distortion consistent
+    with a premium and reports each unit's range. The names are close because
+    both split a total across units; this one is the pricing pane's single
+    answer under fitted families, that one is the Bounds group's interval. They
+    are imported into the same route module, so the longer name here is what
+    keeps the shorter one meaning what it always has.
+
+    **Stateless, like its siblings.** The calibration is struck again here rather
+    than read off the one a Calibrate press already made. Nothing about a
+    ``CalibrationResult`` is cached server side, so holding one would mean a
+    result cache keyed on a form body, and a press that recomputes is the same
+    decision the Evaluate route made.
+
+    Two different questions arrive at one registry name, which is the point of
+    the name. For a book it is ``analyze_distortions``, the per-unit premium
+    allocation the library has always served. For an occurrence program it is
+    the natural allocation off the joint distribution of gross and ceded, where
+    each family's distorted view of the gross sets the weights and ceded plus
+    net foot to gross exactly. The app draws whichever it is served and holds no
+    opinion about which arrived.
+
+    The occurrence path is the expensive one on this pane: it builds a joint
+    distribution rather than reading a density frame. That is why it sits behind
+    its own press.
+    """
+    target = _one_target(coc, lr, premium)
+    anchor = _one_anchor(p, a)
+    if not hasattr(obj, "calibrate_distortions"):
+        raise ValueError("allocation requires an Aggregate or a Portfolio")
+    if not can_natural_allocation(obj):
+        raise ValueError(
+            "there is nothing to allocate across: the natural allocation splits "
+            "one premium among parts, which means the units of a book or the "
+            "halves of an occurrence cession")
+    basis = _allocation_basis(obj, basis)
+    if "premium" in target:
+        target = {"coc": _coc_for_premium(obj, anchor, target["premium"], basis)}
+
+    warns: list[str] = []
+    with library_warnings() as caught:
+        result = obj.calibrate_distortions(**target, **anchor, reins_view=basis)
+        exhibits = {"pricing.allocate": _envelopes(result, "pricing.allocate")}
     warns.extend(caught)
     return {"kind": _kind_of(obj), "exhibits": exhibits, "warnings": warns}
 
