@@ -44,17 +44,37 @@ from .library_notes import library_warnings
 _PERSPECTIVES = ("raw", "insurer")
 
 
-def _one_target(coc: float | None, lr: float | None) -> dict:
-    """Exactly one pricing target, as the keyword the library takes.
+def _one_target(coc: float | None, lr: float | None,
+                premium: float | None = None) -> dict:
+    """Exactly one pricing target, in the caller's own vocabulary.
 
-    ``price_pentagon`` speaks the pentagon's own vocabulary (``ROE``, ``LR``)
-    and ``calibrate_distortions`` speaks the caller's (``coc``, ``lr``), so the
-    two spellings are returned separately rather than one being translated at
-    the call site.
+    Three members since 1.0.0a100. ``price_pentagon`` has always accepted a
+    premium target (``P=``) beside ``ROE`` and ``LR``, so the app's three forms
+    are one form over that signature and this is where the third spelling
+    enters. :func:`_pentagon_target` translates to the pentagon's vocabulary;
+    ``calibrate_distortions`` speaks the caller's, which is why the two
+    spellings stay separate rather than one being translated at the call site.
     """
-    if (coc is None) == (lr is None):
-        raise ValueError("pass exactly one of coc (CoC/ROE) or lr (loss ratio)")
-    return {"coc": coc} if coc is not None else {"lr": lr}
+    named = [name for name, value in
+             (("coc", coc), ("lr", lr), ("premium", premium))
+             if value is not None]
+    if len(named) != 1:
+        raise ValueError(
+            "pass exactly one of coc (CoC/ROE), lr (loss ratio) "
+            "or premium (P)")
+    return {named[0]: {"coc": coc, "lr": lr, "premium": premium}[named[0]]}
+
+
+#: The caller's spelling of a pricing target, to the pentagon's own. The
+#: pentagon's keywords are the canonical stat names, which is why they are
+#: capitalized and the caller's are not.
+_PENTAGON_TARGET = {"coc": "ROE", "lr": "LR", "premium": "P"}
+
+
+def _pentagon_target(target: dict) -> dict:
+    """One caller-spelled target as the keyword ``price_pentagon`` takes."""
+    (name, value), = target.items()
+    return {_PENTAGON_TARGET[name]: value}
 
 
 def _one_anchor(p: float | None, a: float | None) -> dict:
@@ -101,6 +121,45 @@ def _kind_of(obj: Any) -> str:
     return {"Portfolio": "port", "PnL": "pnl"}.get(name, "agg")
 
 
+def _coc_for_premium(obj: Any, anchor: dict, premium: float,
+                     basis: str | None) -> float:
+    """The cost of capital a premium implies, at one capital anchor.
+
+    Parameters
+    ----------
+    obj : Aggregate | Portfolio
+        The live object.
+    anchor : dict
+        The single capital anchor, already validated, as ``price_pentagon``
+        takes it.
+    premium : float
+        The premium target.
+    basis : str or None
+        The reinsurance view, so both legs resolve on the distribution the
+        calibration is about to be struck on.
+
+    Returns
+    -------
+    float
+
+    Notes
+    -----
+    The bridge between the two vocabularies. ``price_pentagon`` accepts a
+    premium target and ``calibrate_distortions`` does not, so a premium becomes
+    the cost of capital it implies before the fit. The pentagon identity is
+    never written here: the library solves ``{L, a, P}`` and reports ``ROE``,
+    and this reads it off. Used by :func:`run_calibration` and by
+    ``bounds._calibrate_for_envelope``, which asked the same question with its
+    own arithmetic through 1.0.0a100.
+
+    A refusal on the way (the unbounded anchor guard, a premium above the
+    assets) is the library's own ``ValueError`` and travels to the caller
+    unchanged, which is what puts its sentence in the preview line.
+    """
+    row = obj.price_pentagon(**anchor, P=premium, reins_view=basis).iloc[0]
+    return _scalar(row["ROE"])
+
+
 def run_pricing_preview(
     obj: Any,
     *,
@@ -108,6 +167,7 @@ def run_pricing_preview(
     a: float | None = None,
     coc: float | None = None,
     lr: float | None = None,
+    premium: float | None = None,
     basis: str | None = None,
 ) -> dict:
     """Complete the pentagon and report it as scalars, with no calibration.
@@ -119,7 +179,7 @@ def run_pricing_preview(
     p, a : float, optional
         Exactly one capital anchor: a VaR probability, or an asset level the
         library snaps to its grid.
-    coc, lr : float, optional
+    coc, lr, premium : float, optional
         Exactly one pricing target.
     basis : str, optional
         Which reinsurance view to answer on, passed through as ``reins_view``.
@@ -146,15 +206,12 @@ def run_pricing_preview(
     would mean reaching for a grid distribution on a named view, which is a
     private surface and buys a number the line does not print.
     """
-    target = _one_target(coc, lr)
+    target = _one_target(coc, lr, premium)
     anchor = _one_anchor(p, a)
     if not hasattr(obj, "price_pentagon"):
         raise ValueError("pricing requires an Aggregate or a Portfolio")
 
-    # The pentagon's own spelling of the target, which is not the caller's.
-    pentagon_target = ({"ROE": target["coc"]} if "coc" in target
-                       else {"LR": target["lr"]})
-    row = obj.price_pentagon(**anchor, **pentagon_target,
+    row = obj.price_pentagon(**anchor, **_pentagon_target(target),
                              reins_view=basis).iloc[0]
     return {
         "p": p,
@@ -176,6 +233,7 @@ def run_calibration(
     a: float | None = None,
     coc: float | None = None,
     lr: float | None = None,
+    premium: float | None = None,
     basis: str | None = None,
 ) -> dict:
     """Fit the standard distortion set, and serve what it says.
@@ -186,7 +244,7 @@ def run_calibration(
         The live object.
     p, a : float, optional
         Exactly one capital anchor.
-    coc, lr : float, optional
+    coc, lr, premium : float, optional
         Exactly one pricing target. The library owns the loss-ratio conversion
         since 1.0.0a262, including its refusal: a loss ratio can imply a premium
         above the assets, which is a position with negative capital, and it says
@@ -212,11 +270,20 @@ def run_calibration(
     unbounded book) is a warning, not a failure: the exhibit carries the rows
     that did answer and the warning says which did not. That is why the capture
     wraps the envelope building and not just the calibration.
+
+    **A premium target costs one extra library call.**
+    ``calibrate_distortions`` takes a cost of capital or a loss ratio and not a
+    premium, so :func:`_coc_for_premium` completes the pentagon first and hands
+    over the cost of capital it reports. Two library calls chained, with no
+    arithmetic here: the pentagon identity stays upstream where it belongs. The
+    tidier form is ``calibrate_distortions(P=...)``, which is an open ask.
     """
-    target = _one_target(coc, lr)
+    target = _one_target(coc, lr, premium)
     anchor = _one_anchor(p, a)
     if not hasattr(obj, "calibrate_distortions"):
         raise ValueError("calibration requires an Aggregate or a Portfolio")
+    if "premium" in target:
+        target = {"coc": _coc_for_premium(obj, anchor, target["premium"], basis)}
 
     warns: list[str] = []
     with library_warnings() as caught:

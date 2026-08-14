@@ -622,12 +622,29 @@ header .navbar { min-height: 56px; }
     height: var(--price-h); display: inline-flex; align-items: center;
     padding: 0 .8rem;
 }
-/* Fixed widths so toggling p<->assets or CoC<->LR does not reflow the value
-   input and the button beside it. The anchor label had none through a83, so the
-   whole row shifted every time the capital anchor changed. */
-#price-target-label, #price-anchor-label, #evaluate-anchor-label {
-    display: inline-block; min-width: 2.3rem;
+/* The value box and the control that says what it holds sit as one unit, so the
+   gap inside a pair is tighter than the gap between pairs. */
+.price-form .price-field + .btn-group { margin-left: -.25rem; }
+/* Between the anchor pair and the target pair, so the row reads as two things
+   and not as four. Not punctuation and not a separator anyone clicks: it is the
+   breath between two phrases. */
+.price-spacer {
+    color: var(--mut); font-size: .8rem; opacity: .55;
+    padding: 0 .15rem; user-select: none;
 }
+/* The one-member target, on Evaluate. There is nothing to switch, so it is a
+   word rather than a control that cannot be operated. Sized to sit on the
+   baseline of the button group it replaces. */
+.price-unit {
+    font-size: .78rem; color: var(--ink-2);
+    height: var(--price-h); display: inline-flex; align-items: center;
+}
+/* Through a99 the anchor and target each stated their choice twice, a btn-group
+   and a span repeating it, and the span carried `min-width: 2.3rem` because
+   without it the whole row shifted on every switch (a live bug through a83).
+   The spans went at a100 when the group moved next to its box and became the
+   label; a btn-group draws all its members always, so its width does not depend
+   on the selection and there is nothing left to hold steady. */
 .price-section-title { font-size: .8rem; font-weight: 600; color: var(--ink-2); margin: .2rem 0 .45rem; }
 /* The preview line under the Calibrate form: the pentagon this form would
    complete, rewritten as you type.
@@ -673,7 +690,6 @@ header .navbar { min-height: 56px; }
        DecL fragment, and prose reads from the left. */
     text-align: left;
 }
-#bounds-premium, #bounds-assets { width: 6.5rem; }
 @media (max-width: 575.98px) {
     #bounds-form .bounds-against input { font-size: 16px; }
 }
@@ -997,10 +1013,11 @@ header .navbar { min-height: 56px; }
     width: 4.6rem; height: 1.6rem; padding: .05rem .3rem;
     font-size: .78rem;
 }
-/* The "calibrate on" row is a divided button group like `derive`, so its label
-   needs the same breathing room the group label has, and the group itself has
-   to clear it. */
-#price-basis { align-items: center; gap: .5rem; margin-bottom: .5rem; }
+/* The basis pair, "calibrate on" or "premium is", first on the form row since
+   a100. A class rather than an id, because one component draws it wherever it
+   is mounted, and inline rather than its own row: the whole form is one line
+   that wraps only when it has to. */
+.price-basis { display: inline-flex; align-items: center; gap: .4rem; }
 /* Same corner as Build / Examples and every other button on the page. These are
    smaller, so they read as a lighter-weight control, but the *shape* is shared:
    a pill next to a rounded rectangle looks like a different kind of thing, and

@@ -435,12 +435,12 @@
                  capital with a probability or an asset level, takes one target,
                  and calibrates the standard distortion set; the two panes are
                  the receipt and the allocation of that same calibration, filled
-                 from one POST. #price-basis chooses which reinsurance view to
-                 calibrate on; that row is always present and filled by main.js,
-                 so the form does not jump when you step from a reinsured
-                 example to a plain one. The preview line under the form says
-                 what the pentagon would be, kept current as you type, and is
-                 also where an impossible anchor says so.
+                 from one POST. The basis group chooses which reinsurance view to
+                 calibrate on; it is always present and always drawn, so the form
+                 does not jump when you step from a reinsured example to a plain
+                 one. The preview line under the form says what the pentagon
+                 would be, kept current as you type, and is also where an
+                 impossible anchor says so.
 
                  Evaluate goes the other way: the premium is already set, and
                  the panel reports the distortion in each family that values the
@@ -449,62 +449,28 @@
                  reading Economics answers. Its asset anchor is what closes the
                  round trip with a calibration struck at the same level; left
                  blank it is the library's unlimited reading, which reports four
-                 families rather than five. The premium box prefills from the
-                 object's own when it states one, and is hidden for a P&L, whose
-                 ledger carries a premium per row.
+                 families rather than five. Both boxes open on the pricing in
+                 hand, and are hidden for a P&L, whose ledger carries a premium
+                 per row.
 
             -->
             <div class="tab-pane fade" id="t-pricing">
                 <div class="sub-tabs" id="sub-pricing"></div>
 
+                <!-- The three pricing forms are built by `pricing-form.js`
+                     since a100, into these hosts. They were three copies of one
+                     row of markup, each stating its choice twice (a btn-group
+                     naming the anchor and a span repeating it), and the Bounds
+                     group had a fourth copy in a different spelling. One form
+                     over `price_pentagon`'s signature serves all five leaves. -->
                 <div id="leaf-price">
-                    <div class="exhibit-controls" id="price-basis"></div>
-                    <div class="tab-tools price-form">
-                        <div class="btn-group btn-group-sm" role="group" aria-label="capital anchor">
-                            <input type="radio" class="btn-check" name="price-anchor" id="price-anc-p" value="p" checked>
-                            <label class="btn btn-outline-secondary" for="price-anc-p">p</label>
-                            <input type="radio" class="btn-check" name="price-anchor" id="price-anc-a" value="a">
-                            <label class="btn btn-outline-secondary" for="price-anc-a">assets</label>
-                        </div>
-                        <label class="price-field"><span id="price-anchor-label">p</span>
-                            <input id="price-anchor-val" type="number" step="0.001" min="0" max="1" value="0.99" autocomplete="off"></label>
-                        <div class="btn-group btn-group-sm" role="group" aria-label="pricing target">
-                            <input type="radio" class="btn-check" name="price-target" id="price-tgt-coc" value="coc" checked>
-                            <label class="btn btn-outline-secondary" for="price-tgt-coc">CoC</label>
-                            <input type="radio" class="btn-check" name="price-target" id="price-tgt-lr" value="lr">
-                            <label class="btn btn-outline-secondary" for="price-tgt-lr">LR</label>
-                        </div>
-                        <label class="price-field"><span id="price-target-label">CoC</span>
-                            <input id="price-target-val" type="number" step="0.01" value="0.15" autocomplete="off"></label>
-                        <button id="price-btn" class="btn btn-primary btn-sm">Calibrate</button>
-                    </div>
-                    <!-- The pentagon this form would complete, kept current as
-                         you type. Debounced, because a keystroke is not a
-                         question; dimmed rather than blanked while in flight,
-                         the Quick Re treatment. A refusal from the library
-                         prints here as its own sentence, which is why an
-                         impossible anchor never reaches a broken pane. -->
-                    <p class="price-preview" id="price-preview"></p>
+                    <div id="price-form"></div>
                     <div id="pane-calibrate" class="pane"></div>
                     <div id="pane-allocate" class="pane d-none"></div>
                 </div>
 
                 <div id="leaf-evaluate" class="d-none">
-                    <div class="exhibit-controls" id="evaluate-basis"></div>
-                    <div class="tab-tools price-form">
-                        <label class="price-field" id="evaluate-premium-field">premium
-                            <input id="evaluate-premium" type="number" step="1" min="0" autocomplete="off"></label>
-                        <div class="btn-group btn-group-sm" role="group" aria-label="asset anchor">
-                            <input type="radio" class="btn-check" name="evaluate-anchor" id="evaluate-anc-p" value="p" checked>
-                            <label class="btn btn-outline-secondary" for="evaluate-anc-p">p</label>
-                            <input type="radio" class="btn-check" name="evaluate-anchor" id="evaluate-anc-a" value="a">
-                            <label class="btn btn-outline-secondary" for="evaluate-anc-a">assets</label>
-                        </div>
-                        <label class="price-field" id="evaluate-anchor-field"><span id="evaluate-anchor-label">p</span>
-                            <input id="evaluate-anchor-val" type="number" step="0.001" min="0" max="1" value="0.99" placeholder="none" autocomplete="off"></label>
-                        <button id="evaluate-btn" class="btn btn-primary btn-sm">Evaluate</button>
-                        <span class="text-muted ms-1 form-gloss">breakeven acceptability: the distortion that values the margin at zero</span>
-                    </div>
+                    <div id="evaluate-form"></div>
                     <div id="pane-evaluate" class="pane"></div>
                 </div>
             </div>
@@ -520,19 +486,8 @@
                  would spend it every time you passed through. -->
             <div class="tab-pane fade" id="t-bounds">
                 <div class="sub-tabs" id="sub-bounds"></div>
-                <div class="tab-tools price-form" id="bounds-form">
-                    <label class="price-field">premium
-                        <input id="bounds-premium" type="number" step="1" min="0" autocomplete="off"></label>
-                    <label class="price-field">assets
-                        <input id="bounds-assets" type="number" step="1" min="0"
-                               placeholder="none" autocomplete="off"></label>
-                    <label class="price-field bounds-against d-none" id="bounds-against-field">against
-                        <input id="bounds-against" type="text" autocomplete="off"
-                               autocorrect="off" autocapitalize="off" spellcheck="false"
-                               placeholder="a unit name, or DecL for a new line"></label>
-                    <button id="bounds-btn" class="btn btn-primary btn-sm">Compute</button>
-                    <span class="sub-hint" id="bounds-hint"></span>
-                </div>
+                <div id="bounds-form"></div>
+                <span class="sub-hint" id="bounds-hint"></span>
                 <div id="pane-bounds" class="pane"></div>
             </div>
 

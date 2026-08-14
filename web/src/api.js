@@ -20,6 +20,33 @@ export class ApiError extends Error {
     }
 }
 
+/**
+ * An error as the sentence it was written to be.
+ *
+ * Lives here, beside the class it reads, because two callers need it: the
+ * output panes, and the pricing form's preview line, where a library refusal
+ * (an unbounded anchor, a loss ratio implying a premium above the assets) is
+ * the text rather than an exception. It was private to `main.js` through a99,
+ * when the form was the only thing that could refuse.
+ */
+export function errorMessage(err) {
+    if (!(err instanceof ApiError)) return err.message;
+    const detail = err.body && (err.body.detail || err.body);
+    if (Array.isArray(detail)) {
+        // FastAPI 422 validation errors: [{loc:[...,field], msg, type}, ...].
+        // Show "<field>: <msg>" per entry so the real reason (a bad p, an
+        // over-cap log2) is legible instead of a bare "HTTP 422".
+        return detail
+            .map((e) => {
+                const field = Array.isArray(e.loc) ? e.loc[e.loc.length - 1] : null;
+                return field ? `${field}: ${e.msg}` : e.msg;
+            })
+            .join('; ');
+    }
+    return (detail && detail.message)
+        || (typeof detail === 'string' ? detail : err.message);
+}
+
 function qs(params) {
     const pairs = [];
     for (const [k, v] of Object.entries(params)) {

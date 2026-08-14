@@ -128,16 +128,75 @@ def test_preview_answers_on_the_basis_it_is_given(client):
 
 
 @pytest.mark.parametrize("body", [
-    {"p": 0.99},                              # no target
-    {"p": 0.99, "coc": 0.15, "lr": 0.7},      # two targets
-    {"coc": 0.15},                            # no anchor
-    {"p": 0.99, "a": 5000, "coc": 0.15},      # two anchors
+    {"p": 0.99},                                   # no target
+    {"p": 0.99, "coc": 0.15, "lr": 0.7},           # two targets
+    {"p": 0.99, "coc": 0.15, "premium": 30000},    # two targets, one new
+    {"p": 0.99, "lr": 0.7, "premium": 30000},      # two targets, one new
+    {"coc": 0.15},                                 # no anchor
+    {"premium": 30000},                            # no anchor, new target
+    {"p": 0.99, "a": 5000, "coc": 0.15},           # two anchors
 ])
 def test_preview_wants_exactly_one_of_each(client, body):
     oid, _ = _build(client, BASIC_BOOK)
     r = client.post(f"/v1/objects/{oid}/pricing/preview", json=body)
     assert r.status_code == 400
     assert "exactly one" in r.json()["detail"]
+
+
+def test_a_premium_is_the_third_pricing_target(client):
+    """``price_pentagon`` has always taken ``P=``, and a100 offers it.
+
+    It is the spelling the Bounds group and Evaluate have always used, so
+    accepting it is what makes those forms and the Calibrate form one form. The
+    octet is the same octet whichever leg the caller states, which is the whole
+    claim: the pentagon is one identity and the target is a choice of which
+    corner to hold.
+    """
+    oid, _ = _build(client, BASIC_BOOK)
+    by_coc = client.post(f"/v1/objects/{oid}/pricing/preview",
+                         json={"p": 0.99, "coc": 0.15})
+    assert by_coc.status_code == 200, by_coc.text
+    premium = by_coc.json()["premium"]
+
+    by_premium = client.post(f"/v1/objects/{oid}/pricing/preview",
+                             json={"p": 0.99, "premium": premium})
+    assert by_premium.status_code == 200, by_premium.text
+    for key, value in by_coc.json().items():
+        assert by_premium.json()[key] == pytest.approx(value, rel=1e-9), key
+
+
+def test_a_premium_target_calibrates_what_its_own_coc_does(client):
+    """The round trip, through the calibrate route.
+
+    ``calibrate_distortions`` takes a cost of capital and not a premium, so a
+    premium target completes the pentagon first and hands over the cost of
+    capital it reports. Two library calls chained, and the fitted families have
+    to come out the same to the last few bits: agreement here is what says the
+    api added no arithmetic of its own on the way.
+
+    Exact equality is the wrong assertion. A premium is reached from a cost of
+    capital and read back, so the derived target lands one or two ULPs off
+    (``0.15`` against ``0.14999999999999997``) and every fitted parameter
+    inherits that at around 1e-15.
+    """
+    oid, _ = _build(client, BASIC_BOOK)
+    premium = client.post(f"/v1/objects/{oid}/pricing/preview",
+                          json={"p": 0.99, "coc": 0.15}).json()["premium"]
+
+    by_coc = _calibrate(client, oid, p=0.99, coc=0.15)
+    by_premium = _calibrate(client, oid, p=0.99, coc=None, premium=premium)
+    assert by_coc.status_code == 200, by_coc.text
+    assert by_premium.status_code == 200, by_premium.text
+
+    left = by_coc.json()["exhibits"]["pricing.calibrate"]["raw"]["blocks"][0]
+    right = by_premium.json()["exhibits"]["pricing.calibrate"]["raw"]["blocks"][0]
+    assert len(left["body"]) == len(right["body"])
+    for a_row, b_row in zip(left["body"], right["body"]):
+        for a_cell, b_cell in zip(a_row, b_row):
+            a_raw = a_cell.get("raw") if isinstance(a_cell, dict) else None
+            b_raw = b_cell.get("raw") if isinstance(b_cell, dict) else None
+            if isinstance(a_raw, (int, float)) and isinstance(b_raw, (int, float)):
+                assert b_raw == pytest.approx(a_raw, rel=1e-6, abs=1e-9)
 
 
 def test_the_unbounded_anchor_guard_reaches_the_reader(client):

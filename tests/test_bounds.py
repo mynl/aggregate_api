@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 AGG = "agg BND.A 10 claims sev lognorm 100 cv 1.5 poisson"
 PORT = ("port BND.P agg A 10 claims sev lognorm 100 cv 1.5 poisson "
         "agg B 5 claims sev gamma 50 cv 0.8 poisson")
@@ -155,6 +157,43 @@ def test_the_calibration_declines_rather_than_raising(client):
     # leaves zero capital.
     assert _calibrate_for_envelope(obj, premium, premium) is False
     assert _calibrate_for_envelope(obj, premium, premium * 2.5) is True
+
+
+def test_the_pentagon_calibrates_panel_two_on_one_asset_level(client):
+    """Panel 2's cost of capital is now consistent, and it was not before.
+
+    Through 1.0.0a100 ``_calibrate_for_envelope`` wrote the pentagon identity
+    out by hand: ``L`` from ``prob_loss_assets``, then ``M = P - L``,
+    ``Q = a - P`` and ``coc = M / Q``. Besides being the api deciding what a
+    price means, it mixed two asset levels. ``prob_loss_assets`` **snaps** the
+    level to the loss grid and reports ``L`` there, while ``Q`` was computed
+    from the caller's raw request, so the margin and the capital came off
+    different asset levels and the resulting cost of capital belonged to no
+    consistent pentagon.
+
+    Measured on this program: requested 15625.068, snapped 15624.0 at ``bs`` 4,
+    giving 0.13334437 by the old route against 0.13335957 now, about 1.1e-4
+    relative. It scales with how far the request sits from a grid point.
+
+    So the two do **not** agree, and the assertion is the corrected identity:
+    one asset level, the snapped one, in both legs.
+    """
+    from aggregate import build as agg_build
+    from aggregate_api.bounds import _calibrate_for_envelope
+
+    obj = agg_build(AGG, log2=13)
+    premium = float(obj.est_m) * 1.25
+    assets = premium * 2.5
+
+    assert _calibrate_for_envelope(obj, premium, assets) is True
+    limited = obj.prob_loss_assets(a=assets)
+    snapped = float(limited.a)
+    assert snapped != assets, "the fixture has to snap for this to test anything"
+    expected = (premium - float(limited.L)) / (snapped - premium)
+    assert obj.calibration_df.iloc[0]["coc"] == pytest.approx(expected, rel=1e-9)
+    # And the old reading is genuinely different, not a rounding of the same.
+    stale = (premium - float(limited.L)) / (assets - premium)
+    assert obj.calibration_df.iloc[0]["coc"] != pytest.approx(stale, rel=1e-9)
 
 
 def test_the_envelope_declines_a_kind_it_cannot_draw(client):

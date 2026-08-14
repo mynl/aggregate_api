@@ -340,6 +340,40 @@ def test_reins_bases_says_what_the_object_can_be_calibrated_on(client):
         assert priced.status_code == 200, f"{basis}: {priced.text}"
 
 
+def test_a_reinsured_book_is_locked_to_net(client):
+    """A Portfolio offers one basis, and it is ``net``.
+
+    **Regression test; do not "simplify" this back.** Reinsurance is placed at
+    the unit level: a book has no cession of its own to choose and takes
+    whatever its units produce, so there is no book-wide decision for the row to
+    offer.
+
+    Through 1.0.0a99 the filter passed ``gross`` and ``net`` straight through
+    from ``Portfolio.reins_views``, which has carried three entries since
+    library a223, and both were live buttons. That was wrong in a way the reader
+    could not see. ``CalibrationResult.pricing_df`` allocates ``density_df``,
+    the net book, whatever view is asked for, so a gross calibration arrived
+    beside a net allocation from one press and the pane labeled the pair as one
+    calculation. Measured on this program, the two allocations agreed to the
+    last digit while the calibrations differed.
+
+    An Aggregate is unaffected: a cession is placed on it directly, so all its
+    views are its own, which is what the second half asserts.
+    """
+    book = ("port CAP.ReBook "
+            "agg CAP.ReUnitA 10 claims sev lognorm 100 cv 1.5 "
+            "occurrence net of 100 xs 100 poisson "
+            "agg CAP.ReUnitB 5 claims sev gamma 50 cv 0.8 poisson")
+    r = client.post("/v1/objects", json={"decl": book, "log2": 12})
+    assert r.status_code == 200, r.text
+    assert r.json()["capability"]["reins_bases"] == ["net"]
+
+    # The same filter on an Aggregate keeps every view the library reports.
+    _, agg = _build(client, "agg_reins")
+    assert len(agg["capability"]["reins_bases"]) > 1, (
+        "an aggregate places its own cession, so it keeps the choice")
+
+
 def test_has_premium_follows_the_exposure(client):
     """The flag the PnL form reads, and it mirrors the library's own test."""
     priced = ("agg CAP.Prem 1000 premium at 0.65 lr "

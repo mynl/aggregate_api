@@ -19,7 +19,8 @@ import './styles/site.css';
 import './styles/cm6.css';
 
 // ---- App modules ----
-import { api, ApiError } from './api.js';
+import { api, ApiError, errorMessage } from './api.js';
+import { createPricingForm } from './pricing-form.js';
 import { createEditor, emacsEnabledDefault } from './editor.js';
 import { mountExamples, mountPalette, loadExamples } from './examples.js';
 import { renderInfo } from './renderers.js';
@@ -556,11 +557,11 @@ function renderSummary(res) {
     const inner = $('summary-inner');
     empty(inner);
     applyCapabilityGating();
-    renderPriceBasis();
-    // Both pricing forms take the shape of the object in front of them, and the
-    // preview line answers for it, before either leaf has been visited.
+    // All three forms take the shape of the object in front of them, and the
+    // preview line answers for it, before any leaf has been visited.
+    priceForm.sync();
     syncEvaluateForm();
-    renderPricePreview();
+    boundsForm.sync();
     const kindLabel = KIND_LABEL[res.kind] || 'Aggregate';
     const bits = [el('span', { className: 'nm' }, res.name || '(anonymous)')];
     const add = (text) => bits.push(sep(), el('span', { className: 'mono' }, text));
@@ -1876,32 +1877,13 @@ async function replacePaneTable(paneId, which, opts = GRID_FULL, bulk = null,
 }
 
 /**
- * What an error says, as a sentence.
+ * An error as a node, for a pane.
  *
- * Split out of `errorNode` at a84 because the pricing preview line prints the
- * message rather than mounting a node: a library refusal is written to be read,
- * and the reader should meet it in the line under the form they are typing in.
- * Both callers get the same reading of the same body, which is the point of
- * having one function.
+ * `errorMessage` is the sentence inside it and lives in `api.js` since a100,
+ * beside the class it reads: the pricing form prints the message rather than
+ * mounting a node, because a library refusal is written to be read and the
+ * reader should meet it in the line under the form they are typing in.
  */
-function errorMessage(err) {
-    if (!(err instanceof ApiError)) return err.message;
-    const detail = err.body && (err.body.detail || err.body);
-    if (Array.isArray(detail)) {
-        // FastAPI 422 validation errors: [{loc:[...,field], msg, type}, ...].
-        // Show "<field>: <msg>" per entry so the real reason (a bad p, an
-        // over-cap log2) is legible instead of a bare "HTTP 422".
-        return detail
-            .map((e) => {
-                const field = Array.isArray(e.loc) ? e.loc[e.loc.length - 1] : null;
-                return field ? `${field}: ${e.msg}` : e.msg;
-            })
-            .join('; ');
-    }
-    return (detail && detail.message)
-        || (typeof detail === 'string' ? detail : err.message);
-}
-
 function errorNode(err) {
     if (err instanceof ApiError && err.status === 429) return renderRateLimit(err.retryAfter);
     return el('div', { className: 'text-muted small' }, errorMessage(err));
@@ -2323,14 +2305,31 @@ async function loadReinsExhibit(block, leaf) {
 let _calibration = null;
 let _evaluation = null;
 
+/**
+ * The pricing every pane is currently talking about.
+ *
+ * `{octet, anchor, target, basis}`: the completed pentagon the server sent, plus
+ * the question that produced it, so a leaf can reopen showing the cost of
+ * capital that was calibrated and not only the premium it resolved to.
+ *
+ * Written by a Calibrate press, by an Evaluate press and by a Bounds compute.
+ * Last write wins, because there is one current pricing rather than several
+ * boxes with private histories: an ad hoc premium tried on Evaluate is the
+ * premium Bounds then sweeps, which is what that leaf is for.
+ *
+ * `octet.premium` is a **technical** premium. Economics reads a booked one, the
+ * two differ by the expense clause, and the library owns the identity between
+ * them, so nothing here should start calling either of them just "premium".
+ */
+let _pricing = null;
+
 function forgetPricing() {
     _calibration = null;
     _evaluation = null;
-    // The typed premium goes with them. It was a number about the previous
-    // object, and left in the box it would be relabeled as this one's by the
-    // basis row beside it, which is worse than an empty field.
-    const premium = $('evaluate-premium');
-    if (premium) premium.value = '';
+    // The pricing goes with them. It was struck on the previous object, and
+    // left in the boxes it would be relabeled as this one's by the basis row
+    // beside it, which is worse than an empty field.
+    _pricing = null;
 }
 
 /**
@@ -2353,7 +2352,7 @@ async function showPricingLeaf(which) {
         syncEvaluateForm();
         drawPricingPane('evaluate');
     } else {
-        renderPricePreview();
+        priceForm.write(_pricing);
         drawPricingPane(which);
     }
 }
@@ -2419,235 +2418,65 @@ function drawPricingPane(which) {
     draw();
 }
 
-// ---- The calibration basis ----
-// Which basis the distortion set is calibrated on. Sticky per browser, and only
-// offered when the object carries a cession.
-const PRICE_BASES = [
-    ['gross', 'Gross', 'Calibrate on the gross book; price the net with the same set'],
-    ['net occ', 'Net occ', 'Calibrate net of the occurrence program'],
-    ['net', 'Net', 'Calibrate on the net book; price the gross with the same set'],
-];
-let priceBasis = (() => {
-    try { return localStorage.getItem('aggapi.priceBasis') || 'gross'; }
-    catch { return 'gross'; }
-})();
+// ---- The five forms ----
+//
+// One component, five mounts. `pricing-form.js` holds the anchor, the target,
+// the basis group and the preview line; this file says what each leaf does with
+// the body it reads. Through a99 there were four hand maintained copies of that
+// row, two of them spelling the same pentagon in a different vocabulary.
+
+/** What the forms need to know about the object now on screen. */
+const formContext = () => ({
+    id: state.id,
+    kind: state.kind,
+    bases: state.caps.flags.reinsBases || [],
+    canPreview: can('canPrice'),
+});
 
 /**
- * The basis selector, above the Price form.
+ * Remember what a press was struck at, so the next leaf opens on it.
  *
- * **Always drawn, never emptied.** House style is that a control the object
- * cannot use greys out and says why, so the reader learns the choice exists and
- * that this object does not offer it; through a51 this returned early on an
- * object with no cession and the whole row vanished, so the form changed shape
- * as you stepped between examples and the choice was invisible until you
- * happened to load something reinsured.
- *
- * Which of the three are live comes from the capability block, not from a
- * guess. A portfolio's `reins_density_df` has no `p_agg_net_occ`, and an
- * occurrence-only program's net occ *is* its net, so offering all three to
- * anything reinsured meant a button that either 400'd or repeated a column
- * already on screen. The api computes the set at build time and this only asks.
- *
- * Drawn as one divided button group, like `derive` on the action row. It used
- * to stack three visual languages down the tab: house-red toggles here,
- * Bootstrap grey radios for the anchor below, and a blue Price button under
- * those. Grey for the active member, matching the p / assets pair it sits over,
- * because the accent means *selected in the navigation* and nothing else.
+ * The octet is the server's, verbatim. `anchor` and `target` are the question
+ * that produced it, which is what lets a leaf reopen showing the cost of
+ * capital that was calibrated rather than only the premium it resolved to.
+ * `basis` rides along so 6.3's refusal can tell whether the pricing belongs to
+ * the distribution the reader is now looking at.
  */
-function renderPriceBasis() {
-    const host = $('price-basis');
-    if (!host) return;
-    empty(host);
-    const live = state.caps.flags.reinsBases || [];
-    host.appendChild(el('span', { className: 'exhibit-group-label' }, 'calibrate on'));
-    const group = el('div', {
-        className: 'btn-group btn-group-sm',
-        role: 'group',
-    });
-    group.setAttribute('aria-label', 'calibration basis');
-    // Fall back to the first live basis when the sticky choice is one this
-    // object cannot answer, so a stored 'net occ' does not silently price the
-    // wrong thing on the next object.
-    if (live.length && !live.includes(priceBasis)) priceBasis = live[0];
+function holdPricing(body, octet) {
+    if (!octet) return;
+    _pricing = {
+        octet,
+        anchor: 'a' in body ? 'a' : 'p',
+        target: 'premium' in body ? 'premium' : ('lr' in body ? 'lr' : 'coc'),
+        basis: body.basis || null,
+    };
+}
 
-    for (const [value, label, title] of PRICE_BASES) {
-        const off = !live.includes(value);
-        const why = state.hasReins
-            ? 'this program has no distinct basis of that kind'
-            : 'needs a cession; add one on the Reinsurance tab';
-        const b = el('button', {
-            type: 'button',
-            title: off ? why : title,
-            className: 'btn btn-outline-secondary'
-                + (value === priceBasis && !off ? ' active' : ''),
-        }, label);
-        if (off) {
-            b.disabled = true;
-            b.setAttribute('aria-label', `${label}, ${why}`);
-        } else {
-            b.addEventListener('click', () => {
-                priceBasis = value;
-                try { localStorage.setItem('aggapi.priceBasis', value); }
-                catch { /* private mode */ }
-                renderPriceBasis();
-                // Both legs of the anchor come off the chosen view, so the
-                // preview is a different reading and not a relabeling of the
-                // one already on screen.
-                renderPricePreview();
-            });
+const priceForm = createPricingForm($('price-form'), {
+    verb: 'Calibrate',
+    basisLabel: 'calibrate on',
+    preview: true,
+    context: formContext,
+    onSubmit: async (body) => {
+        if (!state.id) return;
+        priceForm.setBusy(true, 'Calibrating…');
+        try {
+            _calibration = await api.pricingCalibrate(state.id, body);
+            holdPricing(body, priceForm.held());
+            // One press, two panes. Only the visible one is drawn: a CsvGrid
+            // measures itself as it mounts, and mounting one inside a `d-none`
+            // wrapper measures nothing. The other leaf redraws from the same
+            // held response the moment it is shown, which costs no request.
+            drawPricingPane(activeLeaf('pricing'));
+        } catch (err) {
+            _calibration = null;
+            replacePane(activeLeaf('pricing') === 'allocate'
+                ? 'pane-allocate' : 'pane-calibrate', errorNode(err));
+        } finally {
+            priceForm.setBusy(false);
         }
-        group.appendChild(b);
-    }
-    host.appendChild(group);
-}
-
-/**
- * The calibration the form is currently describing, or null if it describes none.
- *
- * One body for all three pricing calls, since the preview answers the same
- * question the calibration is about to be asked. `basis` travels only where it
- * means something: a portfolio calibrates on its output basis and the library
- * refuses a `reins_view` there, so sending one would turn a greyed control into
- * a 400.
- */
-function priceFormBody() {
-    const anchor = document.querySelector('input[name="price-anchor"]:checked')?.value || 'p';
-    const anchorVal = parseFloat($('price-anchor-val').value);
-    const target = document.querySelector('input[name="price-target"]:checked')?.value || 'coc';
-    const val = parseFloat($('price-target-val').value);
-    if (!Number.isFinite(anchorVal) || !Number.isFinite(val)) return null;
-    const body = {};
-    body[anchor] = anchorVal;      // 'p' (a VaR probability) or 'a' (assets)
-    body[target] = val;            // 'coc' or 'lr'
-    const bases = state.caps.flags.reinsBases || [];
-    if (bases.includes(priceBasis)) body.basis = priceBasis;
-    return body;
-}
-
-/**
- * The pentagon this form would complete, under the form, kept current as you type.
- *
- * The Quick Re treatment, for the same reasons and with the same three guards.
- * Debounced at 350 ms on the trailing edge, because a keystroke is not a
- * question. Ticketed against out-of-order answers, since the boxes move while a
- * request is in flight and an older reading must not overwrite a newer one.
- * Dimmed rather than blanked after 120 ms, so the last good reading stays on
- * screen and says it is not current instead of flickering on every digit.
- *
- * **A refusal is the preview text.** The library's unbounded anchor guard
- * (`p = 1` on a book whose count has no maximum) is a sentence written to be
- * read, and the preview line is where the reader is already looking. That is the
- * whole reason this line answers before the button is pressed rather than after.
- *
- * Silent, not an error, when the object cannot price or the form is incomplete:
- * an empty box is not a mistake, it is a box you have not finished typing in.
- */
-let _pricePreviewTicket = 0;
-async function renderPricePreview() {
-    const node = $('price-preview');
-    if (!node) return;
-    const blank = () => {
-        node.textContent = '';
-        node.classList.remove('is-pending');
-    };
-    if (!state.id || !can('canPrice')) return blank();
-    const body = priceFormBody();
-    if (!body) return blank();
-
-    const ticket = ++_pricePreviewTicket;
-    const pending = setTimeout(() => {
-        if (ticket === _pricePreviewTicket) node.classList.add('is-pending');
-    }, 120);
-    const settle = (text) => {
-        clearTimeout(pending);
-        if (ticket !== _pricePreviewTicket) return;
-        node.textContent = text;
-        node.classList.remove('is-pending');
-    };
-    try {
-        const q = await api.pricingPreview(state.id, body);
-        // PQ as a ratio to three places, matching every table on the pane: it is
-        // premium over capital, and a leverage of 4.6 reads as 4.6 rather than
-        // as 460%.
-        settle(`Preview: premium ${money(q.premium)}, assets ${money(q.assets)}, `
-            + `loss ratio ${percent(q.lr)}, PQ ${q.pq?.toFixed(3) ?? ''}, `
-            + `and CoC ${percent(q.coc)}`);
-    } catch (err) {
-        settle(errorMessage(err));
-    }
-}
-
-const pricePreviewSoon = debounce(renderPricePreview, 350);
-
-/** Money, grouped and to the cent, the same reading the tables give it. */
-function money(value) {
-    return Number.isFinite(value)
-        ? value.toLocaleString('en-US', { minimumFractionDigits: 2,
-                                          maximumFractionDigits: 2 })
-        : '';
-}
-
-/** A ratio as a percent to one place. */
-function percent(value) {
-    return Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : '';
-}
-
-const priceBtn = $('price-btn');
-priceBtn?.addEventListener('click', async () => {
-    if (!state.id) return;
-    const body = priceFormBody();
-    if (!body) return;
-    priceBtn.disabled = true;
-    priceBtn.textContent = 'Calibrating…';
-    try {
-        _calibration = await api.pricingCalibrate(state.id, body);
-        // One press, two panes. Only the visible one is drawn: a CsvGrid
-        // measures itself as it mounts, and mounting one inside a `d-none`
-        // wrapper measures nothing. The other leaf redraws from the same held
-        // response the moment it is shown, which costs no request.
-        drawPricingPane(activeLeaf('pricing'));
-    } catch (err) {
-        _calibration = null;
-        replacePane(activeLeaf('pricing') === 'allocate'
-            ? 'pane-allocate' : 'pane-calibrate', errorNode(err));
-    } finally {
-        priceBtn.disabled = false;
-        priceBtn.textContent = 'Calibrate';
-    }
+    },
 });
-
-// Anchor radio -> label, step and a sensible default. A probability lives in
-// (0, 1] and steps by a thousandth; an asset level is money and does neither,
-// so the input's constraints move with the choice rather than being left at the
-// probability's and silently rejecting every asset figure.
-document.querySelectorAll('input[name="price-anchor"]').forEach((radio) => {
-    radio.addEventListener('change', () => {
-        const input = $('price-anchor-val');
-        const isP = radio.value === 'p';
-        $('price-anchor-label').textContent = isP ? 'p' : 'assets';
-        input.step = isP ? '0.001' : '1';
-        if (isP) input.max = '1'; else input.removeAttribute('max');
-        input.value = isP ? '0.99' : '';
-        if (!isP) input.focus();
-        // The switch changes the whole question, so the line answers at once
-        // rather than through the debounce that exists to absorb typing.
-        renderPricePreview();
-    });
-});
-
-// Target radio -> label + a sensible default value.
-document.querySelectorAll('input[name="price-target"]').forEach((radio) => {
-    radio.addEventListener('change', () => {
-        const isCoc = radio.value === 'coc';
-        $('price-target-label').textContent = isCoc ? 'CoC' : 'LR';
-        $('price-target-val').value = isCoc ? '0.15' : '0.9';
-        renderPricePreview();
-    });
-});
-
-for (const id of ['price-anchor-val', 'price-target-val']) {
-    $(id)?.addEventListener('input', pricePreviewSoon);
-}
 
 // ----------------------------------------------------------------------
 // Bounds: how much of the price the choice of distortion decides
@@ -2668,24 +2497,61 @@ const BOUNDS_HINTS = {
 /** Which bounds leaf is showing; the button reads it when you press Compute. */
 let boundsWhich = 'bounds';
 
+// The `against` box, the one thing the three leaves do not share. It sits below
+// the form rather than inside it so the pricing row reads the same here as on
+// the Pricing tab, and it takes a name or a program rather than a number, which
+// is why it is the one field in the group that is not right aligned.
+const boundsAgainst = el('input', {
+    type: 'text', autocomplete: 'off', autocorrect: 'off',
+    autocapitalize: 'off', spellcheck: 'false',
+    placeholder: 'a unit name, or DecL for a new line',
+});
+const boundsAgainstField = el('label',
+    { className: 'price-field bounds-against d-none' },
+    'against', boundsAgainst);
+
 /**
  * Show one bounds leaf: same form, different extras, pane cleared.
  *
- * Nothing computes here. Each of the three is real work and wants a premium
- * that only you can choose, so arriving at a leaf sets it up and waits.
+ * Nothing computes here. Each of the three is real work, so arriving at a leaf
+ * sets it up and waits.
+ *
+ * The form opens on the pricing the reader has been working with, which is what
+ * makes the band the band around *their* premium. Through a99 it opened on
+ * `mean * 1.25`, a number chosen only to sit above the expected loss, and the
+ * envelope's second panel then named distortions calibrated to that rather than
+ * to anything the reader had asked for.
  */
 async function showBoundsLeaf(which) {
     boundsWhich = which;
-    $('bounds-against-field').classList.toggle('d-none', which !== 'pricing');
+    boundsAgainstField.classList.toggle('d-none', which !== 'pricing');
     $('bounds-hint').textContent = BOUNDS_HINTS[which] || '';
-    // A premium has to sit above the expected loss for the question to mean
-    // anything, so the object's own mean is the only sensible starting point.
-    const premium = $('bounds-premium');
-    if (!premium.value && Number.isFinite(state.mean)) {
-        premium.value = Math.round(state.mean * 1.25);
-    }
+    adoptPricing(boundsForm);
     replacePane('pane-bounds', el('div', { className: 'text-muted small' },
         'Set a premium and press Compute.'));
+}
+
+/**
+ * Open a form on the held pricing, or say why it cannot.
+ *
+ * The Bounds classes answer on the object's own distribution and take no
+ * reinsurance view, so a pricing struck on a book's gross view describes a
+ * different distribution from the one about to be swept. Seeding across that
+ * gap would draw a gross premium on a net band with nothing on screen saying
+ * so, which is the one failure worth a sentence.
+ *
+ * The seed is withheld, and nothing else: every box stays live, a typed premium
+ * computes exactly as before. When `reins_view=` lands on `Bounds` and
+ * `PricingBounds` this check goes and the seed happens.
+ */
+function adoptPricing(form) {
+    if (_pricing?.basis && _pricing.basis !== 'net') {
+        form.note(`The pricing on hand was struck on the ${_pricing.basis} view. `
+            + 'This group answers on the object’s own distribution, so it is '
+            + 'not carried over; type a premium to sweep one.');
+        return;
+    }
+    form.write(_pricing);
 }
 
 /** Render a bounds table: one row per unit or per named risk. */
@@ -2712,43 +2578,62 @@ function renderBoundsTable(payload) {
     draw();
 }
 
-const boundsBtn = $('bounds-btn');
-boundsBtn?.addEventListener('click', async () => {
-    if (!state.id) return;
-    const premium = parseFloat($('bounds-premium').value);
-    if (!Number.isFinite(premium)) return;
-    const assetsRaw = parseFloat($('bounds-assets').value);
-    const assets = Number.isFinite(assetsRaw) ? assetsRaw : null;
-    boundsBtn.disabled = true;
-    boundsBtn.textContent = 'Computing…';
-    try {
-        if (boundsWhich === 'bounds') {
-            // A chart document since a60, where this used to be an <img> whose
-            // src was the whole request. The reader gets a picture they can
-            // zoom and read values off, and the api stopped rendering.
-            const doc = await api.boundsEnvelope(state.id, { premium, assets });
-            const host = el('div', { className: 'bounds-figure' });
-            replacePane('pane-bounds', host);
-            if (boundsChart) { boundsChart.dispose(); boundsChart = null; }
-            // The document is already in hand, since the premium the reader
-            // typed is what identifies it, so this takes the mount's
-            // already-fetched entry point rather than its fetching one.
-            boundsChart = mountChartDoc(host, doc);
-            if (!boundsChart) replacePane('pane-bounds', notDrawable());
-        } else if (boundsWhich === 'allocation') {
-            renderBoundsTable(await api.allocationBounds(state.id, { premium, assets }));
-        } else {
-            const against = $('bounds-against').value.trim();
-            if (!against) return;
-            renderBoundsTable(await api.pricingBounds(
-                state.id, { premium, assets, against: [against] }));
+const boundsForm = createPricingForm($('bounds-form'), {
+    verb: 'Compute',
+    // No basis row. The three Bounds classes take the object and answer on its
+    // own distribution, with no `reins_view` to give them, so a control here
+    // would be one the request cannot carry. `adoptPricing` is where that gap
+    // becomes a sentence rather than a silent mislabel.
+    basisLabel: null,
+    // The pane said nothing at all until a press, and the press is fifty
+    // resamples. One pentagon solve says what is about to be swept, and it puts
+    // the refusals in front of the button: Bounds rejects a premium below the
+    // expected loss or above the cap, and the line shows M or Q going non
+    // positive before the reader commits to the wait.
+    preview: true,
+    extras: boundsAgainstField,
+    context: formContext,
+    onSubmit: async (body) => {
+        if (!state.id) return;
+        boundsForm.setBusy(true, 'Computing…');
+        try {
+            // The sweep is parameterized by a premium and an asset level, and
+            // the form may have been given a cost of capital instead, so the
+            // pentagon resolves the pair first. One cheap call, and it is the
+            // same one the preview line makes.
+            const octet = await api.pricingPreview(state.id, body);
+            holdPricing(body, octet);
+            const premium = octet.premium;
+            const assets = Number.isFinite(octet.assets) ? octet.assets : null;
+            if (!Number.isFinite(premium)) return;
+            if (boundsWhich === 'bounds') {
+                // A chart document since a60, where this used to be an <img>
+                // whose src was the whole request. The reader gets a picture
+                // they can zoom and read values off, and the api stopped
+                // rendering.
+                const doc = await api.boundsEnvelope(state.id, { premium, assets });
+                const host = el('div', { className: 'bounds-figure' });
+                replacePane('pane-bounds', host);
+                if (boundsChart) { boundsChart.dispose(); boundsChart = null; }
+                // The document is already in hand, since the premium the reader
+                // typed is what identifies it, so this takes the mount's
+                // already-fetched entry point rather than its fetching one.
+                boundsChart = mountChartDoc(host, doc);
+                if (!boundsChart) replacePane('pane-bounds', notDrawable());
+            } else if (boundsWhich === 'allocation') {
+                renderBoundsTable(await api.allocationBounds(state.id, { premium, assets }));
+            } else {
+                const against = boundsAgainst.value.trim();
+                if (!against) return;
+                renderBoundsTable(await api.pricingBounds(
+                    state.id, { premium, assets, against: [against] }));
+            }
+        } catch (err) {
+            replacePane('pane-bounds', errorNode(err));
+        } finally {
+            boundsForm.setBusy(false);
         }
-    } catch (err) {
-        replacePane('pane-bounds', errorNode(err));
-    } finally {
-        boundsBtn.disabled = false;
-        boundsBtn.textContent = 'Compute';
-    }
+    },
 });
 
 // ----------------------------------------------------------------------
@@ -2760,139 +2645,92 @@ boundsBtn?.addEventListener('click', async () => {
 // a round trip: evaluating a family's own implied premium recovers that family's
 // calibrated parameters.
 
-//: Which premium is in the box. Not the calibration basis and not sticky, for
-//: the same reason: this one labels the number beside it, and a basis remembered
-//: from the last object over a premium typed for this one is a mislabel rather
-//: than a preference. Defaults to the object's own final distribution.
-let evaluateBasis = 'net';
-
 /**
- * The Evaluate form's basis row: which premium is being input.
- *
- * Deliberately narrow. It names what the number in the box **is**, so the panel
- * measures it against the right distribution; the fuller gross versus net
- * evaluation story overlaps the Economics group and stays there.
- *
- * Always drawn, never emptied, and greyed with a reason where it does not apply,
- * which is the house rule the calibration basis above follows for the same
- * reason: a reader learns the choice exists and that this object does not offer
- * it.
- */
-function renderEvaluateBasis() {
-    const host = $('evaluate-basis');
-    if (!host) return;
-    empty(host);
-    const live = state.kind === 'pnl' ? [] : (state.caps.flags.reinsBases || []);
-    host.appendChild(el('span', { className: 'exhibit-group-label' }, 'premium is'));
-    const group = el('div', { className: 'btn-group btn-group-sm', role: 'group' });
-    group.setAttribute('aria-label', 'which premium is being evaluated');
-    if (live.length && !live.includes(evaluateBasis)) evaluateBasis = live[live.length - 1];
-
-    for (const [value, label] of PRICE_BASES) {
-        const off = !live.includes(value);
-        const why = state.kind === 'pnl'
-            ? 'a P&L states a premium on every row of its ledger'
-            : (state.hasReins
-                ? 'this program has no distinct basis of that kind'
-                : 'needs a cession; add one on the Reinsurance tab');
-        const b = el('button', {
-            type: 'button',
-            title: off ? why : `the premium above is the ${label.toLowerCase()} one`,
-            className: 'btn btn-outline-secondary'
-                + (value === evaluateBasis && !off ? ' active' : ''),
-        }, label);
-        if (off) {
-            b.disabled = true;
-            b.setAttribute('aria-label', `${label}, ${why}`);
-        } else {
-            b.addEventListener('click', () => {
-                evaluateBasis = value;
-                renderEvaluateBasis();
-            });
-        }
-        group.appendChild(b);
-    }
-    host.appendChild(group);
-}
-
-/**
- * Put the Evaluate form in the shape this object calls for.
+ * Put the Evaluate form in the shape this object calls for, and open it on the
+ * pricing in hand.
  *
  * A P&L carries a premium and an asset level per ledger row, so neither the
  * premium box nor the anchor means anything for it and both go; the api refuses
  * them rather than guessing, and a form that can only produce a 400 is worse
  * than one control fewer.
  *
- * Everything else shows the premium box either way, prefilled from the object's
- * own consideration when it states one. Through a83 it appeared only when the
- * object carried none, so an exposure written with a premium was evaluated
- * against a number the reader never saw.
+ * Everything else opens on the held pricing: the premium a calibration was
+ * struck at, and the asset level it was struck at, which is what closes the
+ * round trip the leaf exists for. Pressing Evaluate unchanged recovers that
+ * calibration's own parameters, and changing the premium asks the question the
+ * leaf is for. Through a99 the anchor was seeded by nothing and sat at 0.99
+ * whatever the calibration had used, so the round trip was described in a
+ * comment and never actually offered.
+ *
+ * Falls back to the object's own consideration when nothing has been struck,
+ * which is what it did before.
  */
 function syncEvaluateForm() {
     const isPnl = state.kind === 'pnl';
-    $('evaluate-premium-field').classList.toggle('d-none', isPnl);
-    $('evaluate-anchor-field').classList.toggle('d-none', isPnl);
-    for (const id of ['evaluate-anc-p', 'evaluate-anc-a']) {
-        $(id).closest('.btn-group')?.classList.toggle('d-none', isPnl);
+    evaluateForm.setFieldsVisible(!isPnl);
+    evaluateForm.sync();
+    if (isPnl) return;
+    if (_pricing) {
+        evaluateForm.write(_pricing);
+        return;
     }
-    renderEvaluateBasis();
-    const input = $('evaluate-premium');
     const own = state.caps.flags.premium;
-    // Prefill, do not overwrite: a reader who has typed a premium and stepped
-    // away to look at a table has to find it still there.
-    if (!isPnl && !input.value && Number.isFinite(own)) {
-        input.value = String(own);
+    if (Number.isFinite(own)) {
+        evaluateForm.write({ octet: { premium: own }, anchor: 'p', target: 'premium' });
     }
 }
 
-const evaluateBtn = $('evaluate-btn');
-evaluateBtn?.addEventListener('click', async () => {
-    if (!state.id) return;
-    const body = {};
-    if (state.kind !== 'pnl') {
-        const premium = parseFloat($('evaluate-premium').value);
-        // Required only where the object states none of its own. With one, an
-        // empty box means "as it stands", which is what the library does with
-        // no premium argument.
-        if (Number.isFinite(premium)) body.premium = premium;
-        else if (can('needsPremium')) return;
-
-        const anchor = document.querySelector('input[name="evaluate-anchor"]:checked')?.value || 'p';
-        const anchorVal = parseFloat($('evaluate-anchor-val').value);
-        // Blank is not incomplete here. It is the library's unlimited reading,
-        // which solves over the whole distribution and reports four families
-        // rather than five, since `ccoc` needs an asset level to read.
-        if (Number.isFinite(anchorVal)) body[anchor] = anchorVal;
-
-        const bases = state.caps.flags.reinsBases || [];
-        if (bases.includes(evaluateBasis)) body.basis = evaluateBasis;
-    }
-    evaluateBtn.disabled = true;
-    evaluateBtn.textContent = 'Evaluating…';
-    try {
-        _evaluation = await api.pricingEvaluate(state.id, body);
-        drawPricingPane('evaluate');
-    } catch (err) {
-        _evaluation = null;
-        replacePane('pane-evaluate', errorNode(err));
-    } finally {
-        evaluateBtn.disabled = false;
-        evaluateBtn.textContent = 'Evaluate';
-    }
-});
-
-// The anchor pair, matching the Calibrate form's: a probability steps by a
-// thousandth and stops at 1, an asset level is money and does neither.
-document.querySelectorAll('input[name="evaluate-anchor"]').forEach((radio) => {
-    radio.addEventListener('change', () => {
-        const input = $('evaluate-anchor-val');
-        const isP = radio.value === 'p';
-        $('evaluate-anchor-label').textContent = isP ? 'p' : 'assets';
-        input.step = isP ? '0.001' : '1';
-        if (isP) input.max = '1'; else input.removeAttribute('max');
-        input.value = isP ? '0.99' : '';
-        if (!isP) input.focus();
-    });
+const evaluateForm = createPricingForm($('evaluate-form'), {
+    verb: 'Evaluate',
+    // Narrower than the calibration basis, and deliberately: it names what the
+    // number in the box **is**, so the panel measures it against the right
+    // distribution. The fuller gross versus net story overlaps Economics and
+    // stays there.
+    basisLabel: 'premium is',
+    // One question, so nothing to switch. The premium is the input and the
+    // stress it survives is the answer.
+    targets: ['premium'],
+    allowBlank: true,
+    gloss: 'breakeven acceptability: the distortion that values the margin at zero',
+    context: formContext,
+    onSubmit: async (fields) => {
+        if (!state.id) return;
+        const body = {};
+        if (state.kind !== 'pnl') {
+            // Required only where the object states none of its own. With one,
+            // an empty box means "as it stands", which is what the library does
+            // with no premium argument.
+            if (Number.isFinite(fields.premium)) body.premium = fields.premium;
+            else if (can('needsPremium')) return;
+            // Blank is not incomplete here. It is the library's unlimited
+            // reading, which solves over the whole distribution and reports
+            // four families rather than five, since `ccoc` needs an asset level.
+            if (Number.isFinite(fields.p)) body.p = fields.p;
+            if (Number.isFinite(fields.a)) body.a = fields.a;
+            if (fields.basis) body.basis = fields.basis;
+        }
+        evaluateForm.setBusy(true, 'Evaluating…');
+        try {
+            _evaluation = await api.pricingEvaluate(state.id, body);
+            // The premium just evaluated becomes the current one, which is the
+            // point of the leaf: an ad hoc premium tried here is what Bounds
+            // then sweeps.
+            if (state.kind !== 'pnl') {
+                const octet = await api.pricingPreview(state.id, {
+                    ...(Number.isFinite(body.a) ? { a: body.a } : { p: body.p ?? 0.99 }),
+                    premium: body.premium ?? state.caps.flags.premium,
+                    ...(body.basis ? { basis: body.basis } : {}),
+                }).catch(() => null);
+                holdPricing({ ...body, premium: body.premium }, octet);
+            }
+            drawPricingPane('evaluate');
+        } catch (err) {
+            _evaluation = null;
+            replacePane('pane-evaluate', errorNode(err));
+        } finally {
+            evaluateForm.setBusy(false);
+        }
+    },
 });
 
 // ----------------------------------------------------------------------

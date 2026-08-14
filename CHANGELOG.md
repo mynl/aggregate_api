@@ -4,6 +4,126 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a101
+
+**The Bounds pane answers before you press it.** The pricing form's preview
+line now runs under all three Bounds leaves, on the same 350 ms trailing
+debounce, the same 120 ms dim and the same ticket against out of order answers.
+The pane said nothing at all until a press, and the press is fifty resamples.
+One pentagon solve, documented in `pricing.py` as the cheapest question in the
+group, says what is about to be swept.
+
+It also puts the refusals in front of the button. `Bounds` rejects a premium
+below the expected loss or above the cap, and the line shows `M` or `Q` going
+non positive before the reader commits to the wait. That is the principle
+already established for the library's unbounded anchor guard, that a refusal is
+the preview text, applied to the pane where the wait is longest.
+
+**`_calibrate_for_envelope` lost its arithmetic, and a bug with it.** It
+completed the pentagon by hand: `L` from `prob_loss_assets`, then `M = P - L`,
+`Q = a - P` and `coc = M / Q`. Besides being the api deciding what a price
+means, which is the shape of thing the purist ruling is about, it **mixed two
+asset levels**. `prob_loss_assets` snaps the level to the loss grid and reports
+`L` there, while `Q` came off the caller's raw request, so the margin and the
+capital were struck at different asset levels and the cost of capital they
+implied belonged to no consistent pentagon. On a 50 claim lognormal book at
+`log2=13` a request for 15625.068 snaps to 15624.0 at `bs` 4, and the two
+readings are 0.13334437 against 0.13335957, about 1.1e-4 relative, scaling with
+the distance from a grid point.
+
+It is now one `price_pentagon(a=..., P=...)` call through the same
+`_coc_for_premium` helper the premium target uses, so panel 2 is calibrated on
+one asset level, the one the band is drawn at. The three `return False` cases
+stay: an unbounded asset level still has no cost of capital to fit to, and a
+premium at or beyond either boundary now reaches the function as the library's
+own refusal rather than as a comparison written here, so one test covers both
+ends. They fire less often than they did, because since a100 the pane opens on
+a real calibration whose implied `(P, a)` has `M > 0` and `Q > 0` by
+construction, so panel 2 draws where it used to vanish.
+
+See `dev/done/plan-pricing-form.md`.
+
+## 1.0.0a100
+
+**Five leaves were asking the same question in three spellings, so they now
+share one form.** `Aggregate.price_pentagon` takes exactly one capital anchor
+and exactly one pricing target, and premium has always been one of the targets.
+Read against that signature, Pricing / Calibrate (anchor plus CoC or LR),
+Pricing / Evaluate (anchor plus premium) and the three Bounds leaves (anchor
+plus premium, then sweep) are one form over a signature the library already
+publishes. `web/src/pricing-form.js` is that form, built once and mounted five
+times; the four hand maintained copies of the row are gone, along with the
+Bounds group's separate vocabulary of `premium` and `assets` boxes.
+
+**The pricing carries across the tabs.** One held value, `_pricing`, is the
+completed pentagon plus the question that produced it. A Calibrate press writes
+it, an Evaluate press overwrites it, a Bounds compute overwrites it again, and
+every form opens on it. Last write wins, because there is one current pricing
+rather than several boxes with private histories: an ad hoc premium tried on
+Evaluate is the premium Bounds then sweeps, which is what that leaf is for.
+
+This is not a convenience. `bounds._calibrate_for_envelope` re-derives a
+calibration from the request's own premium so that the envelope's second panel
+names distortions on the band the first panel draws, and its docstring says
+they have to be the same premium or the two panels answer different questions.
+Through a99 the Bounds form opened on `mean * 1.25`, a number chosen only to
+sit above the expected loss, so unless the reader retyped the calibration's `P`
+and `a` exactly the two panes showed the same five families struck at different
+premiums, with nothing on screen saying so. Evaluate is the same story: its own
+comment describes a round trip that recovers a calibration's parameters, and
+its asset anchor was seeded by nothing and sat at `0.99` whatever the
+calibration had used, so the round trip was documented and never offered.
+
+**Premium is the third pricing target.** `PricingPreviewRequest` and
+`PricingCalibrateRequest` gain a `premium` field and `_one_target` accepts
+exactly one of three. `calibrate_distortions` takes a cost of capital or a loss
+ratio and not a premium, so `_coc_for_premium` completes the pentagon first and
+hands over the cost of capital it reports: two library calls chained, with no
+arithmetic here. A premium target and the cost of capital it implies calibrate
+to the same families, and the test asserts that approximately rather than
+exactly, because the round trip loses a couple of bits (`0.15` against
+`0.14999999999999997`) and every fitted parameter inherits it at about 1e-15.
+
+**A reinsured Portfolio is locked to `net`, and this is a fix.** Reinsurance is
+placed at the unit level: a book has no cession of its own to choose and takes
+whatever its units produce. `Portfolio.reins_views` has reported `['gross',
+'ceded', 'net']` since library a223 and `reins_bases_for` passed `gross` and
+`net` straight through, so both were live buttons here. That was wrong in a way
+the reader could not see. `CalibrationResult.pricing_df` allocates `density_df`,
+the net book, whatever view is asked for, so a gross calibration arrived beside
+a net allocation from one press and the pane labeled the pair as one
+calculation. Measured on a two unit book: the calibrations differed, resolving
+to asset levels of 2693.50 and 2599.50, while the allocations agreed to the
+last digit on every unit (UnitA 951.470961, UnitB 999.356266) and the total
+matched the net book at the net anchor. The upstream half, `pricing_df`
+refusing a non-net `reins_view` for a `Portfolio` as `analyze_distortions`
+already does, is an open ask. An Aggregate is unaffected: it places its own
+cession, so all its views are its own.
+
+**A pricing the Bounds group cannot honor withholds its seed rather than
+carrying silently.** The three bounds classes take the object and answer on its
+own distribution, with no `reins_view` to give them, so a reinsured Aggregate
+calibrated on `gross` or `net occ` describes a different distribution from the
+one about to be swept. The form says so where the preview line goes and leaves
+every control live: a typed premium computes exactly as before. When
+`reins_view=` lands on `Bounds` and `PricingBounds` the line goes and the seed
+happens.
+
+**The form is one line.** The row stated each choice twice, a `btn-group` of
+radios naming the anchor and a `<span>` beside the input naming it again, and
+the same for the target. The group stays and the span goes, so the control that
+switches the box is the one that labels it, and the basis group folds onto the
+same row: `calibrate on [Gross|Net occ|Net]  [0.99](p) ◦ [0.15](CoC)
+[Calibrate]`, wrapping only when the viewport is too narrow. The `min-width:
+2.3rem` on the three labels went with them, since it existed to stop the row
+shifting on every switch (a live bug through a83) and a `btn-group` draws all
+its members always, so its width does not depend on the selection.
+
+`errorMessage` moved from `main.js` to `api.js`, beside the `ApiError` it
+reads, because the form prints the sentence where `errorNode` mounts a node.
+
+See `dev/done/plan-pricing-form.md`.
+
 ## 1.0.0a99
 
 **The bounds envelope band draws where it belongs, for the first time since

@@ -2835,7 +2835,8 @@ def post_pricing_preview(
     """
     try:
         return run_pricing_preview(entry.obj, p=req.p, a=req.a, coc=req.coc,
-                                   lr=req.lr, basis=req.basis)
+                                   lr=req.lr, premium=req.premium,
+                                   basis=req.basis)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -2858,7 +2859,8 @@ def post_pricing_calibrate(
     """
     try:
         return run_calibration(entry.obj, p=req.p, a=req.a, coc=req.coc,
-                               lr=req.lr, basis=req.basis)
+                               lr=req.lr, premium=req.premium,
+                               basis=req.basis)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -76,17 +76,30 @@ def _calibrate_for_envelope(obj: Any, premium: float, assets: float | None) -> b
     emitter's business now, and through a59 this function split them across two
     panels because the matplotlib compositor drew three.
 
-    ``calibrate_distortions`` takes a cost-of-capital rather than a premium, and
-    the two are one identity apart at a fixed asset level::
+    ``calibrate_distortions`` takes a cost-of-capital rather than a premium, so
+    the premium is resolved through :func:`aggregate_api.pricing._coc_for_premium`,
+    which completes the pentagon and reads the cost of capital off it.
+
+    Through 1.0.0a100 that identity was written out here::
 
         L = E[min(X, a)]        the limited expected loss
         M = premium - L         the margin
         Q = a - premium         the capital
         coc = M / Q
 
-    ``L`` comes from the library's own ``prob_loss_assets``, which returns a
-    mutually consistent ``(p, L, a)``, so the only api arithmetic here is the
-    pentagon identity itself.
+    which was this repo deciding what a price means, and it predated
+    ``price_pentagon`` being reachable from the api. The pentagon is one library
+    call and the identity stays upstream where it belongs.
+
+    **That hand form was also wrong, in a small way.** ``prob_loss_assets``
+    snaps the asset level to the loss grid and reports ``L`` there, while ``Q``
+    was computed from the caller's raw request, so the margin and the capital
+    came off two different asset levels and the cost of capital they implied
+    belonged to no consistent pentagon. On a 50 claim lognormal book at
+    ``log2=13``, a request for 15625.068 snaps to 15624.0 and the two readings
+    are 0.13334437 against 0.13335957, about 1.1e-4 relative; it scales with the
+    distance from a grid point. Panel 2 is calibrated on one asset level now,
+    the one the band is drawn at.
 
     Returns ``False`` rather than raising, in three cases, and each leaves the
     document honestly one-panelled instead of falsely two:
@@ -95,34 +108,43 @@ def _calibrate_for_envelope(obj: Any, premium: float, assets: float | None) -> b
       calibrate to. The envelope in panel 1 is still meaningful.
     * **degenerate margin or capital.** ``Bounds`` already refuses a premium
       below the mean or above the cap; this catches the boundary where premium
-      equals the cap and capital is zero.
+      equals the cap and capital is zero, which now reaches this function as the
+      library's own refusal out of the pentagon rather than as a comparison here.
     * **the calibration itself declines**, which it does on a book where a mass
       distortion cannot be fitted.
+
+    All three are rarer than they were. Since a100 the app carries a real
+    calibration into this pane rather than opening on ``mean * 1.25``, and an
+    implied ``(P, a)`` has ``M > 0`` and ``Q > 0`` by construction, so panel 2
+    draws where it used to vanish. They stay because a hand typed premium can
+    still hit them.
 
     Notes
     -----
     This **mutates** the cached object: ``calibrate_distortions`` writes
     ``distortions``, ``distortion_df`` and ``calibration_df`` onto it. That is
-    the library's contract for the method and already how ``pricing.run_price``
-    uses it, so the object is no more shared-mutable than before; it is worth
+    the library's contract for the method and already how the pricing runners
+    use it, so the object is no more shared-mutable than before; it is worth
     knowing that a Bounds request leaves a calibration behind.
     """
     import math
 
+    from .pricing import _coc_for_premium
+
     if assets is None or not math.isfinite(float(assets)):
         return False
     assets = float(assets)
-    premium = float(premium)
     try:
-        limited = obj.prob_loss_assets(a=assets)
+        coc = _coc_for_premium(obj, {"a": assets}, float(premium), None)
     except Exception:  # noqa: BLE001 -- an object that cannot answer gets one panel
         return False
-    margin = premium - float(limited.L)
-    capital = assets - premium
-    if not (margin > 0 and capital > 0):
+    # A premium at or above the cap is negative capital and a premium below the
+    # limited expected loss is a negative margin. The library reports either as
+    # a non-positive cost of capital, so one test covers both boundaries.
+    if not (coc is not None and coc > 0):
         return False
     try:
-        obj.calibrate_distortions(margin / capital, a=assets)
+        obj.calibrate_distortions(coc, a=assets)
     except Exception:  # noqa: BLE001 -- reported by the document having one panel
         return False
     return bool(getattr(obj, "distortions", None))

@@ -265,6 +265,21 @@ def reins_bases_for(obj: Any) -> list[str]:
     Empty for an object carrying no cession, which is what makes both rows grey
     out as a whole rather than vanish.
 
+    **A reinsured Portfolio is locked to net** (author's ruling, 1.0.0a100).
+    Reinsurance is placed at the unit level: a book has no cession of its own to
+    choose and takes whatever its units produce, so there is no book-wide
+    decision for the row to offer. ``Portfolio.reins_views`` has reported
+    ``['gross', 'ceded', 'net']`` since library a223 and both this filter's
+    survivors were live here through a99, which was wrong in a way a reader
+    could not see: ``CalibrationResult.pricing_df`` allocates ``density_df``,
+    the net book, whatever view was asked for, so a gross calibration arrived
+    beside a net allocation from one press, labeled as one calculation. Measured
+    on a two unit book, the two allocations agreed to the last digit while the
+    calibrations differed. Net is the only basis a book answers end to end.
+
+    An Aggregate is unaffected: a cession is placed on it directly, and all
+    three views are its own.
+
     Parameters
     ----------
     obj : Any
@@ -277,7 +292,10 @@ def reins_bases_for(obj: Any) -> list[str]:
         views = set(obj.reins_views or ())
     except Exception:  # noqa: BLE001 -- an object that cannot answer offers none
         return []
-    return [name for name in _CALIBRATION_BASES if name in views]
+    live = [name for name in _CALIBRATION_BASES if name in views]
+    if live and isinstance(obj, Portfolio):
+        return ["net"] if "net" in live else []
+    return live
 
 
 def can_price(obj: Any) -> bool:

@@ -490,6 +490,8 @@ class PricingPreviewRequest(BaseModel):
         None, gt=0, description="Asset level fixing capital; snapped to the grid.")
     coc: float | None = Field(None, gt=0, description="Cost-of-capital (ROE) target.")
     lr: float | None = Field(None, gt=0, description="Loss-ratio target.")
+    premium: float | None = Field(
+        None, gt=0, description="Premium target; the pentagon's ``P``.")
     basis: str | None = Field(
         None, description="Reinsurance view: 'gross', 'net occ' or 'net'.")
 
@@ -520,8 +522,14 @@ class PricingCalibrateRequest(BaseModel):
     """Body for ``POST /v1/objects/{id}/pricing/calibrate``.
 
     Exactly one capital anchor (``p`` or ``a``) and exactly one pricing target
-    (``coc`` or ``lr``). The library owns the loss-ratio conversion, so ``lr``
-    travels as itself rather than being turned into a cost of capital here.
+    (``coc``, ``lr`` or ``premium``). The library owns the loss-ratio
+    conversion, so ``lr`` travels as itself rather than being turned into a cost
+    of capital here.
+
+    ``premium`` is the third target since 1.0.0a100, because
+    :meth:`price_pentagon` has always taken one and the Bounds forms ask the
+    same question in that spelling. It costs one extra library call: see
+    :func:`aggregate_api.pricing.run_calibration`.
     """
 
     p: float | None = Field(
@@ -530,6 +538,8 @@ class PricingCalibrateRequest(BaseModel):
         None, gt=0, description="Asset level fixing capital; snapped to the grid.")
     coc: float | None = Field(None, gt=0, description="Cost-of-capital (ROE) target.")
     lr: float | None = Field(None, gt=0, description="Loss-ratio target.")
+    premium: float | None = Field(
+        None, gt=0, description="Premium target; the pentagon's ``P``.")
     basis: str | None = Field(
         None, description="Calibration basis: 'gross', 'net occ' or 'net'.")
 
