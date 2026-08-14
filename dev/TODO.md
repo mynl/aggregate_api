@@ -299,6 +299,14 @@ and the standing REMINDER below about what is worth plotting.
       to the `agg.mynl.com` subdomain (same-origin, auto-TLS, explicit `/docs`
       404, build rate-limit); `human-hints.md` runbook rewritten. *(done; moved
       to `dev/done/`)*
+- [x] **plan-envelope-band-render, the bounds envelope band draws in the wrong
+      place.** The adapter realized the document's `y2` band as an ECharts
+      stacked pair, and stacking on twin value axes sums the x coordinates, so
+      the upper half drew at doubled x with the raw gap as y (the wavy 0.2
+      line) and the fill painted the triangle under the diagonal. Served
+      document verified correct; broken since a62. Fixed at a99 with a
+      `custom` polygon plus two plain edge lines, and the smoke test gained
+      `checkBands`. *(done; moved to `dev/done/`)*
 
 ## Backlog / ideas (unordered)
 

@@ -4,6 +4,55 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a99
+
+**The bounds envelope band draws where it belongs, for the first time since
+a62.** The Bounds pane showed a wavy line at roughly `g = 0.2` labeled
+Envelope, a shaded triangle under the identity diagonal, and no band at all
+around the resampled or the calibrated curves. The served document was correct
+throughout: `charts/_emit_bounds.py` carries the envelope as one series with
+`y` the lower edge and `y2` the upper, and the library's own matplotlib
+rendering of that document draws the band correctly. The defect was entirely
+in this repo's ECharts realization, so it raises no upstream ask and the
+purist ruling is untouched.
+
+**What the adapter did wrong.** The `if (y2)` branch realized a band as two
+line series sharing an ECharts `stack`, the lower edge with an invisible area
+and the gap `hi - lo` stacked on top with the fill. The comment called it
+exact because the two share one x array, and that holds only on a category x
+axis. Both axes here are `type: 'value'`, and data stacking on twin value axes
+stacks the **x** dimension: it sums the x coordinates and leaves y raw.
+Confirmed outside the browser against this repo's own tree shaken ECharts,
+where the stacked value at index 280 came back 1.0898, exactly twice the
+0.5449 the document places there. Every artifact follows: the upper half drew
+`hi(s) - lo(s)` for `s` in `[0, 0.5]` stretched across the panel, which is the
+wavy 0.2 line, its right end at the gap rather than at zero, everything past
+`s = 0.5` clipped, and the fill spanning from that stretched curve down to the
+lower edge.
+
+**What it does now: three series under the document series' one name, so the
+one legend entry still toggles the whole region.** The two edges as plain
+lines at `(x, lo)` and `(x, hi)`, the lower one keeping the readout and the
+upper silent; and the region between them as a `custom` series polygon whose
+vertices are the lower edge walked forward then the upper edge walked back,
+mapped per vertex through `apiRef.coord` the way the surface panel's contour
+overlay already is, so the fill stays glued to its edges through a zoom or a
+window change. Built from the drawn record's own mapped arrays, so the axis
+exchange and the reflected reading ride along with no special case, and a null
+on either edge closes the ring rather than letting a polygon bridge a gap the
+log hide opened. `CustomChart` was already registered. Nothing else moved: the
+emitter, the document, and `legend.push(s.name)` are all as they were.
+
+The smoke test gains `checkBands`, which asserts the realization rather than
+the absence of an exception: three series per band, the two edges carrying the
+document's own `y` and `y2`, no `stack`, and a ring that runs lower out and
+upper back. Verified against a two-panel document (`Bounds(BasicBook, 25500,
+a=31000)` with ten resamples and the five calibrated distortions) rendered
+offline to SVG: the band contains every resampled curve, the lower edge sits
+just above the diagonal, the upper edge is concave and reaches 1 near
+`s = 0.8`, and the reflected reading draws the dual band. Plan:
+`dev/done/plan-envelope-band-render.md`.
+
 ## 1.0.0a98
 
 **The percentile reference lines leave the browser, and the app deleted

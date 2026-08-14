@@ -866,35 +866,89 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
         if (y2) {
             // A band is the region between two edges of one coordinate: the
             // series *is* the region, which is what an envelope means, rather
-            // than two curves a reader has to associate. Drawn as the lower
-            // edge plus the gap above it, stacked, which is exact because the
-            // two share one x array by construction.
+            // than two curves a reader has to associate. Realized as three
+            // ECharts series, all under the document series' one name so the
+            // one legend entry toggles the whole region: the two edges as
+            // plain lines, and the region between them as a filled polygon.
             //
-            // Keyed by PANEL as well as by name: a stack name is global across
-            // the series list, so keying on the name alone would invite ECharts
-            // to combine two bands that live on different grids.
-            const stack = `band-${panel.id}-${s.name}`;
+            // **Not two line series sharing a `stack`, which is what a62
+            // shipped and what never once drew correctly.** Both axes here are
+            // `type: 'value'`, and data stacking on twin value axes stacks the
+            // *x* dimension: it sums the x coordinates and leaves y raw. So
+            // the upper half drew the gap `hi - lo` against doubled abscissa,
+            // the wavy line at roughly 0.2 the author saw, with its fill
+            // sweeping down under the identity diagonal. Full diagnosis in
+            // `dev/done/plan-envelope-band-render.md`.
             const upper = hide(y2, yScale);
+            // The fill as rings of vertices in data coordinates: the lower
+            // edge walked forward, then the upper edge walked back. A null on
+            // either edge closes the ring and opens the next, because the log
+            // hide leaves gaps and a polygon must not bridge one. Built from
+            // the drawn record's own mapped arrays, so an exchanged axis and a
+            // reflected reading ride along with no special case here.
+            const rings = [];
+            let forward = [];
+            let backward = [];
+            const closeRing = () => {
+                if (forward.length > 1) rings.push(forward.concat(backward.reverse()));
+                forward = [];
+                backward = [];
+            };
+            px.forEach((xv, k) => {
+                if (xv == null || py[k] == null || upper[k] == null) {
+                    closeRing();
+                    return;
+                }
+                forward.push([xv, py[k]]);
+                backward.push([xv, upper[k]]);
+            });
+            closeRing();
             const base = {
                 type: 'line', name: s.name, xAxisIndex: i, yAxisIndex: i,
                 symbol: 'none', lineStyle: { width: 0.8, color }, itemStyle: { color },
+                z: 2,
             };
             series.push(
-                { ...base, stack, data: points, areaStyle: { opacity: 0 } },
+                { ...base, data: points },
                 {
                     ...base,
-                    name: `${s.name} (upper)`,
-                    stack,
-                    data: px.map((xv, k) => (xv == null || py[k] == null || upper[k] == null
-                        ? null : [xv, upper[k] - py[k]])),
-                    areaStyle: { color: fade(color, 0.18) },
-                    // The stacked half carries a delta, not a value, so it must
-                    // not answer a hover: the number would be the gap and read
-                    // as the bound.
+                    data: px.map((xv, k) => (xv == null || upper[k] == null
+                        ? null : [xv, upper[k]])),
+                    // One edge answers the hover. Both would put two rows
+                    // under one name in the readout strip, and the lower edge
+                    // is the one the document's `y` names.
                     tooltip: { show: false },
                     silent: true,
                 },
             );
+            if (rings.length) {
+                // The fill goes in last and sits under the edges by `z`, not by
+                // position: a line series staying first keeps the panel's marks
+                // and the legend swatch on a series that carries both.
+                series.push({
+                    type: 'custom', name: s.name, xAxisIndex: i, yAxisIndex: i,
+                    // A vertex the edges already carry, so this series widens no
+                    // axis extent. `renderItem` never reads the datum; it is
+                    // here because a series with no data is not rendered at all.
+                    data: [rings[0][0]],
+                    silent: true, clip: true, z: 1,
+                    tooltip: { show: false },
+                    itemStyle: { color },
+                    // Mapped per vertex through `apiRef.coord`, the same way the
+                    // surface panel's contour overlay is, so the fill stays glued
+                    // to its edges through a zoom or a window change rather than
+                    // being baked into pixels once.
+                    renderItem: (params, apiRef) => ({
+                        type: 'group',
+                        children: rings.map((ring) => ({
+                            type: 'polygon',
+                            shape: { points: ring.map((p) => apiRef.coord(p)) },
+                            style: { fill: fade(color, 0.18), stroke: null },
+                            silent: true,
+                        })),
+                    }),
+                });
+            }
             legend.push(s.name);
             continue;
         }

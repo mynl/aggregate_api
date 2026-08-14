@@ -80,8 +80,8 @@ function checkDrawable(label, doc, option) {
     }
     if (!option.series.length) fail(label, 'no series');
     for (const s of option.series) {
-        // A stacked band's upper half and a stem's own base line are allowed to
-        // be sparse; everything else must carry a drawn point.
+        // A band's fill carries one datum it never reads, and everything else
+        // must carry a drawn point.
         if (s.type === 'heatmap') {
             if (!(s.data || []).length) fail(label, `${s.name}: empty heatmap`);
             continue;
@@ -281,6 +281,48 @@ function checkReadout(label, doc, option) {
     if (!model.rows.length || !model.rows[0].value) fail(label, 'readout row has no value');
 }
 
+/**
+ * A `y2` series draws as the region between its two edges.
+ *
+ * The check a62 to a98 needed and did not have. The band was realized as two
+ * line series sharing an ECharts `stack`, and stacking on twin `value` axes
+ * sums the x coordinates rather than the y, so the envelope drew as a wavy
+ * line at doubled abscissa with its fill sweeping under the diagonal. Nothing
+ * threw and every other assertion here passed, which is why it survived so
+ * long. Asserting the realization rather than the absence of an exception:
+ * three series under the document series' one name, the two edges carrying
+ * the document's own `y` and `y2`, and a closed ring over both of them.
+ */
+function checkBands(label, doc, option) {
+    if (option.is3d) return;
+    for (const band of doc.series.filter((s) => s.y2)) {
+        const at = doc.panels.findIndex((p) => p.id === band.panel_id);
+        const mine = option.series.filter((s) => s.name === band.name && s.xAxisIndex === at);
+        const lines = mine.filter((s) => s.type === 'line');
+        const fills = mine.filter((s) => s.type === 'custom');
+        const where = `${band.name} on ${band.panel_id}`;
+        if (lines.length !== 2 || fills.length !== 1) {
+            fail(label, `${where}: ${lines.length} edges and ${fills.length} fills, want 2 and 1`);
+            continue;
+        }
+        if (mine.some((s) => s.stack)) fail(label, `${where}: stacked`);
+        const [lo, hi] = lines.map((s) => s.data);
+        const edge = (drawn, want) => drawn.length === want.length
+            && want.every((v, k) => drawn[k] && drawn[k][1] === v);
+        if (!edge(lo, band.y)) fail(label, `${where}: lower edge is not the document y`);
+        if (!edge(hi, band.y2)) fail(label, `${where}: upper edge is not the document y2`);
+        // `apiRef.coord` stands in as the identity, so the ring is checkable in
+        // data coordinates without a canvas.
+        const rings = fills[0].renderItem({}, { coord: (p) => p }).children;
+        if (!rings.length) { fail(label, `${where}: fill drew no ring`); continue; }
+        const points = rings[0].shape.points;
+        const half = points.length / 2;
+        const forward = points.slice(0, half).every((p, k) => p[1] === band.y[k]);
+        const back = points.slice(half).every((p, k) => p[1] === band.y2[half - 1 - k]);
+        if (!forward || !back) fail(label, `${where}: the ring is not lower out and upper back`);
+    }
+}
+
 /** Zooming to a handful of atoms reaches the stem rung on a discrete book. */
 function checkLadder(label, doc, option) {
     if (!option.lossGrid || !option.rung) return null;
@@ -300,6 +342,7 @@ for (const [name, entry] of Object.entries(cases)) {
         checkLabels(label, doc, option);
         checkLayout(label, doc);
         checkReadout(label, doc, option);
+        checkBands(label, doc, option);
         checkReadings(label, doc, option);
         const ladder = checkLadder(label, doc, option);
         const offered = readings(doc);
