@@ -71,11 +71,25 @@ const EXPECTED = {
     'reinsurance:stats': ['agg_reins'],
     'reinsurance:density': ['agg_reins'],
     'reinsurance:plot': ['agg_reins'],
-    // Calibrate and Allocate gate together on `canPrice`: they are two readings
-    // of one calibration and one press fills both, so a live Calibrate with a
-    // dark Allocate would be a promise the pane cannot keep.
+    // Calibrate and Stand-alone gate together on `canPrice`: they are two
+    // readings of one calibration and one press fills both, so a live Calibrate
+    // with a dark Stand-alone would be a promise the pane cannot keep.
     'pricing:calibrate': ['agg', 'agg_reins', 'port'],
-    'pricing:allocate': ['agg', 'agg_reins', 'port'],
+    'pricing:standalone': ['agg', 'agg_reins', 'port'],
+    // Allocate and Plot need parts to split a premium across, which is a book
+    // of units or an occurrence cession. A plain aggregate has one part and it
+    // is the whole, so both are dark there while the two beside them are lit:
+    // the narrower gate is the point of the split.
+    'pricing:allocate': ['agg_reins', 'port'],
+    // **Empty on purpose, and temporarily.** Plot is a chart leaf, gated on the
+    // library registering `kappa`, which is phase N5 of
+    // `dev/plan-pricing-natural-allocation.md` and has not landed; the api half
+    // went first by the author's instruction. It belongs to the same set as
+    // `pricing:allocate` above and flips to `['agg_reins', 'port']` in the
+    // commit that syncs against the landed library, alongside deleting
+    // `needs_split_allocation` from `tests/conftest.py` and recapturing this
+    // script's fixture.
+    'pricing:plot': [],
     'pricing:evaluate': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl'],
     // Bounds takes an Aggregate or a Portfolio, which is the library's own
     // accepted set; allocation needs the per-unit conditional expectations only

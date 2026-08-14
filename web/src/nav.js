@@ -28,8 +28,8 @@
  * nothing is hidden, so what is coming is visible and plainly not ready.
  *
  * `dividerBefore: true` draws a thin rule to the left of a leaf, splitting its
- * row into groups. One user, Pricing, where the first two leaves are two
- * readings of one calculation and the third asks the opposite question.
+ * row into groups. One user, Pricing, where the first four leaves work outward
+ * from one calibration and the fifth asks the opposite question.
  *
  * `why` is what a dark leaf says on hover. It states what *does* answer, not
  * what this object lacks, because the reader is deciding what to build next.
@@ -134,13 +134,20 @@ export const NAV_GROUPS = {
             },
         },
     },
-    // Three leaves, and the row reads `Calibrate  Allocate | Evaluate`. The
-    // first two are one story told twice: Calibrate determines the distortion
-    // parameters, Allocate spreads that same calibration across the views of a
-    // cession or the units of a book, and one press of the button fills both.
-    // Evaluate runs the other way, starting from a premium already held and
-    // reporting what stress it survives, which is why it sits behind a divider
-    // rather than beside them.
+    // Five leaves, and the row reads `Calibrate  Stand-alone  Allocate  Plot |
+    // Evaluate`. The first four are one story: Calibrate determines the
+    // distortion parameters, Stand-alone applies those same families to each
+    // part as a price in its own right, Allocate takes the one premium and
+    // splits it across those parts so they foot to the whole, and Plot draws
+    // the conditional machinery that decides the split. Evaluate runs the other
+    // way, starting from a premium already held and reporting what stress it
+    // survives, which is why it sits behind a divider rather than beside them.
+    //
+    // Stand-alone and Allocate are the pane's two comparisons and the reason
+    // they are two tabs. Summing the parts priced alone against the whole is
+    // the diversification story; decomposing the whole into the parts is the
+    // consistency one. Through a102 both answered to the name Allocate, and
+    // only the second is an allocation.
     pricing: {
         label: 'Pricing',
         leaves: {
@@ -148,10 +155,24 @@ export const NAV_GROUPS = {
                          why: 'an aggregate or a portfolio only',
                          hint: 'one row per distortion family, each fitted to '
                              + 'the same premium target' },
-            allocate: { label: 'Allocate', flag: 'canPrice',
-                        why: 'an aggregate or a portfolio only',
-                        hint: 'that calibration spread across the views of a '
-                            + 'cession, or the units of a book' },
+            standalone: { label: 'Stand-alone', flag: 'canPrice',
+                          why: 'an aggregate or a portfolio only',
+                          hint: 'the calibrated families applied to each part '
+                              + 'as prices in their own right, and the sum '
+                              + 'against the whole' },
+            allocate: { label: 'Allocate', flag: 'canNaturalAllocation',
+                        why: 'needs a book of units or an occurrence cession',
+                        hint: 'one premium split across the parts on one '
+                            + 'basis: units of a book, or the halves of an '
+                            + 'occurrence program' },
+            // The only pricing leaf that fetches on activation, and the only
+            // one gated on a chart. It asks a question of the object rather
+            // than of a form: a kappa curve conditions on an outcome, not on a
+            // distortion, so there is no calibration for it to wait for.
+            plot: { label: 'Plot', chart: 'kappa',
+                    why: 'needs a book of units or an occurrence cession',
+                    hint: 'the kappa curves behind the allocation: what each '
+                        + 'part expects, given the whole' },
             evaluate: { label: 'Evaluate', flag: 'canEvaluate',
                         dividerBefore: true,
                         why: 'needs an object that can be priced',
@@ -394,6 +415,11 @@ export function capsFromResponse(capability, built = true) {
             reinsBases: cap.reins_bases || [],
             canBounds: Boolean(cap.can_bounds),
             canAllocate: Boolean(cap.can_allocate),
+            // Not `canAllocate`, which is the Bounds group's per-unit range and
+            // is a portfolio alone. This is the Pricing group's Allocate leaf:
+            // has the object parts to split one premium across, meaning the
+            // units of a book or the halves of an occurrence program.
+            canNaturalAllocation: Boolean(cap.can_natural_allocation),
             hasPremium: Boolean(cap.has_premium),
             // The number, not the flag: the Evaluate form prefills its premium
             // box from it. Null wherever `hasPremium` is false, since the two

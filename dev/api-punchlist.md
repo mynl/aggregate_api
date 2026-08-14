@@ -74,9 +74,14 @@ Menus
 | ...Gross/NetOcc/Net |      |     |              |      |     |            |
 | P.Evaluate      | n/a  | n/a |      y       |  y   | n/a |     y      |
 
-(Pricing rows above describe the shipped two-leaf pane. The pane becomes
-three leaves, Calibrate, Allocate, Evaluate, with the same kind coverage
-except Evaluate keeps PnL; see `dev/plan-pricing-exhibits.md`, 2026-08-12.)
+(Pricing rows above describe the shipped two-leaf pane. It became three at a84,
+Calibrate, Allocate, Evaluate, with the same kind coverage except Evaluate
+keeps PnL; see `dev/plan-pricing-exhibits.md`, 2026-08-12. It became five at
+a104: `Calibrate  Stand-alone  Allocate  Plot | Evaluate`, where Stand-alone is
+the old Allocate renamed and keeps the old coverage, while the new Allocate and
+Plot are narrower and need parts to split a premium across, so a reinsured
+aggregate and a portfolio light them and a plain aggregate does not. See
+`dev/plan-pricing-natural-allocation.md`, 2026-08-14.)
 |                 |      |     |              |      |     |            |
 | **Economics**   | n/a  | n/a |     n/a      | n/a  | n/a |     y      |
 | E.Ledger        | n/a  | n/a |     n/a      | n/a  | n/a |     y      |

@@ -796,15 +796,17 @@ window.addEventListener('resize', syncSummaryMore);
 // Tabs -- lazy load + cache per built object
 // ----------------------------------------------------------------------
 // Where a group's content goes, and where its errors land. Pricing is the one
-// group with three panes rather than one. Calibrate and Allocate are two
+// group with several panes rather than one. Calibrate and Stand-alone are two
 // readings of one calibration and share a form, but they are two documents and
-// so two panes; Evaluate is a second form asking the opposite question.
+// so two panes; Allocate is a second press; Plot is a chart; Evaluate is a
+// second form asking the opposite question.
 const PANE_OF = {
     overview: 'pane-overview', economics: 'pane-economics',
     reinsurance: 'pane-reinsurance', pricing: 'pane-calibrate',
     bounds: 'pane-bounds', more: 'pane-more',
 };
-const ALL_PANES = [...Object.values(PANE_OF), 'pane-allocate', 'pane-evaluate'];
+const ALL_PANES = [...Object.values(PANE_OF), 'pane-standalone', 'pane-allocate',
+                   'pane-kappa', 'pane-evaluate'];
 
 function clearPanes() {
     destroyAllGrids();
@@ -817,6 +819,7 @@ function clearPanes() {
     if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
     if (overviewChart) { overviewChart.dispose(); overviewChart = null; }
     if (boundsChart) { boundsChart.dispose(); boundsChart = null; }
+    if (kappaChart) { kappaChart.dispose(); kappaChart = null; }
 }
 
 function activeTabName() {
@@ -880,11 +883,13 @@ function showTab(name) {
 //                   scoped out by the author. A table of thousands of rows is
 //                   not a reading experience.
 //
-// **Pricing left this list at a85.** Its three leaves draw `pricing.calibrate`,
-// `pricing.allocate` and `pricing.evaluate`, which the library registers on the
-// result objects `calibrate_distortions` and `evaluate` return. They are not in
-// `LOADERS` because they are forms rather than fetches: a leaf here would run on
-// activation, and pricing is work.
+// **Pricing left this list at a85.** Its table leaves draw `pricing.calibrate`,
+// `pricing.stand_alone`, `pricing.allocate` and `pricing.evaluate`, which the
+// library registers on the result objects `calibrate_distortions` and
+// `evaluate` return. They are not fetches in the sense this list means: a form
+// posts and the pane draws what came back, so a leaf here only reveals what a
+// press already produced. Pricing Plot is the exception and is a chart leaf
+// like any other, because it asks the object rather than a form.
 //
 // Nothing else is allowed on the frame route. If a leaf here starts fetching a
 // DataFrame and formatting it, that is the bug.
@@ -924,7 +929,9 @@ const LOADERS = {
     'reinsurance:plot': () => loadReinsPlot(),
 
     'pricing:calibrate': () => showPricingLeaf('calibrate'),
+    'pricing:standalone': () => showPricingLeaf('standalone'),
     'pricing:allocate': () => showPricingLeaf('allocate'),
+    'pricing:plot': () => showPricingLeaf('plot'),
     'pricing:evaluate': () => showPricingLeaf('evaluate'),
 
     'bounds:bounds': () => showBoundsLeaf('bounds'),
@@ -1230,6 +1237,11 @@ async function loadTab(group) {
 // track them ourselves. `liveChart` reads these to answer "save what I can see".
 let overviewChart = null;
 let boundsChart = null;
+// The Pricing group's Plot leaf. A chart on the built object rather than on a
+// pricing result, which is why it is held here beside the other three rather
+// than inside the pricing state: a kappa curve conditions on an outcome, not on
+// a distortion, so nothing a form does invalidates it.
+let kappaChart = null;
 
 // ----------------------------------------------------------------------
 // How tables render: one preference, page-wide
@@ -1814,6 +1826,8 @@ function disposePaneChart(paneId) {
         reinsChart.dispose(); reinsChart = null;
     } else if (paneId === 'pane-bounds' && boundsChart) {
         boundsChart.dispose(); boundsChart = null;
+    } else if (paneId === 'pane-kappa' && kappaChart) {
+        kappaChart.dispose(); kappaChart = null;
     }
 }
 
@@ -2279,20 +2293,27 @@ async function loadReinsExhibit(block, leaf) {
 // wrong, it is wrong in the library.
 
 // ----------------------------------------------------------------------
-// Pricing: Calibrate, Allocate and Evaluate
+// Pricing: Calibrate, Stand-alone, Allocate, Plot and Evaluate
 // ----------------------------------------------------------------------
 // Every table on this pane is a library exhibit. `calibrate_distortions` and
 // `evaluate` return result objects, the library registers `pricing.calibrate`,
-// `pricing.allocate` and `pricing.evaluate` on those, and the api serves the
-// envelopes. So this file holds no title, no caption, no format and no
-// arithmetic about a price: it posts a form and draws a document, which is what
-// the other twelve table leaves have done since a71.
+// `pricing.stand_alone`, `pricing.allocate` and `pricing.evaluate` on those,
+// and the api serves the envelopes. So this file holds no title, no caption, no
+// format and no arithmetic about a price: it posts a form and draws a document,
+// which is what the other twelve table leaves have done since a71.
 //
 // The last of that assembly, in this file and in the api's `pricing.py`, goes at
 // a85. See `dev/plan-pricing-exhibits.md`.
+//
+// The row became five at a104, and the middle three are the shape of the
+// argument. Stand-alone prices each part as a distribution in its own right and
+// sets the sum against the whole, which is the diversification reading.
+// Allocate takes one calibrated premium and splits it across the same parts so
+// they foot exactly, which is the consistency reading. Plot draws the kappa
+// curves the split is made of. See `dev/plan-pricing-natural-allocation.md`.
 
 /**
- * The last answer from each of the two pricing POSTs, held so a leaf never
+ * The last answer from each of the pricing POSTs, held so a leaf never
  * computes on activation.
  *
  * Both perspectives ride in each response, which is what makes the RAW /
@@ -2305,6 +2326,7 @@ async function loadReinsExhibit(block, leaf) {
  * flip of the perspective, which is the thing holding them is for.
  */
 let _calibration = null;
+let _allocation = null;
 let _evaluation = null;
 
 /**
@@ -2327,6 +2349,7 @@ let _pricing = null;
 
 function forgetPricing() {
     _calibration = null;
+    _allocation = null;
     _evaluation = null;
     // The pricing goes with them. It was struck on the previous object, and
     // left in the boxes it would be relabeled as this one's by the basis row
@@ -2334,37 +2357,55 @@ function forgetPricing() {
     _pricing = null;
 }
 
+/** Which wrapper each leaf lives in; the others are hidden on arrival. */
+const PRICING_WRAPPER = {
+    calibrate: 'leaf-price', standalone: 'leaf-price',
+    allocate: 'leaf-allocate', plot: 'leaf-kappa', evaluate: 'leaf-evaluate',
+};
+
 /**
  * Pricing: reveal one leaf, and draw what is held for it.
  *
- * Calibrate and Allocate share a form and a press, so they share the wrapper
- * and differ only in which pane is visible. Evaluate is the other form.
+ * Calibrate and Stand-alone share a form and a press, so they share the wrapper
+ * and differ only in which pane inside it is visible. Allocate is a second
+ * press with a form of its own, Evaluate a third, and Plot has no form at all.
  *
- * Nothing computes here. Pricing and evaluation are both work, and a leaf that
- * ran on arrival would spend it every time you passed through, so the panes stay
- * as the last press left them and the button is the only thing that asks.
+ * **Nothing computes here, except on Plot.** Pricing, allocation and evaluation
+ * are all work behind a button, and a leaf that ran on arrival would spend it
+ * every time you passed through, so those panes stay as the last press left
+ * them. Plot is a chart leaf like every other chart leaf: it asks the object a
+ * question that no form qualifies, so there is nothing for a button to add, and
+ * the ETag on `doc_hash` makes a second visit free.
  */
 async function showPricingLeaf(which) {
-    const evaluating = which === 'evaluate';
-    $('leaf-price').classList.toggle('d-none', evaluating);
-    $('leaf-evaluate').classList.toggle('d-none', !evaluating);
+    const showing = PRICING_WRAPPER[which];
+    for (const wrapper of new Set(Object.values(PRICING_WRAPPER))) {
+        $(wrapper).classList.toggle('d-none', wrapper !== showing);
+    }
     $('pane-calibrate').classList.toggle('d-none', which !== 'calibrate');
-    $('pane-allocate').classList.toggle('d-none', which !== 'allocate');
-    if (evaluating) {
+    $('pane-standalone').classList.toggle('d-none', which !== 'standalone');
+    if (which === 'evaluate') {
         syncEvaluateForm();
         drawPricingPane('evaluate');
+    } else if (which === 'plot') {
+        await loadKappaPlot();
+    } else if (which === 'allocate') {
+        allocateForm.write(_pricing);
+        drawPricingPane(which);
     } else {
         priceForm.write(_pricing);
         drawPricingPane(which);
     }
 }
 
-/** Which exhibit each leaf draws, and out of which held response. */
+/** Which exhibit each table leaf draws, out of which held response. */
 const PRICING_LEAF = {
     calibrate: ['pane-calibrate', 'pricing.calibrate', () => _calibration,
                 'Calibrate'],
-    allocate: ['pane-allocate', 'pricing.allocate', () => _calibration,
-               'Calibrate'],
+    standalone: ['pane-standalone', 'pricing.stand_alone', () => _calibration,
+                 'Calibrate'],
+    allocate: ['pane-allocate', 'pricing.allocate', () => _allocation,
+               'Allocate'],
     evaluate: ['pane-evaluate', 'pricing.evaluate', () => _evaluation,
                'Evaluate'],
 };
@@ -2472,13 +2513,83 @@ const priceForm = createPricingForm($('price-form'), {
             drawPricingPane(activeLeaf('pricing'));
         } catch (err) {
             _calibration = null;
-            replacePane(activeLeaf('pricing') === 'allocate'
-                ? 'pane-allocate' : 'pane-calibrate', errorNode(err));
+            replacePane(activeLeaf('pricing') === 'standalone'
+                ? 'pane-standalone' : 'pane-calibrate', errorNode(err));
         } finally {
             priceForm.setBusy(false);
         }
     },
 });
+
+/**
+ * The Allocate leaf's basis row: one live button, and the rest drawn dark.
+ *
+ * The narrowing is structural rather than a preference. A natural allocation
+ * splits a *gross* premium into its ceded and net parts, so a fit struck on net
+ * has nothing to split; a book takes net alone, because reinsurance is placed at
+ * the unit level and it has no cession of its own to choose. Both are what the
+ * route enforces, so the form refuses to send what the route would refuse to
+ * take, and says why on hover rather than after a press.
+ */
+const allocateBases = (bases, kind) => (
+    kind === 'port' ? bases : bases.filter((basis) => basis === 'gross'));
+
+const allocateForm = createPricingForm($('allocate-form'), {
+    verb: 'Allocate',
+    basisLabel: 'allocate on',
+    preview: true,
+    basisOnly: allocateBases,
+    basisWhy: 'net and ceded are this tab’s outputs, not its inputs',
+    context: formContext,
+    onSubmit: async (body) => {
+        if (!state.id) return;
+        allocateForm.setBusy(true, 'Allocating…');
+        try {
+            _allocation = await api.pricingAllocate(state.id, body);
+            // The shared pentagon moves, as it does on every other press. The
+            // held *calibration* does not: writing another leaf's state from a
+            // side effect here is how a pane drifts out of sync with its own
+            // button, and Stand-alone would then show numbers no press of its
+            // own produced.
+            holdPricing(body, allocateForm.held());
+            drawPricingPane('allocate');
+        } catch (err) {
+            _allocation = null;
+            replacePane('pane-allocate', errorNode(err));
+        } finally {
+            allocateForm.setBusy(false);
+        }
+    },
+});
+
+/**
+ * The Pricing group's Plot leaf: the kappa curves behind the allocation.
+ *
+ * A chart leaf, so the pill lights from `available_charts` and this draws
+ * whatever the library registered under `kappa` for the object in hand: the
+ * per-unit curves for a book, the two-panel band chart for an occurrence
+ * program. The app knows neither, which is the point of gating on the name.
+ *
+ * The one pricing leaf that fetches on activation, and the only one that can:
+ * a kappa curve conditions on an outcome rather than on a distortion, so no
+ * form qualifies it and there is nothing for a button to add.
+ */
+async function loadKappaPlot() {
+    if (kappaChart) { kappaChart.dispose(); kappaChart = null; }
+    const pane = $('pane-kappa');
+    clearGrids('pane-kappa');
+    empty(pane);
+    const host = el('div', { className: 'overview-plot' });
+    pane.appendChild(host);
+    let failed = false;
+    try {
+        kappaChart = await mountChart(host, { id: state.id, chart: 'kappa' });
+    } catch { failed = true; }
+    if (!kappaChart) {
+        empty(pane);
+        pane.appendChild(failed ? fetchFailed() : notDrawable());
+    }
+}
 
 // ----------------------------------------------------------------------
 // Bounds: how much of the price the choice of distortion decides

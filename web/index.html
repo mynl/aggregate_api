@@ -457,16 +457,47 @@
             <div class="tab-pane fade" id="t-pricing">
                 <div class="sub-tabs" id="sub-pricing"></div>
 
-                <!-- The three pricing forms are built by `pricing-form.js`
-                     since a100, into these hosts. They were three copies of one
-                     row of markup, each stating its choice twice (a btn-group
+                <!-- The pricing forms are built by `pricing-form.js` since
+                     a100, into these hosts. They were three copies of one row
+                     of markup, each stating its choice twice (a btn-group
                      naming the anchor and a span repeating it), and the Bounds
                      group had a fourth copy in a different spelling. One form
-                     over `price_pentagon`'s signature serves all five leaves. -->
+                     over `price_pentagon`'s signature serves every leaf that
+                     asks for a price, here and under Bounds.
+
+                     Four wrappers, and which of them is on screen is the leaf.
+                     Calibrate and Stand-alone are two documents from one press
+                     and share the first; Allocate is a second press, because a
+                     decomposition off an occurrence joint is real work and is
+                     not what a reader asking for a calibration ordered; Plot
+                     asks the object rather than a form, so it carries no form
+                     at all. -->
                 <div id="leaf-price">
                     <div id="price-form"></div>
                     <div id="pane-calibrate" class="pane"></div>
-                    <div id="pane-allocate" class="pane d-none"></div>
+                    <div id="pane-standalone" class="pane d-none"></div>
+                </div>
+
+                <div id="leaf-allocate" class="d-none">
+                    <div id="allocate-form"></div>
+                    <!-- The massive placeholder. A control that cannot be
+                         operated, said out loud rather than hidden, per the
+                         house rule that nothing coming is invisible. The
+                         disk-backed joint cannot serve the kappa curve yet;
+                         when the library's band iterator lands this becomes a
+                         real switch and the joint's sizing moves onto the form
+                         beside it. -->
+                    <label class="massive-toggle nav-off"
+                           data-why="the disk-backed joint cannot serve the kappa curve yet; a post 1.0 item">
+                        <input type="checkbox" id="allocate-massive" disabled
+                               aria-label="Massive joint, the disk-backed joint cannot serve the kappa curve yet; a post 1.0 item">
+                        <span>Massive joint</span>
+                    </label>
+                    <div id="pane-allocate" class="pane"></div>
+                </div>
+
+                <div id="leaf-kappa" class="d-none">
+                    <div id="pane-kappa" class="pane"></div>
                 </div>
 
                 <div id="leaf-evaluate" class="d-none">

@@ -625,6 +625,16 @@ header .navbar { min-height: 56px; }
 /* The value box and the control that says what it holds sit as one unit, so the
    gap inside a pair is tighter than the gap between pairs. */
 .price-form .price-field + .btn-group { margin-left: -.25rem; }
+/* The Allocate leaf's massive placeholder: a control that is not operable yet,
+   drawn rather than hidden, because the house rule is that what is coming is
+   visible and plainly not ready. It borrows `nav-off` for the greying and for
+   the `data-why` footnote, and supplies the positioned box that footnote hangs
+   off, which the tab rules give their own elements. */
+.massive-toggle {
+    display: inline-flex; align-items: center; gap: .35rem;
+    margin: 0 0 .55rem; font-size: .78rem; position: relative;
+}
+.massive-toggle input { margin: 0; }
 /* Between the anchor pair and the target pair, so the row reads as two things
    and not as four. Not punctuation and not a separator anyone clicks: it is the
    breath between two phrases. */

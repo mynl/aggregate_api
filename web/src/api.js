@@ -175,12 +175,12 @@ export const api = {
 
     // Pricing.
     //
-    // Three routes, and two of them answer with exhibit envelopes rather than
+    // Four routes, and three of them answer with exhibit envelopes rather than
     // frames: `calibrate_distortions` and `evaluate` return result objects, and
-    // the library registers `pricing.calibrate`, `pricing.allocate` and
-    // `pricing.evaluate` on those. So the app posts a form and draws a
-    // document, exactly as every other table leaf does; nothing on this pane is
-    // assembled here or formatted here.
+    // the library registers `pricing.calibrate`, `pricing.stand_alone`,
+    // `pricing.allocate` and `pricing.evaluate` on those. So the app posts a
+    // form and draws a document, exactly as every other table leaf does;
+    // nothing on this pane is assembled here or formatted here.
     /**
      * The pentagon this form would complete, as scalars, with no calibration.
      *
@@ -191,7 +191,7 @@ export const api = {
     pricingPreview: (id, body) =>
         _json('POST', `/v1/objects/${id}/pricing/preview`, body),
     /**
-     * Fit the distortion set: the `pricing.calibrate` and `pricing.allocate`
+     * Fit the distortion set: the `pricing.calibrate` and `pricing.stand_alone`
      * envelopes, each under both perspectives.
      *
      * One press fills two subtabs, and both readings travel, so stepping
@@ -199,6 +199,17 @@ export const api = {
      */
     pricingCalibrate: (id, body) =>
         _json('POST', `/v1/objects/${id}/pricing/calibrate`, body),
+    /**
+     * Split one calibrated premium across the parts: the `pricing.allocate`
+     * envelope, under both perspectives.
+     *
+     * Its own press rather than a third document out of the calibrate one. For
+     * a book it is the per-unit allocation sweep; for an occurrence program it
+     * builds the joint distribution of gross and ceded to read the split off,
+     * which is the most expensive question on the pane.
+     */
+    pricingAllocate: (id, body) =>
+        _json('POST', `/v1/objects/${id}/pricing/allocate`, body),
     /** The breakeven acceptability panel, as the `pricing.evaluate` envelope. */
     pricingEvaluate: (id, body) =>
         _json('POST', `/v1/objects/${id}/pricing/evaluate`, body),

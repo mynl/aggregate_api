@@ -84,8 +84,19 @@ const BASES = [
  * opts.extras : HTMLElement, optional
  *     Placed below the form row and above the preview line. The Bounds
  *     `against` field is the only user.
+ * opts.basisOnly : function, optional
+ *     `(bases, kind) => bases` narrowing the object's own basis list to the
+ *     ones *this leaf* can send. The Allocate leaf is the user: a natural
+ *     allocation splits a gross premium, so an aggregate offers Gross alone
+ *     there while its other views stay drawn and dark. A form that narrows
+ *     neither reads nor writes the shared sticky choice, because its selection
+ *     is a fact about the leaf rather than a preference of the reader.
+ * opts.basisWhy : string, optional
+ *     What a basis the object *has* says when this leaf refuses it. Only
+ *     meaningful with `basisOnly`; the reasons for a basis the object lacks are
+ *     the same everywhere and stay where they are.
  * opts.context : function
- *     Returns `{id, bases, canPreview}` for the object now on screen. A
+ *     Returns `{id, kind, bases, canPreview}` for the object now on screen. A
  *     function rather than a value because one form outlives many objects.
  *
  * Returns
@@ -98,7 +109,8 @@ const BASES = [
 export function createPricingForm(host, opts) {
     const {
         verb, onSubmit, basisLabel = null, targets = TARGETS.map((t) => t[0]),
-        preview = false, allowBlank = false, gloss = null, extras = null, context,
+        preview = false, allowBlank = false, gloss = null, extras = null,
+        basisOnly = null, basisWhy = null, context,
     } = opts;
 
     empty(host);
@@ -216,28 +228,54 @@ export function createPricingForm(host, opts) {
         });
     }
 
+    /** The bases this leaf may send: the object's own, narrowed by the leaf. */
+    function liveBases() {
+        const { bases = [], kind } = context() || {};
+        return basisOnly ? basisOnly(bases, kind) : bases;
+    }
+
+    /**
+     * The basis this form is on, or null where it has none to state.
+     *
+     * A narrowing leaf takes its own answer and leaves the shared sticky choice
+     * alone: what it sends is a fact about the tab, not a preference, and
+     * writing the sticky from here would change which basis the Calibrate form
+     * one pill over is calibrating on.
+     */
+    function currentBasis() {
+        const live = liveBases();
+        if (!live.length) return null;
+        if (basisOnly) return live[0];
+        // Fall back to the first live basis when the sticky choice is one this
+        // object cannot answer, so a stored 'net occ' does not silently price
+        // the wrong thing on the next object.
+        if (!live.includes(priceBasis)) priceBasis = live[0];
+        return priceBasis;
+    }
+
     /**
      * The basis group, always drawn and never emptied.
      *
      * House rule: a control the object cannot use greys out and says why, so
      * the reader learns the choice exists and that this object does not offer
      * it. Which members are live comes from the capability block, which since
-     * a100 locks a Portfolio to net; `whyDead` is where that reads as a
-     * sentence.
+     * a100 locks a Portfolio to net, and then from the leaf, which since a104
+     * can narrow that further; `whyDead` is where both read as a sentence.
      */
     function renderBasis() {
         if (!basisLabel) return;
         empty(basisHost);
         const { bases = [], kind } = context() || {};
+        const live = liveBases();
         basisHost.appendChild(
             el('span', { className: 'exhibit-group-label' }, basisLabel));
         const group = el('div', { className: 'btn-group btn-group-sm', role: 'group' });
         group.setAttribute('aria-label', basisLabel);
-        // Fall back to the first live basis when the sticky choice is one this
-        // object cannot answer, so a stored 'net occ' does not silently price
-        // the wrong thing on the next object.
-        if (bases.length && !bases.includes(priceBasis)) priceBasis = bases[0];
+        const selected = currentBasis();
         const whyDead = (value) => {
+            // The object has this view and this leaf will not take it, which is
+            // a different sentence from the object not having it at all.
+            if (basisWhy && bases.includes(value)) return basisWhy;
             if (kind === 'port') {
                 return value === 'net'
                     ? 'this book has no cession'
@@ -250,10 +288,11 @@ export function createPricingForm(host, opts) {
                 : 'needs a cession; add one on the Reinsurance tab';
         };
         const members = BASES.map(([value, label]) => {
-            const dead = !bases.includes(value);
+            const dead = !live.includes(value);
             return [value, label, dead ? whyDead(value) : `calibrated on the ${label.toLowerCase()} view`, dead];
         });
-        renderGroup(group, members, priceBasis, (value) => {
+        renderGroup(group, members, selected, (value) => {
+            if (basisOnly) return;         // one live member, and it is not a choice
             priceBasis = value;
             try { localStorage.setItem('aggapi.priceBasis', value); }
             catch { /* private mode */ }
@@ -348,10 +387,11 @@ export function createPricingForm(host, opts) {
         if (Number.isFinite(targetVal)) body[target] = targetVal;
         else if (!allowBlank) return null;
         // `basis` travels only where it means something. Since a100 the
-        // capability block is the single authority on that, and it locks a
-        // Portfolio to net, so a basis this object does not offer is never sent.
-        const { bases = [] } = context() || {};
-        if (basisLabel && bases.includes(priceBasis)) body.basis = priceBasis;
+        // capability block is the single authority on what the object offers,
+        // and it locks a Portfolio to net; since a104 the leaf can narrow that
+        // again. A basis neither of them allows is never sent.
+        const basis = basisLabel ? currentBasis() : null;
+        if (basis) body.basis = basis;
         return body;
     }
 

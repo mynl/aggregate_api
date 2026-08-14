@@ -4,6 +4,59 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a104
+
+**The Pricing row becomes `Calibrate  Stand-alone  Allocate  Plot |
+Evaluate`.** Phase B2 of `dev/plan-pricing-natural-allocation.md`, the pane
+over the routes a103 built. The middle three are the shape of the argument.
+Stand-alone prices each part as a distribution in its own right and sets the
+sum against the whole, which is the diversification reading. Allocate takes one
+calibrated premium and splits it across the same parts so they foot exactly,
+which is the consistency reading. Plot draws the kappa curves the split is made
+of. Read one after the other on a reinsured aggregate they give the three
+different numbers for net that the pane exists to put side by side: net priced
+alone, net as its share of the gross premium, and net calibrated directly.
+
+**Stand-alone is the old Allocate tab, renamed and otherwise untouched.** Same
+press, same document, same star and difference rows. A Portfolio reader loses
+nothing from Calibrate either: what used to arrive with that press now arrives
+with the Allocate one, which is where it was always being computed.
+
+**Allocate is a second press with a form of its own**, and its basis row carries
+one live button. A natural allocation splits a gross premium, so an aggregate
+offers Gross alone there and the other two views stay drawn and dark, saying
+"net and ceded are this tab's outputs, not its inputs" on hover. A book keeps
+the row it has on Calibrate, Net alone, by the same 1.0.0a100 ruling. The press
+writes the shared pentagon like every other verb and does **not** write the held
+calibration: setting another leaf's state from a side effect is how a pane
+drifts out of sync with its own button.
+
+`createPricingForm` grew `basisOnly` and `basisWhy` for that. A form that
+narrows the basis takes its own answer and neither reads nor writes the sticky
+choice the other forms share, so stepping onto Allocate cannot change what
+Calibrate is calibrating on one pill over.
+
+**Plot is the first pricing leaf that fetches on activation**, and the only one
+that can. A kappa curve conditions on an outcome rather than on a distortion, so
+no form qualifies it and there is nothing for a button to add; it is an ordinary
+chart leaf, gated on the library registering `kappa` and ETag-cached on
+`doc_hash` like the rest.
+
+**A disabled `Massive joint` toggle sits under the Allocate form.** It does
+nothing and says so: the disk-backed joint cannot serve the kappa curve yet. It
+is drawn rather than hidden because the house rule is that what is coming is
+visible and plainly not ready, and it becomes a real switch when the library's
+band iterator lands.
+
+**Still ahead of the library, and the two markers that say where.** `check-nav`
+expects Plot dark for every kind, because `kappa` is not registered yet, and
+`tests/conftest.py` still carries `needs_split_allocation`. Both flip in the
+commit that syncs against the landed library, along with recapturing
+`dev/fixtures/capability.json`. Verified in the browser meanwhile on a two-unit
+book: the five pills draw with Plot greyed and Allocate live, the Allocate press
+fills its pane with the library's five blocks, and a plain aggregate greys
+Allocate and Plot with the reason on hover.
+
 ## 1.0.0a103
 
 **Pricing one premium across the parts is its own question, and now its own
