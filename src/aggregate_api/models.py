@@ -440,14 +440,13 @@ class ObjectMetaResponse(BaseModel):
     """``GET /v1/objects/{id}/meta`` -- the object's own DecL metadata.
 
     The trailer clauses a first-class citizen carries (``note`` / ``tags`` /
-    ``hints``) plus the two program renderings. ``doc{{{...}}}`` is deliberately
-    absent: it is the cookbook's long-form recipe, not something the playground
-    displays.
+    ``hints``) plus the two program renderings. Those three are the whole
+    trailer since ``aggregate`` 1.0.0a301.
 
     ``program`` is what the parser was handed, after preprocessing (folded onto
-    one line, comments stripped, any doc body base64-encoded), not the user's
-    keystrokes. ``pprogram`` is what the parser understood, re-rendered
-    canonically, and is the one to show a reader.
+    one line, comments stripped), not the user's keystrokes. ``pprogram`` is
+    what the parser understood, re-rendered canonically, and is the one to show
+    a reader.
 
     Every field is optional. They are read through ``getattr`` so a class that
     does not carry one reports ``None`` rather than raising.

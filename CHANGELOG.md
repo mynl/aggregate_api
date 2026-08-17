@@ -4,6 +4,36 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a108
+
+**The doc defenses come down.** `aggregate` retired the `doc{{{...}}}` clause
+over a298 to a301 (`dev/done/plan-decommission-docs.md`): the Quarto cookbook
+and its renderer left the repository, the library's invariants became ordinary
+pytest, the seven long-form write-ups left `library.agg`, and the clause left
+the grammar. Its section 6 left the timing of the app's side to the app. The
+clause can no longer be produced, so the timing is now.
+
+**Nothing here was ever a feature.** Every touchpoint was defensive, and the
+load-bearing one was a regex: in a stored program the doc body was the
+preprocessor's base64 one-liner rather than the readable text, so `examples.py`
+had to strip it before it could reach a user's editor. That pattern now matches
+nothing and is deleted, along with the `_STRIP_CLAUSES` comment explaining it,
+the `doc` audit-flag reference in the module docstring, two "doc-free"
+descriptions of `Recipe.decl`, the `ObjectMetaResponse` paragraph on why the
+clause was deliberately absent, and `get_meta`'s version of the same. `note` and
+`tags` stripping is untouched.
+
+`test_example_decl_is_doc_free_and_reloadable` becomes
+`test_example_decl_is_trailer_free_and_reloadable` and loses its `doc{{{`
+assertion; the docstring records what that assertion was for, since it was the
+one that mattered. `test_meta_reports_the_trailer`'s `"doc" not in body` stays
+and changes meaning: with the clause gone it guards against a field being added
+rather than against one leaking, and says so.
+
+Behavior is unchanged. Verified clean and nothing owed:
+`web/src/decl-keywords.json` never listed `doc`, and nothing in the app ever
+imported `aggregate.cookbook`.
+
 ## 1.0.0a107
 
 **Hints, the third derivation.** A button between Sharpen and PnL, and

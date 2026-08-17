@@ -11,16 +11,15 @@ strip out of a folded statement.
 Everything now comes off the loaded ``Underwriter``:
 
 ``build.recipes``
-    One row per entry, indexed ``(kind, name)``. ``note`` and ``doc`` are
-    boolean audit flags, not text; ``tags`` is a tuple of slugs.
+    One row per entry, indexed ``(kind, name)``. ``note`` is a boolean audit
+    flag, not text; ``tags`` is a tuple of slugs.
 ``build.recipe(name)``
     The :class:`aggregate.recipe.Recipe` itself, carrying the text: ``note``,
     ``tags``, ``hints`` and ``decl``.
 
-``Recipe.decl`` is the entry's own declaration re-rendered canonically, doc-free,
-carrying ``hints{}`` and nothing else. That is exactly what the editor wants, so
-the SPA no longer has to round-trip a loaded example through
-``POST /v1/decl/format``.
+``Recipe.decl`` is the entry's own declaration re-rendered canonically, carrying
+``hints{}`` and nothing else. That is exactly what the editor wants, so the SPA
+no longer has to round-trip a loaded example through ``POST /v1/decl/format``.
 
 Grouping is by tag namespace rather than by filing letter:
 
@@ -161,12 +160,15 @@ def _sort_key(order: tuple[str, ...]):
 # Trailer clauses stripped on the fallback path below, matching what
 # ``Recipe.decl`` emits: ``hints{}`` stays, because it changes how the object
 # builds and a program without it would not reproduce the entry; ``note`` and
-# ``tags`` are carried in their own fields, and ``doc`` is never served. The doc
-# pattern runs first and is non-greedy over newlines: in a *stored* program the
-# body is the preprocessor's base64 one-liner, not the readable text, so it must
-# never reach the editor.
+# ``tags`` are carried in their own fields.
+#
+# A third pattern used to lead this tuple, for ``doc{{{...}}}``, and it was the
+# load-bearing one: in a stored program that body was the preprocessor's base64
+# one-liner rather than the readable text, so it had to be caught before it
+# reached the editor. ``aggregate`` 1.0.0a301 removed the clause from the
+# grammar (a298 to a301, ``dev/done/plan-decommission-docs.md``), so there is no
+# longer anything for it to match.
 _STRIP_CLAUSES = (
-    re.compile(r"\s*doc\{\{\{.*?\}\}\}", re.S),
     re.compile(r"\s*note\{[^}]*\}"),
     re.compile(r"\s*tags\{[^}]*\}"),
 )
@@ -200,7 +202,7 @@ def _decl_of(recipe) -> str:
     """The runnable declaration for an entry, preferring the canonical form.
 
     ``Recipe.decl`` re-renders the entry from its parsed spec: canonical, in
-    spread layout, doc-free, carrying ``hints{}``. That is what the editor wants.
+    spread layout, carrying ``hints{}``. That is what the editor wants.
 
     It can come back **empty**, though, when the unparser cannot render the spec.
     The shipped case is a composite distortion (``dist X minimum dist.A
@@ -262,9 +264,9 @@ def load_examples(grouping: Grouping = "topic") -> dict:
     Notes
     -----
     Cached per grouping. The cache is sized to the number of legal groupings so
-    every view is computed at most once per process; resolving 186 recipes is
-    cheap (the doc sections parse lazily and nothing is built), but it walks the
-    whole base, so it is not worth repeating per request.
+    every view is computed at most once per process; resolving the base is cheap
+    (nothing is built), but it walks all of it, so it is not worth repeating per
+    request.
     """
     if grouping not in Grouping.__args__:
         raise ValueError(

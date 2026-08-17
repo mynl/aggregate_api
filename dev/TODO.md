@@ -798,6 +798,29 @@ one version bump each.
       the plan is met, checked in the browser on both reference programs.
       **The plan doc has not moved to `dev/done/`**: the library symlinks the
       canonical copy, so the two moves have to happen together.
+- [x] **Hints, the doc catch-up, and a headless flag**:
+      `dev/done/plan-hints-docs-headless.md`, drafted and executed 2026-08-17
+      against the library at 1.0.0a301. Three independent phases, one bump each.
+      **a106**: `--headless` / `AGGAPI_SERVE_SPA=0`, declaring what the
+      conditional static mount already did by accident, plus a test pinning that
+      `/docs` survives it. **a107**: the Hints button and
+      `POST /objects/{id}/hints` over `with_hints` (library a291), which pins the
+      realized grid into the declaration's own `hints{}` so a `sev agg.NAME`
+      reference to it means one fixed thing. **a108**: the app's `doc{{{...}}}`
+      defenses deleted, the library having retired the clause at a301. Two ideas
+      from the same list did not land: the PnL face toggle was dropped by the
+      author (the two faces are one statement shape, so it is a typed
+      character), and the custom-library work is parked in
+      `dev/note-session-isolation.md`.
+- [ ] **One recipe base, many users**: `dev/note-session-isolation.md`, parked
+      2026-08-17 with the design settled and measured but nothing built. Two
+      problems, each needing its own fix: session builds share one recipe base,
+      so one user's declaration is what another user's `agg.NAME` means; and the
+      object cache keys on program text, which no longer determines the object
+      once a reference is in it. Also carries the standalone finding that
+      `--library` re-points the Examples menu only, while both build paths still
+      use the `aggregate.build` singleton, and that `Settings.knowledge_base` has
+      never been read.
 
 ## Raised with `csv-grid` (not fixed here)
 

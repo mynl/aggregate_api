@@ -66,19 +66,22 @@ def test_example_items_carry_decl_kind_and_tags(client):
     assert seen > 100, "the shipped library has ~186 entries"
 
 
-def test_example_decl_is_doc_free_and_reloadable(client):
-    """``Recipe.decl`` is canonical DecL: no trailer noise, no doc payload.
+def test_example_decl_is_trailer_free_and_reloadable(client):
+    """``Recipe.decl`` is canonical DecL: no trailer noise.
 
-    It carries ``hints{}`` (which change how the object builds) and drops
-    ``note`` / ``tags`` / ``doc``. The doc matters most: a stored program holds
-    the preprocessor's base64 one-liner, and leaking that into the editor would
-    be unreadable.
+    It carries ``hints{}``, which change how the object builds, and drops
+    ``note`` and ``tags``, which are carried in their own fields.
+
+    A third assertion stood here, against ``doc{{{``, and it was the one that
+    mattered: a stored program held the preprocessor's base64 one-liner, so
+    leaking it into the editor would have put an unreadable blob in front of the
+    user. ``aggregate`` 1.0.0a301 retired the clause, so there is nothing left
+    to assert about.
     """
     r = client.get("/v1/examples")
     for cat in r.json()["categories"]:
         for item in cat["items"]:
             decl = item["decl"]
-            assert "doc{{{" not in decl
             assert "note{" not in decl
             assert "tags{" not in decl
 

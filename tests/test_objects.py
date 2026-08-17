@@ -1468,7 +1468,10 @@ def test_meta_reports_trailer_and_programs(client):
     # pprogram is what the parser understood, re-rendered canonically.
     assert "META.Probe" in body["pprogram"]
     assert body["program"]
-    # doc is never served: it is cookbook content, not playground content.
+    # The response model forbids extras, so the served block is exactly the
+    # trailer the library has. `doc` was the one clause this route declined to
+    # serve; `aggregate` 1.0.0a301 retired it, so the assertion now guards
+    # against a field being added rather than against one leaking.
     assert "doc" not in body
 
 

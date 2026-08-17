@@ -1309,8 +1309,8 @@ def get_meta(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
 
     Every first-class citizen carries ``note`` / ``tags`` / ``hints`` and the
     ``program`` / ``pprogram`` pair, so this is one route for all six kinds.
-    ``doc{{{...}}}`` is deliberately never served: it is the cookbook's
-    long-form recipe, not playground content.
+    Those three clauses are the whole trailer since ``aggregate`` 1.0.0a301
+    retired ``doc{{{...}}}``, which this route had always declined to serve.
 
     Notes
     -----

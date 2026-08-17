@@ -1,8 +1,21 @@
 # [Hints-Docs-Headless] Plan: the Hints button, the doc catch-up, and a headless flag
 
-Status: EXECUTING, written 2026-08-17 against API `1.0.0a105` and LIB
+Status: **DONE**, 2026-08-17. Written against API `1.0.0a105` and LIB
 `1.0.0a301`, with the environment synced to a301. Three independent phases, one
-version bump and one commit each.
+version bump and one commit each: phase 1 at a106, phase 2 at a107, phase 3 at
+a108. Every acceptance point below was met; see `CHANGELOG.md` for what each
+landed as.
+
+Two carried notes for whoever reads this next. The suite has **four failures
+that predate this work**, all in `tests/test_objects.py` and all exhibit
+formatting, from the a293 to a301 library sync rather than from anything here:
+`test_tail_df_endpoint`, `test_the_library_formats_its_own_numbers`,
+`test_frame_ir_sparsifies_the_row_index`, `test_the_library_flags_the_capital_anchors`.
+And `uv sync` could not record the version bumps, because a stale
+`aggregate-api` process is holding `Scripts/aggregate-api.exe` and refuses to be
+killed from this session; `uv lock` was used instead, so the lock is correct and
+only the installed metadata is stale. `/v1/meta` will report a105 until the
+process is gone and a sync runs.
 
 These are the three items from the author's 2026-08-17 list that are ready to
 build. The other two are parked:
