@@ -122,12 +122,18 @@ def _resolve_static_dir(settings: Settings) -> Path | None:
 
     Order of precedence:
 
+    0. ``AGGAPI_SERVE_SPA=0`` (``settings.serve_spa``) refuses outright, which
+       is what ``aggregate-api --headless`` sets. Ahead of the other two so
+       this stays the single place that decides whether to mount, rather than
+       adding a second condition at the mount site.
     1. ``AGGAPI_STATIC_DIR`` env var (handed via ``settings.static_dir``).
        Useful for developing the SPA out of a separate tree.
     2. ``src/aggregate_api/static`` inside the installed package.
 
-    Returns None if neither is set / exists.
+    Returns None if serving is off, or if neither location is set / exists.
     """
+    if not settings.serve_spa:
+        return None
     if settings.static_dir:
         return Path(settings.static_dir)
     # importlib.resources style: the static dir lives next to

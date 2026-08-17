@@ -4,6 +4,42 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a106
+
+**A deploy can now say it wants the api alone.** `aggregate-api --headless`, or
+`AGGAPI_SERVE_SPA=0`, and the web app stops being mounted at `/`. Everything
+under `/v1` stays, as do `/docs` and `/openapi.json`.
+
+Headless already worked, by accident: the mount in `app.py` is conditional on
+the bundle directory existing, and `static/` is gitignored and built at deploy,
+so an install that never ran the web build was already api only. What was
+missing was a way to *state* it. Absence of a build cannot be set on a machine
+that has one, does not appear in the config, and left `AGGAPI_STATIC_DIR`
+pointed at a nonexistent path as the only explicit off switch, which is a trick
+rather than a setting. `_resolve_static_dir` now refuses first and stays the
+single place that decides whether to mount.
+
+`README.md` gains a "Running headless" section pairing the flag with
+`AGGAPI_CORS_ORIGINS`, which is the rest of what a third-party front end needs,
+and saying plainly that `/v1` is pre-1.0 and shaped by what aLL wants, so the
+flag is not read as a stability promise.
+
+**`/docs` is now pinned by a test, not by luck.** FastAPI registers the
+documentation routes in its own constructor, before `create_app` mounts
+anything, and Starlette matches in registration order, so the SPA's catch-all at
+`/` never shadowed them. That was true by construction and stated nowhere.
+Headless is the mode where the Swagger UI is the only interface, so it is the
+mode where losing it would matter most. `tests/test_headless.py` points
+`AGGAPI_STATIC_DIR` at a real directory holding a real `index.html` in every
+case, because against an absent bundle `/` is 404 whether or not the flag works
+and the suite would pass for the wrong reason.
+
+**Two stale references to a button removed at a58.** Reset left the action row
+because `Ctrl+↑` and `Ctrl+↓` already walk the programs you built and a button
+that undid exactly one derivation was a second, weaker way to do it. The Keys
+panel still listed it, and `renderReinsEntry` still told the reader that Reset
+comes back to the gross object. Both now name the history walk.
+
 ## 1.0.0a105
 
 **The library caught up, so the scaffolding comes down.** `aggregate` 1.0.0a281

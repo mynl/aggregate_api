@@ -88,6 +88,27 @@ Run the tests:
 uv run pytest
 ```
 
+### Running headless
+
+One process serves both halves: the routers mount under `/v1`, and the built web
+bundle is mounted at `/`. To run the engine alone, behind somebody else's front
+end, say so:
+
+```
+uv run aggregate-api --headless           # or AGGAPI_SERVE_SPA=0
+```
+
+`/v1`, `/docs` and `/openapi.json` all stay; only `/` stops answering. A front
+end on another origin also wants `AGGAPI_CORS_ORIGINS`, comma separated:
+
+```
+AGGAPI_CORS_ORIGINS=https://your.app uv run aggregate-api --headless
+```
+
+`/openapi.json` is the contract. Note that the `/v1` surface is pre-1.0 and its
+shape follows what the bundled web app needs, so treat it as a moving target
+rather than a stable interface for now.
+
 ## License
 
 BSD 3-Clause. See [LICENSE](LICENSE).

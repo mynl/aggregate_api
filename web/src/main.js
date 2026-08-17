@@ -1963,8 +1963,10 @@ async function loadReinsPlot() {
  * The cession entry box: derive, fill the editor, build, in one step.
  *
  * A derivation like Sharpen and PnL, and it goes through the same machinery, so
- * Reset on the action row comes back to the gross object with no reset of its
- * own here. Shown only where a cession can be added, which is an aggregate; the
+ * `Ctrl+↑` walks back to the gross program with no undo of its own here. (That
+ * used to read "Reset on the action row", a button removed at a58 for exactly
+ * this reason: history already did its job, better.) Shown only where a cession
+ * can be added, which is an aggregate; the
  * group stays live for one carrying no cession yet, since that is exactly the
  * object you want this for.
  */

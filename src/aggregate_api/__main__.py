@@ -2,12 +2,15 @@
 
 This is the bootstrap that turns the :func:`create_app` factory
 into a running uvicorn process. CLI flags (``--host``, ``--port``,
-``--reload``, ``--library``) override the env-var-driven config; with
-no flags the server picks up everything from ``AGGAPI_*``.
+``--reload``, ``--library``, ``--headless``) override the env-var-driven
+config; with no flags the server picks up everything from ``AGGAPI_*``.
 
 ``--library`` points the Examples dropdown at an alternate ``.agg``
 instead of ``aggregate``'s shipped ``library.agg``, which is how you
 get a short list to review against.
+
+``--headless`` drops the web app and serves the api alone, for a deploy
+whose front end is somebody else's.
 
 Flask users
 -----------
@@ -100,6 +103,14 @@ def main() -> None:
              "quicker. Same as AGGAPI_EXAMPLES_FILE, but it fails rather than "
              "falling back when the path is wrong.",
     )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Do not serve the web app. Everything under /v1 stays, as do "
+             "/docs and /openapi.json; only / stops answering. For a deploy "
+             "whose front end is somebody else's, which also wants "
+             "AGGAPI_CORS_ORIGINS. Same as AGGAPI_SERVE_SPA=0.",
+    )
     args = parser.parse_args()
 
     # Set the environment, not the Settings object. `--reload` builds the app in
@@ -108,6 +119,8 @@ def main() -> None:
     # first `get_settings()` below, which caches.
     if args.library is not None:
         os.environ["AGGAPI_EXAMPLES_FILE"] = resolve_library(args.library)
+    if args.headless:
+        os.environ["AGGAPI_SERVE_SPA"] = "0"
 
     # Import inside ``main`` so ``aggregate-api --help`` doesn't pay
     # the cost of loading FastAPI / uvicorn / aggregate.
@@ -118,6 +131,9 @@ def main() -> None:
     settings = get_settings()
     if args.library is not None:
         print(f"examples library: {settings.examples_file}", file=sys.stderr)
+    if not settings.serve_spa:
+        print("headless: serving /v1, /docs and /openapi.json; / is not served",
+              file=sys.stderr)
     # The ``factory=True`` flag tells uvicorn that the target is a
     # *callable* returning an app rather than an app instance --
     # so we hand it ``aggregate_api.app:create_app`` and it calls

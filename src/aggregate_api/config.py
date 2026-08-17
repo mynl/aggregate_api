@@ -129,6 +129,23 @@ class Settings(BaseSettings):
     # build sitting in a sibling tree without reinstalling.
     static_dir: str = ""
 
+    # Whether to serve the SPA at all. False leaves the api headless: the /v1
+    # routers, /docs and /openapi.json, and nothing at /.
+    #
+    # A setting rather than a fact about the filesystem. Headless already worked
+    # by accident, because the mount in app.py is conditional on the bundle
+    # directory existing and `static/` is gitignored and built at deploy, so an
+    # install that never ran the web build is api-only. But "I did not build the
+    # SPA" is not a way to *say* headless: it cannot be set on a machine that has
+    # the bundle, it is invisible in the config, and the only explicit off was
+    # pointing static_dir at a path that does not exist. This states the
+    # intention instead.
+    #
+    # /docs is unaffected. FastAPI registers the doc routes in its constructor,
+    # before create_app mounts anything, and Starlette matches in registration
+    # order, so this only removes the catch-all at the end.
+    serve_spa: bool = True
+
     # ------------------------------------------------------------------
     # Examples library
     # ------------------------------------------------------------------
