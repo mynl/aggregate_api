@@ -1,4 +1,4 @@
-"""The derivations behind the action row: Sharpen and PnL.
+"""The derivations behind the action row: Sharpen, Hints, PnL and Reins.
 
 Every derivation in this app is a program you can see. The route returns the
 DecL that reproduces the object alongside the object itself, so the text lands
@@ -263,6 +263,88 @@ def test_pnl_declines_what_it_cannot_wrap(client):
         r = client.post(f"/v1/objects/{obj['id']}/pnl", json={})
         assert r.status_code == 400, decl
         assert "Aggregate or a Portfolio" in r.json()["detail"]
+
+
+# ----------------------------------------------------------------------
+# Hints
+# ----------------------------------------------------------------------
+
+def test_hints_pins_the_grid_the_object_built_on(client):
+    """The clause comes back stating the grid, and it is the one that was used."""
+    source = _build(client, AGG, log2=13)
+    r = client.post(f"/v1/objects/{source['id']}/hints", json={})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "hints{" in body["program"]
+    assert "log2=13" in body["program"].replace(" ", "")
+    # The grid did not move: this writes down where the object already was,
+    # which is the whole difference from Sharpen.
+    assert body["log2"] == source["log2"]
+    assert body["bs"] == source["bs"]
+
+
+def test_hints_says_nothing_because_the_text_says_it(client):
+    """Empty ``description``, unlike Sharpen.
+
+    Sharpen fills it because a probe's verdict is a fact the reader cannot
+    otherwise see. Here the result *is* the returned text.
+    """
+    source = _build(client, AGG)
+    body = client.post(f"/v1/objects/{source['id']}/hints", json={}).json()
+    assert body["description"] is None
+
+
+def test_hints_derived_text_rebuilds_to_the_same_object(client):
+    """The `DerivedResponse` contract, same as sharpen and pnl."""
+    source = _build(client, AGG)
+    derived = client.post(f"/v1/objects/{source['id']}/hints", json={}).json()
+    again = client.post("/v1/objects", json={"decl": derived["program"]})
+    assert again.status_code == 200, again.text
+    assert again.json()["id"] == derived["id"]
+    assert again.json()["cached"] is True
+
+
+def test_hints_works_on_a_portfolio(client):
+    """``with_hints`` is on both classes the flag claims, not just the aggregate."""
+    source = _build(client, PORT)
+    r = client.post(f"/v1/objects/{source['id']}/hints", json={})
+    assert r.status_code == 200, r.text
+    assert "hints{" in r.json()["program"]
+
+
+def test_hints_keeps_the_rest_of_the_trailer(client):
+    """The clause is merged key by key, so a declared setting survives.
+
+    The library's contract, and the reason this is not "write a hints clause":
+    a program that already says something about how it builds must not lose it
+    to a button whose subject is the grid.
+    """
+    decl = f"{AGG} note{{keep me}}"
+    source = _build(client, decl)
+    program = client.post(f"/v1/objects/{source['id']}/hints",
+                          json={}).json()["program"]
+    assert "keep me" in program
+    assert "hints{" in program
+
+
+def test_hints_declines_what_has_no_grid_to_pin(client):
+    """A severity has no realized grid, and the route says so before the library.
+
+    400 from the guard rather than 422 from ``with_hints``, because the method
+    is absent rather than unhappy: ``aggregate`` puts it on exactly the two
+    classes that can answer, so ``hasattr`` is the whole test.
+    """
+    obj = _build(client, SEV)
+    r = client.post(f"/v1/objects/{obj['id']}/hints", json={})
+    assert r.status_code == 400
+    assert "Aggregate or a Portfolio" in r.json()["detail"]
+
+
+def test_the_hints_flag_rides_on_the_build(client):
+    """The button greys off the manifest, so the flag has to be in it."""
+    assert _build(client, AGG)["capability"]["can_hints"] is True
+    assert _build(client, PORT)["capability"]["can_hints"] is True
+    assert _build(client, SEV)["capability"]["can_hints"] is False
 
 
 # ----------------------------------------------------------------------

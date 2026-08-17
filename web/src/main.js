@@ -249,6 +249,7 @@ async function build() {
 // made, you can edit it, and history, sharing and rebuild all keep working.
 // Nothing is derived behind a cached id.
 const sharpenBtn = $('sharpen-btn');
+const hintsBtn = $('hints-btn');
 const pnlBtn = $('pnl-btn');
 const reformatBtn = $('reformat-btn');
 const gcnBtn = $('gcn-btn');
@@ -263,6 +264,7 @@ function renderActionRow() {
         btn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
     };
     off(sharpenBtn, !can('canSharpen'));
+    off(hintsBtn, !can('canHints'));
     off(pnlBtn, !can('canPnl'));
     // Both halves of the split button move together: a caret opening a menu
     // whose every item is refused would be worse than a dark caret.
@@ -371,6 +373,14 @@ function clearNote() {
 
 sharpenBtn?.addEventListener('click', () => runDerivation(
     sharpenBtn, 'Sharpening…', (id) => api.sharpen(id)));
+
+// Hints is Sharpen's quiet twin: same shape, no probe. Sharpen asks whether a
+// better grid exists and moves to it; this keeps the grid you have and writes it
+// down. That is the cheaper and more common thing to want, because a declaration
+// another program will reference by name has to state its own resolution, and
+// the library refuses an unpinned one.
+hintsBtn?.addEventListener('click', () => runDerivation(
+    hintsBtn, 'Pinning…', (id) => api.hints(id)));
 
 pnlBtn?.addEventListener('click', () => runDerivation(
     pnlBtn, 'Wrapping…', (id) => api.pnl(id), 'economics'));

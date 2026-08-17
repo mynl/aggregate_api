@@ -4,6 +4,45 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a107
+
+**Hints, the third derivation.** A button between Sharpen and PnL, and
+`POST /v1/objects/{id}/hints`: the object's own declaration comes back carrying
+`log2`, `bs` and `normalize` as it actually computed them, merged into whatever
+`hints{}` it already had rather than replacing the clause, so a declared
+`padding` survives and only the grid moves. `Aggregate.with_hints` and
+`Portfolio.with_hints`, upstream since `aggregate` 1.0.0a291.
+
+**Why it earns a place next to Sharpen.** A `sev agg.NAME` reference requires
+the referenced declaration to state `log2` and `bs`, because the reference
+stands for the distribution that declaration *outputs*, so the declaration has
+to say at what resolution or the severity moves with the ambient defaults
+instead of with the model. The library's resolver refuses an unpinned target and
+its error names this very method. So this is the step that turns a candidate
+inner into one an outer may reference: get it right interactively, press Hints,
+build the text it hands back.
+
+Sharpen's quiet twin, and the difference is worth stating: Sharpen asks whether
+a better grid exists and moves to it; Hints keeps the grid you have and writes
+it down. `test_hints_pins_the_grid_the_object_built_on` asserts the grid did not
+move, which is the whole distinction.
+
+**No request body and no cap guard, both deliberate.** `with_hints(**extra)`
+accepts further hint keys, but the app has no opinion to offer about `padding`
+or `normalize` and a form for them would be the app holding a view about the
+library's settings. And unlike the probe, which can land above `AGGAPI_LOG2_CAP`
+and so needs clamping in `post_sharpen`, this writes down the grid the object
+**already built on**, which exists only because the build route let it through,
+so the pinned `log2` is at or under the cap by construction.
+
+`description` is empty, like PnL and unlike Sharpen: the result *is* the
+returned text, and narrating it would be the app talking over the library.
+
+`can_hints` joins the capability block, read off `with_hints` and deliberately
+not folded into `can_pnl` even though both are true for exactly an `Aggregate`
+and a `Portfolio` today. The route list at the top of `routes/objects.py` gains
+all four derivations, none of which it had ever mentioned.
+
 ## 1.0.0a106
 
 **A deploy can now say it wants the api alone.** `aggregate-api --headless`, or

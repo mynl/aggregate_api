@@ -26,6 +26,12 @@ The /v1/objects/* family covers everything object-shaped:
   static view (``?format=ir``), built from the DataFrame rather than the
   flattened wire format.
 * ``GET    /v1/objects/{id}/plot``        -- SVG/PNG image (native .plot()).
+* ``POST   /v1/objects/{id}/sharpen``     -- audit the grid, move to a better
+  one, and pin the outcome. Derivation: answers with DecL plus the object.
+* ``POST   /v1/objects/{id}/hints``       -- pin the realized grid into the
+  object's own ``hints{}``. Derivation.
+* ``POST   /v1/objects/{id}/pnl``         -- wrap the object in a P&L. Derivation.
+* ``POST   /v1/objects/{id}/reins``       -- cede a layer. Derivation.
 * ``POST   /v1/objects/{id}/pricing/preview``   -- the pentagon as scalars.
 * ``POST   /v1/objects/{id}/pricing/calibrate`` -- the ``pricing.calibrate`` and
   ``pricing.stand_alone`` exhibit envelopes, both perspectives.
@@ -2461,6 +2467,71 @@ def post_sharpen(
         "description": getattr(obj, "sharpen_description", None) or None,
         **_manifest(new_oid, entry),
     }
+
+
+@router.post("/objects/{oid}/hints", response_model=models.DerivedResponse)
+def post_hints(
+    oid: str,
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    cache: ObjectCache = Depends(_get_cache),
+    audit: AuditLog = Depends(_get_audit),
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """Pin this object's realized grid into its own ``hints{}`` clause.
+
+    The declaration comes back carrying ``log2``, ``bs`` and ``normalize`` as the
+    object actually computed them, merged into whatever ``hints{}`` it already
+    had rather than replacing the clause, so a declared ``padding`` survives and
+    only the grid moves. ``aggregate._program.with_hints``, upstream since
+    ``aggregate`` 1.0.0a291.
+
+    Notes
+    -----
+    **Why this earns a button next to Sharpen.** A ``sev agg.NAME`` reference
+    requires the referenced declaration to state ``log2`` and ``bs``, because the
+    reference stands for the distribution that declaration *outputs* and so the
+    declaration has to say at what resolution, or the severity moves with the
+    ambient defaults instead of with the model. The library's resolver refuses an
+    unpinned target and its error names this very method. So this is the step
+    that turns a candidate inner into one an outer may reference: get it right
+    interactively, press this, build the text it hands back.
+
+    **No request body**, unlike ``pnl``. ``with_hints(**extra)`` accepts further
+    hint keys, but the app has no opinion to offer about ``padding`` or
+    ``normalize``, and a form for them would be the app holding a view about the
+    library's settings. Everything it needs comes off the object.
+
+    **No cap guard**, unlike ``sharpen``. The probe can land on a grid the build
+    route would then refuse, which is why ``post_sharpen`` clamps to
+    ``AGGAPI_LOG2_CAP``. This one writes down the grid the object **already built
+    on**, and it only exists because the build route let that grid through, so
+    the pinned ``log2`` is at or under the cap by construction.
+
+    **Nothing is mutated and nothing is re-filed.** Unlike sharpening, this
+    reads the object and writes text; the derived program then goes through the
+    ordinary build path, which is :func:`post_object` called directly rather
+    than reimplemented, so the log2 cap, the semaphore, the wall-clock timeout,
+    the audit row and the whole parse-error surface all apply unchanged.
+
+    ``description`` is left empty on purpose. Sharpen fills it because its
+    verdict is a fact about a probe that the reader cannot see; here the result
+    *is* the text, and the ``hints{}`` clause is sitting in the editor.
+    """
+    obj = entry.obj
+    if not hasattr(obj, "with_hints"):
+        raise HTTPException(
+            status_code=400,
+            detail="pinning a grid applies to an Aggregate or a Portfolio")
+    try:
+        program = obj.with_hints()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    program = collapse_program(program)
+    built = post_object(models.BuildRequest(decl=program), request,
+                        settings, cache, audit)
+    return {"program": spread(program), "description": None, **built}
 
 
 @router.post("/objects/{oid}/pnl", response_model=models.DerivedResponse)

@@ -57,9 +57,10 @@ def test_every_kind_carries_a_capability_block(client, label):
     cap = body["capability"]
     assert set(cap) == {"exhibits", "charts", "primary_chart", "has_premium",
                         "premium", "can_sharpen", "has_sharpen", "can_pnl",
-                        "can_reins", "can_views", "reins_bases", "can_price",
-                        "can_evaluate", "can_bounds", "can_allocate",
-                        "can_natural_allocation", "needs_premium"}
+                        "can_hints", "can_reins", "can_views", "reins_bases",
+                        "can_price", "can_evaluate", "can_bounds",
+                        "can_allocate", "can_natural_allocation",
+                        "needs_premium"}
     # The flag and the number cannot disagree: one is derived from the other.
     assert cap["has_premium"] is (cap["premium"] is not None), label
     # Every first-class kind has its own picture as of library a244, and the

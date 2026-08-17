@@ -228,6 +228,8 @@
             <div class="btn-group" role="group" aria-label="derive a new program">
                 <button id="sharpen-btn" class="btn btn-outline-secondary"
                         title="audit the grid and move to a better one">Sharpen</button>
+                <button id="hints-btn" class="btn btn-outline-secondary"
+                        title="pin the grid this object built on into its hints{} clause, so a reference to it means one fixed thing">Hints</button>
                 <button id="pnl-btn" class="btn btn-outline-secondary"
                         title="wrap this object in a P&amp;L">PnL</button>
                 <!-- GCN: read the program as a pair of views. The main button
@@ -572,6 +574,8 @@
                 <li><span class="t">Examples</span>: load a ready-made program</li>
                 <li><span class="t">Sharpen</span>: audit the grid and move to a better one, writing
                     the <code>hints{}</code> clause that pins it</li>
+                <li><span class="t">Hints</span>: keep the grid you have and write it into
+                    <code>hints{}</code>, so <code>agg.Name</code> elsewhere means one fixed thing</li>
                 <li><span class="t">PnL</span>: wrap what you built in a profit and loss account</li>
             </ul>
             <p class="small text-muted">Each derivation writes DecL into the editor, so you can

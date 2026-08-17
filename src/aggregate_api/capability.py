@@ -368,6 +368,30 @@ def can_pnl(obj: Any) -> bool:
     return hasattr(obj, "pnl_program")
 
 
+def can_hints(obj: Any) -> bool:
+    """Can this object pin its realized grid into a ``hints{}`` clause?
+
+    Consumer: the action row's Hints button.
+
+    Read off ``with_hints``, which ``aggregate`` 1.0.0a291 put on ``Aggregate``
+    and ``Portfolio``, so "does this object have it" is the whole test.
+
+    Deliberately not folded into :func:`can_pnl`, even though both are true for
+    exactly those two classes today. They are two different questions, and one
+    flag would tie a future change in either to the other. The same argument
+    ``can_pnl`` makes about ``can_price``.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    bool
+    """
+    return hasattr(obj, "with_hints")
+
+
 def can_reins(obj: Any) -> bool:
     """Can a cession be added to this object?
 
@@ -643,6 +667,7 @@ def capability_for(obj: Any) -> dict:
         "can_sharpen": can_sharpen(obj),
         "has_sharpen": has_sharpen(obj),
         "can_pnl": can_pnl(obj),
+        "can_hints": can_hints(obj),
         "can_reins": can_reins(obj),
         "can_views": can_views(obj),
         "reins_bases": reins_bases_for(obj),

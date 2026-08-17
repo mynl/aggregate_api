@@ -112,6 +112,11 @@ class Capability(BaseModel):
     # Gates the More group's Sharpen leaf, since `sharpen_df` is None until then.
     has_sharpen: bool = False
     can_pnl: bool = False
+    # Can the object's realized grid be pinned into its own `hints{}`? Gates the
+    # action row's Hints button. True for exactly an Aggregate and a Portfolio
+    # today, the same pair as `can_pnl`, and kept separate because they answer
+    # different questions.
+    can_hints: bool = False
     can_reins: bool = False
     # Can the program be re-read as a gross / ceded / net pair? Gates the action
     # row's GCN control. Narrower than `can_reins` and than `has_reins`: the

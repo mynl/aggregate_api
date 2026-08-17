@@ -225,6 +225,7 @@ export const api = {
     // *and* the object, so the editor and the panes move together and the id
     // is the one an ordinary build of that text would produce.
     sharpen:      (id)              => _json('POST', `/v1/objects/${id}/sharpen`, {}),
+    hints:        (id)              => _json('POST', `/v1/objects/${id}/hints`, {}),
     pnl:          (id, body = {})   => _json('POST', `/v1/objects/${id}/pnl`, body),
     reins:        (id, cession)     => _json('POST', `/v1/objects/${id}/reins`, { cession }),
 
