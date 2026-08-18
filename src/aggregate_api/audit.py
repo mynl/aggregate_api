@@ -53,11 +53,23 @@ CREATE TABLE IF NOT EXISTS builds (
     bs REAL,
     status TEXT NOT NULL,
     error_msg TEXT,
-    elapsed_ms INTEGER NOT NULL
+    elapsed_ms INTEGER NOT NULL,
+    session_id TEXT,
+    key_scope TEXT
 );
 CREATE INDEX IF NOT EXISTS builds_ts ON builds(ts);
 CREATE INDEX IF NOT EXISTS builds_ip ON builds(ip);
 """
+
+# Columns added after the table shipped. ``CREATE TABLE IF NOT EXISTS`` leaves an
+# existing table alone, so a database written before a110 has neither of these
+# and every insert would fail on the column count. SQLite has no
+# ``ADD COLUMN IF NOT EXISTS``, so the check is a table read and the add is
+# guarded by it.
+_ADDED_COLUMNS = (
+    ("session_id", "TEXT"),
+    ("key_scope", "TEXT"),
+)
 
 
 class AuditLog:
@@ -84,6 +96,24 @@ class AuditLog:
         # Trigger initial schema creation, set WAL mode.
         with closing(self._connect()) as conn:
             conn.executescript(_SCHEMA)
+            self._add_missing_columns(conn)
+
+    @staticmethod
+    def _add_missing_columns(conn: sqlite3.Connection) -> None:
+        """Bring a pre-existing table up to the current column list.
+
+        Notes
+        -----
+        Deliberately not a migration framework. The table is append-only and
+        every column added since it shipped is nullable, so "add what is
+        missing" is the whole of it, and a database from any earlier version
+        reaches the current shape in one pass. Old rows keep NULL, which reads
+        correctly as "written before the api knew about sessions".
+        """
+        held = {row[1] for row in conn.execute("PRAGMA table_info(builds)")}
+        for column, sql_type in _ADDED_COLUMNS:
+            if column not in held:
+                conn.execute(f"ALTER TABLE builds ADD COLUMN {column} {sql_type}")
 
     def _connect(self) -> sqlite3.Connection:
         """Open a new connection with sensible defaults.
@@ -131,6 +161,8 @@ class AuditLog:
         kind: str | None = None,
         error_msg: str | None = None,
         elapsed_ms: int = 0,
+        session_id: str | None = None,
+        key_scope: str | None = None,
     ) -> None:
         """Append one row.
 
@@ -153,15 +185,25 @@ class AuditLog:
             One-line error summary (e.g. ``ErrorReport.message``).
         elapsed_ms : int
             Wall-clock time, including parse + cache check + build.
+        session_id : str|None
+            The caller's session, or ``'anonymous'`` for a headerless client.
+        key_scope : str|None
+            ``'shared'`` or ``'session'``: which cache key this request used.
+            Recorded because it is the one number that says whether the
+            qualification rule is working. A demo where nearly every build is
+            ``'session'`` means the rule is firing on programs that do not need
+            it, and the room is paying for builds it could have shared.
         """
         # ISO 8601 with UTC; chosen for sortability and unambiguous TZ.
         ts = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
         with self._lock, closing(self._connect()) as conn:
             conn.execute(
                 """INSERT INTO builds
-                   (ts, ip, object_id, kind, decl, log2, bs, status, error_msg, elapsed_ms)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (ts, ip, object_id, kind, decl, log2, bs, status, error_msg, elapsed_ms),
+                   (ts, ip, object_id, kind, decl, log2, bs, status, error_msg,
+                    elapsed_ms, session_id, key_scope)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (ts, ip, object_id, kind, decl, log2, bs, status, error_msg,
+                 elapsed_ms, session_id, key_scope),
             )
             conn.commit()
 

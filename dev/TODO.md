@@ -818,8 +818,10 @@ one version bump each.
       at a109**, the standalone finding the note turned up: `--library` re-pointed
       the Examples menu only while all three build paths used the
       `aggregate.build` singleton, and `Settings.knowledge_base` had never been
-      read. Phases A1 to A7 are the session work proper and wait on the library's
-      `Underwriter.fork()` and its reference preview.
+      read. Phases **A1 to A4 landed at a110**: the session id, the fork
+      registry, the qualified cache key and every build path routed through the
+      caller's own base. A5 to A7 remain (the Examples menu pinned to the parent
+      and the expiry pane, sharpen on a deepcopy, the pricing-residue comment).
 
 ## Raised with `csv-grid` (not fixed here)
 

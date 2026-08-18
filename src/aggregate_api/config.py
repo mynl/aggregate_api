@@ -75,6 +75,16 @@ class Settings(BaseSettings):
     cache_max: int = 50
 
     # ------------------------------------------------------------------
+    # Sessions
+    # ------------------------------------------------------------------
+    # How many forked recipe bases to hold, and how long an idle one lives.
+    # A fork is microseconds and a few hundred kilobytes, so the count is
+    # deliberately generous and the TTL is what bounds the memory. Eight hours
+    # outlives any sitting a browser tab survives; ttl 0 disables expiry.
+    session_max: int = 500
+    session_ttl_s: float = 28800.0
+
+    # ------------------------------------------------------------------
     # Audit log
     # ------------------------------------------------------------------
     # Default is per-user data dir; resolved lazily in audit.py so the

@@ -44,6 +44,11 @@ def install_cors(app: FastAPI, allowed_origins: list[str]) -> None:
       handled automatically by CORSMiddleware for preflights.
     * ``allow_headers`` is conservative -- if a future endpoint
       needs ``Authorization`` etc., extend this list.
+    * ``X-Aggregate-Session`` is on that list because the SPA sends it on every
+      request, and a browser will not send a header the preflight did not allow.
+      Same-origin deploys skip this middleware entirely, so leaving it off would
+      have broken only the split-origin deploy, which is precisely the one that
+      most needs sessions to work.
     """
     if not allowed_origins:
         return
@@ -52,5 +57,5 @@ def install_cors(app: FastAPI, allowed_origins: list[str]) -> None:
         allow_origins=allowed_origins,
         allow_credentials=False,
         allow_methods=["GET", "POST", "DELETE"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "X-Aggregate-Session"],
     )

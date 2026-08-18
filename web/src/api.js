@@ -10,6 +10,7 @@
 //   it straight into <img src="…"> and let the browser fetch it.
 
 import { API_BASE } from './config.js';
+import { SESSION_HEADER, sessionId, sessionParam } from './session.js';
 
 export class ApiError extends Error {
     constructor(status, body, retryAfter) {
@@ -57,9 +58,15 @@ function qs(params) {
 }
 
 async function _json(method, path, body) {
+    // The session header goes on every request, GET included: it is what makes
+    // the server resolve `agg.NAME` against this tab's own recipe base. It sits
+    // outside the `body ?` ternary on purpose, which used to leave GETs with no
+    // headers object at all.
+    const headers = { [SESSION_HEADER]: sessionId() };
+    if (body) headers['Content-Type'] = 'application/json';
     const r = await fetch(API_BASE + path, {
         method,
-        headers: body ? { 'Content-Type': 'application/json' } : {},
+        headers,
         body: body ? JSON.stringify(body) : undefined,
     });
     // Try to parse as JSON whether ok or not -- 4xx/5xx still carry
@@ -267,8 +274,14 @@ export const api = {
     pricingBounds:    (id, body)    =>
         _json('POST', `/v1/objects/${id}/bounds/pricing?ir=true`, body),
 
-    /** Download-all-session-models URL. form: 'raw' (as typed) | 'agg' (canonical). */
-    sessionModelsUrl: (form = 'raw') => `${API_BASE}/v1/session/models.agg?form=${form}`,
+    /** Download-all-session-models URL. form: 'raw' (as typed) | 'agg' (canonical).
+     *
+     * The session rides in the query string here, not in a header: this URL is
+     * handed to `window.open`, which is a navigation and cannot carry one. The
+     * server reads either.
+     */
+    sessionModelsUrl: (form = 'raw') =>
+        `${API_BASE}/v1/session/models.agg?form=${form}${sessionParam()}`,
     // Per-frame CSV download/copy is handled by CsvGrid's own export controls;
     // the /frame/{which}.csv backend endpoints remain for full-frame API access.
 };

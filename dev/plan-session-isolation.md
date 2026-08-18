@@ -1,8 +1,8 @@
 # Plan [Session-Isolation]: one recipe base, many users
 
-> **Status: IN EXECUTION, 2026-08-18. A0 landed at API `1.0.0a109`.**
-> Author approved execution 2026-08-18; the library executes L1 to L4
-> concurrently. Phases A1 to A7 wait on `Underwriter.fork()` and the preview.
+> **Status: IN EXECUTION, 2026-08-18. A0 landed at API `1.0.0a109`, A1 to A4
+> at `1.0.0a110`.** Author approved execution 2026-08-18; the library executed
+> L1 to L4 concurrently. A5 to A7 remain.
 > Drafted as v2, 2026-08-18. v1, drafted earlier
 > the same day, was built around content addressing. The author reviewed it the
 > same afternoon and rescoped the work: LIB is the product, the API is demo
@@ -359,6 +359,40 @@ registers user fragments in the process-global base).
 `aggregate.parser._PARSER` for lexing (`completion.py:33`, `:204`) and never
 reads a recipe base. If name completion is ever added, it must read the fork;
 note it there now.
+
+**Execution notes, a110 (A1 to A4).** Landed as one bump rather than the
+suggested A1 plus A2 then A3 to A7, because A1 and A2 alone are plumbing no
+route reads: the registry would have shipped unexercised and the first thing to
+touch it would have been the phase that also changed the cache key. A1 to A4 is
+the smallest batch that is a working fix, and it is the batch the tests can
+speak to. Four notes on what the code says that the plan did not.
+
+1. **The library's `preview` landed better than the plan specified.** It follows
+   the deferred `sev agg.NAME` chain to exhaustion with a per-call cycle guard,
+   so a program two steps from a redefined entry is reported honestly. The plan
+   asked only for the references the parse met. The API takes the stronger
+   contract for free.
+2. **Provenance is tested for a file, not against the session sentinel.**
+   `Recipe.source` is a `pathlib.Path` for a library entry and the string
+   `'session'` otherwise, so the rule reads `isinstance(source, PurePath)` and
+   everything else qualifies. Written that way round so an unfamiliar
+   provenance fails toward a redundant build.
+3. **The bare-name route registers nothing**, which the plan's section 4.4 did
+   not have to say because the library had not yet drawn the distinction.
+   Registering that statement would file a library entry as this session's, and
+   every later program naming it would qualify for nothing. `ProgramPreview.route`
+   carries the distinction, so the API reads it rather than inferring it.
+4. **A5's expiry 422 already half exists.** `RecipeNotFound` subclasses
+   `KeyError`, and `post_object` has caught `KeyError` as a 422 carrying the
+   library's own sentence since well before this plan. So an evicted fork
+   already produces a correct, named error; what A5 adds is the app-side pane
+   and the offer to rebuild, not the status code.
+
+The `tables.js` CSV-export path named in A1 no longer exists: per-frame export
+became CsvGrid's own client-side control, and `api.js` records that the
+`/frame/{which}.csv` endpoints survive for API callers only. So the `.agg`
+download is the only path needing the id in the query string, and it is the only
+one that got it.
 
 ### A5. The Examples menu reads the parent; the expiry path
 

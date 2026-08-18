@@ -84,6 +84,7 @@ from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import PurePath
 from typing import Any, Literal
 
 import pandas as pd
@@ -101,12 +102,15 @@ from aggregate.parser_errors import ErrorReport, format_error
 
 from .. import models
 from ..audit import AuditLog
-from ..cache import CacheEntry, ObjectCache, canonicalize_decl, object_id
+from ..cache import (
+    CacheEntry, ObjectCache, canonicalize_decl, object_id, qualified_object_id,
+)
 from ..bounds import run_allocation, run_envelope, run_pricing_bounds
 from ..capability import can_sharpen, capability_for, narrative_for
 from ..config import Settings, get_settings
 from ..library import get_underwriter
 from ..library_notes import from_library
+from ..sessions import SESSION_HEADER, SessionRegistry, normalize_session_id
 from ..pricing import (
     run_calibration, run_evaluation, run_natural_allocation,
     run_pricing_preview,
@@ -163,6 +167,7 @@ _HINTS_LOG2 = re.compile(r"hints\s*\{[^}]*\blog2\s*=\s*(\d+)", re.IGNORECASE)
 _cache_lock = threading.Lock()
 _cache_singleton: ObjectCache | None = None
 _audit_singleton: AuditLog | None = None
+_sessions_singleton: SessionRegistry | None = None
 
 # Single-slot semaphore = only one heavy build runs at a time.
 # Heavy builds happen rarely (most requests are cache hits); the
@@ -194,16 +199,68 @@ def _get_audit(settings: Settings = Depends(get_settings)) -> AuditLog:
     return _audit_singleton
 
 
+def _get_sessions(settings: Settings = Depends(get_settings)) -> SessionRegistry:
+    """Lazy-init the session registry at the configured size and TTL."""
+    global _sessions_singleton
+    with _cache_lock:
+        if (_sessions_singleton is None
+                or _sessions_singleton._max != settings.session_max
+                or _sessions_singleton._ttl != settings.session_ttl_s):
+            _sessions_singleton = SessionRegistry(
+                max_sessions=settings.session_max, ttl_s=settings.session_ttl_s)
+    return _sessions_singleton
+
+
+def _get_session_uw(
+    request: Request,
+    session: str | None = Query(
+        None,
+        alias="session",
+        description=(
+            "Session id, for the two paths a browser cannot set a header on: "
+            "this download and the CSV exports. Everything else sends "
+            "X-Aggregate-Session."
+        ),
+    ),
+    sessions: SessionRegistry = Depends(_get_sessions),
+) -> Any:
+    """Dependency: the caller's own recipe base.
+
+    Reads ``X-Aggregate-Session``, falling back to the ``session`` query
+    parameter for the routes a browser reaches by navigation rather than by
+    ``fetch``, and to one shared anonymous session when neither is present.
+
+    Notes
+    -----
+    Returns the fork itself rather than the id, because every caller wants the
+    base. Where the id is also wanted (the audit row, the qualified cache key)
+    the route reads it through :func:`session_id_of` off the same request.
+    """
+    sid = normalize_session_id(request.headers.get(SESSION_HEADER) or session)
+    return sessions.underwriter(sid, get_underwriter())
+
+
+def session_id_of(request: Request, session: str | None = None) -> str:
+    """The caller's session id, normalized, from header or query parameter.
+
+    Separate from :func:`_get_session_uw` so a route can record the id without
+    taking a fork it does not need, and so the two can never disagree about
+    which id a request carries.
+    """
+    return normalize_session_id(request.headers.get(SESSION_HEADER) or session)
+
+
 def reset_singletons() -> None:
-    """Drop the cached cache + audit so the next request re-inits.
+    """Drop the cached cache + audit + sessions so the next request re-inits.
 
     Hook for tests that swap env vars across cases -- the
     ``client`` fixture in ``tests/api/conftest.py`` calls this.
     """
-    global _cache_singleton, _audit_singleton
+    global _cache_singleton, _audit_singleton, _sessions_singleton
     with _cache_lock:
         _cache_singleton = None
         _audit_singleton = None
+        _sessions_singleton = None
     with _chart_cache_lock:
         _chart_cache.clear()
 
@@ -348,13 +405,21 @@ def _collecting_notes():
         lib_logger.setLevel(was_level)
 
 
-def _run_build(decl: str, log2: int, bs: float):
-    """Invoke the underlying ``build()``, collecting what it says.
+def _run_build(uw, decl: str, log2: int, bs: float):
+    """Invoke the caller's ``build()``, collecting what it says.
 
     Pulled into a helper so the thread-pool target is a plain
     function -- closures over ``log2=0`` / ``bs=0`` are the
     library's "let me pick" signal, so we forward the request's
     values verbatim.
+
+    Parameters
+    ----------
+    uw : aggregate.underwriter.Underwriter
+        The caller's fork, from :func:`_get_session_uw`. Passed in rather than
+        reached for, because which base builds a program is the whole of what
+        keeps one user's ``agg Cat`` out of another user's program, and a
+        helper that reached for a global could not be told otherwise.
 
     Returns
     -------
@@ -367,8 +432,91 @@ def _run_build(decl: str, log2: int, bs: float):
     # sentinels; pass them through when the request omitted those
     # knobs.
     with _collecting_notes() as notes:
-        obj = get_underwriter()(decl, log2=log2, bs=bs)
+        obj = uw(decl, log2=log2, bs=bs)
     return obj, notes
+
+
+def _preview(uw, text: str):
+    """What ``text`` resolves to in ``uw``, or ``None`` if it will not say.
+
+    Never raises. A program that cannot be previewed is one that cannot be
+    keyed either, and the answer to that is to give it a private key and let
+    the build path report the real error, which it does better than this could:
+    a parse failure comes back as the library's ``ErrorReport``, with line,
+    column and caret.
+
+    Notes
+    -----
+    This runs **outside** the build slot, which is new. Every parse used to be
+    serialized by accident, being inside the one-worker executor. The library
+    documents ``preview`` as holding no instance state (a private parser, a
+    private cycle guard) and the Lark grammar it leans on is a module
+    singleton, so concurrent previews are safe by construction rather than by
+    luck; ``tests/test_sessions.py`` pins it.
+    """
+    try:
+        return uw.preview(text)
+    except Exception:  # noqa: BLE001 -- fail closed, see the docstring
+        return None
+
+
+def _is_library_entry(source) -> bool:
+    """True when a resolved reference means the same thing to everybody.
+
+    The library records provenance as the ``.agg`` file an entry was read from,
+    or the sentinel string ``'session'`` for one a build wrote. So the test is
+    "did this come from a file", and it is written that way round on purpose:
+    anything unrecognized answers False and the program gets a private key.
+    Failing toward a redundant build costs one build; failing toward a shared
+    one serves somebody else's answer.
+    """
+    return isinstance(source, PurePath)
+
+
+def _cache_key(preview, session_id: str, canonical: str, log2: int, bs: float):
+    """The cache id for this request, and which rule produced it.
+
+    A program that resolved nothing, or resolved only entries read from the
+    library file, means the same thing in every session: the shared key, one
+    build for the whole room. A program that touched anything its own session
+    declared, **including a library name that session overwrote**, is private:
+    the session id joins the hash.
+
+    Returns
+    -------
+    (str, str)
+        The id, and ``'shared'`` or ``'session'`` for the audit row.
+    """
+    if preview is not None and all(
+            _is_library_entry(ref.source) for ref in preview.resolved):
+        return object_id(canonical, log2, bs), "shared"
+    return qualified_object_id(session_id, canonical, log2, bs), "session"
+
+
+def _register(uw, preview) -> None:
+    """File a previewed program's declarations in the caller's own base.
+
+    The build path registers what it parses, so on a cache **miss** this has
+    already happened. On a **hit** nothing was parsed, and without this the
+    user who was served a cached object could not then refer to it: their next
+    ``agg.NAME`` or ``sev agg.NAME`` would fail on a name their own base never
+    saw, and their ``.agg`` download would omit it. So a hit registers too, and
+    the two paths leave the same base behind.
+
+    Notes
+    -----
+    The bare-name route registers nothing: the entry was already there, and
+    filing it again would re-mark a library entry as this session's, which is
+    exactly the flag the cache rule reads. ``expr`` is skipped for the reason
+    the library skips it, being an answer rather than a declaration.
+    """
+    if preview is None or preview.route != "program":
+        return
+    for statement in preview.statements:
+        if statement.kind == "expr":
+            continue
+        uw.add_recipe(statement.kind, statement.name, statement.spec,
+                      statement.program)
 
 
 def _resolve_object(oid: str, cache: ObjectCache) -> CacheEntry:
@@ -836,6 +984,7 @@ def post_object(
     settings: Settings = Depends(get_settings),
     cache: ObjectCache = Depends(_get_cache),
     audit: AuditLog = Depends(_get_audit),
+    uw: Any = Depends(_get_session_uw),
 ) -> dict:
     """Build (or retrieve from cache) an aggregate object.
 
@@ -843,6 +992,21 @@ def post_object(
     demand via the per-button GETs. Same (decl, log2, bs) is
     idempotent -- the second call returns ``cached=True`` with
     the same ``id``.
+
+    Notes
+    -----
+    **The program is previewed before it is keyed.** What a program means
+    depends on what its references resolve to, and that is a fact about the
+    caller's own recipe base rather than about the text, so the text alone
+    cannot decide which cache slot the answer belongs in. The order is
+    therefore preview, key, look up, build; :func:`_cache_key` holds the rule
+    and the reasoning.
+
+    **What it costs.** A cache hit now pays a parse it did not pay before, tens
+    of milliseconds against builds measured in hundreds, and a miss parses
+    twice, once here and once inside the build. Both are stated rather than
+    discovered: the alternative is keying on text that no longer determines the
+    object, which is not a slower answer but a wrong one.
     """
     # Resolve effective knobs: a missing log2 / bs from the request
     # means "use library defaults" -- which the underlying build()
@@ -851,6 +1015,7 @@ def post_object(
     eff_log2 = req.log2 if req.log2 is not None else 0
     eff_bs = req.bs if req.bs is not None else 0.0
     ip = _client_ip(request)
+    sid = session_id_of(request)
     t0 = time.monotonic()
 
     req.decl = collapse_program(req.decl)
@@ -870,6 +1035,7 @@ def post_object(
             status="limit_exceeded",
             error_msg=f"log2 {effective_log2} exceeds cap {settings.log2_cap}",
             elapsed_ms=elapsed,
+            session_id=sid,
         )
         raise HTTPException(
             status_code=422,
@@ -877,16 +1043,20 @@ def post_object(
         )
 
     canonical = canonicalize_decl(req.decl)
-    oid = object_id(canonical, eff_log2, eff_bs)
+    preview = _preview(uw, req.decl)
+    oid, key_scope = _cache_key(preview, sid, canonical, eff_log2, eff_bs)
 
     # Cache hit -- return slim manifest immediately.
     cached_entry = cache.get(oid)
     if cached_entry is not None:
+        # File the program in the caller's own base even though nothing was
+        # built: see :func:`_register` for why a hit has to register too.
+        _register(uw, preview)
         elapsed = int((time.monotonic() - t0) * 1000)
         audit.record_build(
             ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
             status="ok", object_id=oid, kind=cached_entry.kind,
-            elapsed_ms=elapsed,
+            elapsed_ms=elapsed, session_id=sid, key_scope=key_scope,
         )
         return {
             "id": oid,
@@ -910,7 +1080,7 @@ def post_object(
     # semaphore is technically redundant (the worker serializes
     # naturally), but it makes intent explicit.
     with _build_semaphore:
-        future = _build_executor.submit(_run_build, req.decl, eff_log2, eff_bs)
+        future = _build_executor.submit(_run_build, uw, req.decl, eff_log2, eff_bs)
         try:
             obj, build_notes = future.result(timeout=settings.build_timeout_s)
         except FuturesTimeout:
@@ -920,6 +1090,7 @@ def post_object(
                 status="timeout",
                 error_msg=f"build exceeded {settings.build_timeout_s}s",
                 elapsed_ms=elapsed,
+                session_id=sid, key_scope=key_scope,
             )
             raise HTTPException(status_code=504, detail="build timeout")
         except ValueError as exc:
@@ -940,6 +1111,7 @@ def post_object(
                     ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
                     status="parse_error", error_msg=report.message,
                     elapsed_ms=elapsed,
+                    session_id=sid, key_scope=key_scope,
                 )
                 raise HTTPException(status_code=422, detail=report.to_dict())
             # Library-side validation error (e.g. invalid spec).
@@ -948,6 +1120,7 @@ def post_object(
                 ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
                 status="build_error", error_msg=str(exc),
                 elapsed_ms=elapsed,
+                session_id=sid, key_scope=key_scope,
             )
             raise HTTPException(status_code=422, detail=str(exc))
         except UnexpectedInput as exc:
@@ -960,6 +1133,7 @@ def post_object(
                 ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
                 status="parse_error", error_msg=report.message,
                 elapsed_ms=elapsed,
+                session_id=sid, key_scope=key_scope,
             )
             raise HTTPException(status_code=422, detail=report.to_dict())
         except VisitError as exc:
@@ -975,6 +1149,7 @@ def post_object(
                 ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
                 status="build_error", error_msg=str(orig),
                 elapsed_ms=elapsed,
+                session_id=sid, key_scope=key_scope,
             )
             raise HTTPException(status_code=422, detail=str(orig))
         except (NotImplementedError, KeyError) as exc:
@@ -997,6 +1172,7 @@ def post_object(
                 ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
                 status="build_error", error_msg=str(detail),
                 elapsed_ms=elapsed,
+                session_id=sid, key_scope=key_scope,
             )
             raise HTTPException(status_code=422, detail=str(detail))
         except Exception as exc:
@@ -1005,6 +1181,7 @@ def post_object(
                 ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
                 status="build_error", error_msg=str(exc),
                 elapsed_ms=elapsed,
+                session_id=sid, key_scope=key_scope,
             )
             raise HTTPException(status_code=500, detail=str(exc))
 
@@ -1024,6 +1201,7 @@ def post_object(
             status="build_error",
             error_msg=f"unsupported kind {kind!r}",
             elapsed_ms=elapsed,
+            session_id=sid, key_scope=key_scope,
         )
         raise HTTPException(
             status_code=422,
@@ -1048,6 +1226,7 @@ def post_object(
     audit.record_build(
         ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
         status="ok", object_id=oid, kind=kind, elapsed_ms=elapsed,
+        session_id=sid, key_scope=key_scope,
     )
     return {
         "id": oid,
@@ -1176,6 +1355,7 @@ def get_session_models(
         ),
     ),
     cache: ObjectCache = Depends(_get_cache),
+    uw: Any = Depends(_get_session_uw),
 ) -> Response:
     """Download every DecL program built this session as one ``.agg`` file.
 
@@ -1192,10 +1372,17 @@ def get_session_models(
 
     Notes
     -----
-    Scope is **process-global**: both the object cache and the underwriter are
-    shared across the server process, so on a shared deployment this returns
-    every program built since the last restart, not just one browser's. Fine for a
-    personal / local instance; per-session scoping is future work.
+    **Scope differs between the two forms, and that is not a wart.** ``agg``
+    reads the caller's own recipe base, so it is exactly this session's
+    programs. ``raw`` walks the object cache, which is process-wide and shared
+    by design (that sharing is what lets a room on one hero example pay for one
+    build), so on a busy deployment it returns programs other people typed. The
+    canonical form is the one the menu offers, and the one to reach for.
+
+    The session travels in the query string here rather than in a header,
+    because this URL is opened by navigation and a navigation cannot carry one.
+    A request with neither lands in the anonymous session, whose base holds
+    whatever other headerless clients put there.
     """
     programs: list[str] = []
     if form == "raw":
@@ -1218,9 +1405,10 @@ def get_session_models(
         # ``recipes`` replaced ``knowledge`` at aggregate 1.0.0a164: one frame,
         # one class, indexed (kind, name), with ``source`` marking where an
         # entry came from. A program built through this api is a session entry.
-        # Read through ``get_underwriter`` so this is the same base the builds
-        # registered into, which under ``--library`` it was not until a109.
-        recipes = get_underwriter().recipes
+        # Read off the caller's own fork, which is the base their builds
+        # registered into: the same base under ``--library`` since a109, and
+        # theirs alone rather than the process's since a110.
+        recipes = uw.recipes
         session = recipes[recipes["source"] == "session"]
         # (kind, name) MultiIndex; order by kind dependency then name.
         rows = sorted(
@@ -2388,9 +2576,11 @@ def _manifest(oid: str, entry: CacheEntry) -> dict:
 @router.post("/objects/{oid}/sharpen", response_model=models.DerivedResponse)
 def post_sharpen(
     oid: str,
+    request: Request,
     settings: Settings = Depends(get_settings),
     cache: ObjectCache = Depends(_get_cache),
     entry: CacheEntry = Depends(_locked_entry),
+    uw: Any = Depends(_get_session_uw),
 ) -> dict:
     """Audit the grid, move to a better one, and say so in DecL.
 
@@ -2461,7 +2651,13 @@ def post_sharpen(
     # editor's rebuild would miss its own cache slot. What the reader gets and
     # what the cache is keyed on differ only in whitespace, which is exactly the
     # difference ``collapse_program`` exists to make irrelevant.
-    new_oid = object_id(canonicalize_decl(program), 0, 0.0)
+    #
+    # Through the same rule as a build, for the same reason: the sharpened text
+    # carries whatever references the original had, so if a rebuild of it would
+    # be keyed privately then this entry has to be filed privately too, or the
+    # rebuild misses the slot this just wrote.
+    new_oid, _ = _cache_key(_preview(uw, program), session_id_of(request),
+                            canonicalize_decl(program), 0, 0.0)
     entry.decl, entry.log2, entry.bs = program, 0, 0.0
     cache.delete(oid)
     cache.put(new_oid, entry)
@@ -2480,6 +2676,7 @@ def post_hints(
     cache: ObjectCache = Depends(_get_cache),
     audit: AuditLog = Depends(_get_audit),
     entry: CacheEntry = Depends(_locked_entry),
+    uw: Any = Depends(_get_session_uw),
 ) -> dict:
     """Pin this object's realized grid into its own ``hints{}`` clause.
 
@@ -2533,7 +2730,7 @@ def post_hints(
 
     program = collapse_program(program)
     built = post_object(models.BuildRequest(decl=program), request,
-                        settings, cache, audit)
+                        settings, cache, audit, uw)
     return {"program": spread(program), "description": None, **built}
 
 
@@ -2546,6 +2743,7 @@ def post_pnl(
     cache: ObjectCache = Depends(_get_cache),
     audit: AuditLog = Depends(_get_audit),
     entry: CacheEntry = Depends(_locked_entry),
+    uw: Any = Depends(_get_session_uw),
 ) -> dict:
     """Wrap this object in a P&L and return the program that does it.
 
@@ -2583,7 +2781,7 @@ def post_pnl(
 
     program = collapse_program(program)
     built = post_object(models.BuildRequest(decl=program), request,
-                        settings, cache, audit)
+                        settings, cache, audit, uw)
     return {"program": spread(program), "description": None, **built}
 
 
@@ -2596,6 +2794,7 @@ def post_reins(
     cache: ObjectCache = Depends(_get_cache),
     audit: AuditLog = Depends(_get_audit),
     entry: CacheEntry = Depends(_locked_entry),
+    uw: Any = Depends(_get_session_uw),
 ) -> dict:
     """Cede a layer, and return the program that rebuilds the net object.
 
@@ -2629,7 +2828,7 @@ def post_reins(
 
     program = collapse_program(program)
     built = post_object(models.BuildRequest(decl=program), request,
-                        settings, cache, audit)
+                        settings, cache, audit, uw)
     return {"program": spread(program), "description": None, **built}
 
 
@@ -2655,7 +2854,7 @@ def get_narrative(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
 # Pricing bounds: how much of the price the distortion decides
 # ----------------------------------------------------------------------
 
-def _resolve_risk(obj: Any, text: str, settings: Settings):
+def _resolve_risk(obj: Any, text: str, settings: Settings, uw):
     """A named unit of this portfolio, or a line built from a DecL fragment.
 
     The two ways a user names a second risk, and they are tried in that order
@@ -2670,6 +2869,11 @@ def _resolve_risk(obj: Any, text: str, settings: Settings):
     settings : Settings
         For the log2 cap, which a fragment has to respect exactly as a typed
         program does: it is the same build, reached by a different door.
+    uw : aggregate.underwriter.Underwriter
+        The caller's own base. A fragment is a declaration and registers itself,
+        so building it in the process base would file a user's ad-hoc line where
+        every other user's programs resolve names, which is the collision this
+        whole phase removes.
 
     Returns
     -------
@@ -2689,7 +2893,7 @@ def _resolve_risk(obj: Any, text: str, settings: Settings):
         raise ValueError(
             f"log2 {hint_log2} exceeds AGGAPI_LOG2_CAP={settings.log2_cap}")
     try:
-        built = get_underwriter()(program)
+        built = uw(program)
     except Exception as exc:  # noqa: BLE001 -- reported as a 422
         raise ValueError(
             f"{name!r} is not a unit of this object, and does not build: "
@@ -2765,6 +2969,7 @@ def post_pricing_bounds(
     ir: bool = Query(False, description="Also return a table document."),
     settings: Settings = Depends(get_settings),
     entry: CacheEntry = Depends(_locked_entry),
+    uw: Any = Depends(_get_session_uw),
 ) -> dict:
     """Given this object priced to ``premium``, what can a second risk cost?
 
@@ -2790,7 +2995,7 @@ def post_pricing_bounds(
         against = list(req.against)
         if not against:
             against = [str(u) for u in (getattr(entry.obj, "unit_names", None) or [])]
-        targets = dict(_resolve_risk(entry.obj, text, settings)
+        targets = dict(_resolve_risk(entry.obj, text, settings, uw)
                        for text in against)
         return run_pricing_bounds(entry.obj, premium=req.premium,
                                   targets=targets, assets=req.assets, ir=ir)

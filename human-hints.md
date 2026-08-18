@@ -256,6 +256,39 @@ sudo ufw status
   publicly too). `http://` tells Caddy not to attempt TLS (can't, for a bare IP).
 - One blanket `reverse_proxy` covers `/`, `/v1/*`, `/docs`, assets — same-origin,
   no CORS.
+- **One worker, and it is load bearing since a110.** The session forks, the
+  session registry and the object cache are all in-process memory, so running
+  uvicorn with two workers shards them silently: the same browser gets a
+  different recipe base depending on which worker answers. Nothing errors; the
+  answers just stop being consistent. If throughput ever needs more than one
+  process, the cache has to move out first.
+
+### Sessions
+
+Since a110 every browser tab carries a session id (`X-Aggregate-Session`, minted
+into `sessionStorage` as `<utc timestamp>-<uuid4>`) and the server keeps that
+session its own forked recipe base. So two people on `agg.mynl.com` can both
+declare `agg Line` and neither one's program means the other's.
+
+**It is a namespace, not a credential.** Anyone holding your id gets your
+objects. That is exactly why the app needs no login: it separates people who are
+not trying to reach each other. Do not put anything behind it that would matter
+if it leaked.
+
+**A session is one tab and nothing persists.** A reload keeps it, a new tab
+mints a fresh one, and a server restart ends every one of them. The way to keep
+work is the `.agg` download.
+
+Knobs: `AGGAPI_SESSION_MAX` (500 forks) and `AGGAPI_SESSION_TTL_S` (eight hours
+idle). A fork costs microseconds and a few hundred kilobytes, so the count is
+deliberately generous and the TTL is what bounds memory. Headerless clients
+(`curl`, the test suite) share one anonymous session, which is the old
+process-wide behavior, kept so nothing that worked stopped working.
+
+Whether the rule is working is one column in the audit log: `key_scope` says
+`shared` for a build the whole room can reuse and `session` for one keyed
+privately. Nearly all `session` in a demo would mean it is qualifying programs
+that did not need it, and the room is paying for builds it could have shared.
 
 ### Public route (`agg.mynl.com`)
 

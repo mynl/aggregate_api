@@ -4,6 +4,89 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a110
+
+**One recipe base per session, and a cache key that knows the difference.**
+Phases A1 to A4 of `dev/plan-session-isolation.md`, which is the fix itself. Two
+users on one process no longer write into one namespace, and no user is served an
+object built from somebody else's declaration.
+
+**The fork.** `Underwriter.fork()`, upstream for this work, is a copy whose
+recipe dict is a fresh dict over the same parsed `Recipe` objects: about 6
+microseconds against the 3,185 milliseconds a fresh load costs. New
+`sessions.py` holds `SessionRegistry`, a bounded LRU with a TTL modeled on
+`ObjectCache`, and `normalize_session_id`. `AGGAPI_SESSION_MAX` (500) and
+`AGGAPI_SESSION_TTL_S` (eight hours) size it; a fork is cheap enough that the
+count is generous and the TTL does the work.
+
+**The identity.** The SPA mints `<utc timestamp>-<uuid4>` into `sessionStorage`
+(new `web/src/session.js`) and sends it as `X-Aggregate-Session` on every
+request. A reload keeps the id; a new tab mints a fresh one, which is the
+strictest reading of the author's ruling that a returning user starts afresh.
+The header moved outside `_json`'s `body ?` ternary, which used to leave GETs
+with no headers object at all. The `.agg` download takes the id in the query
+string instead, because `window.open` is a navigation and cannot carry a header.
+`cors.py` allows the header, without which only split-origin deploys would have
+broken, which is precisely the deploy that most needs this.
+
+**A session id is a namespace, not a credential.** Anyone holding yours gets your
+objects. That is why no login is needed, and it is written into the module
+docstring so nobody builds anything on it that would matter if it leaked. A
+missing or unusable id falls back to one per-process anonymous session, so `curl`
+and the test suite keep working and keep today's collision behavior among
+themselves.
+
+**The key rule.** The object cache keyed on program text, which stopped
+determining the object the moment a reference could be in it: Alice's
+`port Book agg.Line` and Bob's are the same eight words over different inners. So
+`post_object` now previews before it keys. A program that resolved nothing, or
+resolved only entries read from the library file, keeps the shared key and is
+built once for the whole room, which is the conference case of a hundred people
+on one hero example. A program that touched anything its own session declared,
+**including a library name that session overwrote**, is keyed with the session id
+joined to the hash (`cache.qualified_object_id`). Unrecognized provenance
+qualifies: a redundant build costs one build, a wrongly shared one serves the
+wrong answer.
+
+The rule reads what the parse resolved, never the text. `Underwriter.preview`
+reports it, including the bare-name route, which is the one program shape that
+never reaches the parser and the hole any lexical scan would fall through, and
+including the deferred `sev agg.NAME` chain followed to exhaustion.
+
+**A cache hit registers too.** Nothing was parsed on a hit, so without this the
+user served a cached object could not then refer to it: their next `agg.NAME`
+would fail on a name their own base never saw, and their `.agg` download would
+omit it. The bare-name route registers nothing, since filing that statement would
+re-mark a library entry as this session's and every later program naming it would
+qualify for no reason.
+
+**What it costs, stated rather than discovered.** A hit now pays a parse it did
+not pay before, tens of milliseconds against builds measured in hundreds, and a
+miss parses twice. The reorder also moves parsing outside the single build slot
+for the first time, so previews genuinely run at once; `tests/test_sessions.py`
+carries the threaded parse hammer and the registry-contention pin that say so.
+
+**The routes.** `_run_build` takes the caller's base as a parameter rather than
+reaching for a global. The `.agg` download's canonical form reads the caller's own
+fork, so its scope is honest for the first time; its `raw` form still walks the
+process-wide object cache and now says so. `_resolve_risk` builds its DecL
+fragment in the caller's base, where it used to register a user's ad-hoc line in
+the process base. `post_hints`, `post_pnl` and `post_reins` hand their fork to the
+`post_object` they call. `post_sharpen` re-files under the same key rule, or the
+rebuild would miss the slot it just wrote.
+
+**The audit row** gains `session_id` and `key_scope`. The second is the one number
+that says whether the rule is working: a demo where nearly every build is
+`session` means it is firing on programs that did not need it. A database written
+before this release is migrated by `ALTER TABLE ADD COLUMN`, guarded by a
+`PRAGMA table_info` read, since `CREATE TABLE IF NOT EXISTS` leaves an existing
+table alone and every insert would otherwise fail on the column count.
+
+Not in this release, and next: the Examples menu still reads the process base
+(correct, and pinned in a111), the expiry path's own error pane, sharpen on a
+deepcopy, and the pricing-residue comment. Sessions are in-process memory, so a
+multi-worker uvicorn would silently shard them: keep workers at 1.
+
 ## 1.0.0a109
 
 **One recipe base for the process.** Phase A0 of

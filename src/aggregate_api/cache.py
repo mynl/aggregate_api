@@ -97,6 +97,40 @@ def object_id(decl: str, log2: int, bs: float) -> str:
     return hashlib.sha256(payload).hexdigest()[:16]
 
 
+def qualified_object_id(session_id: str, decl: str, log2: int, bs: float) -> str:
+    """The cache id for a program private to one session.
+
+    Same hash, one more field. A program that resolved a name its own session
+    declared does not mean the same thing to anyone else, so it cannot share a
+    slot with the identical text typed by a different session: Alice's
+    ``port Book agg.Line`` and Bob's are the same eight words over different
+    inners, and one of them would be served the other's answer.
+
+    Parameters
+    ----------
+    session_id : str
+        The caller's session, from ``aggregate_api.sessions``.
+    decl : str
+        Already-canonicalized DecL.
+    log2, bs : int, float
+        Build knobs, as in :func:`object_id`.
+
+    Returns
+    -------
+    str
+
+    Notes
+    -----
+    Which of the two builders a request uses is decided by what its parse
+    resolved, not by anything in the text: see ``_cache_key`` in
+    ``routes/objects.py``. A self-contained program, or one leaning only on
+    library entries, keeps the shared key and is built once for everybody, which
+    is the case a room on one hero example is made of.
+    """
+    payload = f"{session_id}|{decl}|{log2}|{bs!r}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()[:16]
+
+
 @dataclass
 class CacheEntry:
     """One slot in the LRU.
