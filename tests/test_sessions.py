@@ -15,6 +15,7 @@ and only when they mean the same thing to everybody.
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 
@@ -454,12 +455,16 @@ def test_a_derived_program_builds_in_the_callers_base(library_client):
     assert "ToPin" not in y
 
 
-def test_an_unresolvable_reference_is_a_422_naming_the_entry(library_client):
+# ----------------------------------------------------------------------
+# The expiry path, sharpen, and the pricing residue
+# ----------------------------------------------------------------------
+
+def test_an_unresolvable_reference_names_the_missing_entry(library_client):
     """The expiry shape, reached the short way: a name nobody built.
 
-    An evicted fork lands a session here too, since its own entries have gone
-    with it. The library raises ``RecipeNotFound``, a ``KeyError``, which the
-    build route already reports as a 422 carrying the library's own sentence.
+    Structured rather than a sentence, because the app acts on it: naming the
+    ``kind`` and the ``name`` is what lets the error pane find the program that
+    declared it in history and offer the rebuild.
     """
     r = library_client.post(
         "/v1/objects",
@@ -467,4 +472,129 @@ def test_an_unresolvable_reference_is_a_422_naming_the_entry(library_client):
         headers={SEV: "session-xxxxxxxx"},
     )
     assert r.status_code == 422
-    assert "NeverBuilt" in str(r.json()["detail"])
+    detail = r.json()["detail"]
+    assert detail["error"] == "recipe_not_found"
+    assert detail["kind"] == "agg"
+    assert detail["name"] == "NeverBuilt"
+    assert "NeverBuilt" in detail["message"]
+
+
+def test_an_evicted_fork_reports_the_entry_it_lost(library_client):
+    """The real expiry case, not a typo: the session outlived its own base.
+
+    A browser's session id survives a server restart and a registry eviction;
+    the fork does not. So a program referring to something this session built is
+    suddenly a program referring to nothing, and the answer has to say which
+    name went and not merely that the program failed.
+    """
+    from aggregate_api.routes.objects import _get_sessions
+    from aggregate_api.config import get_settings
+
+    session = "session-evictedone"
+    build(library_client, session,
+          "agg WillBeLost 4 claims sev lognorm 60 cv 1 poisson")
+    referring = "port LostBook agg.WillBeLost"
+    assert build(library_client, session, referring)["kind"] == "port"
+
+    # Drop this session's fork, exactly as the TTL or the LRU would.
+    assert _get_sessions(get_settings()).drop(session)
+
+    r = library_client.post("/v1/objects", json={"decl": referring, "log2": 12},
+                            headers={SEV: session})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert detail["error"] == "recipe_not_found"
+    assert (detail["kind"], detail["name"]) == ("agg", "WillBeLost")
+
+
+def test_the_menu_survives_a_session_overwriting_a_library_name(library_client):
+    """Why the Examples menu reads the process base and not a fork.
+
+    ``_library_only`` drops ``source='session'`` rows, and overwriting a library
+    name marks it session-sourced in that user's fork. A menu built from the
+    fork would therefore lose the entry the reader was looking for. Reading the
+    parent keeps the menu a view of the library, which is the same for everyone.
+    """
+    build(library_client, "session-zzzzzzzz", "sev FixtureSeverity 900 * expon")
+    r = library_client.get("/v1/examples", headers={SEV: "session-zzzzzzzz"})
+    assert r.status_code == 200
+    names = {item["name"] for cat in r.json()["categories"] for item in cat["items"]}
+    assert "FixtureSeverity" in names
+
+
+def test_sharpen_leaves_the_shared_entry_alone(library_client):
+    """Ruling 12. One object, two viewers, one of them sharpens.
+
+    Before a111 the probe moved the cached object and re-filed it, so the other
+    viewer's grid changed underneath them and their id stopped resolving. Both
+    have to survive: the original id still serves, and the object it serves is
+    still on the grid it was built on.
+    """
+    decl = "agg Shareable 10 claims sev lognorm 100 cv 1.5 poisson"
+    x = build(library_client, "session-xxxxxxxx", decl)
+    y = build(library_client, "session-yyyyyyyy", decl)
+    assert x["id"] == y["id"], "the point of the test is that this is shared"
+
+    r = library_client.post(f"/v1/objects/{x['id']}/sharpen", json={},
+                            headers={SEV: "session-xxxxxxxx"})
+    assert r.status_code == 200, r.text
+    assert r.json()["id"] != x["id"]
+
+    # y's id still resolves, and still resolves to the program it was built from.
+    still = library_client.get(f"/v1/objects/{y['id']}",
+                              headers={SEV: "session-yyyyyyyy"})
+    assert still.status_code == 200
+    assert still.json()["decl"] == decl
+
+    # And the object under it has not been probed: no verdict on its own note,
+    # the grid unmoved (the mean would shift), and it can still be sharpened.
+    meta = library_client.get(f"/v1/objects/{x['id']}/meta",
+                             headers={SEV: "session-yyyyyyyy"}).json()
+    assert "sharpen" not in (meta["note"] or "")
+    again = build(library_client, "session-yyyyyyyy", decl)
+    assert again["id"] == x["id"] and again["cached"] is True
+    assert again["mean"] == pytest.approx(y["mean"], rel=1e-12)
+    assert again["capability"]["can_sharpen"] is True
+
+
+def test_two_sessions_price_one_shared_object_independently(library_client):
+    """Ruling 11: the pricing residue is accepted, and this is why it is safe.
+
+    Calibration writes its fit onto the object, and the object is shared. What
+    makes that harmless is that no route reads any of it back: every request
+    recomputes from its own form. So a session's answer over the shared object
+    must equal what it gets over a private one, whatever the other session did
+    to it in between.
+    """
+    shared_decl = "port Priced agg PA 10 claims sev lognorm 100 cv 1.5 poisson"
+    shared = build(library_client, "session-xxxxxxxx", shared_decl)
+    also = build(library_client, "session-yyyyyyyy", shared_decl)
+    assert shared["id"] == also["id"]
+
+    def calibrate(session, coc):
+        r = library_client.post(
+            f"/v1/objects/{shared['id']}/pricing/calibrate",
+            json={"p": 0.99, "coc": coc}, headers={SEV: session})
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    # x calibrates at one cost of capital, then y at another, then x again.
+    x_first = calibrate("session-xxxxxxxx", 0.10)
+    y_only = calibrate("session-yyyyyyyy", 0.25)
+    x_again = calibrate("session-xxxxxxxx", 0.10)
+
+    assert x_again == x_first, "x's answer moved when y priced the same object"
+    assert y_only != x_first, "the two targets should not agree"
+
+    # And y's answer over the shared object is what y gets over a private one.
+    # The object name travels in the exhibit labels, and a private object needs a
+    # different program to get a private key, so the name is normalized out
+    # before the comparison. Everything else, every number included, must match.
+    private_decl = shared_decl.replace("port Priced", "port PricedPrivate")
+    private = build(library_client, "session-yyyyyyyy", private_decl)
+    r = library_client.post(f"/v1/objects/{private['id']}/pricing/calibrate",
+                            json={"p": 0.99, "coc": 0.25},
+                            headers={SEV: "session-yyyyyyyy"})
+    assert r.status_code == 200, r.text
+    on_private = json.dumps(r.json()["exhibits"], sort_keys=True)
+    assert on_private.replace("PricedPrivate", "Priced") ==         json.dumps(y_only["exhibits"], sort_keys=True)

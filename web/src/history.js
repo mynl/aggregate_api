@@ -107,6 +107,33 @@ export function position() {
     return { m: Math.max(state.cursor, 0) + 1, n };
 }
 
+/**
+ * The most recent program that declares `<kind> <name>`, or null.
+ *
+ * For the expiry pane. When a session's forked recipe base is evicted, a program
+ * referring to something that session built comes back as a 422 naming the
+ * `kind` and `name` that went missing. History still holds the program that
+ * declared it, so the pane can offer the rebuild rather than describe it.
+ *
+ * Matched on the declaration head only: a DecL statement opens
+ * `<kind> <Name> ...`, and the entries are stored collapsed to one line, so the
+ * head is the first two tokens. Deliberately not a parse. This is a convenience
+ * that either finds the program or does not; a wrong guess would show a button
+ * that rebuilds something else, so the match is anchored and exact.
+ *
+ * @param {string} kind e.g. 'agg', 'port', 'sev'
+ * @param {string} name the entry name
+ * @returns {string|null}
+ */
+export function findDeclaring(kind, name) {
+    if (!kind || !name) return null;
+    // Escaped because both halves arrive from a server payload. DecL names are
+    // identifiers in practice, so this guards the case where they are not.
+    const quote = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const head = new RegExp(`^\\s*${quote(kind)}\\s+${quote(name)}(\\s|$)`);
+    return state.entries.find((text) => head.test(text)) || null;
+}
+
 /** Reset the nav cursor (called after the user types a new char). */
 export function resetCursor() {
     if (state.cursor !== -1) {

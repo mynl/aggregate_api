@@ -4,6 +4,60 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a111
+
+**The residue: an expiry that says what it lost, a sharpen that leaves other
+people alone, and the one rule that keeps shared pricing safe.** Phases A5 to A7
+of `dev/plan-session-isolation.md`, which closes the plan.
+
+**Expiry has an answer, not just a failure.** A session id lives in the browser
+and outlives the fork it names: idle past the TTL, evicted under pressure, or
+gone with a server restart. After that a program referring to something the user
+built themselves refers to nothing. The build route already answered 422 with the
+library's sentence, which is correct and not actionable, so `RecipeNotFound` now
+comes back structured, `{error, kind, name, message}`, caught around both the
+preview and the build (the deferred `sev agg.NAME` resolves at build time, so the
+referent can go missing between the two). `error-pane.js` renders it as its own
+pane, `history.findDeclaring` looks for the program that declared the missing
+entry, and when it finds one the pane carries a **Rebuild `agg Name`** button:
+`main.js` builds the inner, then re-presses Build on the text still in the
+editor. The fix is one press rather than a paragraph.
+
+**The Examples menu reads the process base, and now says why.** It looks tidier
+for the menu to take a fork like everything else, and it would be wrong:
+`_library_only` drops `source='session'` rows, and overwriting a library name
+marks it session-sourced in that user's fork, so a fork-built menu would lose the
+very entry the reader went looking for. The reasoning is in `_library_only`'s
+Notes and pinned by a test.
+
+**Sharpen is additive.** It moved the cached object in place and re-filed the
+entry under the new program's id, dropping the old one. On a personal instance
+nobody notices, because the only viewer is the one who pressed the button. On a
+shared one it changes the grid under everyone else reading that object and kills
+the id they hold, and the object cache is shared on purpose. So the probe now
+runs on `copy.deepcopy` of the object, taken under the entry lock the route
+already holds, and files the sharpened copy as a **new** entry while the original
+stays exactly as it was. Measured cost: 10.5 ms for a log2 16 aggregate and 31.4
+ms for a three-unit portfolio, against rebuilds of 73.5 and 453 ms. The new entry
+gets its own lock, since it is a different object and sharing one would serialize
+unrelated readers. `test_the_entry_moves_with_the_object` becomes
+`test_the_sharpened_object_is_a_new_entry` and asserts the opposite of what it
+used to.
+
+**Pricing and bounds are unchanged, deliberately.** They write result attributes
+onto the object they price and the object is shared, so the residue is real. It
+is accepted on measured grounds: nothing in this repo reads any of it back, and
+every request recomputes from its own form. The one condition attached to that
+acceptance is now written into `pricing.py`'s module docstring as a standing
+rule: **every call from here passes its own target and its own distortions
+explicitly, and never leans on a library default that reads
+`self.distortions`**. A method falling back to the stored fit would serve this
+request an answer struck for whoever priced the object last, plausibly and
+silently. `tests/test_sessions.py` pins the residue directly: two sessions
+calibrate one shared object at different targets, each gets what its own form
+implies, and the answer over the shared object is byte-identical (object name
+aside) to the same calibration over a private one.
+
 ## 1.0.0a110
 
 **One recipe base per session, and a cache key that knows the difference.**

@@ -808,9 +808,9 @@ one version bump each.
       from the same list did not land: the PnL face toggle was dropped by the
       author (the two faces are one statement shape, so it is a typed
       character), and the custom-library work is parked in
-      `dev/note-session-isolation.md`.
+      `dev/done/note-session-isolation.md`.
 - [ ] **One recipe base, many users**: `dev/plan-session-isolation.md`, the v2
-      rescope of `dev/note-session-isolation.md` (the measured evidence file,
+      rescope of `dev/done/note-session-isolation.md` (the measured evidence file,
       parked 2026-08-17). Two problems, each needing its own fix: session builds
       share one recipe base, so one user's declaration is what another user's
       `agg.NAME` means; and the object cache keys on program text, which no
@@ -818,10 +818,15 @@ one version bump each.
       at a109**, the standalone finding the note turned up: `--library` re-pointed
       the Examples menu only while all three build paths used the
       `aggregate.build` singleton, and `Settings.knowledge_base` had never been
-      read. Phases **A1 to A4 landed at a110**: the session id, the fork
-      registry, the qualified cache key and every build path routed through the
-      caller's own base. A5 to A7 remain (the Examples menu pinned to the parent
-      and the expiry pane, sharpen on a deepcopy, the pricing-residue comment).
+      read. **Fully executed 2026-08-18**: A0 at a109, A1 to A4 at a110 (the
+      session id, the fork registry, the qualified cache key and every build path
+      routed through the caller's own base), A5 to A7 at a111 (the expiry pane
+      with its rebuild button, sharpen on a deepcopy, the pricing-residue rule).
+      The note is in `dev/done/`; the plan follows once the library commits
+      its half, since a symlink in its tree points at this copy. What it deliberately did not do
+      is in the plan's section 8: no content addressing, one browser tab per
+      session with no persistence, `cache_max` still 50, and one uvicorn worker
+      is now load bearing.
 
 ## Raised with `csv-grid` (not fixed here)
 

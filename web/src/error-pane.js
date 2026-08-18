@@ -32,6 +32,7 @@
 // scrolling. This pane is the detail: the source, the caret, and what would
 // have been accepted there.
 
+import * as history from './history.js';
 import { el } from './utils/dom.js';
 
 /**
@@ -67,7 +68,45 @@ export function renderRateLimit(retryAfter) {
     );
 }
 
-export function renderError(err) {
+/**
+ * The pane for a name the server's copy of your session no longer holds.
+ *
+ * `{error: 'recipe_not_found', kind, name, message}`, which the build route
+ * sends when a reference resolves to nothing. The usual cause is not a typo: a
+ * session's recipe base is dropped when it goes idle, when the registry evicts
+ * it under load, or when the server restarts, and after that a reference to
+ * something you built yourself names nothing.
+ *
+ * `onRebuild` is called with the program that declared the missing entry, when
+ * history still holds one. That is the whole point of naming the entry rather
+ * than describing the failure: the fix is one press away.
+ */
+function renderMissingEntry(detail, onRebuild) {
+    const label = detail.kind ? `${detail.kind} ${detail.name}` : detail.name;
+    const program = history.findDeclaring(detail.kind, detail.name);
+    const parts = [
+        el('div', { className: 'mb-1' },
+            'The declaration ', el('code', {}, label),
+            ' is not in this session any more, so the program cannot be built.'),
+        el('div', { className: 'small text-muted mb-2' },
+            detail.message || ''),
+    ];
+    if (program && typeof onRebuild === 'function') {
+        const button = el('button', {
+            className: 'btn btn-sm btn-outline-secondary',
+            type: 'button',
+        }, `Rebuild ${label}`);
+        button.addEventListener('click', () => onRebuild(program));
+        parts.push(button);
+    } else {
+        parts.push(el('div', { className: 'small' },
+            'Build it again, then rebuild this program.'));
+    }
+    return el('div', { className: 'alert alert-warning agg-error-pane', role: 'alert' },
+        ...parts);
+}
+
+export function renderError(err, onRebuild) {
     const body = (err && err.body) || {};
     const detail = body.detail || body || {};
 
@@ -78,6 +117,13 @@ export function renderError(err) {
     if (typeof detail === 'string') {
         return el('div', { className: 'alert alert-warning agg-error-pane', role: 'alert' },
             detail);
+    }
+
+    // Checked ahead of the ErrorReport branches: this detail carries a
+    // `message` and would otherwise render as a bare sentence, losing the one
+    // thing the reader can act on.
+    if (detail.error === 'recipe_not_found') {
+        return renderMissingEntry(detail, onRebuild);
     }
 
     // Generic non-parse fallback (HTTP 500, network failure, etc.):

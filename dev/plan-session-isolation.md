@@ -1,15 +1,19 @@
 # Plan [Session-Isolation]: one recipe base, many users
 
-> **Status: IN EXECUTION, 2026-08-18. A0 landed at API `1.0.0a109`, A1 to A4
-> at `1.0.0a110`.** Author approved execution 2026-08-18; the library executed
-> L1 to L4 concurrently. A5 to A7 remain.
+> **Status: EXECUTED, 2026-08-18. A0 at API `1.0.0a109`, A1 to A4 at
+> `1.0.0a110`, A5 to A7 at `1.0.0a111`.** Author approved execution 2026-08-18;
+> the library executed L1 to L4 concurrently. Execution notes are recorded in
+> section 6 beside the phases they belong to. The note has moved to
+> `dev/done/`. This plan stays in `dev/` until the library commits its half
+> and re-points `aggregate_REFACTOR/dev/plan-session-isolation.md`, the
+> symlink that would otherwise dangle; the two move together.
 > Drafted as v2, 2026-08-18. v1, drafted earlier
 > the same day, was built around content addressing. The author reviewed it the
 > same afternoon and rescoped the work: LIB is the product, the API is demo
 > ware, so ship the smallest fix that makes the demo correct and park the rest.
 > v2 is that scope. The parked material keeps its rulings and its
 > implementation caveats in section 9, so nothing is relearned if it is picked
-> up later. Written from `aggregate_api/dev/note-session-isolation.md` (PARKED
+> up later. Written from `aggregate_api/dev/done/note-session-isolation.md` (PARKED
 > 2026-08-17, the evidence file: every number in it was measured, not reasoned
 > about) plus the author's rulings recorded in section 3. Canonical copy lives
 > in `aggregate_api/dev/`; `aggregate_REFACTOR/dev/plan-session-isolation.md`
@@ -440,6 +444,31 @@ distortions explicitly**, never leaning on LIB defaults that read
 `self.distortions` (`_portfolio.py:4114-4118` raises when unset, which is the
 guard that would otherwise silently serve another session's fit). A comment at
 the call sites, and the section 7 residue test, pin it.
+
+**Execution notes, a111 (A5 to A7).**
+
+1. **A5's 422 was already correct and not yet actionable.** `RecipeNotFound`
+   subclasses `KeyError`, which `post_object` had reported as a 422 carrying the
+   library's own sentence since long before this plan, so an evicted fork
+   already produced a right answer. What landed is the structure the app can act
+   on, `{error, kind, name, message}`, plus the pane and the rebuild button.
+   `_preview` re-raises this one exception and swallows every other, which is
+   also why it is caught in two places: the deferred `sev agg.NAME` resolves at
+   build time, so its referent can go missing between the preview and the build.
+2. **The Examples menu needed no code change, only the reason written down.** It
+   already called `get_underwriter()`. The note lives in `_library_only`, next
+   to the `source == 'session'` filter that is the actual mechanism, rather than
+   in `load_examples` where a reader would not be looking.
+3. **A6 inverted a shipped test.** `test_the_entry_moves_with_the_object` in
+   `tests/test_derive.py` asserted that the old id 404s after a sharpen, which
+   was the old contract stated precisely. It is now
+   `test_the_sharpened_object_is_a_new_entry` and asserts both halves: a new id
+   for the probed copy, and the original still serving the program it was built
+   from.
+4. **A7's standing rule went in the module docstring, not at the call sites.**
+   The plan suggested a comment at each. One statement of the rule in
+   `pricing.py`'s header is harder to let rot than four copies, and it is where
+   a reader adding a fifth runner will see it.
 
 ## 7. Tests
 

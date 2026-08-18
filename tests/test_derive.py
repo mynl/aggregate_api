@@ -8,8 +8,11 @@ keep working.
 The load-bearing tests here are the cache ones. ``sharpen`` moves its object in
 place while the cache is keyed on a hash of ``(decl, log2, bs)``, so a naive
 implementation leaves the cache serving, under a key asserting one grid, an
-object sitting on another. The rule is that the entry moves with the object and
-nothing is rebuilt, and these are what hold it to that.
+object sitting on another. The rule since a111 is that the probe runs on a
+**copy** and files the result as a new entry, leaving the original where it was:
+the object cache is shared between sessions on purpose, so a sharpen that moved
+the cached object would change the grid under everyone else reading it. These
+are what hold it to that.
 """
 
 from __future__ import annotations
@@ -85,19 +88,25 @@ def test_the_spread_program_keeps_its_trailer(client):
     assert "note{" in body["program"] or "hints{" in body["program"], body["program"]
 
 
-def test_the_entry_moves_with_the_object(client):
-    """The old id is gone rather than still serving the moved object.
+def test_the_sharpened_object_is_a_new_entry(client):
+    """A new id, and the old one still serving the object it always did.
 
-    This is the failure the cache rule exists to prevent: the id asserts a
-    ``(decl, log2, bs)`` triple, and after a probe the object may sit on a
-    different grid, so leaving it under the old key would make the cache lie.
+    Two things at once. The id asserts a ``(decl, log2, bs)`` triple, so a
+    probed object cannot stay under the key of the text that built it, or the
+    cache lies about what it holds. And the object cache is shared across
+    sessions by design, so the original cannot be moved or dropped either: some
+    other reader is holding that id. So the sharpened object is filed alongside
+    rather than in place of.
     """
     first = _build(client, AGG)
     old_id = first["id"]
     r = client.post(f"/v1/objects/{old_id}/sharpen", json={})
     assert r.status_code == 200, r.text
     assert r.json()["id"] != old_id
-    assert client.get(f"/v1/objects/{old_id}").status_code == 404
+
+    still_there = client.get(f"/v1/objects/{old_id}")
+    assert still_there.status_code == 200
+    assert still_there.json()["decl"] == AGG
 
 
 def test_rebuilding_the_derived_text_is_a_cache_hit(client):

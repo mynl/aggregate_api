@@ -219,6 +219,31 @@ function forgetBuild() {
     applyCapability(null);
 }
 
+/**
+ * Rebuild a declaration this session has lost, then retry what wanted it.
+ *
+ * The server keeps each session its own recipe base and drops it when the
+ * session goes idle, when the registry evicts it, or on a restart. After that a
+ * program referring to something you built earlier fails on a name the server no
+ * longer holds, and the answer names it: the error pane finds the program that
+ * declared it in history and calls this.
+ *
+ * Two steps, in order, and neither touches the editor: the inner program is
+ * built to put the name back, then `build()` re-reads the editor, which still
+ * holds the program the reader was trying to build.
+ */
+async function rebuildMissing(program) {
+    try {
+        await api.build(program, {});
+        history.record(program);
+        renderHistoryPos();
+    } catch (err) {
+        renderBuildFailure(err);
+        return;
+    }
+    await build();
+}
+
 async function build() {
     const decl = editor.getText().trim();
     if (!decl) return;
@@ -233,7 +258,7 @@ async function build() {
         renderActionRow();
     } catch (err) {
         forgetBuild();
-        renderBuildFailure(err);
+        renderBuildFailure(err, rebuildMissing);
         renderActionRow();
     } finally {
         buildBtn.disabled = false;
@@ -770,7 +795,13 @@ function failureLine(err) {
     return { text: 'build failed', detail: err?.message || null };
 }
 
-function renderBuildFailure(err) {
+/**
+ * @param {Error} err the failure
+ * @param {(program: string) => void} [onRebuild] offered when the failure is a
+ *   declaration this session has lost and history holds the program that made
+ *   it; see `rebuildMissing`.
+ */
+function renderBuildFailure(err, onRebuild) {
     const limited = err instanceof ApiError && err.status === 429;
     const inner = $('summary-inner');
     empty(inner);
@@ -788,7 +819,7 @@ function renderBuildFailure(err) {
     const pane = $('pane-overview');
     empty(pane);
     if (limited) pane.appendChild(renderRateLimit(err.retryAfter));
-    else if (err instanceof ApiError) pane.appendChild(renderError(err));
+    else if (err instanceof ApiError) pane.appendChild(renderError(err, onRebuild));
     else pane.appendChild(el('div', { className: 'alert alert-danger' }, err.message));
     showTab('overview');
 }

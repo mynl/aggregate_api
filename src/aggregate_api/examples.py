@@ -153,6 +153,17 @@ def _library_only(frame):
     -------
     pandas.DataFrame
         The same frame without rows whose ``source`` is ``'session'``.
+
+    Notes
+    -----
+    **This is why the menu reads the process base and not a session fork.**
+    Every build route takes a fork of its own since a110, and it would look
+    tidier for the menu to do the same. It would also be wrong: a user who
+    overwrites a library name marks it ``source='session'`` in *their* fork, so
+    this filter would then drop the library's entry from their menu, and the
+    entry they would be looking for would simply be missing. The menu is a view
+    of the library, which is the same for everybody; the fork is a view of what
+    one user has declared.
     """
     if "source" not in frame.columns:
         return frame

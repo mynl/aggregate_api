@@ -73,6 +73,7 @@ return in milliseconds.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import math
@@ -99,6 +100,7 @@ from aggregate import charts as agg_charts
 from aggregate import exhibits as agg_exhibits
 from aggregate.constants import FIRST_CLASS_CLASSES, NEAR_FIRST_CLASS
 from aggregate.parser_errors import ErrorReport, format_error
+from aggregate.underwriter import RecipeNotFound
 
 from .. import models
 from ..audit import AuditLog
@@ -439,11 +441,19 @@ def _run_build(uw, decl: str, log2: int, bs: float):
 def _preview(uw, text: str):
     """What ``text`` resolves to in ``uw``, or ``None`` if it will not say.
 
-    Never raises. A program that cannot be previewed is one that cannot be
-    keyed either, and the answer to that is to give it a private key and let
-    the build path report the real error, which it does better than this could:
-    a parse failure comes back as the library's ``ErrorReport``, with line,
+    Raises only :class:`aggregate.underwriter.RecipeNotFound`. A program that
+    cannot be previewed for any other reason is one that cannot be keyed
+    either, and the answer to that is to give it a private key and let the
+    build path report the real error, which it does better than this could: a
+    parse failure comes back as the library's ``ErrorReport``, with line,
     column and caret.
+
+    The missing name is the exception, and it is let through on purpose. It is
+    the shape an expired session takes: the fork holding what this user built
+    has been evicted, so their own ``agg.NAME`` now names nothing. Swallowing
+    it here would qualify the key and then possibly find an object still
+    cached under it, answering a program whose reference no longer resolves.
+    Better to say what is missing.
 
     Notes
     -----
@@ -456,6 +466,8 @@ def _preview(uw, text: str):
     """
     try:
         return uw.preview(text)
+    except RecipeNotFound:
+        raise
     except Exception:  # noqa: BLE001 -- fail closed, see the docstring
         return None
 
@@ -517,6 +529,32 @@ def _register(uw, preview) -> None:
             continue
         uw.add_recipe(statement.kind, statement.name, statement.spec,
                       statement.program)
+
+
+def _missing_entry_detail(exc: RecipeNotFound) -> dict:
+    """The 422 body for a name the caller's own recipe base does not hold.
+
+    Structured rather than a bare sentence, because the app can act on it. The
+    common cause is not a typo: it is an expired session. A fork is dropped when
+    it goes idle past the TTL, when the registry evicts it under pressure, or
+    when the server restarts, and after that a user's reference to something
+    they built themselves names nothing. Their program is still in the SPA's
+    history, so naming the ``kind`` and ``name`` lets the error pane offer the
+    rebuild rather than describing it.
+
+    Returns
+    -------
+    dict
+        ``error``, ``kind``, ``name`` and ``message``. The ``message`` is the
+        library's own sentence, kept verbatim: it already explains the case
+        where the name parsed and then went away.
+    """
+    return {
+        "error": "recipe_not_found",
+        "kind": getattr(exc, "kind", None),
+        "name": getattr(exc, "name", "") or "",
+        "message": getattr(exc, "message", None) or str(exc),
+    }
 
 
 def _resolve_object(oid: str, cache: ObjectCache) -> CacheEntry:
@@ -1043,7 +1081,17 @@ def post_object(
         )
 
     canonical = canonicalize_decl(req.decl)
-    preview = _preview(uw, req.decl)
+    try:
+        preview = _preview(uw, req.decl)
+    except RecipeNotFound as exc:
+        detail = _missing_entry_detail(exc)
+        elapsed = int((time.monotonic() - t0) * 1000)
+        audit.record_build(
+            ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
+            status="build_error", error_msg=detail["message"],
+            elapsed_ms=elapsed, session_id=sid,
+        )
+        raise HTTPException(status_code=422, detail=detail) from None
     oid, key_scope = _cache_key(preview, sid, canonical, eff_log2, eff_bs)
 
     # Cache hit -- return slim manifest immediately.
@@ -1152,6 +1200,18 @@ def post_object(
                 session_id=sid, key_scope=key_scope,
             )
             raise HTTPException(status_code=422, detail=str(orig))
+        except RecipeNotFound as exc:
+            # The same case the preview reports, reached the other way: a
+            # deferred ``sev agg.NAME`` resolves at build time, not parse time,
+            # so a referent that went away between the two lands here.
+            detail = _missing_entry_detail(exc)
+            elapsed = int((time.monotonic() - t0) * 1000)
+            audit.record_build(
+                ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
+                status="build_error", error_msg=detail["message"],
+                elapsed_ms=elapsed, session_id=sid, key_scope=key_scope,
+            )
+            raise HTTPException(status_code=422, detail=detail) from None
         except (NotImplementedError, KeyError) as exc:
             # Two more shapes of "your program cannot be built", both of which
             # the library already reports well and neither of which is a server
@@ -2592,34 +2652,47 @@ def post_sharpen(
 
     Notes
     -----
-    **The cache entry moves with the object, and nothing is rebuilt.**
-    ``sharpen`` moves its object in place while the cache is keyed on a hash of
-    ``(decl, log2, bs)``, so left alone the cache would serve, under a key
-    asserting one grid, an object sitting on another. Rebuilding to avoid that
-    would throw away the probe, which is the expensive part and has already run.
-    So the object is re-filed instead: the old id is dropped and the same entry
-    goes back under the id its own ``sharpen_program`` hashes to, which is
-    exactly the id an ordinary build of that text would produce. Rebuilding the
-    derived program from the editor is then a cache hit.
+    **The probe runs on a copy, and the original entry is left alone.**
+    ``sharpen`` moves its object in place, and until a111 it moved the cached
+    one: the entry was re-filed under the id its new ``sharpen_program`` hashes
+    to and the old id was deleted. On a personal instance that is invisible,
+    because the only viewer is the one who pressed the button. On a shared one
+    it breaks everybody else looking at that object: their grid changes
+    underneath them and the id they hold stops resolving. The object cache is
+    deliberately shared, so that a room on one hero example pays for one build,
+    which is what makes an in-place sharpen everybody's business.
 
-    The entry object itself is reused rather than replaced, so the lock that
-    guards reads of this object is the same one before and after the move.
+    So the probe takes ``copy.deepcopy`` of the object first, and the sharpened
+    copy is filed as a **new** entry under the key of its own program while the
+    original entry stays exactly as it was. The response carries the new id,
+    which the SPA already follows.
+
+    **The copy is affordable, measured rather than assumed.** 10.5 ms for a
+    log2 16 aggregate and 31.4 ms for a three-unit portfolio, against rebuilds
+    of 73.5 and 453 ms for the same two. Rebuilding instead would also throw
+    away the probe, which is the expensive part and has already run.
+
+    **The new id is the one an ordinary build would produce**, so rebuilding the
+    derived program from the editor is a cache hit rather than a second probe.
 
     **The api's own cap reaches the probe.** ``sharpen`` defaults to
     ``log2_cap=20`` and ``AGGAPI_LOG2_CAP`` defaults to 18, so an unattended
     probe could land on a grid the build route would then refuse, leaving the
     user with a derived program the app cannot honor.
     """
-    obj = entry.obj
-    if not hasattr(obj, "sharpen"):
+    if not hasattr(entry.obj, "sharpen"):
         raise HTTPException(
             status_code=400,
             detail="sharpening applies to an Aggregate or a Portfolio")
-    if not can_sharpen(obj):
+    if not can_sharpen(entry.obj):
         raise HTTPException(
             status_code=400,
             detail=("this program already carries a sharpen verdict; a second "
                     "audit of a confirmed grid is a slow no-op"))
+
+    # The copy is taken under the entry lock this route already holds, so
+    # nothing can be mid-write in the object being copied.
+    obj = copy.deepcopy(entry.obj)
 
     # Same guards as a build, because a probe is several builds: it re-updates
     # the object across a line search of neighboring cells.
@@ -2658,13 +2731,26 @@ def post_sharpen(
     # rebuild misses the slot this just wrote.
     new_oid, _ = _cache_key(_preview(uw, program), session_id_of(request),
                             canonicalize_decl(program), 0, 0.0)
-    entry.decl, entry.log2, entry.bs = program, 0, 0.0
-    cache.delete(oid)
-    cache.put(new_oid, entry)
+    # A new entry, with its own lock. The sharpened object is a different object
+    # from the one still serving under ``oid``, so sharing a lock between them
+    # would serialize two unrelated readers for nothing.
+    new_entry = CacheEntry(
+        obj=obj,
+        decl=program,
+        log2=0,
+        bs=0.0,
+        kind=entry.kind,
+        name=getattr(obj, "name", entry.name),
+        created_at=datetime.now(timezone.utc),
+        # The build's warnings travel with the copy, because they describe the
+        # object rather than the request: this one was built by that build.
+        notes=list(entry.notes),
+    )
+    cache.put(new_oid, new_entry)
     return {
         "program": spread(program),
         "description": getattr(obj, "sharpen_description", None) or None,
-        **_manifest(new_oid, entry),
+        **_manifest(new_oid, new_entry),
     }
 
 

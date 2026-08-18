@@ -41,6 +41,25 @@ Every ``ValueError`` raised on this path is written to be read by a person, so
 each route turns one into an HTTP 400 whose ``detail`` is the message verbatim.
 Three reach the app: the unbounded anchor guard on ``p = 1``, a loss-ratio target
 implying a premium above the assets, and the "exactly one of" validations.
+
+**The standing rule that makes this safe on a shared object.** Pricing writes
+result attributes onto the object it prices (``distortions``,
+``distortion_df``, ``calibration_df``), and since a110 the object cache is
+deliberately shared while the recipe base is not, so two sessions can be pricing
+one object at once. That residue is accepted, on measured grounds: nothing in
+this repo reads any of those attributes back, and every request recomputes from
+its own form. The one condition attached to that acceptance is a rule for this
+file, so it is written here rather than left as a habit.
+
+**Every call from here passes its own target and its own distortions
+explicitly. Never lean on a library default that reads ``self.distortions``.**
+A method that falls back to the stored fit would serve this request an answer
+struck for whoever priced the object last, silently and plausibly.
+``Portfolio.price`` raises when ``distortions`` is unset, which is the guard
+that would otherwise have hidden the problem by making it look like a bug in
+the first caller rather than in the second. ``tests/test_sessions.py`` pins the
+residue directly: two sessions calibrating one shared object at different
+targets get the answers their own forms imply.
 """
 
 from __future__ import annotations
