@@ -3089,7 +3089,7 @@ api.meta().then((meta) => {
 });
 
 // Download every DecL program built this session, canonical and re-loadable,
-// from the underwriter's session knowledge. The attachment header makes the
+// from the underwriter's session recipes. The attachment header makes the
 // browser save the file.
 //
 // The raw form went at a82. It served the programs as typed, straight off the

@@ -376,10 +376,15 @@ that actually holds.
 ### Curated Examples list
 
 The Examples dropdown is fetched at runtime from `GET /v1/examples` (parsed from
-an `.agg` file), so it's **not** baked into the SPA bundle — change the file,
+an `.agg` file), so it's **not** baked into the SPA bundle: change the file,
 restart the api, refresh the browser. Source precedence: `--library` /
-`AGGAPI_EXAMPLES_FILE` (a curated file anywhere on disk) → bundled
+`AGGAPI_LIBRARY` (a curated file anywhere on disk), then bundled
 `aggregate/agg/library.agg`.
+
+Since a109 the setting points the **whole process** at that file, not just the
+menu: every build and the `.agg` download resolve against it too, so an entry
+may name a sibling. `AGGAPI_EXAMPLES_FILE` is the old name for it, accepted for
+one release and warning when used.
 
 **A short library is the fast way to review.** The flag is the one to reach for:
 
@@ -393,7 +398,7 @@ stale setting on a server and wrong for something typed on purpose. Both end up
 in the same place; the flag just refuses to lie about it.
 
 ```powershell
-$env:AGGAPI_EXAMPLES_FILE = "T:\tmp\short.agg"     # same thing, no path check
+$env:AGGAPI_LIBRARY = "T:\tmp\short.agg"           # same thing, no path check
 ```
 
 **Format** is `library.agg`'s own, so copy an entry out of it rather than

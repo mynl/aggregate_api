@@ -22,10 +22,12 @@ modest log2 cap, 10 s build timeout, 50 objects in the cache.
 
 from __future__ import annotations
 
+import os
+import warnings
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -66,10 +68,6 @@ class Settings(BaseSettings):
     log2_cap: int = 18
     # Per-build wall-clock timeout; expires via threadpool.future.
     build_timeout_s: float = 10.0
-    # Knowledge-base name forwarded to Underwriter(databases=...). The
-    # api uses the default "test_suite" so builtins like ``agg.X`` and
-    # named severities load.
-    knowledge_base: str = "default"
 
     # ------------------------------------------------------------------
     # Cache
@@ -147,14 +145,23 @@ class Settings(BaseSettings):
     serve_spa: bool = True
 
     # ------------------------------------------------------------------
-    # Examples library
+    # The library
     # ------------------------------------------------------------------
-    # When set, the Examples dropdown loads from this .agg file instead of
-    # aggregate's bundled agg/test_suite.agg. Lets a deploy ship a curated
-    # example set without rebuilding the SPA (the list is fetched at runtime
-    # from GET /v1/examples). Same format: a ``# A. Title`` contents block
-    # plus ``agg A.Name ...`` item lines. Re-read on server restart.
-    examples_file: str = ""
+    # When set, the whole process reads its recipes from this .agg file instead
+    # of aggregate's bundled library.agg: the Examples dropdown, every build,
+    # and the .agg download all resolve against it (see library.py). Lets a
+    # deploy ship a curated set without rebuilding the SPA, since the menu is
+    # fetched at runtime from GET /v1/examples. Re-read on server restart.
+    #
+    # Named AGGAPI_EXAMPLES_FILE until a109, when it stopped being about
+    # examples: it feeds builds now, so it is the library. The old name is
+    # accepted for one release and warns, hence the two-name alias rather than a
+    # plain field. ``validation_alias`` bypasses ``env_prefix``, so both names
+    # are spelled in full.
+    library: str = Field(
+        default="",
+        validation_alias=AliasChoices("AGGAPI_LIBRARY", "AGGAPI_EXAMPLES_FILE"),
+    )
 
     # ------------------------------------------------------------------
     # Derived properties
@@ -180,7 +187,23 @@ def get_settings() -> Settings:
     :func:`get_settings.cache_clear` (handled centrally by the
     ``client`` fixture in ``tests/api/conftest.py``) so the next
     read re-evaluates the environment.
+
+    Notes
+    -----
+    The deprecation notice for ``AGGAPI_EXAMPLES_FILE`` lives here rather than
+    on the field, because a field validator sees only the value that won and
+    cannot tell which of the two names supplied it. Warning once per settings
+    read is right: the cache makes that once per process in production, and once
+    per case in a test that clears it.
     """
+    if "AGGAPI_EXAMPLES_FILE" in os.environ and "AGGAPI_LIBRARY" not in os.environ:
+        warnings.warn(
+            "AGGAPI_EXAMPLES_FILE is deprecated and will be removed after one "
+            "release; use AGGAPI_LIBRARY. The setting now feeds every build, "
+            "not just the Examples menu.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
     return Settings()
 
 

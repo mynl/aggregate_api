@@ -58,10 +58,10 @@ from __future__ import annotations
 
 import logging
 import re
-import warnings
 from functools import lru_cache
-from pathlib import Path
 from typing import Literal
+
+from .library import get_underwriter
 
 logger = logging.getLogger(__name__)
 
@@ -91,45 +91,6 @@ _ROLE_ORDER = ("hero", "intro", "reference", "paper")
 _UNGROUPED = "other"
 
 _GROUP_TITLES = {_UNGROUPED: "Other"}
-
-
-def _underwriter():
-    """Return the ``Underwriter`` whose recipe base backs the example library.
-
-    Defaults to ``aggregate.build``, the shipped singleton loaded from
-    ``library.agg``. ``AGGAPI_EXAMPLES_FILE`` overrides it with a custom
-    ``.agg``: a private :class:`Underwriter` is pointed at that file's stem via
-    ``databases=`` and loaded, so a curated library goes through exactly the same
-    recipe machinery as the shipped one. A configured but missing path warns and
-    falls back rather than failing the route.
-
-    Returns
-    -------
-    aggregate.underwriter.Underwriter
-    """
-    from .config import get_settings
-
-    custom = get_settings().examples_file
-    if not custom:
-        from aggregate import build
-
-        return build
-
-    path = Path(custom)
-    if not path.is_file():
-        warnings.warn(
-            f"AGGAPI_EXAMPLES_FILE={custom!r} not found; using the shipped library",
-            stacklevel=2,
-        )
-        from aggregate import build
-
-        return build
-
-    from aggregate import Underwriter
-
-    uw = Underwriter(databases=(str(path),))
-    uw.load()
-    return uw
 
 
 def _title(key: str) -> str:
@@ -273,7 +234,7 @@ def load_examples(grouping: Grouping = "topic") -> dict:
             f"unknown grouping {grouping!r}; expected one of {Grouping.__args__}"
         )
 
-    uw = _underwriter()
+    uw = get_underwriter()
     frame = _library_only(uw.recipes)
     grouped: dict[str, list[dict]] = {}
 
@@ -325,7 +286,7 @@ def load_heroes() -> dict:
     The result is intersected with the library names so a session-built program
     that happens to carry ``tags{role:hero}`` cannot reach the landing gallery.
     """
-    uw = _underwriter()
+    uw = get_underwriter()
     library = set(_library_only(uw.recipes).index.get_level_values("name"))
     found = uw.discover(tags="role:hero")
     items = []

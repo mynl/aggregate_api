@@ -316,19 +316,16 @@ and the standing REMINDER below about what is worth plotting.
 - [ ] Packaging (was "Plan E"): rebuild the SPA before `uv build` so the wheel
       ships the bundle; confirm `static/*` package-data works.
 - [ ] Auth / rate limiting if this is ever exposed beyond localhost.
-- [ ] **One Underwriter per session.** The api builds through the module
-      singleton (`from aggregate import build as _build_singleton`,
-      `routes/objects.py:80`), and every named declaration a build sees is
-      stored as a `Recipe` under `(kind, name)` with `source='session'`
-      (`aggregate/underwriter.py:1399`). So one shared store accumulates every
-      visitor's declarations for the life of the process: two users building
-      different `port ABC` collide, last writer wins, and the store grows
-      unbounded. Nothing in the app reads a user's stored recipe today, so the
-      collision is currently invisible rather than wrong, and the derived
-      programs of `plan-loss-lab-navigation` all emit self-contained text, so
-      they do not make it worse. Fix is an `Underwriter` per session (or a
-      namespaced store), which also gives the session download an honest scope.
-      Raised 2026-08-05 while reviewing that plan.
+- [ ] **One Underwriter per session.** Raised 2026-08-05, superseded by
+      `dev/plan-session-isolation.md` (see the entry at the end of this file),
+      which carries the design and the measurements. Kept here because the
+      diagnosis is still the shortest statement of the problem: every named
+      declaration a build sees is stored as a `Recipe` under `(kind, name)` with
+      `source='session'`, so one shared store accumulates every visitor's
+      declarations for the life of the process. Two users building different
+      `port ABC` collide, last writer wins, and the store grows unbounded. The
+      fix is a fork per session, which also gives the session download an honest
+      scope.
 - [ ] Expand the example library and DecL completion coverage.
 - [x] **Density full-frame via CsvGrid `{url}` + worker** (follow-up from
       plan-grid). *(Closed — superseded by the faithful power-of-two density
@@ -812,15 +809,17 @@ one version bump each.
       author (the two faces are one statement shape, so it is a typed
       character), and the custom-library work is parked in
       `dev/note-session-isolation.md`.
-- [ ] **One recipe base, many users**: `dev/note-session-isolation.md`, parked
-      2026-08-17 with the design settled and measured but nothing built. Two
-      problems, each needing its own fix: session builds share one recipe base,
-      so one user's declaration is what another user's `agg.NAME` means; and the
-      object cache keys on program text, which no longer determines the object
-      once a reference is in it. Also carries the standalone finding that
-      `--library` re-points the Examples menu only, while both build paths still
-      use the `aggregate.build` singleton, and that `Settings.knowledge_base` has
-      never been read.
+- [ ] **One recipe base, many users**: `dev/plan-session-isolation.md`, the v2
+      rescope of `dev/note-session-isolation.md` (the measured evidence file,
+      parked 2026-08-17). Two problems, each needing its own fix: session builds
+      share one recipe base, so one user's declaration is what another user's
+      `agg.NAME` means; and the object cache keys on program text, which no
+      longer determines the object once a reference is in it. Phase **A0 landed
+      at a109**, the standalone finding the note turned up: `--library` re-pointed
+      the Examples menu only while all three build paths used the
+      `aggregate.build` singleton, and `Settings.knowledge_base` had never been
+      read. Phases A1 to A7 are the session work proper and wait on the library's
+      `Underwriter.fork()` and its reference preview.
 
 ## Raised with `csv-grid` (not fixed here)
 

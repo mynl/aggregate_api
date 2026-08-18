@@ -93,7 +93,7 @@ from fastapi.responses import Response
 
 from lark.exceptions import UnexpectedInput, VisitError
 
-from aggregate import Distortion, Severity, build as _build_singleton
+from aggregate import Distortion, Severity
 from aggregate import charts as agg_charts
 from aggregate import exhibits as agg_exhibits
 from aggregate.constants import FIRST_CLASS_CLASSES, NEAR_FIRST_CLASS
@@ -105,6 +105,7 @@ from ..cache import CacheEntry, ObjectCache, canonicalize_decl, object_id
 from ..bounds import run_allocation, run_envelope, run_pricing_bounds
 from ..capability import can_sharpen, capability_for, narrative_for
 from ..config import Settings, get_settings
+from ..library import get_underwriter
 from ..library_notes import from_library
 from ..pricing import (
     run_calibration, run_evaluation, run_natural_allocation,
@@ -366,7 +367,7 @@ def _run_build(decl: str, log2: int, bs: float):
     # sentinels; pass them through when the request omitted those
     # knobs.
     with _collecting_notes() as notes:
-        obj = _build_singleton(decl, log2=log2, bs=bs)
+        obj = get_underwriter()(decl, log2=log2, bs=bs)
     return obj, notes
 
 
@@ -1171,7 +1172,7 @@ def get_session_models(
             "'raw' = programs exactly as submitted, verbatim (from the object "
             "cache; compact syntax like ranges preserved); 'agg' = canonical, "
             "line-wrapped, dependency-ordered DecL from the underwriter's session "
-            "knowledge (re-loadable)."
+            "recipes (re-loadable)."
         ),
     ),
     cache: ObjectCache = Depends(_get_cache),
@@ -1181,7 +1182,7 @@ def get_session_models(
     Two forms, kept deliberately distinct. ``raw`` walks the api object cache and
     emits each built object's program **verbatim** -- your exact source, compact
     syntax and all (a range ``[10:100:10]`` stays ``[10:100:10]``). ``agg`` reads
-    the shared ``build`` underwriter's knowledge base, keeps the entries it
+    the shared underwriter's recipe base, keeps the entries it
     flagged ``source='session'`` (every in-session ``build(...)``), renders each
     through ``decl_writer.spec_to_decl`` (verbatim fallback) and then
     ``format_program`` for the spread / line-wrapped layout, in dependency order
@@ -1191,8 +1192,8 @@ def get_session_models(
 
     Notes
     -----
-    Scope is **process-global**: both the object cache and the ``build`` singleton
-    are shared across the server process, so on a shared deployment this returns
+    Scope is **process-global**: both the object cache and the underwriter are
+    shared across the server process, so on a shared deployment this returns
     every program built since the last restart, not just one browser's. Fine for a
     personal / local instance; per-session scoping is future work.
     """
@@ -1217,7 +1218,9 @@ def get_session_models(
         # ``recipes`` replaced ``knowledge`` at aggregate 1.0.0a164: one frame,
         # one class, indexed (kind, name), with ``source`` marking where an
         # entry came from. A program built through this api is a session entry.
-        recipes = _build_singleton.recipes
+        # Read through ``get_underwriter`` so this is the same base the builds
+        # registered into, which under ``--library`` it was not until a109.
+        recipes = get_underwriter().recipes
         session = recipes[recipes["source"] == "session"]
         # (kind, name) MultiIndex; order by kind dependency then name.
         rows = sorted(
@@ -2686,7 +2689,7 @@ def _resolve_risk(obj: Any, text: str, settings: Settings):
         raise ValueError(
             f"log2 {hint_log2} exceeds AGGAPI_LOG2_CAP={settings.log2_cap}")
     try:
-        built = _build_singleton(program)
+        built = get_underwriter()(program)
     except Exception as exc:  # noqa: BLE001 -- reported as a 422
         raise ValueError(
             f"{name!r} is not a unit of this object, and does not build: "

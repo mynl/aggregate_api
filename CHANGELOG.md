@@ -4,6 +4,42 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a109
+
+**One recipe base for the process.** Phase A0 of
+`dev/plan-session-isolation.md`, which stands on its own: it fixes a live bug
+and it is the natural parent of every fork the rest of that plan takes.
+
+The api had two recipe bases and did not know it. `examples.py` built a private
+`Underwriter` for the Examples menu whenever `--library` was set, while all
+three build paths went on resolving against `aggregate.build`, the shipped
+singleton: the build itself, the `.agg` download's recipes read, and the
+`_resolve_risk` fragment build. Under the default library the split is
+invisible, because both names reach the same object. Under a custom one it has
+two faces. An entry is browsable in the menu and any program naming one of its
+siblings fails to build, since the base doing the parsing never read the file.
+And the download lists the session rows of a base the menu did not come from.
+
+New `library.py` holds `get_underwriter()`, an `lru_cache(maxsize=1)` over what
+was `examples.py`'s private `_underwriter`, and the four call sites take it.
+`create_app` clears it beside `get_settings`, for the same reason: which library
+it reads is a setting, and a test that just changed that setting would otherwise
+get the base built for the previous case. `tests/test_library.py` is the fixture
+library the plan asked for, two entries with the second naming the first;
+`test_a_program_may_reference_a_library_entry` is the one that fails on a108.
+
+**`AGGAPI_EXAMPLES_FILE` becomes `AGGAPI_LIBRARY`.** The setting stopped being
+about examples the moment it started feeding builds. The old name is accepted
+for one release through an `AliasChoices` and warns once per settings read;
+`--library` sets the new name. `Settings.knowledge_base` is deleted outright:
+the library retired the knowledge base at `1.0.0a164` when `recipes` replaced
+`knowledge`, nothing in `src`, `tests` or `web` ever read the setting, and its
+comment claimed a default (`"test_suite"`) that its value (`"default"`)
+contradicted. `--library` already carries that job under the right name.
+
+Behavior under the default library is unchanged: with nothing set,
+`get_underwriter()` returns `aggregate.build` itself.
+
 ## 1.0.0a108
 
 **The doc defenses come down.** `aggregate` retired the `doc{{{...}}}` clause

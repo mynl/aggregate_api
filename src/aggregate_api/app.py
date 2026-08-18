@@ -33,6 +33,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import Settings, get_settings
 from .cors import install_cors
+from .library import get_underwriter
 from .routes import decl as decl_routes
 from .routes import examples as examples_routes
 from .routes import meta as meta_routes
@@ -64,6 +65,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Drop cached cache+audit singletons -- the next request
     # rebuilds them against the (possibly just-changed) config.
     objects_routes.reset_singletons()
+    # And the underwriter, for the same reason: which library it reads is a
+    # setting, and a test that just changed that setting would otherwise get the
+    # base built for the previous case.
+    get_underwriter.cache_clear()
 
     app = FastAPI(
         title="aggregate api",

@@ -5,9 +5,10 @@ into a running uvicorn process. CLI flags (``--host``, ``--port``,
 ``--reload``, ``--library``, ``--headless``) override the env-var-driven
 config; with no flags the server picks up everything from ``AGGAPI_*``.
 
-``--library`` points the Examples dropdown at an alternate ``.agg``
-instead of ``aggregate``'s shipped ``library.agg``, which is how you
-get a short list to review against.
+``--library`` points the whole process at an alternate ``.agg``
+instead of ``aggregate``'s shipped ``library.agg``: the Examples
+dropdown, every build and the ``.agg`` download all read it. A short
+library is how you get a list to review against.
 
 ``--headless`` drops the web app and serves the api alone, for a deploy
 whose front end is somebody else's.
@@ -50,8 +51,8 @@ def resolve_library(raw: str) -> str:
     Notes
     -----
     Deliberately stricter than the environment variable it feeds.
-    ``examples.py`` warns and falls back to the shipped library when
-    ``AGGAPI_EXAMPLES_FILE`` names a missing file, which is right for a stale
+    ``library.py`` warns and falls back to the shipped library when
+    ``AGGAPI_LIBRARY`` names a missing file, which is right for a stale
     setting on a server. It is wrong for a flag typed on purpose: falling back to
     the full library is the exact outcome someone passing ``--library`` is trying
     to avoid, and a warning scrolling past in a server log is not a refusal. So
@@ -98,10 +99,11 @@ def main() -> None:
         "--library",
         default=None,
         metavar="PATH",
-        help="Load the Examples library from this .agg file instead of "
-             "aggregate's shipped library.agg. A short library makes review "
-             "quicker. Same as AGGAPI_EXAMPLES_FILE, but it fails rather than "
-             "falling back when the path is wrong.",
+        help="Read the recipe base from this .agg file instead of "
+             "aggregate's shipped library.agg: the Examples menu, every build "
+             "and the .agg download. A short library makes review quicker. "
+             "Same as AGGAPI_LIBRARY, but it fails rather than falling back "
+             "when the path is wrong.",
     )
     parser.add_argument(
         "--headless",
@@ -118,7 +120,7 @@ def main() -> None:
     # poked into this process's cached Settings. It also has to happen before the
     # first `get_settings()` below, which caches.
     if args.library is not None:
-        os.environ["AGGAPI_EXAMPLES_FILE"] = resolve_library(args.library)
+        os.environ["AGGAPI_LIBRARY"] = resolve_library(args.library)
     if args.headless:
         os.environ["AGGAPI_SERVE_SPA"] = "0"
 
@@ -130,7 +132,7 @@ def main() -> None:
 
     settings = get_settings()
     if args.library is not None:
-        print(f"examples library: {settings.examples_file}", file=sys.stderr)
+        print(f"library: {settings.library}", file=sys.stderr)
     if not settings.serve_spa:
         print("headless: serving /v1, /docs and /openapi.json; / is not served",
               file=sys.stderr)
