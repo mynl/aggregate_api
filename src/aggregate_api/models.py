@@ -817,3 +817,44 @@ class MetaResponse(BaseModel):
     log2_default: int
     build_timeout_s: float
     cache_max: int
+
+
+class StatusResponse(BaseModel):
+    """The operator's view of the process, behind the private gate.
+
+    Notes
+    -----
+    **The blocks are typed as dicts, and that is a decision rather than a
+    shortcut.** Every other response model here describes a contract the SPA
+    depends on, so ``extra="forbid"`` on a fully declared field set is what
+    stops a typo shipping. This payload has one consumer, the page in
+    ``status_page.html``, which ships in the same commit as the route and reads
+    what it is given. Declaring forty nested models would freeze the shape of
+    an instrument that is expected to grow a panel whenever something new is
+    worth watching, and would put every future panel behind a schema edit for
+    no reader's benefit.
+
+    What *is* declared is the frame the page relies on: the block names, so a
+    panel cannot silently vanish, and ``generated_in_ms``, which is the payload
+    reporting its own cost so a future regression is self evident.
+
+    ``sessions`` and ``key_scope`` are always present. If the session isolation
+    work were ever reverted they would carry ``{"unavailable": "<reason>"}``
+    rather than being dropped, so a missing panel is always a stated fact and
+    never an absent key.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    generated_at: str
+    generated_in_ms: float
+    identity: dict[str, Any]
+    settings: dict[str, Any]
+    sessions: dict[str, Any]
+    cache: dict[str, Any]
+    chart_cache: dict[str, Any]
+    builds: dict[str, Any]
+    key_scope: dict[str, Any]
+    resources: dict[str, Any]
+    gate: dict[str, Any]
+    watch: dict[str, Any]

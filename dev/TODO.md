@@ -828,6 +828,30 @@ one version bump each.
       session with no persistence, `cache_max` still 50, and one uvicorn worker
       is now load bearing.
 
+- [x] **A status page, private by construction**:
+      `dev/plan-site-status-page.md`, phases S0 to S4 at **a112**. An operator's
+      view at `/v1/status/page` behind a JSON contract at `/v1/status`: versions
+      against process start, live session forks, cache and build behavior,
+      whether the a110 shared-against-session key rule is firing correctly, and
+      process resources. Three access layers, the primary one being a Caddy
+      matcher on the public block, because both front doors proxy to
+      `127.0.0.1:8001` and no peer-address test can tell a public visitor from a
+      VPN one. The same fact was a live bug: every audit row recorded
+      `ip = '127.0.0.1'`, now fixed in `net.py`. Two things it deliberately does
+      not do: no metrics export and no controls, section 9 of the plan.
+      **Follow-ups**, neither blocking:
+      - The **audit database has no retention policy** and the page now shows it
+        growing. Section 8 question 4 of the plan is left open on purpose; the
+        number on the page is what should prompt deciding it.
+      - **Capability drift is live**: 16 exhibits and 9 charts registered
+        against the oversight charter's recorded 12 and 8, the difference being
+        the four pricing exhibits and the `kappa` chart from LIB a259 to a263.
+        The charter's state snapshot wants reconciling, which is an oversight
+        task rather than an api one.
+      - The page's key-scope panel will report **programs the previewer refused
+        and the builder then accepted**, verbatim. Any that appear are an
+        upstream ask against `Underwriter.preview`; none have yet.
+
 ## Raised with `csv-grid` (not fixed here)
 
 - [ ] **No way to default the export to raw values.** CsvGrid 3.9.0 builds the

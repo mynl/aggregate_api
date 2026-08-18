@@ -311,6 +311,90 @@ in `/etc/caddy/Caddyfile`:
 Reload: `caddy fmt --overwrite /etc/caddy/Caddyfile` → `sudo caddy validate
 --config /etc/caddy/Caddyfile` → `sudo systemctl restart caddy`.
 
+### Status page (`/v1/status`, private, three layers)
+
+An operator's page at `http://10.8.0.1:19456/v1/status/page` over the VPN,
+backed by JSON at `/v1/status`: versions loaded, live session forks and what
+they built, cache hit rates, build latency off the audit log, whether the
+shared-against-session cache rule is behaving, and process memory and CPU. Read
+only; nothing under `/v1/status` builds, evicts or clears anything.
+
+**The trap that shapes it.** Both front doors `reverse_proxy 127.0.0.1:8001`,
+so `request.client.host` is `127.0.0.1` for a public visitor exactly as much as
+for a VPN one. A gate written as "allow if the peer is loopback" would test
+green on the laptop, test green over the VPN, and publish the page to the whole
+internet. So the gate reads `X-Forwarded-For` instead, and reads the **last**
+element: Caddy appends what it observed, so a visitor who sends
+`X-Forwarded-For: 10.8.0.2` arrives as `10.8.0.2, <their real address>`, and
+reading the first element hands them the page. See `src/aggregate_api/net.py`.
+
+**The single-hop assumption is load bearing.** Reading the last element is
+correct for exactly one trusted proxy, which is this topology. Put a second
+proxy in front (a CDN, another Caddy) and that index is wrong and the gate
+opens. Nothing in the app can detect it: a change to the topology is a change to
+`net.py`.
+
+The same fix corrects a long-standing audit bug. `_client_ip` read the peer and
+nothing else, so every production row recorded `ip = '127.0.0.1'`, the
+`builds_ip` index indexed one value, and `AuditLog.by_ip` could not answer the
+question it exists for. Rows written before a112 are not retroactively
+meaningful.
+
+**Layer one, the Caddy edit (the only one required).** Add the prefix to the
+existing `@apidocs` matcher on the `agg.mynl.com` block, beside `/docs` and
+`/openapi.json`:
+
+```caddyfile
+@apidocs path /docs /docs/* /redoc /redoc/* /openapi.json /v1/status /v1/status/*
+respond @apidocs 404
+```
+
+One prefix covers both routes and every future status route, which is why they
+live under `/v1` together: a matcher with a gap in it is the likeliest way this
+layer fails. The VPN block is untouched.
+
+**Layer two, `AGGAPI_PRIVATE_CIDRS`**, defaulting to
+`127.0.0.0/8, ::1, 10.8.0.0/24`. Set it if the VPN subnet ever moves. A
+malformed entry raises rather than silently allowing less.
+
+**Layer three, off by default.** `AGGAPI_STATUS_REQUIRE_ZONE_HEADER=true` makes
+the app additionally demand `X-Aggapi-Zone: private`, which the VPN block would
+set (`header_up X-Aggapi-Zone private`) and the public block would strip
+(`header_up -X-Aggapi-Zone`). It is the only layer that survives a mistake in
+the CIDR list. Left off because it couples the app to a Caddyfile edit and fails
+closed but confusingly: the page simply stops working.
+
+**Install line.** The resource panel wants `psutil`, an optional extra:
+
+```
+uv sync --extra status
+```
+
+Without it the page still works and falls back to `/proc` and stdlib, and says
+which source it used. Fields that cannot be filled read "unavailable" with the
+reason, never zero.
+
+**Verify, and verify the refusal as well as the answer:**
+
+```bash
+# From Windows on the VPN: the page answers.
+curl -so /dev/null -w '%{http_code}\n' http://10.8.0.1:19456/v1/status     # 200
+
+# From anywhere outside: Caddy 404s before the app is reached.
+curl -so /dev/null -w '%{http_code}\n' https://agg.mynl.com/v1/status      # 404
+
+# And the app refuses on its own, with layer one bypassed. Run on the VPS,
+# forging the header a public visitor's request would carry.
+curl -so /dev/null -w '%{http_code}\n' \
+  -H 'X-Forwarded-For: 203.0.113.7' http://127.0.0.1:8001/v1/status        # 404
+```
+
+The third is the one worth running after any Caddy change: the first two pass
+whenever layer one is intact, and only the third says layer two is still there.
+
+`AGGAPI_STATUS_REFRESH_S` (default 10) sets the page's auto-refresh cadence; the
+page has its own pause control.
+
 ### Rate limiting (public `agg.mynl.com` route only)
 
 The VPN route (`:19456`) is unlimited. The **public** route caps abuse via

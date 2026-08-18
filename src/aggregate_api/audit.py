@@ -32,7 +32,7 @@ from __future__ import annotations
 import sqlite3
 import threading
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ----------------------------------------------------------------------
@@ -169,7 +169,10 @@ class AuditLog:
         Parameters
         ----------
         ip : str
-            Client IP from ``request.client.host`` (or ``"-"`` in tests).
+            Client address from ``routes.objects._client_ip``, which reads the
+            forwarded chain and falls back to the peer. ``"-"`` when neither
+            says anything. Rows written before a112 read the peer alone, so
+            every one of them from behind Caddy says ``127.0.0.1``.
         decl : str
             The raw DecL submitted (not the canonicalized form).
         log2, bs : int|None, float|None
@@ -223,3 +226,166 @@ class AuditLog:
                 (ip, n),
             ).fetchall()
         return [dict(r) for r in rows]
+
+    @staticmethod
+    def _cutoff(window_s: float) -> str:
+        """The ``ts`` value marking the start of a window ``window_s`` back.
+
+        Notes
+        -----
+        A string comparison, not a date function. Every row's ``ts`` is written
+        by :meth:`record_build` as an ISO 8601 UTC timestamp of fixed width, and
+        fixed-width ISO 8601 in one timezone sorts lexicographically in time
+        order, so ``ts >= ?`` is both correct and able to use the ``builds_ts``
+        index. Calling SQLite's ``datetime()`` on the column instead would be
+        correct and would scan the table.
+        """
+        start = datetime.now(timezone.utc) - timedelta(seconds=window_s)
+        return start.isoformat(timespec="milliseconds")
+
+    def window_summaries(self, windows, *, top: int = 5,
+                         slowest: int = 5) -> dict:
+        """Several windows over one connection.
+
+        Parameters
+        ----------
+        windows : iterable of (str, float)
+            Label and window length in seconds, for example
+            ``(('hour', 3600.0), ('day', 86400.0))``.
+        top, slowest : int
+            Passed through to :meth:`window_summary`.
+
+        Returns
+        -------
+        dict
+            Label to summary.
+
+        Notes
+        -----
+        One connection for the lot. Each :meth:`_connect` runs two ``PRAGMA``
+        statements before the first query, which on the status route's two
+        windows was the larger half of the cost: the queries themselves are
+        indexed and answer in microseconds. The connection is still per call
+        rather than held, which is the pattern the rest of this class uses and
+        the reason it is safe across threads.
+        """
+        with closing(self._connect()) as conn:
+            return {label: self.window_summary(window, top=top, slowest=slowest,
+                                               conn=conn)
+                    for label, window in windows}
+
+    def window_summary(self, window_s: float, *, top: int = 5,
+                       slowest: int = 5, conn: sqlite3.Connection | None = None) -> dict:
+        """Everything ``GET /v1/status`` says about builds in one time window.
+
+        Parameters
+        ----------
+        window_s : float
+            How far back to look, in seconds.
+        top : int
+            How many error messages and how many clients to name.
+        slowest : int
+            How many slow builds to list.
+        conn : sqlite3.Connection, optional
+            An open connection to reuse. Given by :meth:`window_summaries` so
+            several windows share one; ``None`` opens and closes its own.
+
+        Returns
+        -------
+        dict
+            ``window_s``, ``total``, ``by_status``, ``by_key_scope``,
+            ``p50_ms``, ``p95_ms``, ``slowest``, ``top_errors``,
+            ``distinct_clients`` and ``top_clients``.
+
+        Notes
+        -----
+        **Seven small queries rather than one Python pass over the table.** The
+        audit database grows without bound by design, so reading rows into
+        Python to count them is a page whose cost rises with the age of the
+        deployment. Every query here is bounded by the window, is served by the
+        ``builds_ts`` index, and carries a ``LIMIT``.
+
+        The percentiles are offsets into an ordered window rather than an
+        interpolated quantile, because SQLite has no percentile function and the
+        alternative is loading the column. Nearest rank on a few thousand rows
+        is the same number to the millisecond the page prints.
+
+        ``by_key_scope`` covers only rows written since a110, which is when the
+        column arrived. Older rows read ``NULL`` and are grouped under
+        ``'unknown'`` rather than silently folded into either scope.
+        """
+        if conn is None:
+            with closing(self._connect()) as owned:
+                return self.window_summary(window_s, top=top, slowest=slowest,
+                                           conn=owned)
+        cutoff = self._cutoff(window_s)
+        total = conn.execute(
+            "SELECT COUNT(*) FROM builds WHERE ts >= ?", (cutoff,)
+        ).fetchone()[0]
+        by_status = {
+            row[0]: row[1] for row in conn.execute(
+                "SELECT status, COUNT(*) FROM builds WHERE ts >= ? "
+                "GROUP BY status ORDER BY COUNT(*) DESC LIMIT 20", (cutoff,))
+        }
+        by_key_scope = {
+            (row[0] or "unknown"): row[1] for row in conn.execute(
+                "SELECT key_scope, COUNT(*) FROM builds WHERE ts >= ? "
+                "GROUP BY key_scope ORDER BY COUNT(*) DESC LIMIT 20", (cutoff,))
+        }
+        percentiles = {}
+        for label, q in (("p50_ms", 0.50), ("p95_ms", 0.95)):
+            if total == 0:
+                percentiles[label] = None
+                continue
+            offset = min(total - 1, max(0, int(round(q * (total - 1)))))
+            percentiles[label] = conn.execute(
+                "SELECT elapsed_ms FROM builds WHERE ts >= ? "
+                "ORDER BY elapsed_ms LIMIT 1 OFFSET ?", (cutoff, offset)
+            ).fetchone()[0]
+        slow = [dict(row) for row in conn.execute(
+            "SELECT ts, elapsed_ms, status, kind, object_id, session_id "
+            "FROM builds WHERE ts >= ? ORDER BY elapsed_ms DESC LIMIT ?",
+            (cutoff, slowest))]
+        errors = [{"error_msg": row[0], "count": row[1]} for row in conn.execute(
+            "SELECT error_msg, COUNT(*) FROM builds WHERE ts >= ? "
+            "AND error_msg IS NOT NULL GROUP BY error_msg "
+            "ORDER BY COUNT(*) DESC LIMIT ?", (cutoff, top))]
+        distinct = conn.execute(
+            "SELECT COUNT(DISTINCT ip) FROM builds WHERE ts >= ?", (cutoff,)
+        ).fetchone()[0]
+        clients = [{"ip": row[0], "count": row[1]} for row in conn.execute(
+            "SELECT ip, COUNT(*) FROM builds WHERE ts >= ? GROUP BY ip "
+            "ORDER BY COUNT(*) DESC LIMIT ?", (cutoff, top))]
+        return {
+            "window_s": window_s,
+            "total": total,
+            "by_status": by_status,
+            "by_key_scope": by_key_scope,
+            **percentiles,
+            "slowest": slow,
+            "top_errors": errors,
+            "distinct_clients": distinct,
+            "top_clients": clients,
+        }
+
+    def size_bytes(self) -> int | None:
+        """Bytes on disk for the database and its write-ahead log, or ``None``.
+
+        Notes
+        -----
+        The WAL is counted because it is real disk and can be the larger of the
+        two between checkpoints, and the page exists partly so that the audit
+        database's growth becomes obvious: section 8 question 4 of
+        ``dev/plan-site-status-page.md`` is the retention decision this number
+        is meant to prompt.
+        """
+        total = 0
+        seen = False
+        for suffix in ("", "-wal", "-shm"):
+            path = Path(str(self.db_path) + suffix)
+            try:
+                total += path.stat().st_size
+                seen = True
+            except OSError:
+                continue
+        return total if seen else None

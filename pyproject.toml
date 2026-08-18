@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aggregate_api"
-version = "1.0.0a111"
+version = "1.0.0a112"
 description = "aggregate Loss Lab (aLL): FastAPI service and single-page web app for the aggregate actuarial library."
 readme = "README.md"
 authors = [
@@ -67,6 +67,16 @@ dev = [
     "httpx>=0.27",
     "ruff>=0.6",
 ]
+# The resource block of GET /v1/status. An extra rather than a runtime
+# dependency so the lean install is untouched and a deployment opts in with
+# `uv sync --extra status`; `resources.py` carries a stdlib fallback and says
+# which source it used, so the page works either way.
+#
+# Worth declaring even though psutil is usually already present: it arrives
+# transitively through ipython, which aggregate pulls, so the import succeeds
+# by accident rather than by intent and is one unrelated dependency change away
+# from not. That is what an explicit extra is for.
+status = ["psutil>=5.9"]
 
 [project.scripts]
 aggregate-api = "aggregate_api.__main__:main"
@@ -110,7 +120,13 @@ packages = ["aggregate_api", "aggregate_api.routes"]
 [tool.setuptools.package-data]
 # The built SPA bundle (index.html + assets/) is dropped here by the web
 # build and is gitignored; the committed icons/webmanifest ship too.
-aggregate_api = ["static/*"]
+#
+# `status_page.html` is the operator's page, served by routes/status.py straight
+# out of the package. Deliberately not under `static/`: the web build wipes that
+# directory on every run, so a copy there would be deleted by the next deploy,
+# and a status page whose delivery depends on the pipeline it reports on cannot
+# report on that pipeline failing.
+aggregate_api = ["static/*", "status_page.html"]
 
 [tool.ruff]
 line-length = 100

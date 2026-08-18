@@ -30,6 +30,8 @@ from pathlib import Path
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .net import DEFAULT_PRIVATE_CIDRS, parse_cidrs
+
 
 class Settings(BaseSettings):
     """Process-wide configuration.
@@ -174,6 +176,39 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------
+    # The status page
+    # ------------------------------------------------------------------
+    # Which client addresses may reach /v1/status and /v1/status/page. Loopback,
+    # IPv6 loopback, and the VPN subnet from human-hints.md.
+    #
+    # A setting rather than a constant because the VPN subnet is a deployment
+    # fact, and the list is the second of three layers rather than the only one:
+    # the public Caddy block 404s the /v1/status prefix before the app is
+    # reached at all. See net.py for why this cannot be written as "allow if the
+    # peer is loopback" (both front doors proxy to 127.0.0.1, so that rule would
+    # publish the page) and for the single-hop assumption the gate rests on.
+    #
+    # ``validation_alias`` so the env var stays AGGAPI_PRIVATE_CIDRS rather than
+    # the auto-derived AGGAPI_PRIVATE_CIDRS_RAW, matching the CORS field above.
+    private_cidrs_raw: str = Field(
+        default=DEFAULT_PRIVATE_CIDRS,
+        validation_alias="AGGAPI_PRIVATE_CIDRS",
+    )
+
+    # Layer three: demand X-Aggapi-Zone: private, which the VPN Caddy block sets
+    # and the public block strips. Off by default (author ruling, 2026-08-18):
+    # layer two is sufficient, and this one couples the app to a Caddyfile edit
+    # in a way that fails closed but confusingly, the page simply stopping. It
+    # ships built and documented because it is the only layer that survives a
+    # mistake in the CIDR list, so turning it on is a setting rather than a
+    # change.
+    status_require_zone_header: bool = False
+
+    # Seconds between the page's automatic refreshes. The page carries a pause
+    # control, so this is the starting cadence rather than a policy.
+    status_refresh_s: float = 10.0
+
+    # ------------------------------------------------------------------
     # Derived properties
     # ------------------------------------------------------------------
     @property
@@ -183,6 +218,27 @@ class Settings(BaseSettings):
         if not raw:
             return []
         return [o.strip() for o in raw.split(",") if o.strip()]
+
+    @property
+    def private_cidrs(self) -> tuple:
+        """Parse ``AGGAPI_PRIVATE_CIDRS`` into networks.
+
+        Raises
+        ------
+        ValueError
+            On a malformed entry, from :func:`aggregate_api.net.parse_cidrs`.
+            Loud on purpose: a typo here is a gate that allows the wrong set,
+            and a route that refuses to answer says so more clearly than a page
+            that has quietly stopped working.
+
+        Notes
+        -----
+        Parsed per read rather than cached on the instance, because ``Settings``
+        is itself the cached singleton and the list is a handful of networks. A
+        cached property here would only add a second place for a stale value to
+        live.
+        """
+        return parse_cidrs(self.private_cidrs_raw)
 
 
 @lru_cache(maxsize=1)

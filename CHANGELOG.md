@@ -4,6 +4,133 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a112
+
+**An operator's page, private by three independent mechanisms, and the audit log
+finally records who asked.** `dev/plan-site-status-page.md`, phases S0 to S4,
+executed as one bump because none of them ships alone: instrumentation with
+nothing reading it, or a page with no route behind it, is not a working thing.
+
+**The trap first, because it is the one that would have been arrived at
+independently.** Both Caddy front doors `reverse_proxy 127.0.0.1:8001`, so
+`request.client.host` is loopback for a visitor from the public internet exactly
+as much as for one on the VPN. A gate written as "allow if the peer is loopback"
+would test green on the laptop, test green over the VPN, and publish the page to
+the whole internet. The gate reads `X-Forwarded-For` instead and reads the
+**last** element: Caddy appends what it observed, so a visitor who sends
+`X-Forwarded-For: 10.8.0.2` arrives as `10.8.0.2, <their real address>`, and
+reading the first element hands them the page. `net.py` holds the rule, its
+module docstring holds the reasoning, and `tests/test_status.py` holds eight
+cases including that exact forgery. Reading the last element is correct for
+exactly one trusted proxy, which is a deployment invariant and is written down in
+three places.
+
+**The same fact was already a bug.** `_client_ip` read the peer and nothing else,
+so every production row in the audit log recorded `ip = '127.0.0.1'`, the
+`builds_ip` index indexed one value, and `AuditLog.by_ip` could not answer the
+question it exists for. It delegates to `net.client_address` now. Rows written
+before this release are not retroactively meaningful, and the by-address panel
+on the new page is the first time that breakdown says anything.
+
+**Three layers, none trusted alone.** The public Caddy block gains `/v1/status*`
+on the matcher that already 404s `/docs`, which is the layer that needs no trust
+in application logic at all. `require_private` is the app's own gate, deny by
+default, refusing with 404 rather than 403 so the page's existence is not
+advertised, and logging the refusal because one on a correctly configured box
+means something changed. `AGGAPI_STATUS_REQUIRE_ZONE_HEADER` is built,
+documented and off: it is the only layer that survives a mistake in the CIDR
+list, so turning it on is a setting rather than a change. `AGGAPI_PRIVATE_CIDRS`
+defaults to `127.0.0.0/8, ::1, 10.8.0.0/24`.
+
+**What the page shows.** Versions loaded beside the process start time, which is
+the standing `importlib.metadata` trap made visible at a glance rather than after
+an hour. Live session forks with what each declared and built, and eviction split
+by cause, because expiry, capacity and an explicit drop mean different things to
+whoever is asking why sessions keep vanishing. The object cache in LRU order, so
+the table answers "what will I lose next" rather than "what is oldest". Build
+latency and error mix over the last hour and the last day, queried in SQL against
+the existing audit table. Process memory and CPU. And the panel the plan calls
+its strongest argument, below.
+
+**Whether the a110 cache rule is behaving.** Session isolation phase A3 asked for
+shared keys to be counted against session-qualified ones, in these words: "a
+qualified rate near 100 percent in a demo would mean the rule is misfiring." a110
+landed the audit column and neither the counters nor any way to read them. They
+are here, split by the two reasons, which mean opposite things.
+`session_reference` is the rule working. `preview_unavailable` is the previewer
+declining to speak about a program, which is usually a program about to fail its
+build and is occasionally the previewer refusing what the builder then accepts:
+there a shareable object took a private slot and a room pays a build each. That
+narrow class, previewed `None` and built anyway, is the one thing this page keeps
+verbatim, because it is an upstream ask against `Underwriter.preview` and an ask
+needs the program rather than a paraphrase.
+
+**The plan was drafted against session isolation v1 and has been corrected.**
+That plan shipped as v2 and dropped content addressing, so the draft's
+"key derivation health" panel described a fallback path that does not exist. It
+was rewritten against what a110 actually landed before any code was written; the
+plan records the finding in its header and nine execution divergences in its
+section 6.5.
+
+**Retention, stated as an invariant rather than as limits.** The status subsystem
+persists nothing and holds nothing unbounded: counters are plain integers, text
+lives in `collections.deque` with `maxlen` set, and everything else is a query
+against something already bounded. Restarting clears all of it by construction.
+Fifty programs at two thousand characters, twenty refusals, five hundred timing
+samples, roughly 250 kB. The audit log on disk is deliberately untouched, and its
+retention stays an open question the page now makes visible by showing the file
+growing.
+
+**Session ids never travel in full.** An id is a namespace and not a security
+boundary, so anyone holding one gets that session's objects. The cut happens
+server side rather than in the page, in the three places one can reach the wire,
+because truncating in the page would leave the JSON carrying a list of other
+people's namespaces for anyone who saved it. The timestamp survives whole and
+eight characters of the uuid go with it, which correlates with a log line and
+does not impersonate.
+
+**The page is one file and does not go through Vite.** `scripts/build-web.ps1`
+wipes `static/` on every run, so a copy there would be deleted by the next
+deploy, and a status page whose delivery depends on the pipeline it reports on
+cannot report on that pipeline failing. It is `status_page.html` inside the
+package, inline CSS and JS, no imports, served by an explicit route: the same
+argument the `_ASSETS` allow-list in `routes/meta.py` already makes. Dense,
+monospace, tables rather than charts, auto refresh with a pause control.
+
+**Two things measured rather than assumed.** Object sizes are arithmetic on
+`log2` and labeled estimated, because `sys.getsizeof` would walk into numpy and
+pandas and, worse, would materialize the lazy frames it was trying to measure, on
+a timer. And the route does not load the recipe library in order to report on it:
+it reads `get_underwriter.cache_info()` and says the library is not loaded yet,
+which on a cold process is true and is cheaper than the two seconds the naive
+version would have spent measuring its own request. The whole payload costs 25 to
+40 ms warm on the Windows development box, of which `psutil` is about 17, and
+`generated_in_ms` rides in the payload so a regression of a different order is
+self evident.
+
+**`psutil` is an optional extra**, `uv sync --extra status`, with a stdlib
+fallback over `/proc` that covers the Linux VPS. A field that cannot be filled
+reads "unavailable" with the reason, never zero, because a resource panel
+reporting zero resident bytes is worse than one reporting nothing. Worth
+declaring even though `psutil` already arrives transitively through `ipython`:
+that is an accident one unrelated dependency change away from not holding, and
+the tests force the fallback path because nothing else ever would.
+
+**The capability drift panel earned its place on the first request.** It compares
+the live exhibit and chart registry counts against the numbers the oversight
+charter records, expecting a future library bump to make it interesting. It is
+interesting now: 16 exhibits and 9 charts against the charter's 12 and 8, the
+difference being the four pricing exhibits and the `kappa` chart the library
+registered at a259 to a263. Reconciling the charter is an oversight task, not
+this one.
+
+**Deployment.** One Caddy edit on the public block, documented in
+`human-hints.md` with the topology reasoning, the single-hop assumption, the
+install line, and a three-command verification that checks the refusal as well as
+the answer. The third command is the one worth running after any Caddy change:
+the first two pass whenever layer one is intact, and only the third says layer
+two is still there.
+
 ## 1.0.0a111
 
 **The residue: an expiry that says what it lost, a sharpen that leaves other

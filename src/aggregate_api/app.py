@@ -31,6 +31,7 @@ from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from . import resources, status
 from .config import Settings, get_settings
 from .cors import install_cors
 from .library import get_underwriter
@@ -38,6 +39,7 @@ from .routes import decl as decl_routes
 from .routes import examples as examples_routes
 from .routes import meta as meta_routes
 from .routes import objects as objects_routes
+from .routes import status as status_routes
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -69,6 +71,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # setting, and a test that just changed that setting would otherwise get the
     # base built for the previous case.
     get_underwriter.cache_clear()
+    # Process-lifetime facts for GET /v1/status. Both are idempotent and both
+    # are here rather than at import time, because a module-level record would
+    # be made when the first import happens rather than when the process starts
+    # serving, and the second is the number an operator reads uptime against.
+    # ``status.mark_started`` records once per process even though tests build
+    # many apps: see its Notes for why an uptime that resets under a test client
+    # would make every "since process start" label on the page a lie.
+    status.mark_started()
+    resources.seed()
 
     app = FastAPI(
         title="aggregate api",
@@ -103,6 +114,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(objects_routes.router, prefix="/v1", tags=["objects"])
     app.include_router(decl_routes.router, prefix="/v1", tags=["decl"])
     app.include_router(examples_routes.router, prefix="/v1", tags=["examples"])
+    # The operator's page. Mounted with the rest, and ahead of the static mount
+    # below, which is why it lives under /v1: an unmatched top-level path falls
+    # through to StaticFiles(html=True) and would be answered with index.html
+    # rather than a 404, so a top-level /status could be shadowed by a
+    # registration-order mistake and would fail by serving the SPA. Its own
+    # routes are include_in_schema=False and behind require_private; the public
+    # Caddy block 404s the whole /v1/status prefix before any of that is
+    # reached. See routes/status.py.
+    app.include_router(status_routes.router, prefix="/v1", tags=["status"])
 
     # Static-file mount for the SPA (Plan D). Conditional because
     # the api ships independently of the web build; if the web

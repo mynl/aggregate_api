@@ -26,9 +26,12 @@ work; this module answers only "which library", and answers it once.
 
 from __future__ import annotations
 
+import time
 import warnings
 from functools import lru_cache
 from pathlib import Path
+
+from . import status
 
 
 @lru_cache(maxsize=1)
@@ -52,27 +55,40 @@ def get_underwriter():
     flag is deliberately stricter and exits instead: see
     :func:`aggregate_api.__main__.resolve_library` for why the asymmetry is
     intended rather than an oversight.
+
+    **The load is explicit and timed**, for ``GET /v1/status``. ``load()`` with
+    no argument is idempotent (it returns an empty list once the configured
+    request has been read), so calling it here costs nothing when the base is
+    already loaded and moves nothing when it is not: every caller reaches this
+    base through ``fork()``, which loads the parent itself. What it buys is a
+    number. The recorded figure is what *this* call paid, so a process reading
+    the shipped library reports a near-zero time, correctly: the read happened
+    when ``aggregate`` was imported, not here. A custom ``.agg`` reports the
+    real cost of reading it, which is the case where the number is worth
+    knowing.
     """
     from .config import get_settings
 
+    started = time.monotonic()
     custom = get_settings().library
     if not custom:
         from aggregate import build
 
-        return build
+        uw = build
+    else:
+        path = Path(custom)
+        if not path.is_file():
+            warnings.warn(
+                f"AGGAPI_LIBRARY={custom!r} not found; using the shipped library",
+                stacklevel=2,
+            )
+            from aggregate import build
 
-    path = Path(custom)
-    if not path.is_file():
-        warnings.warn(
-            f"AGGAPI_LIBRARY={custom!r} not found; using the shipped library",
-            stacklevel=2,
-        )
-        from aggregate import build
+            uw = build
+        else:
+            from aggregate import Underwriter
 
-        return build
-
-    from aggregate import Underwriter
-
-    uw = Underwriter(databases=(str(path),))
+            uw = Underwriter(databases=(str(path),))
     uw.load()
+    status.record_library_load((time.monotonic() - started) * 1000)
     return uw

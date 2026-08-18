@@ -198,13 +198,27 @@ class ObjectCache:
         self._max = max_entries
         self._store: OrderedDict[str, CacheEntry] = OrderedDict()
         self._lock = threading.Lock()
+        # Instrumentation for GET /v1/status. Incremented under the same lock
+        # that guards the store, so a reading of them is consistent with the
+        # entry list read in the same call and no second lock is introduced.
+        # They count this instance, and ``_get_cache`` replaces the instance
+        # when ``cache_max`` changes, so the page reports them against the
+        # process start time and that is honest for every deployment which does
+        # not edit its config while running.
+        self.hits = 0
+        self.misses = 0
+        self.puts = 0
+        self.evictions = 0
+        self.deletes = 0
 
     def get(self, oid: str) -> CacheEntry | None:
         """Return the cached entry for ``oid`` (moving it to MRU) or None."""
         with self._lock:
             entry = self._store.get(oid)
             if entry is None:
+                self.misses += 1
                 return None
+            self.hits += 1
             # ``move_to_end`` is the OrderedDict primitive that makes
             # LRU work; entries closest to the front are evicted first.
             self._store.move_to_end(oid)
@@ -213,6 +227,7 @@ class ObjectCache:
     def put(self, oid: str, entry: CacheEntry) -> None:
         """Insert or refresh ``entry`` under ``oid``, evicting LRU if full."""
         with self._lock:
+            self.puts += 1
             if oid in self._store:
                 self._store.move_to_end(oid)
                 self._store[oid] = entry
@@ -221,11 +236,15 @@ class ObjectCache:
             while len(self._store) > self._max:
                 # ``last=False`` pops the *least* recently used (front).
                 self._store.popitem(last=False)
+                self.evictions += 1
 
     def delete(self, oid: str) -> bool:
         """Remove ``oid`` from the cache; return True if it was present."""
         with self._lock:
-            return self._store.pop(oid, None) is not None
+            dropped = self._store.pop(oid, None) is not None
+            if dropped:
+                self.deletes += 1
+            return dropped
 
     def list(self) -> list[CacheEntry]:
         """Return a snapshot of cache contents, MRU last.
@@ -235,6 +254,24 @@ class ObjectCache:
         """
         with self._lock:
             return list(self._store.values())
+
+    def items(self) -> list[tuple[str, CacheEntry]]:
+        """Snapshot of ``(id, entry)`` pairs, **LRU first**.
+
+        Notes
+        -----
+        LRU first because the caller that wants ids as well as entries is
+        ``GET /v1/status``, whose cache table answers "what will I lose next",
+        and the front of the ``OrderedDict`` is exactly that. :meth:`list`
+        keeps its MRU-last ordering, which is what its callers already read.
+
+        Exists so callers stop reaching into ``_store`` directly, which two of
+        them in ``routes/objects.py`` do, unlocked. The pairs are a copy, so
+        iterating them is safe without the lock; the entries themselves are the
+        live objects, as :meth:`list` also returns.
+        """
+        with self._lock:
+            return list(self._store.items())
 
     def clear(self) -> None:
         """Drop every entry. Used by tests."""
@@ -248,3 +285,35 @@ class ObjectCache:
     def __len__(self) -> int:
         with self._lock:
             return len(self._store)
+
+    def stats(self) -> dict:
+        """Counters and occupancy, read in one critical section.
+
+        Returns
+        -------
+        dict
+            ``entries``, ``max``, ``hits``, ``misses``, ``hit_rate``, ``puts``,
+            ``evictions`` and ``deletes``. ``hit_rate`` is ``None`` rather than
+            zero before the first lookup, because "no requests yet" and "every
+            request missed" are different facts and a status page that renders
+            them the same way is misreporting a cold start as a failure.
+
+        Notes
+        -----
+        One call rather than eight attribute reads so the numbers a caller
+        prints together were true together. An eviction landing between two
+        reads would otherwise show a hit count that does not reconcile with the
+        entry list.
+        """
+        with self._lock:
+            looks = self.hits + self.misses
+            return {
+                "entries": len(self._store),
+                "max": self._max,
+                "hits": self.hits,
+                "misses": self.misses,
+                "hit_rate": round(self.hits / looks, 4) if looks else None,
+                "puts": self.puts,
+                "evictions": self.evictions,
+                "deletes": self.deletes,
+            }

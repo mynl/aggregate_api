@@ -46,6 +46,8 @@ import re
 import threading
 import time
 from collections import OrderedDict
+from dataclasses import dataclass
+from datetime import datetime, timezone
 
 # The header a browser sends its session id in. Read in ``routes/objects.py``
 # and, because a download cannot set headers, accepted in the query string
@@ -93,6 +95,44 @@ def normalize_session_id(raw: str | None) -> str:
     return candidate
 
 
+@dataclass
+class SessionEntry:
+    """One session's fork and what the registry knows about it.
+
+    A dataclass rather than the ``(fork, touched)`` tuple this started as,
+    because ``GET /v1/status`` reports a row per live session and a tuple grows
+    a field at a time until nobody remembers the order. Everything here is
+    written by the registry under its lock and read through
+    :meth:`SessionRegistry.rows`.
+
+    Attributes
+    ----------
+    fork : aggregate.underwriter.Underwriter
+        The session's own recipe base.
+    created_at : datetime
+        Wall clock, for display. Not used for eviction: see ``touched``.
+    created : float
+        Monotonic seconds at creation, for the age.
+    touched : float
+        Monotonic seconds at the last access, which is what the TTL reads. A
+        monotonic clock rather than the wall clock, because a machine adjusting
+        its time should not expire or resurrect a session.
+    requests : int
+        How many times this session asked the registry for its base.
+    builds : int
+        How many objects this session caused to be built, meaning cache misses
+        that produced one. A session with many requests and no builds is a
+        reader, and the pair says more than either number alone.
+    """
+
+    fork: object
+    created_at: datetime
+    created: float
+    touched: float
+    requests: int = 0
+    builds: int = 0
+
+
 class SessionRegistry:
     """Session id to forked ``Underwriter``, bounded LRU with a TTL.
 
@@ -126,13 +166,21 @@ class SessionRegistry:
     def __init__(self, max_sessions: int = 500, ttl_s: float = 28800.0) -> None:
         self._max = max_sessions
         self._ttl = ttl_s
-        # id -> (fork, last-touched monotonic seconds).
-        self._store: OrderedDict[str, tuple] = OrderedDict()
+        self._store: OrderedDict[str, SessionEntry] = OrderedDict()
         self._lock = threading.Lock()
-        # Counters for the audit and for anything reporting on the process:
-        # how many forks were taken, and how many were dropped again.
+        # Counters for the audit and for anything reporting on the process.
+        # Dropped forks are split by cause because the three causes mean
+        # different things to an operator: expiry is the TTL working, eviction
+        # is the capacity being too small for the room, and an explicit drop is
+        # somebody asking. A single total cannot tell them apart, and "sessions
+        # keep vanishing" is exactly the report where the difference is the
+        # answer. ``forks_dropped`` stays as the total, since it shipped at
+        # a110 under that meaning.
         self.forks_taken = 0
+        self.forks_expired = 0
+        self.forks_evicted = 0
         self.forks_dropped = 0
+        self.high_water = 0
 
     def underwriter(self, session_id: str, parent):
         """Return this session's fork of ``parent``, taking one if needed.
@@ -156,9 +204,10 @@ class SessionRegistry:
             self._expire(now)
             found = self._store.get(session_id)
             if found is not None:
-                self._store[session_id] = (found[0], now)
+                found.touched = now
+                found.requests += 1
                 self._store.move_to_end(session_id)
-                return found[0]
+                return found.fork
         # The fork is taken outside the lock: it is microseconds, but it runs
         # library code, and holding a registry-wide lock across a call into
         # another package is how a deadlock gets written. Two threads racing
@@ -168,12 +217,18 @@ class SessionRegistry:
         with self._lock:
             found = self._store.get(session_id)
             if found is not None:
+                found.touched = now
+                found.requests += 1
                 self._store.move_to_end(session_id)
-                return found[0]
-            self._store[session_id] = (fork, now)
+                return found.fork
+            self._store[session_id] = SessionEntry(
+                fork=fork, created_at=datetime.now(timezone.utc),
+                created=now, touched=now, requests=1)
             self.forks_taken += 1
+            self.high_water = max(self.high_water, len(self._store))
             while len(self._store) > self._max:
                 self._store.popitem(last=False)
+                self.forks_evicted += 1
                 self.forks_dropped += 1
         return fork
 
@@ -186,10 +241,11 @@ class SessionRegistry:
         if self._ttl <= 0:
             return
         while self._store:
-            session_id, (_, touched) = next(iter(self._store.items()))
-            if now - touched <= self._ttl:
+            session_id, entry = next(iter(self._store.items()))
+            if now - entry.touched <= self._ttl:
                 return
             self._store.pop(session_id)
+            self.forks_expired += 1
             self.forks_dropped += 1
 
     def drop(self, session_id: str) -> bool:
@@ -210,6 +266,19 @@ class SessionRegistry:
         with self._lock:
             return list(self._store.keys())
 
+    def record_build(self, session_id: str) -> None:
+        """Note that ``session_id`` caused one object to be built.
+
+        Called on a cache miss that produced an object. A no-op for a session
+        whose fork has since been evicted, because the counter lives on the
+        entry and there is nothing left to count against. The audit log holds
+        that build either way, which is where a permanent record belongs.
+        """
+        with self._lock:
+            entry = self._store.get(session_id)
+            if entry is not None:
+                entry.builds += 1
+
     def __contains__(self, session_id: str) -> bool:
         with self._lock:
             return session_id in self._store
@@ -217,3 +286,68 @@ class SessionRegistry:
     def __len__(self) -> int:
         with self._lock:
             return len(self._store)
+
+    def stats(self) -> dict:
+        """Aggregate counters and the configured bounds, in one critical section."""
+        with self._lock:
+            return {
+                "live": len(self._store),
+                "max": self._max,
+                "ttl_s": self._ttl,
+                "high_water": self.high_water,
+                "taken": self.forks_taken,
+                "dropped": self.forks_dropped,
+                "expired": self.forks_expired,
+                "evicted": self.forks_evicted,
+            }
+
+    def rows(self, baseline: int = 0) -> list[dict]:
+        """One row per live session, LRU first, for ``GET /v1/status``.
+
+        Parameters
+        ----------
+        baseline : int
+            The reference underwriter's recipe count, subtracted from each
+            fork's so the column reads "what this session declared" rather than
+            "the library plus what this session declared", where the second
+            number is the same few hundred on every row and says nothing.
+
+        Returns
+        -------
+        list of dict
+            ``session_id``, ``created_at``, ``age_s``, ``idle_s``, ``requests``,
+            ``builds`` and ``recipes``, LRU first, so what is about to be
+            expired reads first. The id travels in full: truncating it is the
+            page's job, since the payload is already behind the private gate and
+            a machine reader may want to correlate it with an audit row.
+
+        Notes
+        -----
+        ``len(fork._recipes)`` is a private attribute of a stable-tier library
+        class, taken deliberately and recorded in the oversight charter's
+        tolerated list (author ruling, 2026-08-18). The public route is
+        ``Underwriter.recipes``, which builds a pandas frame per call, and this
+        page would call it once per live session on every refresh: hundreds of
+        frames every ten seconds to report hundreds of integers. The read is
+        guarded, so a rename upstream costs one field reading ``None`` rather
+        than a broken route.
+        """
+        now = time.monotonic()
+        with self._lock:
+            entries = list(self._store.items())
+        rows = []
+        for session_id, entry in entries:
+            try:
+                recipes = len(entry.fork._recipes) - baseline
+            except (AttributeError, TypeError):
+                recipes = None
+            rows.append({
+                "session_id": session_id,
+                "created_at": entry.created_at.isoformat(timespec="seconds"),
+                "age_s": round(now - entry.created, 1),
+                "idle_s": round(now - entry.touched, 1),
+                "requests": entry.requests,
+                "builds": entry.builds,
+                "recipes": recipes,
+            })
+        return rows

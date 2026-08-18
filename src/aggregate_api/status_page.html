@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>aggregate api status</title>
+<!--
+  The operator's page. One self-contained file: inline CSS, inline JS, no
+  imports, no build step, no network beyond the one fetch of /v1/status.
+
+  It does not go through Vite and does not live in static/, deliberately. The
+  web build wipes static/ on every run, so a copy there would be deleted by the
+  next deploy, and a status page whose delivery depends on the pipeline it
+  reports on cannot report on that pipeline failing. Served instead by
+  routes/status.py, straight out of the package.
+
+  An instrument, not a dashboard: tables rather than charts, monospace numbers,
+  and every count labeled with the window or the process start it is measured
+  against. See dev/plan-site-status-page.md.
+-->
+<style>
+:root {
+    --ink: #16191d;
+    --dim: #5c6570;
+    --faint: #8b949e;
+    --rule: #dfe3e8;
+    --panel: #ffffff;
+    --ground: #f5f6f8;
+    --accent: #0d6efd;
+    --warn: #b54708;
+    --bad: #b42318;
+    --good: #027a48;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --ink: #e6e9ee; --dim: #9aa4b0; --faint: #6b747f; --rule: #2b3138;
+        --panel: #171b20; --ground: #0e1114; --accent: #6ea8fe;
+        --warn: #f6a561; --bad: #f27a72; --good: #6dd3a1;
+    }
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 13px/1.45 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+}
+code, .num, td.num, .mono {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+    font-variant-numeric: tabular-nums;
+}
+header {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline;
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--rule);
+}
+header h1 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: .01em; }
+header .meta { color: var(--dim); font-size: 12px; }
+header .spacer { flex: 1 1 auto; }
+button {
+    font: inherit; color: var(--ink); background: var(--ground);
+    border: 1px solid var(--rule); border-radius: 4px;
+    padding: 3px 10px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); color: var(--accent); }
+main { padding: 14px 16px 60px; display: grid; gap: 14px; }
+section {
+    background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
+    padding: 10px 12px 12px;
+}
+section > h2 {
+    margin: 0 0 8px; font-size: 12px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .06em; color: var(--dim);
+}
+section > h2 .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 2px 18px; }
+.kv div { display: flex; justify-content: space-between; gap: 10px; padding: 1px 0; border-bottom: 1px dotted var(--rule); }
+.kv span:first-child { color: var(--dim); }
+.kv span:last-child {
+    font-family: ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums;
+    text-align: right; overflow-wrap: anywhere;
+}
+table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+th, td { text-align: left; padding: 3px 8px 3px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { color: var(--dim); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+td.num, th.num { text-align: right; font-family: ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+tbody tr:hover { background: var(--ground); }
+.prog {
+    font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+    white-space: pre-wrap; overflow-wrap: anywhere; cursor: pointer;
+    max-height: 1.5em; overflow: hidden; color: var(--ink);
+}
+.prog.open { max-height: none; }
+.prog::after { content: " \25BE"; color: var(--faint); }
+.prog.open::after { content: " \25B4"; }
+.empty { color: var(--faint); font-style: italic; }
+.warn { color: var(--warn); }
+.bad { color: var(--bad); }
+.good { color: var(--good); }
+.pill { border: 1px solid currentColor; border-radius: 10px; padding: 0 6px; font-size: 11px; }
+#error { color: var(--bad); padding: 10px 16px; }
+.cols2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+</style>
+
+<header>
+    <h1>aggregate api status</h1>
+    <span class="meta" id="ident">loading</span>
+    <span class="spacer"></span>
+    <span class="meta" id="cost"></span>
+    <span class="meta" id="tick"></span>
+    <button id="pause">pause</button>
+    <button id="now">refresh</button>
+</header>
+<div id="error" hidden></div>
+<main id="main"></main>
+
+<script>
+'use strict';
+
+// Substituted by routes/status.py from AGGAPI_STATUS_REFRESH_S. Inlined rather
+// than fetched so the page's first render costs one round trip, not two.
+const REFRESH_MS = Number('__REFRESH_MS__') || 10000;
+
+// '..' from /v1/status/page resolves to /v1/status. Derived from the current
+// location rather than hardcoded so the page works unchanged behind a prefix.
+const ENDPOINT = new URL('../status', location.href).pathname;
+
+let timer = null;
+let paused = false;
+let nextAt = 0;
+
+// ---------------------------------------------------------------- formatting
+const NBSP = ' ';
+
+function num(v, digits) {
+    if (v === null || v === undefined) return '–';
+    if (typeof v !== 'number') return String(v);
+    return v.toLocaleString(undefined, {
+        minimumFractionDigits: digits || 0, maximumFractionDigits: digits || 0,
+    });
+}
+
+function bytes(v) {
+    if (v === null || v === undefined) return '–';
+    const units = ['B', 'kB', 'MB', 'GB', 'TB'];
+    let n = v, i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i += 1; }
+    return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)}${NBSP}${units[i]}`;
+}
+
+function secs(v) {
+    if (v === null || v === undefined) return '–';
+    if (v < 90) return `${v.toFixed(0)}${NBSP}s`;
+    if (v < 5400) return `${(v / 60).toFixed(1)}${NBSP}min`;
+    if (v < 172800) return `${(v / 3600).toFixed(1)}${NBSP}h`;
+    return `${(v / 86400).toFixed(1)}${NBSP}d`;
+}
+
+function rate(v) {
+    if (v === null || v === undefined) return '–';
+    return `${(v * 100).toFixed(1)}%`;
+}
+
+function ms(v) {
+    if (v === null || v === undefined) return '–';
+    return `${num(v, v < 10 ? 2 : 0)}${NBSP}ms`;
+}
+
+/**
+ * A session id, as it arrived.
+ *
+ * Already shortened: `status.short_session_id` cuts it server side, before the
+ * payload is built. The id is a namespace and not a security boundary, so
+ * anyone holding one gets that session's objects, and truncating here instead
+ * would leave the JSON carrying full ids for anyone who saved it. This is a
+ * label rather than a formatter, kept so the intent is visible at the call
+ * sites that print one.
+ */
+function sess(id) {
+    return id || '–';
+}
+
+/**
+ * A timestamp, cut to what an operator is reading it for.
+ *
+ * The payload carries full ISO 8601 in UTC, which is right for the contract and
+ * far too wide for a table column: five of them wrap and the row doubles in
+ * height. Today's stamps show the time alone, older ones gain the date, and the
+ * full value stays on the element's title so it is one hover away.
+ */
+function when(iso) {
+    if (!iso) return '–';
+    const at = new Date(iso);
+    if (Number.isNaN(at.getTime())) return iso;
+    const pad = (n) => String(n).padStart(2, '0');
+    const clock = `${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}`;
+    const text = at.toDateString() === new Date().toDateString()
+        ? clock
+        : `${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${clock.slice(0, 5)}`;
+    return el('span', { title: iso, text: text });
+}
+
+function el(tag, attrs, kids) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+        if (v === null || v === undefined || v === false) continue;
+        if (k === 'class') node.className = v;
+        else if (k === 'text') node.textContent = v;
+        else node.setAttribute(k, v === true ? '' : String(v));
+    }
+    for (const kid of kids || []) {
+        if (kid === null || kid === undefined) continue;
+        node.append(typeof kid === 'string' ? document.createTextNode(kid) : kid);
+    }
+    return node;
+}
+
+function section(title, note, kids) {
+    const head = el('h2', { text: title });
+    if (note) head.append(' ', el('span', { class: 'note', text: note }));
+    return el('section', {}, [head, ...kids]);
+}
+
+function kv(pairs) {
+    return el('div', { class: 'kv' }, pairs
+        .filter((p) => p)
+        .map(([k, v, cls]) => el('div', {}, [
+            el('span', { text: k }),
+            el('span', { class: cls || null, text: v === null || v === undefined ? '–' : String(v) }),
+        ])));
+}
+
+function table(columns, rows, render) {
+    if (!rows || !rows.length) return el('p', { class: 'empty', text: 'nothing to show' });
+    const head = el('tr', {}, columns.map((c) => el('th', {
+        class: c.num ? 'num' : null, text: c.label,
+    })));
+    const body = rows.map((row) => el('tr', {}, render(row).map((cell, i) => {
+        const td = el('td', { class: columns[i].num ? 'num' : null });
+        td.append(typeof cell === 'string' || typeof cell === 'number'
+            ? document.createTextNode(String(cell)) : cell);
+        return td;
+    })));
+    return el('table', {}, [el('thead', {}, [head]), el('tbody', {}, body)]);
+}
+
+/** A program cell: one line, click to expand. Truncation is marked, not hidden. */
+function program(text, truncated) {
+    const node = el('div', {
+        class: 'prog',
+        title: 'click to expand',
+        text: truncated ? `${text}… [truncated]` : text,
+    });
+    node.addEventListener('click', () => node.classList.toggle('open'));
+    return node;
+}
+
+// ------------------------------------------------------------------ sections
+function identity(d) {
+    const i = d.identity;
+    return section('identity', `pid ${i.pid}`, [kv([
+        ['aggregate_api', i.version],
+        ['aggregate', i.aggregate_version],
+        ['greater-tables', i.tables_version],
+        ['python', i.python],
+        ['platform', i.platform],
+        ['bind', `${i.host}:${i.port}`],
+        ['started', i.started_at],
+        ['uptime', secs(i.uptime_s)],
+        ['library', i.library],
+        ['library recipes', num(i.library_recipes)],
+        ['library load', ms(i.library_load_ms)],
+        ['generated in', ms(d.generated_in_ms)],
+    ])]);
+}
+
+function settings(d) {
+    return section('settings', 'live, from AGGAPI_* env vars', [kv(
+        Object.entries(d.settings).map(([k, v]) => [
+            k, Array.isArray(v) ? (v.join(', ') || 'none') : String(v),
+        ]))]);
+}
+
+function sessions(d) {
+    const s = d.sessions;
+    return section('sessions', 'forks of the process recipe base', [
+        kv([
+            ['live', `${num(s.live)} / ${num(s.max)}`],
+            ['high water', num(s.high_water)],
+            ['ttl', secs(s.ttl_s)],
+            ['taken since start', num(s.taken)],
+            ['dropped', num(s.dropped)],
+            ['expired (ttl)', num(s.expired)],
+            ['evicted (capacity)', num(s.evicted)],
+        ]),
+        table([
+            { label: 'session' }, { label: 'created' },
+            { label: 'age', num: true }, { label: 'idle', num: true },
+            { label: 'requests', num: true }, { label: 'builds', num: true },
+            { label: 'recipes', num: true },
+        ], s.rows, (r) => [
+            sess(r.session_id), when(r.created_at),
+            secs(r.age_s), secs(r.idle_s),
+            num(r.requests), num(r.builds), num(r.recipes),
+        ]),
+    ]);
+}
+
+function cache(d) {
+    const c = d.cache;
+    return section('object cache', 'rows are LRU first, so the next eviction reads first', [
+        kv([
+            ['entries', `${num(c.entries)} / ${num(c.max)}`],
+            ['hits', num(c.hits)],
+            ['misses', num(c.misses)],
+            ['hit rate', rate(c.hit_rate)],
+            ['puts', num(c.puts)],
+            ['evictions', num(c.evictions)],
+            ['deletes', num(c.deletes)],
+        ]),
+        table([
+            { label: 'id' }, { label: 'kind' }, { label: 'name' },
+            { label: 'log2', num: true }, { label: 'bs', num: true },
+            { label: 'created' }, { label: 'notes', num: true },
+            { label: 'est. size', num: true }, { label: 'program' },
+        ], c.rows, (r) => [
+            r.id, r.kind, r.name, num(r.log2), r.bs || '–',
+            when(r.created_at), num(r.notes), bytes(r.estimated_bytes),
+            program(r.program, r.truncated),
+        ]),
+    ]);
+}
+
+function chartCache(d) {
+    const c = d.chart_cache;
+    return section('chart document cache', 'sits above the object cache and can never cause a build', [kv([
+        ['entries', `${num(c.entries)} / ${num(c.max)}`],
+        ['hits', num(c.hits)],
+        ['misses', num(c.misses)],
+        ['hit rate', rate(c.hit_rate)],
+        ['evictions', num(c.evictions)],
+    ])]);
+}
+
+function buildWindow(label, w) {
+    const statuses = Object.entries(w.by_status);
+    const scopes = Object.entries(w.by_key_scope);
+    return el('section', {}, [
+        el('h2', { text: `builds, last ${label}` }),
+        kv([
+            ['total', num(w.total)],
+            ['p50', ms(w.p50_ms)],
+            ['p95', ms(w.p95_ms)],
+            ['distinct clients', num(w.distinct_clients)],
+            ...statuses.map(([k, v]) => [
+                `status ${k}`, num(v), k === 'ok' ? 'good' : 'warn',
+            ]),
+            ...scopes.map(([k, v]) => [`key ${k}`, num(v)]),
+        ]),
+        el('h2', { text: 'slowest' }),
+        table([
+            { label: 'when' }, { label: 'elapsed', num: true },
+            { label: 'status' }, { label: 'kind' }, { label: 'session' },
+        ], w.slowest, (r) => [
+            when(r.ts), ms(r.elapsed_ms), r.status, r.kind || '–',
+            sess(r.session_id),
+        ]),
+        el('h2', { text: 'most common errors' }),
+        table([{ label: 'message' }, { label: 'count', num: true }],
+            w.top_errors, (r) => [r.error_msg, num(r.count)]),
+        el('h2', { text: 'busiest clients' }),
+        table([{ label: 'address' }, { label: 'builds', num: true }],
+            w.top_clients, (r) => [r.ip, num(r.count)]),
+    ]);
+}
+
+function builds(d) {
+    const live = d.builds.live;
+    return el('div', { class: 'cols2' }, [
+        section('build pipeline', 'live, one slot', [kv([
+            ['in flight', num(live.in_flight), live.in_flight ? 'warn' : null],
+            ['waiting', num(live.waiting), live.waiting ? 'warn' : null],
+            ['started since boot', num(live.started)],
+            ['timeouts since boot', num(live.timeouts), live.timeouts ? 'bad' : null],
+        ])]),
+        buildWindow('hour', d.builds.hour),
+        buildWindow('day', d.builds.day),
+    ]);
+}
+
+function keyScope(d) {
+    const k = d.key_scope;
+    const bad = k.reasons.preview_unavailable > 0;
+    return section('key scope', 'shared against session qualified, since boot', [
+        kv([
+            ['shared', num(k.shared)],
+            ['session qualified', num(k.session)],
+            ['session rate', rate(k.session_rate)],
+            ['reason: session reference', num(k.reasons.session_reference)],
+            ['reason: preview unavailable', num(k.reasons.preview_unavailable),
+                bad ? 'warn' : null],
+            ['preview calls', num(k.preview_calls)],
+            ['preview mean', ms(k.preview_mean_ms)],
+            ['preview p95', ms(k.preview_p95_ms)],
+            ['refused by preview, built anyway', num(k.unpreviewable_builds),
+                k.unpreviewable_builds ? 'bad' : 'good'],
+        ]),
+        el('h2', {
+            text: 'programs the previewer refused and the builder accepted',
+        }),
+        el('p', {
+            class: 'empty',
+            text: 'each of these took a private cache slot it did not need. '
+                + 'They are an upstream ask against Underwriter.preview, which '
+                + 'is why they are kept verbatim.',
+        }),
+        table([
+            { label: 'when' }, { label: 'session' }, { label: 'kind' },
+            { label: 'elapsed', num: true }, { label: 'program' },
+        ], k.recent_unpreviewable, (r) => [
+            when(r.at), sess(r.session_id), r.kind || '–',
+            ms(r.elapsed_ms), program(r.program, r.truncated),
+        ]),
+    ]);
+}
+
+function resources(d) {
+    const r = d.resources;
+    const missing = Object.entries(r.unavailable || {});
+    return section('process resources', `source: ${r.source}, ${r.platform}`, [
+        kv([
+            ['rss', bytes(r.rss_bytes)],
+            ['vms', bytes(r.vms_bytes)],
+            ['cpu', r.cpu_percent === null ? '–' : `${num(r.cpu_percent, 1)}%`],
+            [`threads${r.threads_kind ? ` (${r.threads_kind})` : ''}`, num(r.threads)],
+            [`open ${r.open_files_kind || 'files'}`, num(r.open_files)],
+            ['load average', r.load_average ? r.load_average.join('  ') : null],
+            ['disk free', bytes(r.disk_free_bytes)],
+            ['disk total', bytes(r.disk_total_bytes)],
+        ]),
+        missing.length ? el('h2', { text: 'unavailable' }) : null,
+        missing.length ? kv(missing.map(([k, v]) => [k, v, 'warn'])) : null,
+    ]);
+}
+
+function watch(d) {
+    const w = d.watch;
+    const reg = w.registries;
+    const st = w.static;
+    return section('worth an eye', null, [
+        kv([
+            ['cached objects carrying library notes', num(w.notes.entries_with_notes)],
+            ['distinct notes', num(w.notes.distinct)],
+            reg.unavailable ? ['registries', reg.unavailable, 'warn'] : null,
+            reg.unavailable ? null : ['exhibits registered',
+                `${num(reg.exhibits)} (charter ${num(reg.charter_exhibits)})`,
+                reg.exhibits === reg.charter_exhibits ? null : 'warn'],
+            reg.unavailable ? null : ['charts registered',
+                `${num(reg.charts)} (charter ${num(reg.charter_charts)})`,
+                reg.charts === reg.charter_charts ? null : 'warn'],
+            ['spa bundle', st.mounted ? st.directory : (st.reason || 'not mounted'),
+                st.mounted ? null : 'warn'],
+            st.mounted ? ['index.html built', st.index_built_at.replace('T', ' ')] : null,
+            st.mounted ? ['bundle age', secs(st.index_age_s)] : null,
+            ['audit db on disk', bytes(w.audit_db_bytes)],
+            ['config set but unused', (w.unused_settings || []).join(', ') || 'none'],
+        ]),
+        w.notes.most_common.length ? el('h2', { text: 'most common library notes' }) : null,
+        w.notes.most_common.length
+            ? table([{ label: 'note' }, { label: 'objects', num: true }],
+                w.notes.most_common, (r) => [r.note, num(r.count)])
+            : null,
+    ]);
+}
+
+function gate(d) {
+    const g = d.gate;
+    return section('access', `admitted on ${g.admitted_on}`, [
+        kv([['refusals since boot', num(g.refusals), g.refusals ? 'warn' : 'good']]),
+        table([{ label: 'when' }, { label: 'address' }, { label: 'path' }],
+            g.recent, (r) => [when(r.at), r.address, r.path]),
+    ]);
+}
+
+// -------------------------------------------------------------------- render
+function render(d) {
+    const i = d.identity;
+    document.getElementById('ident').textContent =
+        `${i.version} on aggregate ${i.aggregate_version}, up ${secs(i.uptime_s)}, `
+        + `generated ${d.generated_at}`;
+    document.getElementById('cost').textContent = `payload ${ms(d.generated_in_ms)}`;
+    const main = document.getElementById('main');
+    main.replaceChildren(
+        identity(d), sessions(d), cache(d), keyScope(d),
+        builds(d), chartCache(d), resources(d), watch(d), gate(d), settings(d),
+    );
+}
+
+async function poll() {
+    const box = document.getElementById('error');
+    try {
+        const res = await fetch(ENDPOINT, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        render(await res.json());
+        box.hidden = true;
+    } catch (err) {
+        box.hidden = false;
+        box.textContent = `could not read ${ENDPOINT}: ${err.message}`;
+    }
+    nextAt = Date.now() + REFRESH_MS;
+}
+
+function schedule() {
+    clearInterval(timer);
+    timer = setInterval(() => { if (!paused) poll(); }, REFRESH_MS);
+    nextAt = Date.now() + REFRESH_MS;
+}
+
+document.getElementById('pause').addEventListener('click', (e) => {
+    paused = !paused;
+    e.target.textContent = paused ? 'resume' : 'pause';
+    if (!paused) { poll(); nextAt = Date.now() + REFRESH_MS; }
+});
+document.getElementById('now').addEventListener('click', () => { poll(); });
+
+setInterval(() => {
+    const tick = document.getElementById('tick');
+    tick.textContent = paused
+        ? 'paused'
+        : `next in ${Math.max(0, Math.round((nextAt - Date.now()) / 1000))}s`;
+}, 250);
+
+poll();
+schedule();
+</script>

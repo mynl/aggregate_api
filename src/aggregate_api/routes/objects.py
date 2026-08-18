@@ -112,7 +112,9 @@ from ..capability import can_sharpen, capability_for, narrative_for
 from ..config import Settings, get_settings
 from ..library import get_underwriter
 from ..library_notes import from_library
+from ..net import client_address
 from ..sessions import SESSION_HEADER, SessionRegistry, normalize_session_id
+from .. import status as status_state
 from ..pricing import (
     run_calibration, run_evaluation, run_natural_allocation,
     run_pricing_preview,
@@ -299,16 +301,22 @@ def _chart_cached(key: tuple) -> tuple[str, bytes] | None:
         hit = _chart_cache.get(key)
         if hit is not None:
             _chart_cache.move_to_end(key)
-        return hit
+    status_state.record_chart_cache("hit" if hit is not None else "miss")
+    return hit
 
 
 def _chart_store(key: tuple, etag: str, body: bytes) -> None:
     """File ``(etag, body)`` under ``key``, evicting the least recently read."""
+    evicted = 0
     with _chart_cache_lock:
         _chart_cache[key] = (etag, body)
         _chart_cache.move_to_end(key)
         while len(_chart_cache) > _CHART_CACHE_MAX:
             _chart_cache.popitem(last=False)
+            evicted += 1
+    status_state.record_chart_cache("store")
+    for _ in range(evicted):
+        status_state.record_chart_cache("eviction")
 
 
 # ----------------------------------------------------------------------
@@ -316,10 +324,22 @@ def _chart_store(key: tuple, etag: str, body: bytes) -> None:
 # ----------------------------------------------------------------------
 
 def _client_ip(request: Request) -> str:
-    """Best-effort client IP. Returns ``"-"`` if FastAPI didn't capture one."""
-    if request.client and request.client.host:
-        return request.client.host
-    return "-"
+    """The address this request came from, honoring one trusted proxy.
+
+    Notes
+    -----
+    A one-line delegation to :func:`aggregate_api.net.client_address`, kept as a
+    name here because every audit call site reads it and the indirection is the
+    point: the rule for which forwarded element to trust is written once, beside
+    the gate that depends on it being right.
+
+    Through a111 this read ``request.client.host`` and nothing else. Both Caddy
+    front doors proxy to ``127.0.0.1:8001``, so every production row recorded
+    ``ip = '127.0.0.1'``, the ``builds_ip`` index indexed one value, and
+    :meth:`aggregate_api.audit.AuditLog.by_ip` could not answer the question it
+    exists for. Rows written before a112 are not retroactively meaningful.
+    """
+    return client_address(request)
 
 
 def _now_iso() -> str:
@@ -496,13 +516,24 @@ def _cache_key(preview, session_id: str, canonical: str, log2: int, bs: float):
 
     Returns
     -------
-    (str, str)
-        The id, and ``'shared'`` or ``'session'`` for the audit row.
+    (str, str, str or None)
+        The id, ``'shared'`` or ``'session'`` for the audit row, and why the
+        session key was taken. The reason is ``None`` for a shared key, and
+        otherwise one of two that mean opposite things. ``'session_reference'``
+        is the rule working: the program touched a name its own session
+        declared, so it cannot share a slot. ``'preview_unavailable'`` is the
+        previewer declining to speak about the program at all, which is usually
+        a program about to fail its build and is occasionally the previewer
+        refusing what the builder accepts. Only the second is a finding, and
+        ``GET /v1/status`` counts them apart for that reason.
     """
-    if preview is not None and all(
-            _is_library_entry(ref.source) for ref in preview.resolved):
-        return object_id(canonical, log2, bs), "shared"
-    return qualified_object_id(session_id, canonical, log2, bs), "session"
+    if preview is None:
+        return (qualified_object_id(session_id, canonical, log2, bs),
+                "session", "preview_unavailable")
+    if all(_is_library_entry(ref.source) for ref in preview.resolved):
+        return object_id(canonical, log2, bs), "shared", None
+    return (qualified_object_id(session_id, canonical, log2, bs),
+            "session", "session_reference")
 
 
 def _register(uw, preview) -> None:
@@ -1023,6 +1054,7 @@ def post_object(
     cache: ObjectCache = Depends(_get_cache),
     audit: AuditLog = Depends(_get_audit),
     uw: Any = Depends(_get_session_uw),
+    sessions: SessionRegistry = Depends(_get_sessions),
 ) -> dict:
     """Build (or retrieve from cache) an aggregate object.
 
@@ -1081,6 +1113,7 @@ def post_object(
         )
 
     canonical = canonicalize_decl(req.decl)
+    preview_t0 = time.monotonic()
     try:
         preview = _preview(uw, req.decl)
     except RecipeNotFound as exc:
@@ -1092,7 +1125,10 @@ def post_object(
             elapsed_ms=elapsed, session_id=sid,
         )
         raise HTTPException(status_code=422, detail=detail) from None
-    oid, key_scope = _cache_key(preview, sid, canonical, eff_log2, eff_bs)
+    status_state.record_preview_ms((time.monotonic() - preview_t0) * 1000)
+    oid, key_scope, key_reason = _cache_key(
+        preview, sid, canonical, eff_log2, eff_bs)
+    status_state.record_key_scope(key_scope, key_reason)
 
     # Cache hit -- return slim manifest immediately.
     cached_entry = cache.get(oid)
@@ -1127,11 +1163,12 @@ def post_object(
     # *future submission*, not the wait. With one worker the
     # semaphore is technically redundant (the worker serializes
     # naturally), but it makes intent explicit.
-    with _build_semaphore:
+    with status_state.build_slot(_build_semaphore):
         future = _build_executor.submit(_run_build, uw, req.decl, eff_log2, eff_bs)
         try:
             obj, build_notes = future.result(timeout=settings.build_timeout_s)
         except FuturesTimeout:
+            status_state.record_build_timeout()
             elapsed = int((time.monotonic() - t0) * 1000)
             audit.record_build(
                 ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
@@ -1283,6 +1320,16 @@ def post_object(
     )
     cache.put(oid, entry)
     elapsed = int((time.monotonic() - t0) * 1000)
+    sessions.record_build(sid)
+    if preview is None:
+        # The previewer refused a program the builder then accepted, so a
+        # shareable object took a private slot and a room pays a build each
+        # instead of one between them. Kept verbatim because that is an upstream
+        # ask against the library's ``preview`` and an ask needs the program.
+        # The previewed-None-and-then-failed case is an ordinary parse error and
+        # is deliberately not kept: the audit log already has it, with a better
+        # message.
+        status_state.record_unpreviewable_build(req.decl, sid, kind, elapsed)
     audit.record_build(
         ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
         status="ok", object_id=oid, kind=kind, elapsed_ms=elapsed,
@@ -2695,8 +2742,10 @@ def post_sharpen(
     obj = copy.deepcopy(entry.obj)
 
     # Same guards as a build, because a probe is several builds: it re-updates
-    # the object across a line search of neighboring cells.
-    with _build_semaphore:
+    # the object across a line search of neighboring cells. Counted the same way
+    # too, so the queue depth GET /v1/status reports is the real one: a probe
+    # holding the slot blocks a build exactly as another build would.
+    with status_state.build_slot(_build_semaphore):
         future = _build_executor.submit(
             lambda: obj.sharpen(log2_cap=settings.log2_cap))
         try:
@@ -2729,7 +2778,10 @@ def post_sharpen(
     # carries whatever references the original had, so if a rebuild of it would
     # be keyed privately then this entry has to be filed privately too, or the
     # rebuild misses the slot this just wrote.
-    new_oid, _ = _cache_key(_preview(uw, program), session_id_of(request),
+    # Not counted toward the key-scope panel, deliberately. That panel measures
+    # how often a *submitted program* shares, and a derived id re-keyed here
+    # would double-count the program the reader is about to submit anyway.
+    new_oid, _, _ = _cache_key(_preview(uw, program), session_id_of(request),
                             canonicalize_decl(program), 0, 0.0)
     # A new entry, with its own lock. The sharpened object is a different object
     # from the one still serving under ``oid``, so sharing a lock between them
@@ -2763,6 +2815,7 @@ def post_hints(
     audit: AuditLog = Depends(_get_audit),
     entry: CacheEntry = Depends(_locked_entry),
     uw: Any = Depends(_get_session_uw),
+    sessions: SessionRegistry = Depends(_get_sessions),
 ) -> dict:
     """Pin this object's realized grid into its own ``hints{}`` clause.
 
@@ -2816,7 +2869,7 @@ def post_hints(
 
     program = collapse_program(program)
     built = post_object(models.BuildRequest(decl=program), request,
-                        settings, cache, audit, uw)
+                        settings, cache, audit, uw, sessions)
     return {"program": spread(program), "description": None, **built}
 
 
@@ -2830,6 +2883,7 @@ def post_pnl(
     audit: AuditLog = Depends(_get_audit),
     entry: CacheEntry = Depends(_locked_entry),
     uw: Any = Depends(_get_session_uw),
+    sessions: SessionRegistry = Depends(_get_sessions),
 ) -> dict:
     """Wrap this object in a P&L and return the program that does it.
 
@@ -2867,7 +2921,7 @@ def post_pnl(
 
     program = collapse_program(program)
     built = post_object(models.BuildRequest(decl=program), request,
-                        settings, cache, audit, uw)
+                        settings, cache, audit, uw, sessions)
     return {"program": spread(program), "description": None, **built}
 
 
@@ -2881,6 +2935,7 @@ def post_reins(
     audit: AuditLog = Depends(_get_audit),
     entry: CacheEntry = Depends(_locked_entry),
     uw: Any = Depends(_get_session_uw),
+    sessions: SessionRegistry = Depends(_get_sessions),
 ) -> dict:
     """Cede a layer, and return the program that rebuilds the net object.
 
@@ -2914,7 +2969,7 @@ def post_reins(
 
     program = collapse_program(program)
     built = post_object(models.BuildRequest(decl=program), request,
-                        settings, cache, audit, uw)
+                        settings, cache, audit, uw, sessions)
     return {"program": spread(program), "description": None, **built}
 
 
