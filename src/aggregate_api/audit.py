@@ -376,7 +376,7 @@ class AuditLog:
         The WAL is counted because it is real disk and can be the larger of the
         two between checkpoints, and the page exists partly so that the audit
         database's growth becomes obvious: section 8 question 4 of
-        ``dev/plan-site-status-page.md`` is the retention decision this number
+        ``dev/done/plan-site-status-page.md`` is the retention decision this number
         is meant to prompt.
         """
         total = 0

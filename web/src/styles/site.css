@@ -808,12 +808,29 @@ header .navbar { min-height: 56px; }
 .agg-ratelimit-sub   { margin-top: .45rem; }
 
 /* ---- The lede, above the editor ----
-   Where the hero cards were through a36. One sentence, allowed to run to two
-   lines, on the same measure as every other run of prose on the page. */
+   Where the hero cards were through a36. One band, boxed to the editor's
+   width (same border, radius, and shadow as .editor-box, so the two read as
+   a stack): the tagline leads at body size and the terms notice rides at the
+   right edge in the small grey of the help panel's fine print, wrapping under
+   the tagline on narrow screens. Baseline alignment, not center, so the two
+   runs of text sit on one line of type. */
+.lede-box {
+    border: 1px solid var(--line);
+    border-radius: .75rem;
+    background: #fff;
+    box-shadow: 0 .125rem .35rem rgba(0, 0, 0, .06);
+    padding: .6rem 1rem;
+    margin: 0 0 var(--gutter);
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    justify-content: space-between; gap: .1rem 1.25rem;
+}
 .lede {
     font-size: var(--fs-body); line-height: 1.5; color: var(--ink-2);
-    max-width: var(--measure); margin: 0 0 var(--gutter);
+    margin: 0;
 }
+.lede-terms { font-size: .74rem; color: var(--mut); margin: 0; }
+.lede-terms a { color: var(--primary); text-decoration: none; }
+.lede-terms a:hover { text-decoration: underline; }
 
 /* ---- Examples picker: dropdown search + Ctrl+K palette ---- */
 /* One list component, two surfaces. The dropdown is browsable, grouped by

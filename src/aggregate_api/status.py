@@ -30,7 +30,7 @@ that cannot fit that is a query and not a buffer.
 
 **This does not touch the audit log.** That is SQLite on disk and survives
 restarts, which is the point of an audit log. Section 8 question 4 of
-``dev/plan-site-status-page.md`` stays open.
+``dev/done/plan-site-status-page.md`` stays open.
 
 Thread safety
 -------------

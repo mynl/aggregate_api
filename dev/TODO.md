@@ -809,7 +809,7 @@ one version bump each.
       author (the two faces are one statement shape, so it is a typed
       character), and the custom-library work is parked in
       `dev/done/note-session-isolation.md`.
-- [ ] **One recipe base, many users**: `dev/plan-session-isolation.md`, the v2
+- [x] **One recipe base, many users**: `dev/done/plan-session-isolation.md`, the v2
       rescope of `dev/done/note-session-isolation.md` (the measured evidence file,
       parked 2026-08-17). Two problems, each needing its own fix: session builds
       share one recipe base, so one user's declaration is what another user's
@@ -822,14 +822,15 @@ one version bump each.
       session id, the fork registry, the qualified cache key and every build path
       routed through the caller's own base), A5 to A7 at a111 (the expiry pane
       with its rebuild button, sharpen on a deepcopy, the pricing-residue rule).
-      The note is in `dev/done/`; the plan follows once the library commits
-      its half, since a symlink in its tree points at this copy. What it deliberately did not do
+      The note, and since 2026-08-18 the plan itself, are in `dev/done/`, the
+      library's debrief folded into the plan's section 5 and the symlink in its
+      tree moved to `dev/done/` alongside. What it deliberately did not do
       is in the plan's section 8: no content addressing, one browser tab per
       session with no persistence, `cache_max` still 50, and one uvicorn worker
       is now load bearing.
 
 - [x] **A status page, private by construction**:
-      `dev/plan-site-status-page.md`, phases S0 to S4 at **a112**. An operator's
+      `dev/done/plan-site-status-page.md`, phases S0 to S4 at **a112**. An operator's
       view at `/v1/status/page` behind a JSON contract at `/v1/status`: versions
       against process start, live session forks, cache and build behavior,
       whether the a110 shared-against-session key rule is firing correctly, and

@@ -147,13 +147,21 @@
          ============================================================ -->
     <main class="container-fluid px-3 px-md-4 py-3" style="max-width:1280px;">
 
-        <!-- The lede. One sentence naming what the app is for, on the same
-             measure as every other run of prose. The hero cards that stood here
-             through a36 are gone, and the random hero build behind them went at
-             a93: the page lands on dice of dice, in the editor from the first
-             paint. The gallery is to resurface inside the Examples dropdown. -->
-        <p class="lede">Model a book of insurance, investigate tail risk,
-           allocate margin, apply and price reinsurance.</p>
+        <!-- The lede. One sentence naming what the app is for, boxed to the
+             editor's width, with the terms notice at the right edge linking to
+             the About panel's disclaimer. The notice sits here, above the
+             input, because a terms line nobody passes on the way in agrees
+             nobody to anything; it stays small and grey so the pitch leads.
+             The hero cards that stood here through a36 are gone, and the
+             random hero build behind them went at a93: the page lands on dice
+             of dice, in the editor from the first paint. The gallery is to
+             resurface inside the Examples dropdown. -->
+        <div class="lede-box">
+            <p class="lede">Model a book of insurance, investigate tail risk,
+               allocate margin, apply and price reinsurance.</p>
+            <p class="lede-terms">Use of this site signifies agreement with the
+               <a href="#aboutPanel" data-bs-toggle="offcanvas" data-bs-target="#aboutPanel">terms</a>.</p>
+        </div>
 
         <!-- Editor box (CM6 mounts into #editor-host) -->
         <div class="editor-wrap">
@@ -627,6 +635,24 @@
                 <dt>echarts-gl</dt><dd id="about-echarts-gl" class="mono">…</dd>
                 <dt>Bootstrap</dt><dd id="about-bootstrap" class="mono">…</dd>
             </dl>
+
+            <!-- The site's terms. The BSD license disclaims warranties for
+                 people who copy the code; a visitor here receives a service,
+                 not the code, so the service needs its own words. The lede box
+                 above the editor links to this section, which is what makes
+                 "use signifies agreement" point at something. -->
+            <h6>Disclaimer</h6>
+            <p>aLL is a free research and educational tool built on the open
+               source <code>aggregate</code> library (BSD 3-Clause). All results
+               are provided as is, with no warranty of any kind. Nothing on this
+               site constitutes actuarial, financial, or other professional
+               advice, and no output is an actuarial communication within the
+               meaning of ASOP 41. Verify results independently before relying
+               on them. Submitted programs and sessions may be logged to operate
+               the service; do not submit confidential data. The service is
+               offered with no promise of availability and may change or be
+               withdrawn at any time. Third-party components are used under
+               their respective MIT, BSD, and Apache 2.0 licenses.</p>
 
             <h6>Learn more</h6>
             <p class="help-links mb-0">

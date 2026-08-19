@@ -1,12 +1,20 @@
 # Plan [Session-Isolation]: one recipe base, many users
 
 > **Status: EXECUTED, 2026-08-18. A0 at API `1.0.0a109`, A1 to A4 at
-> `1.0.0a110`, A5 to A7 at `1.0.0a111`.** Author approved execution 2026-08-18;
-> the library executed L1 to L4 concurrently. Execution notes are recorded in
-> section 6 beside the phases they belong to. The note has moved to
-> `dev/done/`. This plan stays in `dev/` until the library commits its half
-> and re-points `aggregate_REFACTOR/dev/plan-session-isolation.md`, the
-> symlink that would otherwise dangle; the two move together.
+> `1.0.0a110`, A5 to A7 at `1.0.0a111`; L1 to L4 at LIB `1.0.0a302`.** Author
+> approved execution 2026-08-18; the library executed L1 to L4 concurrently and
+> has committed. Execution notes are recorded in sections 5 and 6 beside the
+> phases they belong to. **The library's debrief is folded into section 5's
+> execution notes** (it lived briefly as
+> `aggregate_REFACTOR/dev/plan-session-isolation-LIB.md`, folded here and
+> retired when this plan moved to `dev/done/`). **Read its divergences before
+> relying on the preview**, because two decisions the plan left open change
+> what it reports (the deferred `sev_ref` chain is followed transitively, and
+> the parse runs against a throwaway fork so a program's own declarations
+> resolve without being reported as dependencies), and divergence 6, `route`,
+> is the one trap on ruling 9 (register the preview's statements on a cache
+> hit only when `route == 'program'`). The note moved to `dev/done/` first;
+> this plan and its symlink followed on the author's word, 2026-08-18.
 > Drafted as v2, 2026-08-18. v1, drafted earlier
 > the same day, was built around content addressing. The author reviewed it the
 > same afternoon and rescoped the work: LIB is the product, the API is demo
@@ -16,11 +24,10 @@
 > up later. Written from `aggregate_api/dev/done/note-session-isolation.md` (PARKED
 > 2026-08-17, the evidence file: every number in it was measured, not reasoned
 > about) plus the author's rulings recorded in section 3. Canonical copy lives
-> in `aggregate_api/dev/`; `aggregate_REFACTOR/dev/plan-session-isolation.md`
-> is a symlink to it, the `plan-3d-plot.md` arrangement. Line anchors are LIB
-> `1.0.0a301` and API `1.0.0a108`, verified against both trees on 2026-08-18,
-> and the API side of them moves as its phases land. The note moves to
-> `dev/done/` when this plan lands.
+> in `aggregate_api/dev/done/`;
+> `aggregate_REFACTOR/dev/done/plan-session-isolation.md` is a symlink to it,
+> the `plan-3d-plot.md` arrangement. Line anchors are LIB `1.0.0a301` and API
+> `1.0.0a108`, the pre-execution trees, verified against both on 2026-08-18.
 
 ## 1. The design in one paragraph
 
@@ -242,6 +249,224 @@ The note listed this as optional. Under this plan it is not: the expiry path
   `agg Wrapper dfreq[1] sev sev.NAME` then `sev agg.Wrapper`. The 8 exempt
   entries stay exempt. Under v2 this is a language ruling only; the cache
   dependency v1 would have created does not exist.
+
+### Execution notes, a302 (L1 to L4)
+
+The library's debrief, folded in from
+`aggregate_REFACTOR/dev/plan-session-isolation-LIB.md` when this plan moved to
+`dev/done/`. All four phases landed in one bump, one commit, while the
+application executed A0 to A7 in parallel: what shipped, the measurements, the
+six places the implementation decided something the plan left open, one narrow
+behavior change, and what the API can rely on.
+
+#### What shipped
+
+`src/aggregate/underwriter.py`, plus `tests/test_session_isolation.py` (30
+cases), `docs/3_reference/3_x_Underwriter.rst`, two `dev/TODO.md` records and
+the `CHANGELOG.md` section, which is the real description.
+
+| phase | item | where |
+|---|---|---|
+| L1 | `Underwriter.fork(name=None)` | `underwriter.py`, after `reload()` |
+| L1 | `_recipes_frame` snapshots the dict before iterating | `_recipes_frame` |
+| L1 | `interpret_file` refactored onto `fork()`, hand-rolled scratch deleted | `interpret_file` |
+| L2 | `Underwriter.preview(program)` returning `ProgramPreview` | before `build_many` |
+| L2 | `ProgramPreview`, `ResolvedReference` value types | module level, exported |
+| L2 | `_collect_sev_refs`, one canonical walker; `_carries_sev_ref` rewritten on it | module level, private |
+| L3 | `RecipeNotFound`, raised from `recipe()` and `_resolve_sev_ref` | module level, exported |
+| L4 | `[Session-Build-Clobbers-The-Trailer]` and `[Unparser-Reference-Gaps]` item 1 | `dev/TODO.md` |
+
+Public surface added: two methods on stable-tier `Underwriter`, three module
+names. Nothing existing changed shape. One narrow behavior change, below.
+
+#### Measurements
+
+Taken on the development machine, 2026-08-18, `1.0.0a302`, the loaded default
+`build` (`library.agg`, 284 entries).
+
+| quantity | measured | how |
+|---|---|---|
+| `fork()` | **7.5 microseconds**, mean of 100 | `perf_counter` loop, warm |
+| `preview()` of a one-line agg | order of milliseconds, one Lark parse | dominated by `_PARSER.parse` |
+| 8 concurrent previews | results equal to their serial baselines | `test_preview_holds_no_instance_state_under_threads` |
+
+L1's 6 microseconds is confirmed. The test pins it at 1 millisecond, two
+orders of magnitude above the measurement, so it fails on a design regression
+(a deepcopy creeping in) and not on a noisy machine.
+
+#### Divergences and decisions, the ones that matter to the API
+
+Six. Two change what the preview reports; the a110 execution notes in section
+6 record how the API's cache rule took them up.
+
+**Divergence 1: the preview follows the deferred `sev_ref` chain
+transitively.** Section 4.2 asks for "every reference it resolved". Taken
+literally that is depth one, and depth one is not safe. Consider a fork where
+the user has redefined library entry `A`. Library entry `C` is written
+`sev agg.A`. The user now builds `agg D ... sev agg.C`. The parse of `D`
+resolves `C` and nothing else, `C` is file-sourced in every fork, so the
+literal rule keys `D` on the shared key and serves one user's object to
+another. The build, meanwhile, resolves `C` and then resolves `C`'s reference
+to the user's private `A`.
+
+So `preview` walks the deferred targets to exhaustion: the parsed statements'
+specs and every directly-resolved entry's spec are scanned for `sev_ref`, each
+target is recorded and its own spec scanned in turn, with a per-call `expanded`
+set as the cycle guard. Never the instance `_sev_ref_stack`: the preview runs
+outside any build and possibly beside one, which is the same reasoning section
+9.1 records for the parked identity fold.
+
+Only the deferred form needs this. Every other dotted reference is inlined at
+parse time, which physically copies the referent's spec into the outer spec, so
+a nested `sev_ref` rides along and is found by scanning the statement itself.
+`_collect_sev_refs` is recursive over dicts, lists and tuples because a
+portfolio nests one spec per unit and a bivariate nests `('agg', name, spec)`
+triples under `units`.
+
+`test_preview_follows_the_deferred_chain_to_the_bottom` is the depth-two pin.
+
+**Divergence 2: the parse runs against a fork, provenance is read from
+`self`.** A multi-statement program may declare a name and use it further
+down, which is how `_interpret_program` behaves and therefore how a
+two-statement hero example behaves. A preview that registered nothing anywhere
+would raise `RecipeNotFound` on the second statement of a program that builds
+fine, so the preview parses against `self.fork()` and registers into that
+throwaway.
+
+Provenance, though, is read from `self._recipes`, never from the scratch. So a
+name the program declares itself is reported **only if the previewing
+underwriter also holds it**. Two consequences, both correct:
+
+- A self-contained two-statement program resolves internally and reports
+  nothing, so it stays on the **shared** key. This is the conference case and
+  the literal reading would have qualified it.
+- A program whose first statement shadows a name the fork already holds
+  session-sourced reports that name and **qualifies**, even though the
+  program's own declaration shadows it and the build is really self-contained.
+  Over-qualification, a redundant build, never a wrong answer. Fail closed,
+  per section 1.
+
+`test_preview_resolves_a_programs_own_declarations_without_reporting_them` pins
+the first.
+
+**Divergence 3: `fork()` loads the parent first.** L1 says "document that a
+fork is taken after `load()`". Documenting it leaves the failure available: a
+fork of an unloaded underwriter inherits an empty dict, then reads the
+databases again on its own first access, once per fork, which is the 3.2
+seconds the whole design exists to pay once. So `fork()` calls `self.load()`
+when `self._loaded` is false, the same lazy discipline `recipe()` and
+`recipes` already apply, and documents that it did.
+
+**Divergence 4: `fork(name=None)` takes a name.** Not in the plan.
+`interpret_file` needed `f'{self.name}-interpret'` for its `repr`, and a host
+wants the session id in there. Default is the parent's name with `-fork`
+appended, so a `repr` always says which is which.
+
+**Divergence 5: `_request` is copied when it is a list.** L1 mentions in
+passing that `_request` aliases a caller's list when one was passed to
+`__init__`. The fork now copies it in that case, so a later `load()` on either
+side cannot rewrite the other's request. Three lines, removes an alias, no
+behavior anyone relies on.
+
+**Divergence 6: `route`, and what not to register on a cache hit.**
+`ProgramPreview.route` is `'name'` or `'program'`. **The API must check it
+before acting on ruling 9.** On the `'name'` route the program text was itself
+an entry name: there is nothing new to register, and calling `add_recipe(...,
+source='session')` with the preview's single statement would re-file a library
+entry as a session entry in that fork, after which every later program
+referencing that name qualifies. A silent, sticky, per-session cache split.
+
+So: register the preview's `statements` on a cache hit **only** when
+`route == 'program'`, and skip `kind == 'expr'` statements, matching
+`_interpret_program`. The `statements` tuple holds ordinary `Recipe` records,
+so the call is
+`uw.add_recipe(s.kind, s.name, s.spec, s.program, source='session')`.
+
+#### Behavior change, narrow
+
+A deferred reference whose referent has vanished raises `RecipeNotFound`, a
+`KeyError`, where it raised `ValueError` before. `_resolve_sev_ref`'s "it
+parsed, so it was there when the program was read; it has been removed or
+renamed since" diagnosis keeps its exact text and becomes the same exception
+type as every other missing name, which is what phase A5's expiry path needs:
+one `except RecipeNotFound` around preview and build catches an expired session
+whether the name was reached by lookup, by dotted reference, or by deferred
+resolution.
+
+A caller that wrapped a build in `except ValueError` to catch this case now
+needs `except (ValueError, LookupError)`. Nothing in the library or the test
+suite did. A reference **cycle** is still a `ValueError`: that is a bad
+program, not a missing name, and
+`test_the_reference_cycle_guard_is_unchanged` asserts the distinction.
+
+`RecipeNotFound.__str__` is overridden because `KeyError.__str__` is
+`repr(args[0])`, which would wrap a two-sentence diagnosis in quotes and escape
+the quotes inside it. Anything rendering the message to a user, the API's 422
+pane included, gets plain text.
+
+#### What the API can rely on
+
+```python
+pv = session_uw.preview(text)                  # ValueError / RecipeNotFound
+qualify = any(r.source == 'session' for r in pv.resolved)
+...
+if hit and pv.route == 'program':              # ruling 9, divergence 6
+    for s in pv.statements:
+        if s.kind != 'expr':
+            session_uw.add_recipe(s.kind, s.name, s.spec, s.program)
+```
+
+- `pv.resolved` is deduplicated and complete: inlined references, deferred
+  referents, the whole deferred chain, and on the `'name'` route the named
+  entry itself. Order is the order the parse met them.
+- `r.source` is `'session'` or a `pathlib.Path` / string naming the file. The
+  test compares against the sentinel, not against a truthiness rule.
+- `preview` writes nothing on the underwriter it is called on and holds no
+  instance state, so it is safe outside the build slot. **The one lock the
+  library does not take**: `fork()` copies the recipe dict without
+  synchronization, so a host that registers builds concurrently with previews
+  on the *same* session must serialize its own writes. Per-session
+  serialization is enough; the registry lock A2 already calls for covers it.
+- `fork()` is a snapshot. `config.reload_settings` mutates the module-level
+  `build` in place, so a fork predating a reload keeps the base it was taken
+  from, and the module alias `build_many` stays bound to the singleton.
+
+#### Tests, and one failure that is not ours
+
+`tests/test_session_isolation.py`, 30 cases, all passing. Full fast suite:
+**4,609 passed**. Version-bump gate, `-m 'slow or not slow'`: **4,780 passed,
+1 failed**.
+
+The one failure is pre-existing at `a301` and unrelated.
+`tests/test_massive_bivariate.py::test_massive_pnl_one_sweep_ledger` fails with
+`TypeError: Index must be a MultiIndex` from `stats_df.xs(r, level='Label')`.
+Verified by stashing the `underwriter.py` change and re-running: it fails
+identically on `a301`. Diagnosis for whoever picks it up: `pm.stats_df` is an
+**empty DataFrame**, no columns and no index, on the massive PnL route. The
+three assertions ahead of the failing line pass vacuously, two comparing empty
+index lists and one looping over an empty index, so the sheet has been empty
+for some while and only the fourth line notices. It sits in the `slow` tier, so
+the everyday `uv run pytest` never sees it. Not fixed at a302, being nothing
+to do with sessions; flagged for the author to triage against the massive
+one-sweep ledger work.
+
+#### Not done, deliberately
+
+- **Nothing from section 9.** No content addressing, no `Aggregate.fork()` /
+  `Portfolio.fork()`, no picklable severity closures, no derived-results cache.
+  All parked with their rulings intact.
+- **`docs/2_aggregate_overview/underwriter.rst`** gains no prose. The reference
+  page carries the new surface and the docstrings carry the reasoning; the
+  overview page's fork-and-preview paragraph is worth writing once the API has
+  used both and the shape has stopped moving.
+- **No doc build.** Per the library's `CLAUDE.md`, the 500-page tree stays
+  outside the iteration loop. The `.rst` edit is one autosummary block and one
+  paragraph, both checked by eye against the existing directives.
+- **`dev/FEATURES.csv` not regenerated.** Its columns are the first-class
+  classes; `Underwriter` is not one of them, so two new `Underwriter` methods
+  do not move a cell. `docs/2_aggregate_overview/features.rst` is likewise
+  untouched: its version table stops at `a195` and is not kept current per
+  bump.
 
 ## 6. API phases
 

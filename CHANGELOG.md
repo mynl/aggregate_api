@@ -7,7 +7,7 @@ mirrors the main `aggregate` project: every plan-based change bumps the
 ## 1.0.0a112
 
 **An operator's page, private by three independent mechanisms, and the audit log
-finally records who asked.** `dev/plan-site-status-page.md`, phases S0 to S4,
+finally records who asked.** `dev/done/plan-site-status-page.md`, phases S0 to S4,
 executed as one bump because none of them ships alone: instrumentation with
 nothing reading it, or a page with no route behind it, is not a working thing.
 
