@@ -4,6 +4,55 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a113
+
+**One button, two steps of one story: wrap a program in a P&L, then break that
+P&L out layer by layer.** `dev/plan-pnl-button-punchup.md`, phases A2, A2b and
+A3. Phase A1, the premium the P&L is written at, waits on its companion plan in
+the library (`dev/plan-pnl-reinsurance-pricing.md`) and is not in this release.
+
+**`POST /v1/objects/{id}/explode`**, a derivation like the four beside it: it
+answers with DecL plus the object that text builds, so the program lands in the
+editor and history, sharing and rebuild all keep working. `pnl` and `xpnl` share
+an identical body in the grammar, so the transform is the leading keyword plus a
+`peel bottom-up` clause. Nothing is recomputed: this is a rewrite of the program
+the object was built from, not a re-render of the object.
+
+**The trap is where the `peel` clause goes.** The rule is `... expense_less
+peel_clause trailer`, and a P&L inherits its engine's trailer: an engine carrying
+`note{...} hints{...}` wraps into a P&L carrying both after the expense clause.
+Sharpen and Hints write exactly those clauses, so appending the peel at the end
+would be a parse error for any program that had been through either button. The
+clause goes in front of the earliest of `note{`, `tags{` and `hints{`, which is
+safe because a P&L carries at most one trailer: the inline engine slot has no
+trailer of its own, which is why `pnl_program` lifts the engine's onto the
+wrapper in the first place.
+
+**Two gates, both read off the live object rather than guessed from the text.** A
+portfolio engine is refused with a 400, because `xpnl` over a portfolio raises
+upstream ("the portfolio total hides its units, so there is nothing to explode")
+and refusing here lets the button go dark instead of making the press produce an
+error pane. An engine with no reinsurance still explodes and simply writes no
+`peel` clause: that is the correct `xpnl`, one group per step with a single step,
+where the clause would be refused for having no layers to walk.
+
+**The button carries both states and says which one it is in.** `PnL` over an
+aggregate or a portfolio, `Explode` once a P&L is what you are reading, greyed on
+a program already exploded. `can_explode` is the new capability flag behind the
+second state, false for a `PnL` built by `xpnl` and false over a portfolio
+engine. `can_pnl` and `can_explode` are never both true, which is what lets one
+button carry both. The way back from an exploded program is Ctrl+Up, exactly as
+for any other derivation, so there is no third state to press.
+
+**A fix that had been wrong quietly.** `_has_reinsurance` now looks through a
+`PnL` to its engine, as it already looked through a `Portfolio` to its units. A
+`PnL` has no `occ_reins` attribute at all, so a P&L over a reinsured engine had
+reported `has_reins` false on every build response since the P&L work landed. Two
+things ride on it: the summary strip's flag, and the choice of moments in
+`_summary_fields`, which prefers the realized pair net of a cession because those
+are the ones describing what is on screen and had been handing a reinsured P&L
+the analytic pair.
+
 ## 1.0.0a112
 
 **An operator's page, private by three independent mechanisms, and the audit log

@@ -31,6 +31,8 @@ The /v1/objects/* family covers everything object-shaped:
 * ``POST   /v1/objects/{id}/hints``       -- pin the realized grid into the
   object's own ``hints{}``. Derivation.
 * ``POST   /v1/objects/{id}/pnl``         -- wrap the object in a P&L. Derivation.
+* ``POST   /v1/objects/{id}/explode``     -- the same P&L walked layer by layer,
+  ``pnl`` to ``xpnl``. Derivation.
 * ``POST   /v1/objects/{id}/reins``       -- cede a layer. Derivation.
 * ``POST   /v1/objects/{id}/pricing/preview``   -- the pentagon as scalars.
 * ``POST   /v1/objects/{id}/pricing/calibrate`` -- the ``pricing.calibrate`` and
@@ -640,9 +642,20 @@ def _has_reinsurance(obj: Any) -> bool:
     for every object and that frame is not cheap.
 
     A ``Portfolio`` carries no cession of its own, so it is asked about its
-    units. The recursion is gated on the class name rather than on iterability:
-    an ``Aggregate`` is iterable too, and walking one here would be a loop with
-    no base case.
+    units, and a ``PnL`` carries none either, so it is asked about its engine.
+    Both recursions are gated on the class name rather than on iterability: an
+    ``Aggregate`` is iterable too, and walking one here would be a loop with no
+    base case.
+
+    Notes
+    -----
+    **The P&L case was wrong until a113**, and silently: a ``PnL`` has no
+    ``occ_reins`` attribute at all, so a P&L over a reinsured engine reported
+    ``has_reins`` False on every build response since the P&L work landed. Two
+    things follow it. The summary strip's flag, and the choice of moments in
+    :func:`_summary_fields`, which prefers the realized pair net of a cession
+    because those are the ones describing what is on screen, and was handing a
+    reinsured P&L the analytic pair.
 
     Parameters
     ----------
@@ -658,6 +671,8 @@ def _has_reinsurance(obj: Any) -> bool:
         return True
     if type(obj).__name__ == "Portfolio":
         return any(_has_reinsurance(unit) for unit in obj)
+    if type(obj).__name__ == "PnL":
+        return _has_reinsurance(getattr(obj, "engine", None))
     return False
 
 
@@ -2666,6 +2681,77 @@ def spread(program: str) -> str:
     return text.strip() or program
 
 
+# The ``pnl`` head of a P&L program, with the grammar's own boundary rule so
+# ``pnlx`` is not mistaken for it. Mirrors the ``PNL`` terminal in ``decl.lark``.
+_PNL_HEAD = re.compile(r"pnl(?![a-zA-Z0-9._:~\-])")
+
+# Where the trailer starts, if there is one. The ``peel`` clause goes in front
+# of it: see :func:`explode_program`.
+_TRAILER_HEAD = re.compile(r"(?:note|tags|hints)\{")
+
+
+def explode_program(program: str, peel: str | None = "bottom-up") -> str:
+    """The ``xpnl`` that walks a consolidated P&L layer by layer.
+
+    ``pnl`` and ``xpnl`` share an identical body in the grammar, so the whole
+    transform is the leading keyword plus the optional ``peel`` clause. The text
+    is a rewrite of the program the object was built from, not a re-render of
+    the object, so nothing about the P&L is recomputed here.
+
+    Parameters
+    ----------
+    program : str
+        Collapsed DecL for a ``pnl`` program, as :func:`collapse_program`
+        leaves it.
+    peel : str or None, default 'bottom-up'
+        The walk direction, or ``None`` to write no ``peel`` clause. Omitted
+        for an engine with no reinsurance, which has no layers to walk and
+        which the library refuses to peel.
+
+    Returns
+    -------
+    str
+        Collapsed DecL for the exploded program.
+
+    Raises
+    ------
+    ValueError
+        If ``program`` does not lead with the ``pnl`` keyword, which includes
+        the ``xpnl`` that is already exploded.
+
+    Notes
+    -----
+    **The clause goes before the trailer, and that is the whole difficulty.**
+    The rule is ``... expense_less peel_clause trailer`` (``decl.lark:133``),
+    and a P&L inherits its engine's trailer: an engine carrying
+    ``note{...} hints{...}`` wraps into a P&L carrying both after the expense
+    clause, verified against ``pnl_program`` on 1.0.0a305. Sharpen and Hints
+    write exactly those clauses, so appending at the end would be a parse error
+    for any program that had been through either button.
+
+    Taking the **earliest** of ``note{``, ``tags{`` and ``hints{`` is safe
+    because a P&L carries at most one trailer. The inline engine slot has no
+    trailer of its own (``agg_source`` in the grammar), which is why
+    ``pnl_program`` lifts the engine's onto the wrapper, and reading the first
+    match also does the right thing for a note whose text happens to mention
+    another clause.
+    """
+    program = program.strip()
+    if not _PNL_HEAD.match(program):
+        raise ValueError(
+            "an explode rewrites a 'pnl' program, and this one does not "
+            "start with the pnl keyword")
+    program = "x" + program
+    if peel is None:
+        return program
+    clause = f"peel {peel}"
+    trailer = _TRAILER_HEAD.search(program)
+    if trailer is None:
+        return f"{program} {clause}"
+    head = program[:trailer.start()].rstrip()
+    return f"{head} {clause} {program[trailer.start():]}"
+
+
 def _manifest(oid: str, entry: CacheEntry) -> dict:
     """The build manifest for an object already in the cache."""
     return {
@@ -2920,6 +3006,81 @@ def post_pnl(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     program = collapse_program(program)
+    built = post_object(models.BuildRequest(decl=program), request,
+                        settings, cache, audit, uw, sessions)
+    return {"program": spread(program), "description": None, **built}
+
+
+@router.post("/objects/{oid}/explode", response_model=models.DerivedResponse)
+def post_explode(
+    oid: str,
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    cache: ObjectCache = Depends(_get_cache),
+    audit: AuditLog = Depends(_get_audit),
+    entry: CacheEntry = Depends(_locked_entry),
+    uw: Any = Depends(_get_session_uw),
+    sessions: SessionRegistry = Depends(_get_sessions),
+) -> dict:
+    """Break this P&L out layer by layer: the ``xpnl`` of the same program.
+
+    Press two of the P&L button's two step story. Press one wraps an object in a
+    P&L and shows the consolidated total; this swaps ``pnl`` for ``xpnl`` and
+    adds ``peel bottom-up``, so the same book comes back as the walk up through
+    its reinsurance layers, lowest attaching first.
+
+    **No request body.** There is one thing to do here and no convention to
+    state, which is the ``hints`` shape rather than the ``pnl`` one.
+
+    Notes
+    -----
+    **A route rather than a text edit in the browser.** The transform needs a
+    rebuild either way, so there is no round trip to save. Here it sits beside
+    the grammar knowledge the other derivations already keep server side, it is
+    covered by ``pytest``, and both gates below are read off the live object
+    instead of guessed from the text.
+
+    **The two gates.** A portfolio engine is refused outright: ``xpnl`` over a
+    portfolio raises ``NotImplementedError`` upstream ("the portfolio total
+    hides its units, so there is nothing to explode"), and refusing here as a
+    400 lets the button go dark rather than making the press produce an error
+    pane. An engine with no reinsurance still explodes, and simply writes no
+    ``peel`` clause: that is the correct ``xpnl``, one group per step with a
+    single step, where a peel clause would be refused for having no layers to
+    walk.
+
+    **The reinsurance gate looks through** ``PnL.engine``. It reads the engine
+    rather than the P&L because the cession lives on the wrapped object, which
+    is the same reason :func:`_has_reinsurance` learned to look through a P&L.
+
+    **Nothing is mutated.** The exploded text goes through the ordinary build
+    path, :func:`post_object` called directly rather than reimplemented, so the
+    log2 cap, the semaphore, the wall-clock timeout, the audit row and the whole
+    parse-error surface apply unchanged.
+
+    ``description`` is left empty, as for ``pnl`` and ``hints``: the result is
+    the text, and it is sitting in the editor.
+    """
+    obj = entry.obj
+    if entry.kind != "pnl":
+        raise HTTPException(
+            status_code=400,
+            detail="an explode applies to a P&L")
+
+    engine = getattr(obj, "engine", None)
+    if type(engine).__name__ == "Portfolio":
+        raise HTTPException(
+            status_code=400,
+            detail=("the portfolio total hides its units, so there is nothing "
+                    "to explode"))
+
+    try:
+        program = explode_program(
+            collapse_program(entry.decl),
+            peel="bottom-up" if _has_reinsurance(engine) else None)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     built = post_object(models.BuildRequest(decl=program), request,
                         settings, cache, audit, uw, sessions)
     return {"program": spread(program), "description": None, **built}

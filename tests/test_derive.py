@@ -30,6 +30,13 @@ PRICED = "agg DRV.Priced 1000 premium at 0.65 lr sev lognorm 100 cv 1 poisson"
 PNL = ("pnl DRV.Pnl 1000 prem less "
        "agg DRV.PnlL 1000 prem at 70% lr sev lognorm 100 cv 2 poisson")
 SEV = "sev DRV.S lognorm 50 cv 1.5"
+# Reinsured, so the exploded form has layers to walk. Small limits keep it quick.
+REINS = ("agg DRV.Reins 10 claims 100 xs 0 sev lognorm 10 cv 1.5 "
+         "occurrence net of 15 xs 5 poisson")
+# The same, carrying the two trailer clauses Sharpen and Hints write. A P&L
+# inherits its engine's trailer, which is the whole difficulty in `peel`
+# placement: see `explode_program`.
+REINS_TRAILER = REINS.replace("poisson", "poisson note{watch the tail} hints{log2=12}")
 
 
 def _build(client, decl, log2=12):
@@ -272,6 +279,126 @@ def test_pnl_declines_what_it_cannot_wrap(client):
         r = client.post(f"/v1/objects/{obj['id']}/pnl", json={})
         assert r.status_code == 400, decl
         assert "Aggregate or a Portfolio" in r.json()["detail"]
+
+
+# ----------------------------------------------------------------------
+# Explode
+# ----------------------------------------------------------------------
+# Press two of the PnL button. `pnl` and `xpnl` share an identical body in the
+# grammar, so the transform is the leading keyword plus the `peel` clause, and
+# these hold it to the two places that is not quite the whole story: where the
+# clause goes when the program carries a trailer, and when to write it at all.
+
+
+def _pnl_of(client, decl):
+    """Build ``decl`` and wrap it in a P&L: the state press two starts from."""
+    source = _build(client, decl)
+    r = client.post(f"/v1/objects/{source['id']}/pnl", json={})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_explode_walks_a_reinsured_pnl_layer_by_layer(client):
+    """The whole contract: `pnl` becomes `xpnl`, and it peels."""
+    pnl = _pnl_of(client, REINS)
+    r = client.post(f"/v1/objects/{pnl['id']}/explode")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    program = body["program"]
+    assert program.startswith("xpnl DRV.Reins_PnL"), program
+    assert "peel bottom-up" in program, program
+    assert body["kind"] == "pnl", "both keywords build a PnL"
+    assert body["id"] != pnl["id"]
+
+
+def test_explode_writes_no_peel_clause_without_reinsurance(client):
+    """An unreinsured engine still explodes, and simply does not peel.
+
+    The library refuses a `peel` on a guaranteed-cost program with no layers to
+    walk, so writing the clause anyway would turn press two into an error pane
+    for the commonest object in the app. What comes back is the correct
+    ``xpnl``: one group per step, with a single step.
+    """
+    pnl = _pnl_of(client, AGG)
+    r = client.post(f"/v1/objects/{pnl['id']}/explode")
+    assert r.status_code == 200, r.text
+    program = r.json()["program"]
+    assert program.startswith("xpnl "), program
+    assert "peel" not in program, program
+
+
+def test_explode_puts_the_peel_clause_before_the_trailer(client):
+    """The one trap: a P&L inherits its engine's `note{}` and `hints{}`.
+
+    The rule is `... expense_less peel_clause trailer`, so appending the clause
+    at the end would be a parse error for any program that had been through
+    Sharpen or Hints, both of which write exactly those clauses. The assertion
+    that matters is the last one: it builds.
+    """
+    pnl = _pnl_of(client, REINS_TRAILER)
+    assert "note{" in pnl["program"], "the engine's trailer rides up onto the P&L"
+
+    r = client.post(f"/v1/objects/{pnl['id']}/explode")
+    assert r.status_code == 200, r.text
+    program = r.json()["program"]
+    assert program.index("peel bottom-up") < program.index("note{"), program
+    assert program.index("peel bottom-up") < program.index("hints{"), program
+
+    again = client.post("/v1/objects", json={"decl": program})
+    assert again.status_code == 200, again.text
+
+
+def test_explode_derived_text_rebuilds_to_the_same_object(client):
+    """Same contract as every other derivation: Build finds it already there."""
+    pnl = _pnl_of(client, REINS)
+    derived = client.post(f"/v1/objects/{pnl['id']}/explode").json()
+    again = client.post("/v1/objects", json={"decl": derived["program"]})
+    assert again.status_code == 200, again.text
+    assert again.json()["id"] == derived["id"]
+    assert again.json()["cached"] is True
+
+
+def test_explode_declines_a_portfolio_engine(client):
+    """The library refuses this, and the route refuses it first.
+
+    ``xpnl`` over a portfolio raises upstream, which the build path would turn
+    into a 422 and an error pane. Refusing here as a 400 is what lets the button
+    be dark instead, so the press never happens.
+    """
+    pnl = _pnl_of(client, PORT)
+    r = client.post(f"/v1/objects/{pnl['id']}/explode")
+    assert r.status_code == 400, r.text
+    assert "hides its units" in r.json()["detail"]
+
+
+def test_explode_declines_what_is_already_exploded(client):
+    """Press three has nothing to do, and says so rather than rebuilding."""
+    pnl = _pnl_of(client, REINS)
+    once = client.post(f"/v1/objects/{pnl['id']}/explode").json()
+    r = client.post(f"/v1/objects/{once['id']}/explode")
+    assert r.status_code == 400, r.text
+    assert "pnl keyword" in r.json()["detail"]
+
+
+def test_explode_declines_what_is_not_a_pnl(client):
+    """An aggregate is press one's job, not press two's."""
+    for decl in (AGG, PORT, SEV):
+        obj = _build(client, decl)
+        r = client.post(f"/v1/objects/{obj['id']}/explode")
+        assert r.status_code == 400, decl
+        assert "applies to a P&L" in r.json()["detail"]
+
+
+def test_a_reinsured_pnl_reports_has_reins(client):
+    """a113: the flag reads the engine, because the cession lives there.
+
+    A ``PnL`` has no ``occ_reins`` of its own, so it reported False here since
+    the P&L work landed. Two things ride on it: the summary strip's flag, and
+    the choice of moments, which prefers the realized pair net of a cession
+    because those describe what is on screen.
+    """
+    assert _pnl_of(client, REINS)["has_reins"] is True
+    assert _pnl_of(client, AGG)["has_reins"] is False
 
 
 # ----------------------------------------------------------------------

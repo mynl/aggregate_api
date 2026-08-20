@@ -234,6 +234,7 @@ export const api = {
     sharpen:      (id)              => _json('POST', `/v1/objects/${id}/sharpen`, {}),
     hints:        (id)              => _json('POST', `/v1/objects/${id}/hints`, {}),
     pnl:          (id, body = {})   => _json('POST', `/v1/objects/${id}/pnl`, body),
+    explode:      (id)              => _json('POST', `/v1/objects/${id}/explode`, {}),
     reins:        (id, cession)     => _json('POST', `/v1/objects/${id}/reins`, { cession }),
 
     // DecL editor support

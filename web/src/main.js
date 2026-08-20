@@ -290,7 +290,19 @@ function renderActionRow() {
     };
     off(sharpenBtn, !can('canSharpen'));
     off(hintsBtn, !can('canHints'));
-    off(pnlBtn, !can('canPnl'));
+    // One button, two steps of one story: wrap the object in a P&L, then break
+    // that P&L out layer by layer. The label moves with the object in the box,
+    // so the button never lies about what the press will do, and the way back
+    // from an exploded program is Ctrl+Up like any other derivation, which is
+    // why there is no third state.
+    const exploding = state.kind === 'pnl';
+    if (pnlBtn) {
+        pnlBtn.textContent = exploding ? 'Explode' : 'PnL';
+        pnlBtn.title = exploding
+            ? 'break this P&L out layer by layer, lowest attaching first'
+            : 'wrap this object in a P&L';
+    }
+    off(pnlBtn, exploding ? !can('canExplode') : !can('canPnl'));
     // Both halves of the split button move together: a caret opening a menu
     // whose every item is refused would be worse than a dark caret.
     off(gcnBtn, !can('canViews'));
@@ -407,8 +419,13 @@ sharpenBtn?.addEventListener('click', () => runDerivation(
 hintsBtn?.addEventListener('click', () => runDerivation(
     hintsBtn, 'Pinning…', (id) => api.hints(id)));
 
-pnlBtn?.addEventListener('click', () => runDerivation(
-    pnlBtn, 'Wrapping…', (id) => api.pnl(id), 'economics'));
+// Press one lands on Economics, where the P&L it just wrote is the thing to
+// look at. Press two stays where you are: you are already reading the P&L and
+// the exploded one answers in the same place, now layer by layer.
+pnlBtn?.addEventListener('click', () => (
+    state.kind === 'pnl'
+        ? runDerivation(pnlBtn, 'Exploding…', (id) => api.explode(id))
+        : runDerivation(pnlBtn, 'Wrapping…', (id) => api.pnl(id), 'economics')));
 
 /**
  * Rewrite the program in the box in canonical form.

@@ -853,6 +853,20 @@ one version bump each.
         and the builder then accepted**, verbatim. Any that appear are an
         upstream ask against `Underwriter.preview`; none have yet.
 
+- [ ] **The PnL button, a priced book and one press to explode**:
+      `dev/plan-pnl-button-punchup.md`. **A2, A2b and A3 landed at a113**: the
+      `explode` route turning a `pnl` into the `xpnl` that walks its layers,
+      `can_explode` behind the button's second state, and `_has_reinsurance`
+      looking through a `PnL` to its engine, which had been reporting
+      `has_reins` false for every reinsured P&L. **A1 is open** and is the
+      reason the plan stays here: press one still writes its premium off a loss
+      ratio, and the ladder it should use (net technical premium plus the cost
+      of each cover, grossed up once for expenses) is the library's half, in
+      `aggregate_REFACTOR/dev/plan-pnl-reinsurance-pricing.md`. That plan is a
+      draft awaiting review, so the fields are not addable yet: passing
+      `net_combined_ratio` to a library that predates it is a 500. A1 lands
+      after LIB L3 and a `uv sync --extra dev`, in that order.
+
 ## Raised with `csv-grid` (not fixed here)
 
 - [ ] **No way to default the export to raw values.** CsvGrid 3.9.0 builds the

@@ -368,6 +368,37 @@ def can_pnl(obj: Any) -> bool:
     return hasattr(obj, "pnl_program")
 
 
+def can_explode(obj: Any) -> bool:
+    """Can this P&L be broken out layer by layer?
+
+    Consumer: the action row's PnL button in its second state, where it reads
+    ``Explode`` and posts to ``/objects/{id}/explode``.
+
+    True for a ``PnL`` built by ``pnl`` whose engine is a single aggregate.
+    False for one already built by ``xpnl``, which has nothing left to do, and
+    false for a portfolio engine, which the library refuses to explode because
+    the portfolio total hides the units the walk would step through.
+
+    Read off ``PnL.program``, the text the object was built from, because the
+    two keywords produce the same class and the source is the only thing that
+    tells them apart. The leading ``x`` is the whole test: an object of this
+    class leads with one keyword or the other.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    bool
+    """
+    if type(obj).__name__ != "PnL":
+        return False
+    if type(getattr(obj, "engine", None)).__name__ == "Portfolio":
+        return False
+    return str(getattr(obj, "program", "") or "").lstrip().startswith("pnl")
+
+
 def can_hints(obj: Any) -> bool:
     """Can this object pin its realized grid into a ``hints{}`` clause?
 
@@ -667,6 +698,7 @@ def capability_for(obj: Any) -> dict:
         "can_sharpen": can_sharpen(obj),
         "has_sharpen": has_sharpen(obj),
         "can_pnl": can_pnl(obj),
+        "can_explode": can_explode(obj),
         "can_hints": can_hints(obj),
         "can_reins": can_reins(obj),
         "can_views": can_views(obj),

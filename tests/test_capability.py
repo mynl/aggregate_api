@@ -57,6 +57,7 @@ def test_every_kind_carries_a_capability_block(client, label):
     cap = body["capability"]
     assert set(cap) == {"exhibits", "charts", "primary_chart", "has_premium",
                         "premium", "can_sharpen", "has_sharpen", "can_pnl",
+                        "can_explode",
                         "can_hints", "can_reins", "can_views", "reins_bases",
                         "can_price", "can_evaluate", "can_bounds",
                         "can_allocate", "can_natural_allocation",
@@ -103,6 +104,41 @@ def test_can_views_needs_an_occurrence_cession(client):
 
     _, port = _build(client, "port")
     assert port["capability"]["can_views"] is False
+
+
+def test_can_explode_is_a_pnl_that_has_not_been_exploded(client):
+    """The second state of the action row's PnL button.
+
+    Three ways to be False, and each is a different sentence the greyed button
+    is saying. Not a P&L at all, so there is nothing to explode. Already an
+    ``xpnl``, so there is nothing left to do. A portfolio engine, which the
+    library refuses because the total hides the units a walk would step
+    through.
+
+    ``can_pnl`` and ``can_explode`` are never both true, which is what lets one
+    button carry both: the object in the box is either something to wrap or the
+    wrapper itself.
+    """
+    for label in ("agg", "agg_reins", "port", "sev", "distortion", "bvagg"):
+        _, body = _build(client, label)
+        assert body["capability"]["can_explode"] is False, label
+
+    _, pnl = _build(client, "pnl")
+    assert pnl["capability"]["can_explode"] is True
+    assert pnl["capability"]["can_pnl"] is False, "a P&L is not wrapped again"
+
+    _, xpnl = _build(client, "xpnl")
+    assert xpnl["capability"]["can_explode"] is False, "already exploded"
+
+    port_engine = ("pnl CAP.PortPnl 1000 prem less "
+                   "port CAP.PortPnlP "
+                   "agg A 10 claims sev lognorm 100 cv 1.5 poisson "
+                   "agg B 5 claims sev gamma 50 cv 0.8 poisson")
+    body = client.post("/v1/objects",
+                       json={"decl": port_engine, "log2": 12}).json()
+    assert body["kind"] == "pnl"
+    assert body["capability"]["can_explode"] is False, \
+        "the portfolio total hides the units the walk would step through"
 
 
 @pytest.mark.parametrize("label", list(DECLS))
