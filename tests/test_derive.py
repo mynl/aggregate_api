@@ -282,6 +282,125 @@ def test_pnl_declines_what_it_cannot_wrap(client):
 
 
 # ----------------------------------------------------------------------
+# PnL: the priced book (the combined-ratio ladder, library a306)
+# ----------------------------------------------------------------------
+
+def test_pnl_prices_the_cover_it_cedes(client):
+    """Press one writes a book, not a program with free reinsurance.
+
+    The whole point of the ladder. Every cession is written as a ``deposit``, a
+    currency amount, and the ``ZeroPremiumCessionWarning`` that an unpriced one
+    raises is gone from the response. The contrast is asserted both ways so the
+    test says what changed rather than only what is true now.
+    """
+    source = _build(client, REINS)
+
+    priced = client.post(f"/v1/objects/{source['id']}/pnl", json={})
+    assert priced.status_code == 200, priced.text
+    body = priced.json()
+    assert "deposit" in body["program"], body["program"]
+    assert not any("ceded-premium" in w for w in body["warnings"]), body["warnings"]
+
+    # Null is how a caller asks for the old behavior, and it still warns.
+    bare = client.post(f"/v1/objects/{source['id']}/pnl",
+                       json={"net_combined_ratio": None})
+    assert "deposit" not in bare.json()["program"]
+    assert any("ceded-premium" in w for w in bare.json()["warnings"])
+
+
+def test_pnl_prices_each_layer_at_its_own_ratio(client):
+    """A scalar is a convention, a list is a quote sheet, one value per layer.
+
+    The wrong number of them is a 422 carrying the library's own message rather
+    than a 500: it is a statement about what was asked for, not a server fault.
+    """
+    two_layers = ("agg DRV.Tower 10 claims 100 xs 0 sev lognorm 10 cv 1.5 "
+                  "occurrence net of 5 xs 5 and 10 xs 10 poisson")
+    source = _build(client, two_layers)
+
+    r = client.post(f"/v1/objects/{source['id']}/pnl",
+                    json={"occ_combined_ratio": [0.75, 0.55]})
+    assert r.status_code == 200, r.text
+    assert r.json()["program"].count("deposit") == 2, r.json()["program"]
+
+    # The same tower at one ratio prices differently, so the list is doing work.
+    flat = client.post(f"/v1/objects/{source['id']}/pnl",
+                       json={"occ_combined_ratio": 0.75})
+    assert flat.json()["program"] != r.json()["program"]
+
+    wrong = client.post(f"/v1/objects/{source['id']}/pnl",
+                        json={"occ_combined_ratio": [0.75, 0.55, 0.4]})
+    assert wrong.status_code == 422, wrong.text
+    assert "one ratio per layer" in wrong.json()["detail"]
+
+
+def test_pnl_over_a_portfolio_takes_the_unladdered_path(client):
+    """The ladder prices one aggregate's cessions, and says so for a portfolio.
+
+    So the app's defaults are dropped for a portfolio rather than sent and
+    refused, or every portfolio press would be an error pane. Dropped only when
+    the caller did not ask: an explicit ratio reaches the library and is
+    refused there, because ignoring what was asked for is worse than refusing.
+    """
+    source = _build(client, PORT)
+
+    r = client.post(f"/v1/objects/{source['id']}/pnl", json={})
+    assert r.status_code == 200, r.text
+    assert r.json()["kind"] == "pnl"
+
+    asked = client.post(f"/v1/objects/{source['id']}/pnl",
+                        json={"net_combined_ratio": 0.9})
+    assert asked.status_code == 422, asked.text
+    assert "portfolio" in asked.json()["detail"]
+
+
+def test_pnl_refuses_a_layer_quoted_as_a_rate(client):
+    """A rate is a fraction of the premium the ladder is computing.
+
+    The library's ruling is to refuse and name the layer rather than solve the
+    circularity or break its margin identity silently, and the message says to
+    restate the layer as a deposit. A 422, since it describes the program.
+    """
+    rated = ("agg DRV.Rated 10 claims 100 xs 0 sev lognorm 10 cv 1.5 "
+             "occurrence net of 15 xs 5 rate 0.1 poisson")
+    source = _build(client, rated)
+    r = client.post(f"/v1/objects/{source['id']}/pnl", json={})
+    assert r.status_code == 422, r.text
+    assert "rate" in r.json()["detail"]
+
+
+def test_pnl_request_defaults_are_held_to_the_library_signature(client):
+    """The drift catcher: five fields, all of them the library's own.
+
+    This endpoint is passthrough, so a field the library does not take is a
+    500 waiting to happen and a renamed one is a silently ignored convention.
+    Three defaults diverge on purpose, because the button is demo sugar and the
+    library's ``None`` means "leave the cover unpriced"; the divergence is
+    asserted rather than merely commented so changing it is a deliberate act.
+    """
+    import inspect
+
+    from aggregate import Aggregate
+
+    from aggregate_api import models
+
+    params = inspect.signature(Aggregate.pnl_program).parameters
+    fields = models.PnlProgramRequest.model_fields
+    assert set(fields) <= set(params), "a request field the library does not take"
+
+    # Shared with the library, and identical to it.
+    assert fields["loss_ratio"].default == params["loss_ratio"].default
+    assert fields["expense_ratio"].default == params["expense_ratio"].default
+
+    # The app's own opinion, against a library that defaults to unpriced.
+    for name, ours in (("net_combined_ratio", 0.90),
+                       ("occ_combined_ratio", 0.75),
+                       ("agg_combined_ratio", 0.65)):
+        assert params[name].default is None, f"{name}: upstream default moved"
+        assert fields[name].default == ours, name
+
+
+# ----------------------------------------------------------------------
 # Explode
 # ----------------------------------------------------------------------
 # Press two of the PnL button. `pnl` and `xpnl` share an identical body in the

@@ -145,12 +145,26 @@ def test_pnl_premium_keeps_the_cents_when_small(client):
     library's call about how a float prints and not something to pin here; what
     this route owes the reader is a premium rounded to the cent, and 10.5 is
     that number.
+
+    **The ladder is switched off for the first arm, deliberately.** Since a114
+    the endpoint defaults to the combined-ratio ladder, which sizes the premium
+    from the bottom up and grosses it up once for expenses, so ``loss_ratio``
+    sizes nothing unless the ladder is off. That is what makes 10.5 an exact
+    expectation. The second arm is the path the button actually presses, and it
+    is here because the rounding rule has to hold on both.
     """
     built = client.post("/v1/objects", json={"decl": _DICE}).json()
     program = client.post(f"/v1/objects/{built['id']}/pnl",
-                          json={"loss_ratio": 1.0}).json()["program"]
+                          json={"loss_ratio": 1.0,
+                                "net_combined_ratio": None}).json()["program"]
     premium = float(_pnl_premium(program))
     assert premium == round(premium, 2) and premium == 10.5, program[:80]
+
+    laddered = client.post(f"/v1/objects/{built['id']}/pnl",
+                           json={}).json()["program"]
+    priced = float(_pnl_premium(laddered))
+    assert priced <= 100, "the fixture has to stay on the cents arm"
+    assert priced == round(priced, 2), laddered[:80]
 
 
 def test_build_reports_library_warnings(client):

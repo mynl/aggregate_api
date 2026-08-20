@@ -26,7 +26,7 @@ Conventions
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -37,6 +37,13 @@ from pydantic import BaseModel, ConfigDict, Field
 # settings. ``extra="forbid"`` enforces that response models only
 # carry declared fields (catches accidental leakage of internal data).
 _RESPONSE_CFG = ConfigDict(extra="forbid")
+
+# A combined ratio, expected loss over premium. The library's own rule, which
+# this mirrors so a bad value is a 422 from the edge rather than a ValueError
+# from inside the build: "a positive finite number". No upper bound, because a
+# ratio above 1 is a cover priced below its expected loss, which is a thing a
+# reader may legitimately want to look at.
+_Ratio = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 
 
 # ======================================================================
@@ -276,18 +283,55 @@ class DerivedResponse(BuildResponse):
 class PnlProgramRequest(BaseModel):
     """Body for ``POST /v1/objects/{id}/pnl``.
 
-    Both ratios are conventions rather than facts, which is why the library
-    puts them in the signature where a caller reads them, and why they are
-    request fields here rather than server settings. ``loss_ratio`` sizes the
-    premium and is used **only** when the engine states none of its own.
+    Every field here is a convention rather than a fact, which is why the
+    library puts them in the signature where a caller reads them, and why they
+    are request fields rather than server settings. The button posts an empty
+    body and takes all five defaults, so this model is where the app's opinion
+    about a demo book is written down, documented and tested.
+
+    Notes
+    -----
+    **Three of the five defaults are the app's own**, and diverge from the
+    library's deliberately. Upstream, all three combined ratios default to
+    ``None``, which means "behave exactly as before" and leaves any cession
+    unpriced. This endpoint exists to serve one app whose PnL button is demo
+    sugar, so it defaults to a priced book: a 90 percent net combined ratio,
+    occurrence cover at 75 and aggregate cover at 65. ``loss_ratio`` and
+    ``expense_ratio`` match the library's own defaults exactly, and a test
+    holds all five field names to the library's signature so the two cannot
+    drift apart unnoticed.
+
+    **The ladder makes ``loss_ratio`` legacy.** With a combined ratio in hand
+    the premium is built from the bottom up, net technical premium plus the
+    cost of each cover, grossed up once for expenses, so ``loss_ratio`` is used
+    only when the ladder is off, which for this endpoint means a portfolio
+    engine. See ``aggregate`` 1.0.0a306, ``dev/done/plan-pnl-reinsurance-pricing.md``.
+
+    **Every ceded premium is written as a ``deposit``**, a currency amount, and
+    the app has no say in the form. A ``rate`` quote is a fraction of the P&L
+    premium, and that premium is what the ladder is computing, so a rate would
+    be circular. The library ruled the split out rather than solve it.
     """
 
     loss_ratio: float = Field(
         0.70, gt=0, le=1,
-        description="Sizes the premium as expected loss over this, when there is none to derive from.")
+        description=("Sizes the premium as expected loss over this, when there is none to "
+                     "derive from. Unused once the combined-ratio ladder is engaged."))
     expense_ratio: float = Field(
         0.25, ge=0, lt=1,
         description="Gross expense as a fraction of premium; 0 omits the clause.")
+    net_combined_ratio: _Ratio | None = Field(
+        0.90,
+        description=("Expected net loss over net technical premium. Engages the ladder, "
+                     "which prices every cession; null leaves cessions unpriced."))
+    occ_combined_ratio: _Ratio | list[_Ratio] | None = Field(
+        0.75,
+        description=("The occurrence tier's combined ratio: one value, or one per layer in "
+                     "declaration order. Null means the net ratio."))
+    agg_combined_ratio: _Ratio | list[_Ratio] | None = Field(
+        0.65,
+        description=("The aggregate tier's combined ratio, one value or one per layer. "
+                     "Null means the net ratio."))
 
 
 class NarrativeSection(BaseModel):

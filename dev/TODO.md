@@ -853,19 +853,22 @@ one version bump each.
         and the builder then accepted**, verbatim. Any that appear are an
         upstream ask against `Underwriter.preview`; none have yet.
 
-- [ ] **The PnL button, a priced book and one press to explode**:
-      `dev/plan-pnl-button-punchup.md`. **A2, A2b and A3 landed at a113**: the
-      `explode` route turning a `pnl` into the `xpnl` that walks its layers,
-      `can_explode` behind the button's second state, and `_has_reinsurance`
-      looking through a `PnL` to its engine, which had been reporting
-      `has_reins` false for every reinsured P&L. **A1 is open** and is the
-      reason the plan stays here: press one still writes its premium off a loss
-      ratio, and the ladder it should use (net technical premium plus the cost
-      of each cover, grossed up once for expenses) is the library's half, in
-      `aggregate_REFACTOR/dev/plan-pnl-reinsurance-pricing.md`. That plan is a
-      draft awaiting review, so the fields are not addable yet: passing
-      `net_combined_ratio` to a library that predates it is a 500. A1 lands
-      after LIB L3 and a `uv sync --extra dev`, in that order.
+- [x] **The PnL button, a priced book and one press to explode**:
+      `dev/done/plan-pnl-button-punchup.md`, complete across **a113** and
+      **a114**. A113: the `explode` route turning a `pnl` into the `xpnl` that
+      walks its layers, `can_explode` behind the button's second state, and
+      `_has_reinsurance` looking through a `PnL` to its engine, which had been
+      reporting `has_reins` false for every reinsured P&L. A114: the three
+      combined ratios, so press one prices every cession as a `deposit` against
+      LIB a306's ladder. Two things a later reader should know. The drafted
+      `working_attach` field never existed, because a `rate` quote against the
+      P&L premium is circular and the library removed the split; and a
+      portfolio engine keeps the unladdered path, so it is still sized off
+      `loss_ratio` while an aggregate is sized off the ladder.
+      **Follow-up**, not blocking: LIB's D2, whether `net_combined_ratio`
+      eventually takes a `Distortion` and resolves the implied technical
+      premium ratio itself. That is the destination the ratio form was chosen
+      for, and it would reach this endpoint as a field.
 
 ## Raised with `csv-grid` (not fixed here)
 

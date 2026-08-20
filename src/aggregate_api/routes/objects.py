@@ -2984,8 +2984,35 @@ def post_pnl(
     (``aggregate._program._pnl_consideration``, upstream since ``aggregate``
     1.0.0a251; this route rewrote the text itself until a95).
 
+    **The cover is priced too**, since a114. The three combined ratios engage
+    the library's technical premium ladder (``aggregate`` 1.0.0a306): the net
+    book and each cession are priced separately and added, then grossed up once
+    for expenses, and each ceded premium is written into the program as a
+    ``deposit``. That is what silences the ``ZeroPremiumCessionWarning`` a bare
+    cession raises, and it is the difference between the button writing a book
+    with reasonable numbers in it and one whose reinsurance is free.
+
     Notes
     -----
+    **A portfolio engine takes the old path, and that is the library's scope
+    rather than this route's timidity.** The ladder prices the cessions of a
+    single aggregate engine and refuses a portfolio by name, so sending the
+    app's default ratios to one would turn every portfolio press into an error
+    pane. The ratios are dropped for a portfolio **only when the caller did not
+    ask for them**: an explicit ``net_combined_ratio`` in the body reaches the
+    library and is refused there, with a message naming the reason, because
+    silently ignoring what a caller asked for is worse than refusing it. The
+    consequence worth knowing is that a portfolio P&L is still sized off
+    ``loss_ratio`` while an aggregate one is sized off the ladder.
+
+    **A layer already carrying a ``rate`` clause is a 422**, from the library.
+    A rate resolves against the P&L premium, and the premium is what the ladder
+    is computing, so it cannot enter the sum at a known amount. The library's
+    ruling is to refuse and name the layer rather than solve a circularity or
+    break its own margin identity, and the message tells the reader to restate
+    the layer as a deposit. Surfacing that beats writing a book whose numbers
+    quietly do not add up.
+
     Unlike sharpening this mutates nothing, so there is no re-filing to do: the
     derived text goes through the ordinary build path, which is
     :func:`post_object` called directly rather than reimplemented. That is
@@ -2999,9 +3026,18 @@ def post_pnl(
         raise HTTPException(
             status_code=400,
             detail="a P&L wraps an Aggregate or a Portfolio")
+
+    ladder = {"net_combined_ratio": req.net_combined_ratio,
+              "occ_combined_ratio": req.occ_combined_ratio,
+              "agg_combined_ratio": req.agg_combined_ratio}
+    if (type(obj).__name__ == "Portfolio"
+            and not req.model_fields_set & set(ladder)):
+        ladder = {}
+
     try:
         program = obj.pnl_program(loss_ratio=req.loss_ratio,
-                                  expense_ratio=req.expense_ratio)
+                                  expense_ratio=req.expense_ratio,
+                                  **ladder)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

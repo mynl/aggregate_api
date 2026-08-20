@@ -1,14 +1,37 @@
 # Plan [PnL-Button-Punchup]: a priced book, and one press to explode
 
-> **Status: PART EXECUTED at API `1.0.0a113`, 2026-08-20.** Phases **A2** (the
-> explode route), **A2b** (`_has_reinsurance` through `PnL.engine`) and **A3**
-> (the capability flag and the button's two states) are in. Phase **A1** is
-> **open**: it needs the companion plan's L3, and as of this writing LIB is at
-> `1.0.0a305` with `pnl_program(loss_ratio, expense_ratio)` unchanged and the
-> companion plan itself still a draft. The plan stays in `dev/` until A1 lands.
-> Line anchors as drafted: API `1.0.0a112`, LIB `1.0.0a305`. Companion document:
-> LIB `dev/plan-pnl-reinsurance-pricing.md`, which owns the premium construction
-> and must land and be synced before phase A1 here.
+> **Status: EXECUTED, 2026-08-20.** Phases **A2** (the explode route), **A2b**
+> (`_has_reinsurance` through `PnL.engine`) and **A3** (the capability flag and
+> the button's two states) landed at API `1.0.0a113`; phase **A1** (the priced
+> premium) landed at API `1.0.0a114` against LIB `1.0.0a306`. Line anchors as
+> drafted: API `1.0.0a112`, LIB `1.0.0a305`. Companion document: LIB
+> `dev/done/plan-pnl-reinsurance-pricing.md`, executed at a306 with no
+> divergences from its own v3.
+>
+> **A1 landed one field short of this draft, and the missing one is the
+> interesting part.** `working_attach` does not exist, and neither does the
+> `rate` / `rol` split it selected. A `rate` quote is a fraction of the P&L
+> premium, and that premium is what the ladder is computing, so the quotation
+> form was circular; the author's ruling during the LIB build was to remove the
+> split rather than solve it, and **every cession is written as a `deposit`**, a
+> currency amount that references neither the premium nor the limit. Section 1's
+> field table is therefore five fields, not six, and section 4's test 7 asserts
+> a deposit rather than a rate or a rol. A layer whose program already carries a
+> `rate` clause is refused upstream, and surfaces here as a 422 naming the
+> layer.
+>
+> **One design decision this draft did not anticipate.** The ladder prices the
+> cessions of a single aggregate engine and refuses a `Portfolio` by name, but
+> the PnL button works on portfolios, so sending the app's defaults to one would
+> have turned every portfolio press into an error pane. The route drops the
+> three ratios for a portfolio, and only when the caller did not ask for them:
+> an explicit `net_combined_ratio` reaches the library and is refused there.
+> A portfolio P&L is therefore still sized off `loss_ratio`.
+>
+> **The author's amended defaults are in**: `net_combined_ratio` 0.90,
+> `occ_combined_ratio` 0.75, `agg_combined_ratio` 0.65. That is three
+> divergences from the library's `None`, not the one this draft's section 1
+> claimed, and the test asserts all three by value.
 >
 > **Execution notes, A2 / A2b / A3.** Four things worth recording against the
 > draft. (1) The trailer trap is real and was verified rather than assumed:
@@ -207,8 +230,8 @@ with real logic in them.
 
 ## 5. Phases and cadence
 
-- **A1**, the request fields. **OPEN.** Lands after LIB L3 and a sync. Version
-  bump, `CHANGELOG.md` section, one line commit.
+- **A1**, the request fields. **DONE, a114**, against LIB a306, five fields
+  rather than six.
 - **A2**, the explode route and its tests. **DONE, a113.** Independent of A1 and
   of the whole LIB plan, and it did land first because the premium work is still
   a draft upstream.

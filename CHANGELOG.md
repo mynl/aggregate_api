@@ -4,6 +4,54 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a114
+
+**The PnL button writes a priced book: every cession carries a premium, and the
+warning the library used to raise about it is gone.**
+`dev/done/plan-pnl-button-punchup.md`, phase A1, which completes the plan. It
+needed `aggregate` 1.0.0a306, `[PnL-Reinsurance-Pricing]`, and could not land at
+a113 because that release did not exist yet.
+
+**Passthrough, and nothing else.** `PnlProgramRequest` gains
+`net_combined_ratio`, `occ_combined_ratio` and `agg_combined_ratio`, `post_pnl`
+forwards them, and the library builds the premium from the bottom up: net
+technical premium plus the cost of each cover, summed, then grossed up once for
+expenses. Nothing in this repo computes a premium, a rate or an expected loss.
+The button still posts an empty body, so the defaults are where the app's
+opinion about a demo book is written down.
+
+**Three defaults diverge from the library's, deliberately**: a 90 percent net
+combined ratio, occurrence cover at 75 and aggregate cover at 65, against an
+upstream `None` that means "leave the cover unpriced". This endpoint serves one
+app whose button is demo sugar, and a reader adjusts the numbers in the box
+afterward, which is the whole reason this is DecL rather than a form. A test
+holds all five field names to the library's signature and asserts the three
+divergences by value, so neither the drift nor the opinion can go unnoticed.
+
+**Every ceded premium is a `deposit`, a currency amount, and the app has no say
+in it.** The drafted plan had a sixth field, `working_attach`, choosing between a
+`rate` and a `rol` quote by probability of attachment. It does not exist: a
+`rate` is a fraction of the P&L premium and that premium is what the ladder is
+computing, so the library removed the split rather than solve the circularity.
+A layer whose program already carries a `rate` clause is refused upstream and
+surfaces here as a 422 naming the layer, which beats writing a book whose
+numbers quietly do not add up.
+
+**A portfolio engine keeps the old path.** The ladder prices the cessions of a
+single aggregate engine and refuses a portfolio by name, so sending the app's
+defaults to one would turn every portfolio press into an error pane. They are
+dropped for a portfolio only when the caller did not ask for them: an explicit
+`net_combined_ratio` reaches the library and is refused there, because silently
+ignoring what a caller asked for is worse than refusing it. The consequence
+worth knowing is that a portfolio P&L is still sized off `loss_ratio` while an
+aggregate one is sized off the ladder.
+
+**One existing test changed rather than broke.**
+`test_pnl_premium_keeps_the_cents_when_small` pinned a premium of 10.5 sized off
+`loss_ratio`, which the ladder now overrides by default. It switches the ladder
+off for that arm, keeping the exact expectation, and gained a second arm on the
+default path, because the rounding rule has to hold on both.
+
 ## 1.0.0a113
 
 **One button, two steps of one story: wrap a program in a P&L, then break that
