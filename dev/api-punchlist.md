@@ -81,7 +81,7 @@ a104: `Calibrate  Stand-alone  Allocate  Plot | Evaluate`, where Stand-alone is
 the old Allocate renamed and keeps the old coverage, while the new Allocate and
 Plot are narrower and need parts to split a premium across, so a reinsured
 aggregate and a portfolio light them and a plain aggregate does not. See
-`dev/plan-pricing-natural-allocation.md`, 2026-08-14.)
+`dev/done/plan-pricing-natural-allocation.md`, 2026-08-14.)
 |                 |      |     |              |      |     |            |
 | **Economics**   | n/a  | n/a |     n/a      | n/a  | n/a |     y      |
 | E.Ledger        | n/a  | n/a |     n/a      | n/a  | n/a |     y      |

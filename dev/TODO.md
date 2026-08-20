@@ -781,8 +781,8 @@ one version bump each.
          moot.
 
 - [x] **Five Pricing subtabs, and the natural allocation**:
-      `dev/plan-pricing-natural-allocation.md` (canonical here, symlinked in
-      the library), drafted 2026-08-14. The pane becomes `Calibrate
+      `dev/done/plan-pricing-natural-allocation.md` (canonical here, symlinked
+      in the library), drafted 2026-08-14. The pane becomes `Calibrate
       Stand-alone  Allocate  Plot | Evaluate`. Stand-alone prices the parts
       alone, Allocate splits the whole across them, Plot draws the kappa
       curves behind the split. **Three api phases, all landed: B1 the routes
@@ -793,8 +793,9 @@ one version bump each.
       `needs_split_allocation` marker and a temporarily dark `pricing:plot`
       row meanwhile; both are deleted at a105. Every acceptance criterion of
       the plan is met, checked in the browser on both reference programs.
-      **The plan doc has not moved to `dev/done/`**: the library symlinks the
-      canonical copy, so the two moves have to happen together.
+      **Both copies moved to `dev/done/` 2026-08-20**, the canonical one here
+      and the library's symlink with it, which is why the two moves waited to
+      happen together.
 - [x] **Hints, the doc catch-up, and a headless flag**:
       `dev/done/plan-hints-docs-headless.md`, drafted and executed 2026-08-17
       against the library at 1.0.0a301. Three independent phases, one bump each.

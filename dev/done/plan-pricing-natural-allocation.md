@@ -1,5 +1,15 @@
 # Plan [Pricing-Natural-Allocation]: five subtabs, the natural allocation, and the kappa plot
 
+> **Status: DONE, moved to `dev/done/` 2026-08-20.** Every phase landed:
+> LIB N1 to N5 at `aggregate` 1.0.0a281 to a285, on top of the companion
+> notes' four phases at a277 to a280, then API B1 (the allocate route,
+> a103), B2 (the five subtab pane, a104) and the sync that took the
+> scaffolding down (a105). Section 8's acceptance criteria were all checked
+> in the browser on both reference programs at a105. The `Massive joint`
+> control shipped as the greyed placeholder section 7 specified, and stays
+> greyed until LIB `[Massive-Kappa-Second-Sweep]` lands, which LIB
+> `dev/TODO.md` tracks. The history below is left as drafted.
+>
 > **Status: DRAFT v3, 2026-08-14, awaiting author review.** Written from the
 > author's rulings of the same day: four subtabs became five with the Plot
 > leaf; the Portfolio question of v1's section 3 is ruled (the Portfolio's
@@ -7,7 +17,7 @@
 > built for it); v3 records two further rulings, the portfolio stand-alone
 > anchor (on the total, decision 2) and the memoized joint (decision 6).
 > Canonical copy lives in `aggregate_api/dev/`;
-> `aggregate_REFACTOR/dev/plan-pricing-natural-allocation.md` is a symlink to
+> `aggregate_REFACTOR/dev/done/plan-pricing-natural-allocation.md` is a symlink to
 > it, the `plan-3d-plot.md` arrangement. Nothing is implemented. Line anchors
 > are LIB `1.0.0a275` and API `1.0.0a99`.
 >
