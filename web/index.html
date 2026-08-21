@@ -314,15 +314,17 @@
              one container, so the instrumentation reads as one thing:
 
                1. the object    name · kind · bs · log2 · mean · CV · validation
-               2. the note      the program's own note{}, then what a derivation
-                                did and what the library warned about
+               2. the note      the program's own tags{} as chips and its note{}
+                                running on after them, then what a derivation did
+                                and what the library warned about
                3. the timing    Calculated in 0.000 seconds
 
              The note is its own line as of a49. Sharpen's verdict used to be
              written onto the timing line, which the next render then overwrote.
-             It carries the declared note{} too since a118, on the reading that
-             a program's own account of itself belongs next to its numbers and
-             not only on the Overview header, which is drawn for one group.
+             The declared note{} joined it at a118 and the tags{} at a120, when
+             the Overview header block that had carried both was retired: a
+             program's own account of itself belongs next to its numbers, and
+             that block was drawn under one group where this is drawn under six.
 
              main.js sets `is-warn` / `is-fail` on the wrapper from the build's
              own verdict, which tints the whole strip: hue alone is too weak for
@@ -340,12 +342,11 @@
             <div class="summary-timing" id="summary-timing"></div>
         </div>
 
-        <!-- The object's identity: name, kind, tags and its note. It sits ABOVE
-             the group strip, not inside Overview, because it names the object
-             rather than any one view of it. Nothing may stand between a group
-             strip and its sub menu, or the two stop reading as parent and
-             child, which is exactly what they did through a46. -->
-        <div id="head-overview"></div>
+        <!-- An identity block stood here through a119, carrying the object's
+             tags and its note. Both are on the status strip now, drawn under
+             every group rather than under Overview alone and off the build
+             response rather than a second request. See the note above the
+             Overview loaders in main.js. -->
 
         <!-- Output navigation: six groups, each with its own sub-tab row.
              The groups are editorial, a judgment about how insurance work

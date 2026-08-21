@@ -400,19 +400,37 @@ header .navbar { min-height: 56px; }
 }
 .summary.expanded .summary-more i { transform: rotate(180deg); }
 /* The note slot, between the summary row and the timing line: the program's own
-   note{}, what a derivation just did, and what the library warned about. Set in
-   the UI face rather than in mono, because these are the prose sentences on a
-   strip that is otherwise all instrument readings, and one step darker than the
-   timing line, because they are worth reading and the timing is not. */
+   tags{} and note{}, what a derivation just did, and what the library warned
+   about. Set in the UI face rather than in mono, because these are the prose
+   sentences on a strip that is otherwise all instrument readings, and one step
+   darker than the timing line, because they are worth reading and the timing is
+   not. */
 .summary-note {
     font-size: var(--fs-meta); color: var(--ink-2); line-height: 1.4;
     max-width: var(--measure); margin: .25rem 0 0;
 }
 .summary-note:empty { display: none; }
-/* Each tenant of the note slot on its own line, so a declared note, a
+/* Each tenant of the note slot on its own line, so the declaration's own line, a
    derivation's sentence and two build warnings do not run together into one
    paragraph. */
 .summary-note > span { display: block; }
+/* The declaration's own line: its tag chips, then its note running on after
+   them, wrapping as one paragraph. `line-height` gives the chips room to sit on
+   the text baseline without pushing the lines apart when the note wraps past
+   them. */
+.summary-note .note-declared { line-height: 1.75; }
+/* A tag chip, carried over from the Overview header block this line absorbed at
+   a120. Same shape as it had there, and it has to be a different fill: on that
+   block it was --soft on the white page, and here the strip's own ground IS
+   --soft, so the chip would have vanished into it. One step darker than the
+   strip instead, which also holds against the two tinted grounds a warning and a
+   failure paint (#fdf6ee and #fdf1f2), both lighter than this. */
+.summary-note .note-tag {
+    display: inline-block; margin-right: .35rem;
+    font-family: var(--mono); font-size: .68rem; color: var(--ink-2);
+    background: #e7e7e7; border: 1px solid var(--line);
+    border-radius: 999px; padding: .05rem .5rem;
+}
 /* A build warning: what the library said on its way to the object. Marked with
    the warn hue and a leading rule rather than an icon, and it does NOT tint the
    strip, because the strip's ground carries the validation verdict and two
@@ -963,25 +981,14 @@ header .navbar { min-height: 56px; }
 .palette-list .example-note { white-space: normal; }
 .palette-list .example-row:hover { background: var(--soft); }
 
-/* ---- Overview tab ---- */
+/* ---- Overview tab ----
+   A header block stood above the sub-tab row through a119, one quiet line of tag
+   chips and the object's note. Both moved onto the status strip's note slot,
+   which is drawn under every group where that row was drawn under one, and the
+   chip styling went with them (`.note-tag`). --fs-title has had no subject on
+   the page since a48, when the name and the kind left this block for the same
+   reason. */
 
-/* Header block: the tags, read off the object itself via /meta.
-   One line, not the two-deck heading it was through a48: the name and the kind
-   moved out because the status strip already opens with both, and --fs-title
-   now has no subject on the page. The note followed them at a119, onto the
-   strip's note slot, which is drawn under every group where this row is drawn
-   under one. What is left is set quietly, so the eye goes from the strip
-   straight to the tabs and reads this on the way past rather than stopping. */
-.overview-head {
-    display: flex; align-items: baseline; flex-wrap: wrap; gap: .45rem;
-    margin: .1rem .1rem .85rem;
-}
-.overview-head:empty { display: none; }
-.overview-tag {
-    font-family: var(--mono); font-size: .68rem; color: var(--ink-2);
-    background: var(--soft); border: 1px solid var(--line);
-    border-radius: 999px; padding: .05rem .5rem;
-}
 /* The exhibit sizes itself: ECharts sets the canvas height from the panel
    layout (side by side, stacked, or square), so no fixed height here. The cap
    is wider than the old single-panel chart because two panels need the room. */

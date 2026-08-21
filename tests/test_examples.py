@@ -66,16 +66,14 @@ def test_example_items_carry_decl_kind_and_tags(client):
     assert seen > 100, "the shipped library has ~186 entries"
 
 
-def test_example_decl_carries_the_note_and_not_the_tags(client):
-    """The served declaration keeps ``note{}`` and drops ``tags{}``.
+def test_example_decl_carries_its_whole_trailer(client):
+    """The served declaration keeps ``note{}`` and ``tags{}``.
 
     ``Recipe.decl`` is ``spec_to_decl`` then ``format_program`` at the default
-    ``trailer=False``, which drops both. ``examples._decl_of`` spells the pair
-    out with ``trailer=True`` and strips the tags itself, because the two clauses
-    are different kinds of thing. A note is the entry's own account of itself and
-    the app prints it on the status strip for every object, which it can only do
-    if the program carries it. Tags classify the entry for the menu and say
-    nothing about the object, so they stay out of the editor.
+    ``trailer=False``, which drops both, and ``examples._decl_of`` spells the
+    pair out with ``trailer=True`` to keep them. An object carries the note and
+    the tags **its own program** declares, so an entry served without them builds
+    an object with none and the status strip has nothing to print.
 
     ``hints{}`` stays either way: it changes how the object builds, so a program
     without it would not reproduce the entry.
@@ -87,17 +85,21 @@ def test_example_decl_carries_the_note_and_not_the_tags(client):
     to assert about.
     """
     r = client.get("/v1/examples")
-    noted = 0
+    noted = tagged = 0
     for cat in r.json()["categories"]:
         for item in cat["items"]:
             decl = item["decl"]
-            assert "tags{" not in decl
             if item["note"]:
                 noted += 1
                 assert f"note{{{item['note']}}}" in decl, item["name"]
             else:
                 assert "note{" not in decl
+            if item["tags"]:
+                tagged += 1
+                for tag in item["tags"]:
+                    assert tag in decl, f"{item['name']} lost {tag}"
     assert noted > 100, "most of the shipped library carries a note"
+    assert tagged > 100, "the shipped library is tagged throughout"
 
 
 @pytest.mark.parametrize(
@@ -105,8 +107,8 @@ def test_example_decl_carries_the_note_and_not_the_tags(client):
     [("agg", "BasicBook"), ("port", "BasicPortfolio"), ("sev", "Bodoff2017.Pareto"),
      ("distortion", "PHDistortion"), ("pnl", "PnLLoss")],
 )
-def test_a_library_entry_builds_an_object_that_keeps_its_note(client, kind, name):
-    """One of each kind: the note reaches the object, so the strip can print it.
+def test_a_library_entry_builds_an_object_that_keeps_its_trailer(client, kind, name):
+    """One of each kind: note and tags reach the object, so the strip prints them.
 
     The ``port`` case is the one worth having. DecL binds a trailer to the
     declaration it follows, so a note written after the last unit belongs to that
@@ -124,8 +126,10 @@ def test_a_library_entry_builds_an_object_that_keeps_its_note(client, kind, name
              for i in cat["items"] if i["kind"] == kind}
     item = items[name]
     assert item["note"], f"{name} is chosen because it carries a note"
+    assert item["tags"], f"{name} is chosen because it carries tags"
     body = client.post("/v1/objects", json={"decl": item["decl"]}).json()
     assert body["note"] == item["note"]
+    assert sorted(body["tags"]) == sorted(item["tags"])
 
 
 def test_heroes_are_the_role_hero_entries(client):

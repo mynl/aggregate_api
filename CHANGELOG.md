@@ -4,6 +4,40 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a120
+
+**The tag chips join the note on the status strip, and the Overview header block
+is retired.** a119 left that block drawing tags alone, which was a vestige: the
+tags were still stripped from the served declaration, so the row was empty for
+every library entry and drew something only for a hand-typed `tags{}`. Both
+fields belong in the same place, and that place is the strip.
+
+`examples._decl_of` now keeps the whole trailer. The tuple of clause patterns it
+used to strip is gone, and with it the reasoning that the menu item's own `note`
+and `tags` fields made the clauses redundant. They are not redundant and never
+were: the fields feed the menu row and the search index before anything is
+built, and the clauses are what survive into the object, which is the only way
+the strip can report either. `hints{}` was always kept and is unaffected.
+
+`tags` rides on the build response beside `note`, off `_summary_fields`, so all
+three manifest paths carry it.
+
+**The chips are the ones from the old header, and they had to change color.**
+There they were `--soft` on the white page. The strip's own ground *is* `--soft`,
+so the same chip would have vanished into it; they are one step darker than the
+strip instead (`#e7e7e7`), which also holds against the two tinted grounds a
+warning and a failure paint, both lighter than that. Chips first, then the note
+running on after them, wrapping as one paragraph rather than the note starting a
+line of its own under a short row of tags.
+
+**The header block is deleted, not emptied.** `renderOverviewHeader`,
+`loadOverviewHeader`, the `head-overview` div and the `.overview-head` and
+`.overview-tag` rules all go, and with them Overview's `/v1/objects/{id}/meta`
+fetch on every build. The route stays and is still where the program and its
+hints are asked for; nothing in the app asks it now. The block had been shedding
+tenants since a48, when the name and the kind left it for the same reason the
+note and the tags have now: the strip already carried them, better placed.
+
 ## 1.0.0a119
 
 **The library's own entries keep their notes, and the note is on the strip
@@ -40,17 +74,16 @@ object builds. `format_program` gets this right, and `test_examples.py` now
 builds one entry of each kind and asserts the note reached the object, with the
 `port` case there to catch exactly that.
 
-One consequence worth noting. `TwoLineBook` and `BodoffWindQuake` carry their
-`note{}` after the last unit in `library.agg`, which `dev/TODO.md` records as an
-upstream item. Served through the writer they come out correctly placed and both
-now build a portfolio carrying its note, so the app-visible half of that item no
-longer reproduces. The text in `library.agg` is still positioned wrong and the
-upstream ask stands.
-
 **And the note is no longer printed twice.** The Overview header block drew it
 too. That row is drawn for one group where the strip is drawn under all six, so
 the copy that survives is the one the reader can see from wherever they are. The
 header keeps the tags.
+
+A paragraph stood here claiming `TwoLineBook` and `BodoffWindQuake` carry their
+`note{}` after the last unit in `library.agg`, repeating an open item in
+`dev/TODO.md`. It is wrong and was never checked. Both entries put the note
+directly after the portfolio name, correctly, and have since `aggregate`
+1.0.0a159 wrote them. The TODO item wants deleting rather than doing.
 
 ## 1.0.0a118
 

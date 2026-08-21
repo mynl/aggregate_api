@@ -411,32 +411,48 @@ function noteDerivation(text) {
 }
 
 /**
- * The note slot's three tenants, and why they share one line.
+ * The note slot's tenants, and why they share one line.
  *
- * `declared` is the program's own `note{}` body, verbatim: what the author of
- * the declaration wrote about it, whether they typed it in the box or picked it
- * out of the examples menu.
+ * `tags` and `declared` are the program's own `tags{}` and `note{}`, verbatim:
+ * how the author of the declaration classified it and what they said about it,
+ * whether they typed it in the box or picked it out of the examples menu. They
+ * are one tenant between them, on one line, tags first as chips and the note
+ * running on after them.
  * `derivation` is what Sharpen or PnL just did, in the library's own words.
  * `warnings` is what the library said while building, at WARNING and above:
  * a splice reaching below zero, a clause ignored, a grid clipping the tail.
  *
- * They share a slot because they are the same kind of thing, prose about this
- * object rather than a reading off it, and a strip line each for three things
- * usually empty would cost the layout more than it returns.
+ * They share a slot because they are the same kind of thing, what this object
+ * says about itself rather than a reading off it, and a strip line each for
+ * three things usually empty would cost the layout more than it returns.
  *
- * The declared note leads. It is the only one of the three the object carries
- * on its own account, so it reads as a caption on the facts line right above
- * it, and the other two are then remarks about the build that just ran, in the
- * order they happened. Printed with no label: a sentence of prose under a line
+ * The declaration's own line leads. It is the only one the object carries on its
+ * own account, so it reads as a caption on the facts line right above it, and the
+ * other two are then remarks about the build that just ran, in the order they
+ * happened. The note is printed with no label: a sentence of prose under a line
  * of instrument readings does not need to be told apart from one.
+ *
+ * This line is where the Overview header block used to be, and it absorbed that
+ * block at a120 rather than copying it. The header was drawn for one group and
+ * cost a `/meta` fetch to draw; the strip stands under all six and is already
+ * holding the build response that carries both fields.
  */
-const _note = { declared: '', derivation: '', warnings: [] };
+const _note = { tags: [], declared: '', derivation: '', warnings: [] };
 
 function renderNote() {
     const line = $('summary-note');
     if (!line) return;
     empty(line);
-    if (_note.declared) line.appendChild(el('span', {}, _note.declared));
+    if (_note.tags.length || _note.declared) {
+        // One block, so the chips and the sentence wrap as one paragraph rather
+        // than the note starting a line of its own under a short row of tags.
+        const own = el('span', { className: 'note-declared' });
+        for (const tag of _note.tags) {
+            own.appendChild(el('span', { className: 'note-tag' }, tag));
+        }
+        if (_note.declared) own.appendChild(el('span', {}, _note.declared));
+        line.appendChild(own);
+    }
     if (_note.derivation) line.appendChild(el('span', {}, _note.derivation));
     for (const w of _note.warnings) {
         line.appendChild(el('span', { className: 'note-warn' }, w));
@@ -445,6 +461,7 @@ function renderNote() {
 
 /** Clear the note slot. Called on every build: a note belongs to one object. */
 function clearNote() {
+    _note.tags = [];
     _note.declared = '';
     _note.derivation = '';
     _note.warnings = [];
@@ -720,8 +737,9 @@ function renderSummary(res) {
     clearNote();
     // What the program says about itself, on the line under its own numbers.
     // Straight off the build response rather than off `/v1/objects/{id}/meta`,
-    // which is fetched once per object and only while Overview is open: a note
+    // which was fetched once per object and only while Overview was open: a note
     // worth reading is worth reading from wherever the reader happens to be.
+    _note.tags = res.tags || [];
     _note.declared = res.note || '';
     // Whatever the library said while building this object. Deliberately does
     // NOT tint the strip: the ground carries the validation verdict, which is
@@ -926,7 +944,6 @@ function clearPanes() {
     state.rendered = {};
     for (const id of ALL_PANES) empty($(id));
     empty($('reins-desc'));
-    empty($('head-overview'));
     if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
     if (overviewChart) { overviewChart.dispose(); overviewChart = null; }
     if (boundsChart) { boundsChart.dispose(); boundsChart = null; }
@@ -1336,13 +1353,13 @@ document.addEventListener('keydown', (e) => {
 /**
  * Activate a group: draw its row, then load the leaf it is on.
  *
- * The identity block is Overview's alone and is fetched once per build rather
- * than per leaf, so moving between Plot, Summary and Tail costs nothing.
+ * Reinsurance carries a block above its row, fetched once per build rather than
+ * per leaf, so moving between its leaves costs nothing. Overview had one too
+ * through a119; see the note above the Overview loaders for where it went.
  */
 async function loadTab(group) {
     if (!state.id || !NAV_GROUPS[group]) return;
     renderSubTabs(group);
-    if (group === 'overview') await loadOverviewHeader();
     if (group === 'reinsurance') await loadReinsDescription();
     await loadLeaf(group);
 }
@@ -1715,57 +1732,20 @@ function mountTable(paneId, host, source, gridOpts = GRID_FULL) {
 // the capital anchors, which is the library's own choice and is exactly the sort
 // of fact that goes stale in a copy.
 
-/**
- * The object's own header block: its tags.
- *
- * Reads `/v1/objects/{id}/meta`, so it works for anything that was built. This
- * replaces the old `pendingNote` route, where the lead could only ever come from
- * an example that had just been clicked.
- *
- * Notes
- * -----
- * **The name and the kind are gone from here.** They are the first two things
- * the status strip says, a couple of centimetres up the page, so this row
- * repeated them at a larger size and read as a second heading for the same
- * object.
- *
- * **And so is the note, as of a119.** The strip prints it now, on every build
- * and under every group, where this row is drawn for Overview alone. Two copies
- * of one sentence a few centimetres apart is one too many, and the one that
- * survives is the one the reader can see from wherever they are.
- *
- * The program and its hints are deliberately **not** shown here either. They
- * sit in the editor, so a disclosure repeating them was spending the most
- * valuable strip of the tab on something already on screen.
- */
-function renderOverviewHeader(meta) {
-    if (!meta) return null;
-    // Always a node, even when the object carries no tags, so the caller's
-    // "already fetched" guard still has something to test; `:empty` in the CSS
-    // is what stops an empty one taking up space.
-    const head = el('div', { className: 'overview-head' });
-    for (const tag of meta.tags || []) {
-        head.appendChild(el('span', { className: 'overview-tag' }, tag));
-    }
-    return head;
-}
-
 // ---- Overview: the landing group, three leaves ----
-
-/**
- * The identity block above the sub-tab row: name, kind, tags, note.
- *
- * Fetched once per build rather than once per leaf, because it names the object
- * rather than any one view of it and stays put as you move between Plot,
- * Summary and Tail.
- */
-async function loadOverviewHeader() {
-    const host = $('head-overview');
-    if (!host || host.firstChild) return;
-    const meta = await api.meta_of(state.id).catch(() => null);
-    const head = renderOverviewHeader(meta);
-    if (head) host.appendChild(head);
-}
+//
+// The header block that used to stand above this row is gone at a120, and its
+// history is worth a paragraph because it kept losing tenants. It opened as a
+// two-deck heading carrying the name and the kind, which the status strip
+// already says a couple of centimetres up the page, so those went at a48 and it
+// became one quiet line of tags and the note. The note went to the strip at a119
+// and the tags followed at a120, which left the block with nothing to draw and a
+// `/meta` fetch to draw it with.
+//
+// Both fields ride on the build response now, so the strip has them without
+// asking, and it is drawn under all six groups where this row was drawn under
+// one. `GET /v1/objects/{id}/meta` is still a route, and still the place to ask
+// for the program and its hints; nothing in the app asks it any more.
 
 /**
  * Overview / Plot: the object's own picture, whichever chart that is.
