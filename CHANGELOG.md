@@ -4,6 +4,96 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a121
+
+**[Chart-2D-Punchups] the control strip goes per panel, and three axis windows
+stop lying.** The app half, A1 to A6, of the paired plan
+`dev/done/plan-2d-punchups.md`, which is canonical for the whole change. The
+library half landed at `aggregate 1.0.0a314` and this runs against it: the
+environment must be synced before any of it is believed, or `importlib.metadata`
+keeps reporting the old `aggregate` and the moved axes never arrive.
+
+**One group per panel, with a rule between them** (author ruling 2026-08-21).
+This reverses `dev/done/plan-plot-ir-api.md` section 6's one-control-per-document
+rule and restores the arrangement `dev/done/plan-exhibit-punchups-3.md`
+describes, which the a62 chart-IR rewrite collapsed into a centered row. It is
+what properly fixes the a-generation punch item "log y on rh plot triggers
+reshape/draw of left plot; left plot should not move/change"
+(`dev/api-punchlist.md:238`), which section 6 had resolved by answering it
+differently rather than by fixing it. Pressing anything in one group now leaves
+every other panel's axes character for character unchanged, which the smoke test
+asserts per panel. `reference lines` moves into the group of the panel whose
+marks it suppresses, so the restored arrangement is two groups rather than the
+older three.
+
+**`log` becomes `log x` and `log y`.** The single button could not draw a log
+ordinate over a linear loss axis, which is the reading wanted most often, and a
+split by screen position could not have either: an `agg`'s loss axis is read by
+both panels, so one flag would have drawn it on log in the density panel and
+linear in the Lee panel. Per-panel groups dissolve that, since each panel answers
+for itself. A panel offers on every axis that can reach a position rather than on
+the one occupying it now, which is the existing invertibility argument extended
+to the `reflect` and `return period` substitutions; without it the P&L's Lee
+panel would have lost the log reading it has today, its outcome axis being signed
+and its `p` single scaled.
+
+**`full range` means the declared extents and nothing else.** It no longer falls
+back to the drawn data, which is what labeled a probability axis to 1.5: the
+severity quantile curve's last cumulated probability is `1.000000000000002`,
+floating point rather than a reading, and the nice-window rounding took that
+outward. An axis declaring no extent now has nothing for the button to open.
+
+**The log release is a separate question and acts on a density ordinate alone**
+(author ruling 2026-08-21). Punchlist item 7, "when we go to log, get rid of any
+capping", collided head on with the new return-period ladder once a314 gave the
+`mass` axis a declared extent: releasing every declared extent under log would
+have opened the ladder to 1e9 on `log x` alone and left `full range` nothing to
+do. The split is by what the axis is, keyed on `unit == 'density'`, because a
+density's suggested top is the tallest thing worth seeing in the *linear*
+reading, a statement about a picture, while every other axis' suggestion is a
+reading of the quantity and survives the change of scale. Keying on the unit
+rather than the screen position is what carries it through `invert`. So `log y`
+on an `agg` density panel puts the severity block's head back, measured at 49
+times the suggested top on the fixture and 79 times on the author's own program.
+
+**The return-period axis keeps its window, and its companion stops keeping
+one.** Four independent faults on two lines of `xyPanel`, each enough on its own:
+the release was keyed on the scale the axis happened to be drawn on rather than
+on a reading anyone chose, the declared window was then discarded outright, the
+`MAX_RETURN_PERIOD` clamp was gated so it could never fire and was dead code, and
+the companion rule's two conditions were exactly swapped against the comment
+above them, so the period axis lost its window and the loss axis kept a crop
+computed for the probability reading. ECharts was left auto-fitting a log axis
+over twelve decades, picking a ten-decade tick interval and printing
+`100000000000B`. The axis now draws its declared ladder to 1-in-10,000, opens to
+1-in-1e9 under `full range`, reads on log under either, and follows onto y under
+`invert`; the clamp survives as a backstop for a document that declares nothing.
+
+**No `VIEW_KEY` bump**, per the test `dev/done/plan-chart-reflect.md` records: a
+key is bumped when a stored value would now mean something *wrong*, as v3's flat
+`window` did. The six flat readings are merely unread, so a held blob spreads
+over the new defaults, `panels` takes `{}` and every panel takes its defaults.
+`kind`, the surface preferences, the cut position and the per-chart `windows` all
+survive, which a bump would have silently discarded. `migrateChartView` strips
+the dead keys on the next write and now runs on the current key as well as the
+superseded one, since this move leaves its dead keys inside `v4` rather than in a
+key already being dropped. Readings are held per panel id, which is a gain rather
+than a cost: `density`, `lee`, `kappa`, `occurrence` and `aggregate` carry one
+meaning across every document that uses them, so `log y` chosen on a density
+panel carries from an `agg` to a `port` to a P&L.
+
+**Fixtures re-captured** against a314, since every chart ETag moved with the
+axes. `dev/scripts/smoke-charts.mjs` checks readings per panel, asserts the
+isolation claim, and gains the assertion that would have caught this: the
+`Return period` axis always carries a finite window and never one above the cap.
+The old check passed cleanly on the bug because the min was `undefined` rather
+than zero, so the defect was an absent bound rather than a bad one.
+
+**Not done, and owed:** the browser pass, sections 5 and 6 of the plan's
+verification. The two things no offline check stands in for are the group
+alignment over the panels at both sides of `WIDE_PX` and the sticky state
+carrying across documents.
+
 ## 1.0.0a120
 
 **The tag chips join the note on the status strip, and the Overview header block

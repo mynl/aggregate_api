@@ -110,6 +110,17 @@ export const PANEL_ASPECT = 4 / 3.25;
 // Side-by-side needs room for two readable axes; below this panels stack.
 export const WIDE_PX = 720;
 
+// One panel's readings, off. Exported so the adapter, `mount.js` and the smoke
+// test read one list rather than three copies that drift: the strip builds its
+// groups from it, the pure path resolves against it, and a stored view blob
+// spreads over it. `refLines` is the odd one out and defaults **on**, because a
+// document's marks are data it publishes rather than a reading it offers, and
+// the button suppresses them rather than summoning them.
+export const PANEL_DEFAULTS = {
+    logX: false, logY: false, fullRange: false,
+    reflect: false, returnPeriod: false, invert: false, refLines: true,
+};
+
 // Bounds on the square plot area an equal-aspect panel is drawn at.
 const SQUARE_MIN = 240;
 const SQUARE_MAX = 420;
@@ -209,29 +220,50 @@ function axisScale(axis, log) {
 }
 
 /**
- * The window this axis is drawn in: its suggestion, or everything it reaches.
+ * The window this axis is drawn in, from the two separate questions the reader
+ * has asked: whether the zoom out is pressed, and whether this axis is on log.
  *
- * Released two ways, and both are the author's round 7 item 7. The **declared**
- * extent is used where the document gives one. Where it does not, the drawn
- * data's own extent is, which is what makes one button mean full x *and* full
- * y: the library declares `full_range` on an outcome axis and not on the
- * ordinate over it, on the reasoning that zero to the peak already is the whole
- * extent of a density. It is not, once a severity atom is in the picture. The
- * agg chart's ordinate stops at the *aggregate* peak whenever the severity peak
- * is more than twice it (`_emit_aggregate.ordinate_top`), so a book with a mass
- * draws a spike with its head cut off and no control could put it back.
+ * **`full` is the button, and it honors what the document declares.** It never
+ * falls back to the drawn data. That fallback used to live here so one button
+ * could mean full x *and* full y, and it is what labeled a probability axis to
+ * 1.5: the severity quantile curve's last cumulated probability is
+ * `1.000000000000002`, floating point rather than a reading, and `niceWindow`
+ * rounds it outward. An axis declaring no extent has nothing for the button to
+ * open, and saying so is more honest than inventing a number for it.
  *
- * Reading the data rather than second-guessing the library is what keeps this
- * inside the purist rule: how much of what was served to show is a question
- * about drawing, and the numbers being released are the ones already in hand.
+ * **`uncapped` is the log rule, and it acts on a density ordinate only.** The
+ * author's ruling of 2026-08-21 on punchlist item 7 ("when we go to log, get
+ * rid of any capping"), squared with a return-period ladder that wants the
+ * opposite. The split is by what the axis *is* rather than by where it sits: a
+ * density's suggested top is the tallest thing worth seeing in the *linear*
+ * reading, which is a statement about a picture, and log is exactly the reading
+ * that changes what is worth seeing. Every other axis' suggestion is a reading
+ * of the quantity itself and survives the change of scale, which is what leaves
+ * `return_period` drawing its declared ladder under `log` and opening to the
+ * deep tail under `full range`, each button doing its own job and neither doing
+ * the other's.
+ *
+ * Keying on the unit rather than on the screen position is what carries it
+ * through `invert`: a unit belongs to the axis and travels with it when
+ * `panelAxes` exchanges the two.
+ *
+ * The case it exists for: the agg chart's ordinate stops at the *aggregate*
+ * peak whenever a severity companion overtops it (`_emit_aggregate` and its
+ * `COMPANION_HEADROOM`), by a factor of 79 on the author's own program, so a
+ * book with a mass draws a spike with its head cut off on the one reading with
+ * room for it. The library declares that extent as of `1.0.0a314` and it is
+ * preferred where present; a portfolio's ordinate still declines to declare it
+ * and the drawn data answers for it, which is the same number by construction.
  *
  * @param {object} axis a ChartAxis.
- * @param {boolean} full release the window.
+ * @param {{full: boolean, uncapped: boolean}} release the two questions: `full`
+ *   is the zoom out, `uncapped` is log pressed on this axis.
  * @param {Array<Array<number>>} [drawn] the coordinate arrays on this axis, the
- *   fallback when the axis declares no full extent.
+ *   fallback when a released ordinate declares no full extent.
  */
-function axisWindow(axis, full, drawn = null) {
-    if (full) {
+function axisWindow(axis, { full, uncapped }, drawn = null) {
+    if (full && Array.isArray(axis.full_range)) return axis.full_range;
+    if (uncapped && axis.unit === 'density') {
         if (Array.isArray(axis.full_range)) return axis.full_range;
         const seen = drawn ? extentOf(drawn) : null;
         if (seen) return seen;
@@ -268,13 +300,58 @@ function squareWindow(xWindow, yWindow, allX, allY) {
     return hi > lo ? [lo, hi] : windows[0];
 }
 
+/** Whether this axis offers a reading other than the one it is drawn on. */
+const scaled = (a) => Boolean(a) && (a.scales || []).length > 1;
+
 /**
- * What readings a document offers, which is what the control strip surfaces.
+ * Every axis a panel can put in a given position, which is what it offers on.
  *
- * A control appears if **any** axis or panel declares the reading, and acts on
- * **every** one that does. That is the library renderer's rule too
- * (`plot_chartdoc`'s four switches), so one instrument reads the same way in
- * both renderers rather than the app inventing a per-axis patchwork.
+ * Three substitutions can happen below a panel before anything is drawn, and
+ * each of them can bring a different axis to a position: `reflect` swaps in the
+ * `complement_of` partner, `return period` the `reciprocal_of` one, and
+ * `invert` exchanges the two positions outright. So a position is offered on
+ * everything that can reach it, not on whatever occupies it right now.
+ *
+ * Offering on the current reading alone would make a button appear and
+ * disappear as the reader worked, which is worse than one button that waits:
+ * `log x` on a P&L's Lee panel is nothing under the plain reading, whose
+ * outcome axis is signed and declares `('linear',)`, and is the whole point
+ * under `return period`, whose axis declares both since `aggregate 1.0.0a314`.
+ */
+function positionAxes(doc, panel, position) {
+    const axes = (doc && doc.axes) || [];
+    const byId = Object.fromEntries(axes.map((a) => [a.id, a]));
+    const own = position === 'x' ? panel.x_axis : panel.y_axis;
+    const other = position === 'x' ? panel.y_axis : panel.x_axis;
+    const ids = panel.invertible ? [own, other] : [own];
+    const out = [];
+    for (const id of ids) {
+        if (!id) continue;
+        out.push(byId[id]);
+        for (const a of axes) {
+            if (a.complement_of === id || a.reciprocal_of === id) out.push(a);
+        }
+    }
+    return out.filter(Boolean);
+}
+
+/**
+ * What readings a document offers, per panel, which is what the strip surfaces.
+ *
+ * **One group per panel** (author ruling 2026-08-21), reversing
+ * `dev/done/plan-plot-ir-api.md` section 6's one-control-per-document rule and
+ * restoring the arrangement `dev/done/plan-exhibit-punchups-3.md` describes,
+ * which the a62 chart-IR rewrite collapsed. A control appears on a panel if
+ * anything that panel can draw declares the reading, and acts on that panel
+ * alone. That is what properly fixes the a-generation punch item "log y on rh
+ * plot triggers reshape/draw of left plot" (`dev/api-punchlist.md:238`), which
+ * section 6 had resolved by answering it differently rather than by fixing it.
+ *
+ * It also dissolves the shared `outcome` axis problem. One log button could not
+ * draw a log ordinate over a linear loss axis, the reading wanted most often,
+ * because the loss axis is read by both panels and a split by screen position
+ * would have drawn it on log in one and linear in the other. Per-panel groups
+ * mean each panel answers for itself and the question never arises.
  *
  * Parameters
  * ----------
@@ -284,15 +361,16 @@ function squareWindow(xWindow, yWindow, allX, allY) {
  * Returns
  * -------
  * object
- *     `{log, fullRange, reflect, returnPeriod, invert, kinds}`. The first five
- *     are booleans saying whether to offer the switch; `kinds` is the set of
- *     panel realizations the document declares beyond one, empty when there is
- *     no choice to make.
+ *     `{panels, kinds}`. Each entry of `panels` is `{id, title, logX, logY,
+ *     fullRange, reflect, returnPeriod, invert, marks}`, the booleans saying
+ *     whether to offer that switch on that panel. `kinds` stays at the document
+ *     level: it is the set of panel realizations declared beyond one, empty when
+ *     there is no choice to make, and it re-draws the whole document.
  */
 export function readings(doc) {
     const axes = (doc && doc.axes) || [];
     const panels = (doc && doc.panels) || [];
-    const drawn = new Set(panels.flatMap((p) => [p.x_axis, p.y_axis, p.z_axis]));
+    const marked = new Set(((doc && doc.marks) || []).map((m) => m.panel_id));
     const kinds = new Set();
     for (const p of panels) {
         for (const k of p.kinds || [p.kind]) kinds.add(k);
@@ -307,21 +385,42 @@ export function readings(doc) {
         if (p.kind === 'surface') kinds.add('heatmap');
     }
     return {
-        log: axes.some((a) => drawn.has(a.id) && (a.scales || []).length > 1),
-        fullRange: axes.some((a) => drawn.has(a.id) && Array.isArray(a.full_range)),
-        // Both pairings: a paired axis is named by no panel by construction, so
-        // each is read off the axis rather than off what is drawn.
-        reflect: axes.some((a) => a.complement_of),
-        returnPeriod: axes.some((a) => a.reciprocal_of),
-        invert: panels.some((p) => p.invertible),
-        // Not a *reading* in the sense the other four are: the document does not
-        // declare that its marks can be turned off, they are simply data it
-        // publishes. It rides here anyway because this is what the control strip
-        // is built from, and the honest gate is the same shape as the others,
-        // offer the button when there is something for it to act on. The strip
-        // lost this control entirely in the a62 rewrite, which is the whole of
-        // punch item G3's "we've lost the annotations option".
-        marks: ((doc && doc.marks) || []).length > 0,
+        panels: panels.map((p) => {
+            const x = positionAxes(doc, p, 'x');
+            const y = positionAxes(doc, p, 'y');
+            const z = p.z_axis ? [axes.find((a) => a.id === p.z_axis)] : [];
+            // The pairings are read off the axis rather than off what is
+            // drawn, because a paired axis is named by no panel by
+            // construction. Naming the panel's own axes as the subject is what
+            // makes it a per-panel offer rather than a document-wide one.
+            const paired = (attr) => [p.x_axis, p.y_axis].some(
+                (id) => id && axes.some((a) => a[attr] === id));
+            return {
+                id: p.id,
+                title: p.title || '',
+                logX: x.some(scaled),
+                // A surface's height is the same quantity the flat reading
+                // ramps, and a density ordinate is a y axis on the panel next
+                // door, so the z axis rides `logY` rather than asking for a
+                // third button.
+                logY: [...y, ...z].some(scaled),
+                fullRange: [...x, ...y].some((a) => Array.isArray(a.full_range)),
+                reflect: paired('complement_of'),
+                returnPeriod: paired('reciprocal_of'),
+                invert: Boolean(p.invertible),
+                // Not a *reading* in the sense the others are: the document
+                // does not declare that its marks can be turned off, they are
+                // simply data it publishes. It rides here anyway because this
+                // is what the control strip is built from, and the honest gate
+                // is the same shape as the others, offer the button when there
+                // is something for it to act on. Per panel because marks carry
+                // `panel_id` and `xyPanel` already filters on it, so the button
+                // belongs to the panel whose marks it suppresses. The strip
+                // lost this control entirely in the a62 rewrite, which is the
+                // whole of punch item G3's "we've lost the annotations option".
+                marks: marked.has(p.id),
+            };
+        }),
         kinds: kinds.size > 1 ? [...kinds] : [],
     };
 }
@@ -785,32 +884,52 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
     const allX = drawn.map((d) => d.x);
     const allY = drawn.map((d) => d.y);
 
-    const xScale = axisScale(xAxis, view.log);
-    const yScale = axisScale(yAxis, view.log);
-    // **A log axis is never capped.** Room to see everything is the whole point
-    // of asking for one, so an axis that goes log releases its window on the way
-    // there rather than drawing a decade ladder inside the linear reading's
-    // crop. The author's round 7 item 7, whose case is a severity spike or a
-    // mass: log is exactly the reading that has room for a spike three decades
-    // over the aggregate peak, and it was the reading that cut it off.
-    const releaseX = view.fullRange || xScale === 'log';
-    const releaseY = view.fullRange || yScale === 'log';
+    const xScale = axisScale(xAxis, view.logX);
+    const yScale = axisScale(yAxis, view.logY);
+    // The two questions stay two, deliberately. `full` is the button and honors
+    // what the document declares; `uncapped` is the log rule and releases a
+    // density ordinate to everything it reaches. Collapsing them into one
+    // boolean here would re-join exactly what `axisWindow` splits apart, and
+    // the split is the whole of how punchlist item 7 and the return-period
+    // ladder both get what they want. `chosen` is the log half: it asks whether
+    // the reader pressed log on an axis that has a second reading to go to.
+    const chosen = (axis, log) => Boolean(log) && (axis.scales || []).length > 1;
+    const releaseX = { full: view.fullRange, uncapped: chosen(xAxis, view.logX) };
+    const releaseY = { full: view.fullRange, uncapped: chosen(yAxis, view.logY) };
+
+    // A backstop, not the mechanism. The mechanism is the window the axis
+    // declares, which since `aggregate 1.0.0a314` is the ladder to 10,000
+    // opening to 1e9, so this clamp is exactly non-binding on every document
+    // the library emits today. It stays for one that declares nothing: the
+    // quantile function saturates at the end of its grid, where T diverges, and
+    // `compactPeriod`'s suffix ladder stops at `B` so 1e20 would print
+    // `100000000000B`. Applied to whichever axis carries the period, which is
+    // the half an earlier draft left out: the same axis under `invert` is a y
+    // axis and diverges identically.
+    const capPeriod = (w, period) => (period && w
+        ? [w[0], Math.min(w[1], MAX_RETURN_PERIOD)] : w);
 
     const declaredX = axisWindow(xAxis, releaseX, allX);
-    let xWindow = declaredX || extentOf(allX) || [0, 1];
-    // Keyed on the *period*, not on "a map is present": the cap exists because
-    // the quantile function saturates and T diverges, and a reflected
-    // probability axis is bounded in [0, 1] and needs no cap.
-    if (xPeriod && !declaredX) xWindow = [xWindow[0], Math.min(xWindow[1], MAX_RETURN_PERIOD)];
-    // Also keyed on the period, and for the same kind of reason. A
-    // return-period reading re-slices the panel: the deep tail it exists to
-    // show sits far outside the window computed for the probability reading,
-    // so the companion axis follows the data instead. A reflection is a
-    // bijection of [0, 1] onto itself and its axis carries its own window from
-    // the emitter, which is the whole point of declaring it as a paired axis,
-    // so that window stands.
-    let yWindow = yPeriod ? null : axisWindow(yAxis, releaseY, allY);
-    let xOnly = xPeriod ? null : xWindow;
+    const declaredY = axisWindow(yAxis, releaseY, allY);
+    // **The axis carrying the period keeps its declared window; the axis across
+    // from it follows the drawn data.** Read `xPeriod` as "x is the period
+    // axis", so y is the companion, and `yPeriod` as the mirror of that. The
+    // two conditions used to be the other way round, which cost both halves at
+    // once: the period axis lost its window and auto-fitted over twelve
+    // decades, and the loss axis kept a crop computed for the probability
+    // reading and cut off the deep tail the reading exists to show.
+    let xWindow = capPeriod(declaredX || extentOf(allX) || [0, 1], xPeriod);
+    // A return-period reading re-slices the panel, so its companion cannot keep
+    // a window computed for the probability reading. A reflection needs no such
+    // thing: it is a bijection of [0, 1] onto itself and its axis carries its
+    // own window from the emitter, which is the whole point of declaring it as
+    // a paired axis, so that window stands.
+    let yWindow = xPeriod ? null
+        : capPeriod(declaredY || (yPeriod ? extentOf(allY) : null), yPeriod);
+    // `xWindow` and `xOnly` stay two names because `atomsInView` below reads
+    // the window and not the axis option: a companion x axis is handed to
+    // echarts to fit, and the rung still has to know what is on screen.
+    let xOnly = yPeriod ? null : xWindow;
     if (panel.aspect === 'equal' && xScale === yScale) {
         xOnly = squareWindow(xOnly, yWindow, allX, allY);
         yWindow = xOnly;
@@ -1204,7 +1323,10 @@ function heatmapPanel(doc, panel, i, axes, view, box) {
     const x = xCoords(g);
     const y = yCoords(g);
     const zAxis = axes[panel.z_axis] || {};
-    const useLog = axisScale(zAxis, view.log) === 'log';
+    // The height in relief and the ramp of the same quantity flat are one
+    // reading, and a density ordinate is a y axis on the panel next door, so
+    // the z axis rides `logY` rather than asking for a button of its own.
+    const useLog = axisScale(zAxis, view.logY) === 'log';
     const floor = decadeFloor([g.z]) || LOG_FLOOR;
 
     let max = -Infinity;
@@ -1359,10 +1481,13 @@ function heatmapPanel(doc, panel, i, axes, view, box) {
  * doc : object
  *     A ChartDoc canonical dict (`GET /v1/objects/{id}/chart/{name}`).
  * opts : object
- *     `view` -- which declared reading is on screen:
- *     `{log, fullRange, returnPeriod, invert, kind}`. Each acts on every axis
- *     or panel that declares it and is ignored everywhere else, so a document
- *     with nothing to say about a reading draws identically either way.
+ *     `view` -- which declared reading is on screen. Document-wide keys sit at
+ *     the top level (`kind`, the surface preferences, the cut); the seven
+ *     per-panel readings live under `view.panels`, keyed by panel id, and are
+ *     resolved against `PANEL_DEFAULTS` here so every path below takes one flat
+ *     view object and only its provenance changed. Each reading acts on the
+ *     panel that declares it and is ignored everywhere else, so a panel with
+ *     nothing to say about one draws identically either way.
  *     `width` -- host width in CSS pixels, which the layout is computed from.
  *     `zoom` -- the window the reader is holding on the shared x axis, in data
  *     units, so a rebuild restores the gesture rather than undoing it.
@@ -1381,9 +1506,16 @@ export function chartdocToEcharts(doc, opts = {}) {
     const panels = (doc && doc.panels) || [];
     if (!panels.length) return null;
     if (doc.ir_version > CHART_IR_VERSION) return null;
-    const view = { log: false, fullRange: false, reflect: false,
-                   returnPeriod: false, invert: false, kind: null,
-                   ...(opts.view || {}) };
+    const view = { kind: null, ...(opts.view || {}) };
+    // Resolved once, here, rather than threaded down as a map: the panel walk
+    // below is the only place that knows which panel it is on, and every path
+    // under it (`xyPanel`, `panelAxes`, `heatmapPanel`, the surface) keeps
+    // taking one flat view. The document-wide keys spread first so the surface
+    // preferences and the cut reach every panel; `PANEL_DEFAULTS` then resets
+    // the seven readings, which is what makes the six flat keys a pre-a121
+    // blob still carries inert rather than sticky.
+    view.forPanel = (id) => ({ ...view, ...PANEL_DEFAULTS,
+                               ...((view.panels || {})[id] || {}) });
     const realized = panels.map((p) => realization(p, view.kind));
     // The bifurcation, split by RENDERER CAPABILITY rather than by panel kind.
     // A heatmap is a 2-D drawing of the same grid a surface draws in relief, so
@@ -1415,8 +1547,8 @@ function xyOption(doc, opts, view, realized) {
 
     const realizedPanels = panels.map((panel, i) => (
         realized[i] === 'xy'
-            ? xyPanel(doc, panel, i, axes, view, opts.zoom, ctx)
-            : heatmapPanel(doc, panel, i, axes, view, box.grids[i])
+            ? xyPanel(doc, panel, i, axes, view.forPanel(panel.id), opts.zoom, ctx)
+            : heatmapPanel(doc, panel, i, axes, view.forPanel(panel.id), box.grids[i])
     )).filter(Boolean);
     if (!realizedPanels.length) return null;
 
@@ -2081,9 +2213,12 @@ export function surfaceCuts(option, view) {
 }
 
 /** The 3-D path: one 'surface' panel, the bivariate joint in relief. */
-function surfaceOption(doc, opts, view) {
+function surfaceOption(doc, opts, documentView) {
     const panel = (doc && doc.panels && doc.panels[0]) || null;
     if (!panel) return null;
+    // One panel by construction, so resolving its readings here is the whole of
+    // the per-panel change on this path: `view` below reads exactly as it did.
+    const view = documentView.forPanel(panel.id);
     const axes = Object.fromEntries((doc.axes || []).map((a) => [a.id, a]));
     const series = findSurfaceSeries(doc);
     if (!series) return null;
@@ -2091,8 +2226,9 @@ function surfaceOption(doc, opts, view) {
 
     // Whether a log height is meaningful is the Z AXIS's declaration, as the
     // scales it admits. A singleton `scales` means the axis has one honest
-    // reading and the control does not apply.
-    const useLog = axisScale(axes[panel.z_axis] || {}, view.log) === 'log';
+    // reading and the control does not apply. It rides `logY` because the
+    // height in relief and the ramp of the same quantity flat are one reading.
+    const useLog = axisScale(axes[panel.z_axis] || {}, view.logY) === 'log';
     const { max, min } = zExtent(g, LOG_FLOOR);
     const zMax = useLog ? Math.ceil(Math.log10(max)) : max;
     const zMin = useLog

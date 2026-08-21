@@ -1090,29 +1090,47 @@ header .navbar { min-height: 56px; }
     .exhibit-skeleton-panel { animation: none; }
 }
 
-/* ---- The chart control strip (log / full range / return period / invert) ----
-   Sits directly above the chart. One button per reading the DOCUMENT declares,
-   so the strip is a function of what is on screen rather than of its kind, and
-   the pressed state is sticky per browser: a chosen reading survives a rebuild.
+/* ---- The chart control strip (log x / log y / full range / return period) ----
+   Sits directly above the chart. One group per PANEL, holding one button per
+   reading that panel's own axes declare, so the strip is a function of what is
+   on screen rather than of its kind, and the pressed state is sticky per
+   browser and per panel id: `log y` chosen on a density panel survives a
+   rebuild and carries to the next document with a density panel.
 */
 .exhibit-controls {
     display: flex; flex-wrap: wrap; align-items: center; gap: 0;
     margin: 0 0 .45rem;
 }
-/* Centered under the panels, which is the only layout the strip needs now that
-   every control governs the whole chart by construction. It used to split
-   across the two panels, with each button over the panel it drove, because a
-   control belonged to one of them; a reading belongs to the document. */
-.exhibit-controls-center { justify-content: center; padding-left: 0; }
-.exhibit-controls-center .exhibit-group { padding-left: .7rem; }
 /* One group per panel, with a rule between adjacent groups so a button reads as
-   belonging to the panel below it rather than to one undifferentiated row. */
+   belonging to the panel below it rather than to one undifferentiated row.
+   Restored at a121 from `dev/done/plan-exhibit-punchups-3.md`, which the a62
+   chart-IR rewrite collapsed into a centered row on the reasoning that a
+   reading belonged to the document rather than to a panel. That reasoning is
+   what the author reversed on 2026-08-21. */
 .exhibit-group {
     display: flex; flex-wrap: wrap; align-items: center; gap: .35rem;
     padding: .1rem .7rem;
 }
 .exhibit-group + .exhibit-group { border-left: 1px solid var(--line); }
 .exhibit-group:first-child { padding-left: 0; }
+/* Equal shares of the row, so group 0 sits over the left panel and group 1 over
+   the right. Exact alignment to the ECharts grid columns is not attempted and
+   cannot be: the strip is a DOM row above a single canvas holding both grids,
+   so no control can sit physically under its panel. Equal shares is the honest
+   approximation. The document's own group is not a panel and takes only the
+   width it needs, leaving the rest to be halved. */
+.exhibit-group-panel { flex: 1 1 0; justify-content: center; }
+/* Stacked below `WIDE_PX`, where `panelLayout` puts the panels one per row and
+   left and right stop corresponding to anything. Each group takes a full row
+   and its panel's title, which is then the only thing saying which is which. */
+.exhibit-controls-stacked { flex-direction: column; align-items: stretch; }
+.exhibit-controls-stacked .exhibit-group {
+    flex: 0 0 auto; justify-content: flex-start; padding-left: 0;
+    border-left: 0;
+}
+.exhibit-controls-stacked .exhibit-group + .exhibit-group {
+    border-left: 0; border-top: 1px solid var(--line);
+}
 .exhibit-group-label {
     font-size: .68rem; color: var(--mut);
     text-transform: uppercase; letter-spacing: .04em;

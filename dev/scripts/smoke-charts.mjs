@@ -46,6 +46,13 @@ const {
 } = await import(pathToFileURL(
     path.join(root, 'web', 'src', 'charts', 'chartdoc-to-echarts.js')).href);
 
+// The adapter's backstop, restated here rather than exported: the check below
+// asserts a realized axis against it, and a test that imported the number it is
+// testing could not tell a changed cap from a broken one. `_chartdoc`'s
+// `MAX_RETURN_PERIOD`, and note it is a different thing from the library's
+// `charts._two_panel.RETURN_PERIOD_TOP`, which is the suggested ladder.
+const MAX_RETURN_PERIOD = 1e9;
+
 const cases = JSON.parse(readFileSync(fixture, 'utf8'));
 
 let failures = 0;
@@ -100,6 +107,27 @@ function checkDrawable(label, doc, option) {
         if (ax.type === 'log' && Number.isFinite(ax.min) && ax.min <= 0) {
             fail(label, `axis ${ax.name}: log axis with min ${ax.min}`);
         }
+        // **The return-period axis always carries a window.** The assertion the
+        // old test could not make, and the one that would have caught the a120
+        // defect: `xyPanel` discarded that axis' window outright, so the check
+        // above passed cleanly because the min was `undefined` rather than
+        // zero, and echarts auto-fitted a log axis over twelve decades and
+        // picked a ten-decade tick interval. The bug was an *absent* bound, not
+        // a bad one.
+        //
+        // Not written as the blanket "no log axis has an undefined minimum" the
+        // plan drafted: a companion axis under a period reading is handed to
+        // echarts to fit on purpose, and `sev_density` and `pdf` declare no
+        // window at all and have always auto-fitted, so the blanket form fails
+        // three documents that are drawing correctly.
+        if (ax.name === 'Return period') {
+            if (!Number.isFinite(ax.min) || !Number.isFinite(ax.max)) {
+                fail(label, `axis ${ax.name}: unbounded [${ax.min}, ${ax.max}]`);
+            }
+            if (Number.isFinite(ax.max) && ax.max > MAX_RETURN_PERIOD) {
+                fail(label, `axis ${ax.name}: max ${ax.max} over the ${MAX_RETURN_PERIOD} cap`);
+            }
+        }
     }
     if (!(option.hostHeight > 0)) fail(label, `hostHeight ${option.hostHeight}`);
     return true;
@@ -136,97 +164,155 @@ function checkLabels(label, doc, option) {
     }
 }
 
-/** A document's declared readings each do something when switched on. */
+/**
+ * Each panel's declared readings do something when switched on, and nothing to
+ * any other panel.
+ *
+ * Per panel since a121. The second half is the new claim and the one the
+ * a-generation punch item asked for: pressing a button in one group must leave
+ * every other panel completely still, which is checked here by realizing one
+ * panel's reading at a time and comparing the untouched panels' axes against
+ * the base drawing.
+ */
 function checkReadings(label, doc, base) {
     const offered = readings(doc);
     const at = (view) => chartdocToEcharts(doc, { view, width: 980 });
+    const only = (id, patch) => at({ panels: { [id]: patch } });
 
-    if (offered.log) {
-        const logged = at({ log: true });
-        if (!checkDrawable(`${label} [log]`, doc, logged)) return;
-        // What the reading leaves behind, in whichever shape the option came
-        // back in. A 2-D option carries axis types and a visualMap array; a
-        // 3-D one carries neither, and reads the height through `zAxis3D` and
-        // a single visualMap. Written as one footprint rather than as two
-        // checks because the assertion is the same either way: switching the
-        // reading on has to change something.
-        const footprint = (o) => {
-            if (o.is3d) {
-                const vm = o.visualMap || {};
-                const z = o.zAxis3D || {};
-                return JSON.stringify([z.name, z.min, z.max, vm.min, vm.max]);
+    /** Every other panel's axes, as the string that must not move. */
+    const others = (o, i) => JSON.stringify(
+        o.xAxis.filter((_, k) => k !== i).concat(o.yAxis.filter((_, k) => k !== i)));
+
+    offered.panels.forEach((panel, i) => {
+        const P = `${label} [${panel.id}]`;
+        /** Realize one reading on this panel, check it drew, check it was alone. */
+        const solo = (key, tag) => {
+            const o = only(panel.id, { [key]: true });
+            if (!checkDrawable(`${P} [${tag}]`, doc, o)) return null;
+            if (!o.is3d && others(o, i) !== others(base, i)) {
+                fail(P, `${tag} on this panel moved another panel's axes`);
             }
-            const axes = [...o.xAxis, ...o.yAxis];
-            return JSON.stringify([axes.filter((a) => a.type === 'log').length,
-                                   (o.visualMap || []).map((v) => [v.min, v.max])]);
+            return o;
         };
-        if (footprint(logged) === footprint(base)) {
-            fail(label, 'log is declared but nothing changed scale');
+
+        // Every reading this panel can be in, as the patches to compose the log
+        // flag with. A position is offered on everything that can reach it, so
+        // `log x` on a Lee panel is nothing under the plain reading, whose
+        // abscissa is a probability with one scale, and is the whole point once
+        // `reflect` or `return period` has put a two-scale axis there. The
+        // assertion is therefore "some reading this panel offers takes it",
+        // not "the plain one does": checking the plain reading alone would
+        // demand the strip hide a button until another button was pressed,
+        // which is the appearing and disappearing control the per-panel design
+        // exists to avoid.
+        const composed = [{}];
+        for (const key of ['reflect', 'returnPeriod', 'invert']) {
+            if (!panel[key]) continue;
+            for (const base2 of [...composed]) composed.push({ ...base2, [key]: true });
         }
-    }
-    if (offered.fullRange && !base.is3d) {
-        const full = at({ fullRange: true });
-        if (!checkDrawable(`${label} [full]`, doc, full)) return;
-        // Widening can move either end: a signed outcome axis reaches further
-        // down rather than further up.
-        const wider = (a, b) => (Number.isFinite(a.max) && Number.isFinite(b.max)
-                                 && a.max > b.max)
-            || (Number.isFinite(a.min) && Number.isFinite(b.min) && a.min < b.min);
-        const widened = full.xAxis.some((a, i) => wider(a, base.xAxis[i]))
-            || full.yAxis.some((a, i) => wider(a, base.yAxis[i]));
-        if (!widened) fail(label, 'full range is declared but no window widened');
-    }
-    if (offered.reflect) {
-        const rf = at({ reflect: true });
-        if (!checkDrawable(`${label} [reflect]`, doc, rf)) return;
-        // The reflected axis is a declared axis of its own, so it arrives with
-        // its own name off the document.
-        const named = rf.xAxis.some((a, i) => a.name !== base.xAxis[i].name)
-            || rf.yAxis.some((a, i) => a.name !== base.yAxis[i].name);
-        if (!named) fail(label, 'reflect is declared but no axis took the reading');
-        const moved = rf.series.some((s, i) => (
-            base.series[i] && JSON.stringify(s.data) !== JSON.stringify(base.series[i].data)));
-        if (!moved) fail(label, 'reflect left every coordinate untouched');
-        // The assertion the other readings do not make, and the reason it is
-        // here: a reflection is a bijection of [0, 1] onto itself, so unlike a
-        // return period it keeps its window. Whichever axes were bounded
-        // before must still be bounded, or the panel has lost its bounds, its
-        // nice interval and its zoom extent to the return period's rule.
-        const bounded = (o) => [...o.xAxis, ...o.yAxis]
-            .filter((a) => Number.isFinite(a.min) && Number.isFinite(a.max)).length;
-        if (bounded(rf) < bounded(base)) {
-            fail(label, 'reflect dropped an axis window it should have kept');
+        /** Does any offered reading draw `position` on log when asked? */
+        const reaches = (key, position) => composed.some((extra) => {
+            const o = only(panel.id, { ...extra, [key]: true });
+            return o && !o.is3d && o[position][i] && o[position][i].type === 'log';
+        });
+
+        if (panel.logX) {
+            solo('logX', 'log x');
+            if (!base.is3d && !reaches('logX', 'xAxis')) {
+                fail(P, 'log x is offered but no reading put a log axis on x');
+            }
         }
-    }
-    if (offered.returnPeriod) {
-        const rp = at({ returnPeriod: true });
-        if (!checkDrawable(`${label} [rp]`, doc, rp)) return;
-        const named = [...rp.xAxis, ...rp.yAxis].some((a) => a.name === 'Return period');
-        if (!named) fail(label, 'return period is declared but no axis took the reading');
-        // The map turns a probability into a period, so the drawn values must
-        // move on the paired panel. Only that panel: a density panel names no
-        // probability axis and is untouched by design.
-        const moved = rp.series.some((s, i) => (
-            base.series[i] && JSON.stringify(s.data) !== JSON.stringify(base.series[i].data)));
-        if (!moved) fail(label, 'return period left every coordinate untouched');
-    }
-    if (offered.invert) {
-        const inv = at({ invert: true });
-        if (!checkDrawable(`${label} [invert]`, doc, inv)) return;
-        const titles = new Set((inv.title || []).map((t) => t.text));
-        const wanted = doc.panels.filter((p) => p.invertible)
-            .map((p) => p.inverse_title).filter(Boolean);
-        for (const t of wanted) {
-            if (!titles.has(t)) fail(label, `inverted panel did not take its name ${t}`);
+        if (panel.logY) {
+            solo('logY', 'log y');
+            // A surface reads its height through `zAxis3D` rather than through
+            // a y axis, so the flat assertion does not apply to it and that it
+            // drew at all is the check.
+            if (!base.is3d && !reaches('logY', 'yAxis')) {
+                fail(P, 'log y is offered but no reading put a log axis on y');
+            }
         }
-        // An exchange swaps the axes, so the panel's x name must have moved.
-        const moved = inv.xAxis.some((a, i) => a.name !== base.xAxis[i].name);
-        if (!moved) fail(label, 'invert is declared but no panel exchanged its axes');
-    }
+        if (panel.fullRange) {
+            const o = solo('fullRange', 'full range');
+            // Widening can move either end: a signed outcome axis reaches
+            // further down rather than further up.
+            const wider = (a, b) => (Number.isFinite(a.max) && Number.isFinite(b.max)
+                                     && a.max > b.max)
+                || (Number.isFinite(a.min) && Number.isFinite(b.min) && a.min < b.min);
+            if (o && !o.is3d
+                && !wider(o.xAxis[i], base.xAxis[i]) && !wider(o.yAxis[i], base.yAxis[i])) {
+                fail(P, 'full range is offered but neither window widened');
+            }
+        }
+        if (panel.reflect) {
+            const o = solo('reflect', 'reflect');
+            if (o && !o.is3d) {
+                // The reflected axis is a declared axis of its own, so it
+                // arrives with its own name off the document.
+                if (o.xAxis[i].name === base.xAxis[i].name
+                    && o.yAxis[i].name === base.yAxis[i].name) {
+                    fail(P, 'reflect is offered but no axis took the reading');
+                }
+                // The assertion the other readings do not make, and the reason
+                // it is here: a reflection is a bijection of [0, 1] onto
+                // itself, so unlike a return period it keeps its window. An
+                // axis bounded before must still be bounded, or the panel has
+                // lost its bounds, its nice interval and its zoom extent to the
+                // return period's rule.
+                const bounded = (o2) => [o2.xAxis[i], o2.yAxis[i]]
+                    .filter((a) => Number.isFinite(a.min) && Number.isFinite(a.max)).length;
+                if (bounded(o) < bounded(base)) {
+                    fail(P, 'reflect dropped an axis window it should have kept');
+                }
+            }
+        }
+        if (panel.returnPeriod) {
+            const o = solo('returnPeriod', 'return period');
+            if (o && !o.is3d) {
+                if (o.xAxis[i].name !== 'Return period'
+                    && o.yAxis[i].name !== 'Return period') {
+                    fail(P, 'return period is offered but no axis took the reading');
+                }
+                // The period axis keeps its declared window and the companion
+                // follows the data, which is the pair of behaviors that used to
+                // be exactly swapped. `checkDrawable` has already asserted the
+                // period axis is bounded and under the cap; this is the other
+                // half, that the companion was released.
+                const onX = o.xAxis[i].name === 'Return period';
+                const companion = onX ? o.yAxis[i] : o.xAxis[i];
+                const wasBounded = Number.isFinite((onX ? base.yAxis : base.xAxis)[i].min);
+                if (wasBounded && Number.isFinite(companion.min)
+                    && Number.isFinite(companion.max)) {
+                    fail(P, 'the companion axis kept its probability-reading crop');
+                }
+                // Both orientations, since `invert` moves the period onto the
+                // other axis and the window and the cap have to follow it.
+                if (panel.invert) {
+                    solo2(P, only(panel.id, { returnPeriod: true, invert: true }),
+                          doc, 'return period inverted');
+                }
+            }
+        }
+        if (panel.invert) {
+            const o = solo('invert', 'invert');
+            if (o && !o.is3d && o.xAxis[i].name === base.xAxis[i].name) {
+                fail(P, 'invert is offered but the panel did not exchange its axes');
+            }
+        }
+        if (panel.marks) {
+            const o = only(panel.id, { refLines: false });
+            checkDrawable(`${P} [no marks]`, doc, o);
+        }
+    });
+
     for (const kind of offered.kinds) {
         const drawn = at({ kind });
         if (!drawn) fail(label, `declared kind ${kind} does not realize`);
     }
+}
+
+/** One extra realization, checked drawable only. */
+function solo2(where, option, doc, tag) {
+    checkDrawable(`${where} [${tag}]`, doc, option);
 }
 
 /** The layout holds the target footprint, and stacks when the host is narrow. */
@@ -346,14 +432,22 @@ for (const [name, entry] of Object.entries(cases)) {
         checkReadings(label, doc, option);
         const ladder = checkLadder(label, doc, option);
         const offered = readings(doc);
-        const which = Object.entries(offered)
-            .filter(([, v]) => (Array.isArray(v) ? v.length : v))
-            .map(([k]) => k).join(' ') || 'none';
+        // Printed per panel, which is what the strip now draws: one group per
+        // entry, in document order, so the line reads as the row of buttons a
+        // reader would see. The clutter count in
+        // `dev/done/plan-2d-punchups.md` is read straight off this.
+        const which = offered.panels.map((p) => {
+            const on = Object.entries(p)
+                .filter(([k, v]) => v === true && k !== 'id')
+                .map(([k]) => k).join(' ');
+            return `${p.id}:${on || 'none'}`;
+        }).join(' | ') || 'none';
+        const kinds = offered.kinds.length ? ` kinds=[${offered.kinds.join(' ')}]` : '';
         const marks = (option.series || []).filter((s) => s.markLine).length;
         console.log(
             `${label.padEnd(22)} panels=${doc.panels.length} `
             + `series=${option.series.length} marks=${marks} `
-            + `h=${option.hostHeight} readings=[${which}]`
+            + `h=${option.hostHeight} readings=[${which}]${kinds}`
             + (ladder ? ` ladder=${ladder.full}->${ladder.zoomed}` : ''));
     }
 }

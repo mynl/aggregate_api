@@ -24,7 +24,8 @@ import { api } from '../api.js';
 import * as spacemouse from '../spacemouse.js';
 import { el, empty } from '../utils/dom.js';
 import {
-    chartdocToEcharts, panelLayout, readings, rungAt, surfaceCuts,
+    PANEL_DEFAULTS, WIDE_PX, chartdocToEcharts, panelLayout, readings, rungAt,
+    surfaceCuts,
 } from './chartdoc-to-echarts.js';
 import { fileStem, meshToGlb, meshToObj, meshToStl, surfaceMesh } from './mesh-export.js';
 import { chartParamsFor, migrateChartView, windowsWith } from './request-params.js';
@@ -59,12 +60,24 @@ const VIEW_KEY = 'aggapi.chartView.v4';
 const VIEW_KEY_PREVIOUS = 'aggapi.chartView.v3';
 
 const VIEW_DEFAULTS = {
-    log: false,          // every axis that declares a log reading
-    fullRange: false,    // every axis that declares a full extent
-    reflect: false,      // the complement of a probability axis, 1 - v
-    returnPeriod: false, // the paired reading of a probability axis
-    invert: false,       // every panel that declares its axes exchange
-    refLines: true,      // the document's marks: the mean, break even
+    // The seven readings live per panel, under `panels`, keyed by the
+    // document's own panel id. **No `VIEW_KEY` bump for the move**, per the test
+    // `dev/done/plan-chart-reflect.md` records: a key is bumped when a stored
+    // value would now mean something *wrong*, as v3's flat `window` did. Here
+    // the stored blob spreads over these defaults, the six old flat keys become
+    // inert because nothing reads them any more, `panels` takes `{}` and every
+    // panel takes `PANEL_DEFAULTS`. Nothing means anything wrong, and `kind`,
+    // the surface preferences, the cut position and the per-chart `windows` all
+    // survive, which a bump would silently discard. `migrateChartView` strips
+    // the dead keys on the next write.
+    //
+    // Keying on the panel id is a real gain over the flat set rather than the
+    // cost of the move: `density`, `lee`, `kappa`, `occurrence`, `aggregate`,
+    // `square` and `cloud` are stable names carrying one meaning across every
+    // document that uses them, so `log y` chosen on a density panel carries
+    // from an `agg` to a `port` to a P&L, which the flat set could not tell
+    // apart from `log y` chosen on a Lee panel.
+    panels: {},
     kind: null,          // panel realization: a z grid flat or in relief
     // The relief's own controls, which act on nothing else. Defaults are the
     // prototype's `app` preset: the mesh and the wall grid on, the marginals
@@ -113,7 +126,13 @@ const WALK_INTERVAL = 50;
 let view = (() => {
     try {
         const held = localStorage.getItem(VIEW_KEY);
-        if (held !== null) return { ...VIEW_DEFAULTS, ...JSON.parse(held) };
+        // Migrated on the way in as well as on the v3 path below: the a121 move
+        // of the readings under `panels` left its dead keys inside the key that
+        // is still current, so they are stripped here rather than carried
+        // forward forever. Inert either way, since nothing reads them.
+        if (held !== null) {
+            return { ...VIEW_DEFAULTS, ...migrateChartView(JSON.parse(held)) };
+        }
         const previous = localStorage.getItem(VIEW_KEY_PREVIOUS);
         if (previous === null) return { ...VIEW_DEFAULTS };
         const migrated = { ...VIEW_DEFAULTS, ...migrateChartView(JSON.parse(previous)) };
@@ -137,66 +156,99 @@ function setView(patch, persist = true) {
     try { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch { /* private mode */ }
 }
 
+/** One panel's held readings, resolved against the defaults. */
+function panelView(id) {
+    return { ...PANEL_DEFAULTS, ...((view.panels || {})[id] || {}) };
+}
+
+/** Set one reading on one panel, leaving every other panel alone. */
+function setPanelView(id, patch) {
+    setView({ panels: { ...(view.panels || {}),
+                        [id]: { ...panelView(id), ...patch } } });
+}
+
 // The controls, in the house order: axis readings first, then panel
 // realizations, each family appended within its group as it arrives. Fixed so
 // the strip does not reorder itself between charts and a reader's hand learns
 // one layout.
 //
-// The canonical order is `log, full range, reflect, return period, invert,
-// reference lines`, stated the same way in the library's
-// `dev/plan-chart-reflect.md`. `reflect` is the one entry that did not simply
-// append: it sits *before* the return period because the two act on the same
-// probability axis and the period reading composes on top of the reflection,
-// so reading the strip left to right is reading the coordinate changes in the
-// order they apply. Worth the one time cost of moving three buttons.
+// The canonical order is `log x, log y, full range, reflect, return period,
+// invert, reference lines`, stated the same way in the library's
+// `dev/plan-chart-reflect.md` bar the log split. `reflect` is the one entry
+// that did not simply append: it sits *before* the return period because the
+// two act on the same probability axis and the period reading composes on top
+// of the reflection, so reading the strip left to right is reading the
+// coordinate changes in the order they apply.
 //
-// `key` names the reading in the view state; `offer` reads the document's
+// **One `log` became `log x` and `log y`** (author ruling 2026-08-21). The
+// single button could not draw a log ordinate over a linear loss axis, which is
+// the reading wanted most often, and a naive split by screen position could not
+// have either: the loss axis is read by both panels of an `agg`, so one flag
+// would have drawn it on log in the density panel and linear in the Lee panel.
+// Per-panel groups dissolve that entirely, since each panel answers for itself.
+// The two resolve by screen position *after* the invert exchange, so a button
+// keeps meaning the axis under the reader's eye.
+//
+// `key` names the reading in the view state; `offer` reads the panel's
 // declaration, which is what decides whether the button exists at all.
 const CONTROLS = [
     {
-        key: 'log',
-        label: 'log',
-        title: 'Read every axis that offers a log scale on log. Which axes '
-            + 'those are is the document\'s statement, not a setting here. An '
-            + 'axis drawn on log is never cropped: the room is the point',
+        key: 'logX',
+        label: 'log x',
+        title: 'Read this panel\'s horizontal axis on log, where it offers a '
+            + 'log reading. Which axes do is the document\'s statement, not a '
+            + 'setting here, and it acts on this panel alone',
+    },
+    {
+        key: 'logY',
+        label: 'log y',
+        title: 'Read this panel\'s vertical axis on log, where it offers a log '
+            + 'reading. A density ordinate is uncropped on the way there, '
+            + 'because room for a spike is the whole point of asking',
     },
     {
         key: 'fullRange',
         label: 'full range',
-        title: 'Show everything, on both axes: the whole extent where the '
-            + 'document declares one, and as far as the data reaches where it '
-            + 'does not, instead of the window the library computed',
+        title: 'Draw this panel\'s axes over the whole extent they declare, '
+            + 'instead of the window the library suggested. On a return period '
+            + 'that opens the ladder past 1-in-10,000 to the deep tail',
     },
     {
         key: 'reflect',
         label: 'reflect',
-        title: 'Read a probability axis as its complement, 1 - v. A '
-            + 'distribution function reflected is the survival function; with '
-            + 'the return period it opens out the other end of the curve',
+        title: 'Read this panel\'s probability axis as its complement, 1 - v. '
+            + 'A distribution function reflected is the survival function; '
+            + 'with the return period it opens out the other end of the curve',
     },
     {
         key: 'returnPeriod',
         label: 'return period',
-        title: 'Read a probability axis as the return period it pairs with: '
-            + 'the same curve, interrogated at 1-in-200 rather than at 0.995',
+        title: 'Read this panel\'s probability axis as the return period it '
+            + 'pairs with: the same curve, interrogated at 1-in-200 rather '
+            + 'than at 0.995',
     },
     {
         key: 'invert',
         label: 'invert',
-        title: 'Exchange the axes of a panel that says they exchange. A '
+        title: 'Exchange this panel\'s axes, where it says they exchange. A '
             + 'quantile plot inverted is the distribution function',
     },
-    // Offered whenever the document publishes marks, and **on** by default: a
-    // mark is a reading a reader cannot hover for, so it is what they came to
-    // see, and this is the button for taking it away rather than for asking
-    // for it. It existed before a62, did not survive the rewrite onto chart
-    // documents, and its absence is punch item G3.
+    // Offered whenever the panel carries marks, and **on** by default: a mark
+    // is a reading a reader cannot hover for, so it is what they came to see,
+    // and this is the button for taking it away rather than for asking for it.
+    // It existed before a62, did not survive the rewrite onto chart documents,
+    // and its absence is punch item G3. Per panel since a121, and it lost the
+    // middle group of the old three-group arrangement with the move: marks
+    // carry `panel_id` and `xyPanel` already filters on it, so the button
+    // belongs to the panel whose marks it suppresses. On an `agg` and a `port`
+    // that is the density group alone, which is why the restored arrangement is
+    // two groups rather than the older three.
     {
         key: 'refLines',
         offer: 'marks',
         label: 'reference lines',
-        title: 'Show the marks the document carries, the mean and break '
-            + 'even, drawn on the panels that carry them',
+        title: 'Show the marks this panel carries, the mean and break even, '
+            + 'drawn where the document puts them',
     },
 ];
 
@@ -487,32 +539,60 @@ function spaceMouseButton(onSpaceMouse, register) {
 
 function renderControls(doc, hooks) {
     const { chart, onChange, onReset, onWindow, walking, onWalk, onExport,
-            canExport, onSpaceMouse, register, nav, camera } = hooks;
+            canExport, onSpaceMouse, register, nav, camera, width } = hooks;
     const offered = readings(doc);
-    const row = el('div', { className: 'exhibit-controls exhibit-controls-center' });
+    const row = el('div', { className: 'exhibit-controls' });
+    // `panelLayout` stacks panels one per row below `WIDE_PX`, and the strip
+    // sits above a single canvas holding every grid, so under the breakpoint
+    // left and right stop corresponding to anything. The groups stack the same
+    // way and take their panel's title as a label, which is the only thing that
+    // can say which group is which once they are no longer side by side.
+    const stacked = (width ? width() : 0) < WIDE_PX;
+    if (stacked) row.classList.add('exhibit-controls-stacked');
+    // One group per panel, in document order, each holding only what that
+    // panel's own axes declare. Author ruling 2026-08-21, reversing
+    // `dev/done/plan-plot-ir-api.md` section 6 and restoring the arrangement
+    // `dev/done/plan-exhibit-punchups-3.md` describes. Ten buttons in two
+    // labeled halves reads as less cluttered than seven in one undifferentiated
+    // centered row, because each half visibly belongs to the panel above it,
+    // which the centered row could not say at all.
+    for (const panel of offered.panels) {
+        const group = el('div', { className: 'exhibit-group exhibit-group-panel' });
+        if (stacked && offered.panels.length > 1 && panel.title) {
+            group.appendChild(el('span', { className: 'exhibit-group-label' },
+                                  panel.title));
+        }
+        for (const spec of CONTROLS) {
+            // `offer` names the declaration that decides whether the button
+            // exists, where it differs from the view key the button sets. Only
+            // reference lines needs it: it is gated on the panel carrying marks
+            // at all, and there is no reading called `refLines` to read.
+            if (!panel[spec.offer || spec.key]) continue;
+            const btn = el('button', {
+                type: 'button',
+                className: `exhibit-toggle${panelView(panel.id)[spec.key] ? ' active' : ''}`,
+                title: spec.title,
+                onClick: () => {
+                    setPanelView(panel.id, { [spec.key]: !panelView(panel.id)[spec.key] });
+                    btn.classList.toggle('active',
+                                         Boolean(panelView(panel.id)[spec.key]));
+                    onChange();
+                },
+            }, spec.label);
+            group.appendChild(btn);
+        }
+        // A panel declaring nothing gets no group at all rather than an empty
+        // one, which would draw a rule with nothing beside it.
+        if (group.querySelector('button')) row.appendChild(group);
+    }
+    // The document's own group, last: everything below acts on the whole
+    // drawing rather than on one panel, so it sits apart from the panel groups
+    // and takes only the width it needs while they share what is left.
     const box = el('div', { className: 'exhibit-group' });
     // The feel panel, when there is a puck to have one: a full width row under
     // the buttons rather than a popover, so nothing floats over the chart and
     // nothing has to be positioned.
     let feelPanel = null;
-    for (const spec of CONTROLS) {
-        // `offer` names the declaration that decides whether the button exists,
-        // where it differs from the view key the button sets. Only reference
-        // lines needs it: it is gated on the document carrying marks at all,
-        // and there is no reading called `refLines` for it to read.
-        if (!offered[spec.offer || spec.key]) continue;
-        const btn = el('button', {
-            type: 'button',
-            className: `exhibit-toggle${view[spec.key] ? ' active' : ''}`,
-            title: spec.title,
-            onClick: () => {
-                setView({ [spec.key]: !view[spec.key] });
-                btn.classList.toggle('active', Boolean(view[spec.key]));
-                onChange();
-            },
-        }, spec.label);
-        box.appendChild(btn);
-    }
     // The relief's own controls, between the readings and the realization:
     // they act on one drawing rather than on the document, and they exist only
     // while that drawing is the one on screen.
@@ -1215,6 +1295,10 @@ function draw(container, tools, host, doc, spec = null) {
             register: (off) => stripOff.push(off),
             nav,
             camera: liveCamera,
+            // Read at render time rather than captured: the strip is rebuilt on
+            // resize, and the group layout turns on the same breakpoint the
+            // panels do.
+            width: () => host.clientWidth || 0,
         });
         if (strip) tools.appendChild(strip);
     }
@@ -1348,8 +1432,15 @@ function draw(container, tools, host, doc, spec = null) {
     const ro = new ResizeObserver(() => {
         const width = host.clientWidth || 0;
         if (Math.abs(width - lastWidth) <= 8) return;
+        const crossed = (width < WIDE_PX) !== (lastWidth < WIDE_PX);
         lastWidth = width;
-        if (ready) render();
+        if (!ready) return;
+        // The strip is rebuilt only when the breakpoint is actually crossed:
+        // that is what changes whether the groups stack and carry their panel
+        // titles, and rebuilding it on every resize tick would throw away the
+        // feel panel and re-register the puck's watchers for nothing.
+        if (crossed) renderTools();
+        render();
     });
     ro.observe(host);
 

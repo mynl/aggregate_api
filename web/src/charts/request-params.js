@@ -88,33 +88,53 @@ export function windowsWith(windows, chartName, depth) {
 }
 
 /**
- * A stored v3 reading state, as v4 reads it.
+ * A stored chart view, with the keys nothing reads any more taken out.
+ *
+ * Run on a stored v3 entry, which is read once and dropped, and on the current
+ * v4 entry every load, because the a121 move of the readings under `panels`
+ * left its dead keys in the key that is still current rather than in a
+ * superseded one.
  *
  * Parameters
  * ----------
  * stored : object
- *     The parsed v3 entry, or anything at all: a value that is not a plain
- *     object migrates to nothing rather than throwing, since a corrupt entry
- *     must not cost the reader their charts.
+ *     The parsed entry, or anything at all: a value that is not a plain object
+ *     migrates to nothing rather than throwing, since a corrupt entry must not
+ *     cost the reader their charts.
  *
  * Returns
  * -------
  * object
- *     The same readings without the flat `window`.
+ *     The same state without the flat `window` and without the six readings
+ *     that went per panel at a121.
  *
  * Notes
  * -----
- * The readings themselves are a view the reader chose, so they carry over. The
- * flat `window` is the one thing v3 held that nobody chose for the charts it
- * was never offered on, which is the same argument the v2 to v3 bump recorded
- * in place. A poisoned browser therefore heals on its next load, with no user
- * action and no note in the release telling anybody to clear anything.
+ * The flat `window` is the one thing v3 held that nobody chose for the charts
+ * it was never offered on, which is the same argument the v2 to v3 bump
+ * recorded in place. A poisoned browser therefore heals on its next load, with
+ * no user action and no note in the release telling anybody to clear anything.
+ *
+ * The six flat readings are a different case and are stripped for tidiness
+ * rather than for correctness. They went per panel at a121, under `panels` and
+ * keyed by panel id, and nothing reads them at the top level any more, so a
+ * blob still carrying them is inert rather than wrong. That is exactly why
+ * `VIEW_KEY` did not need a bump for the move: the test
+ * `dev/done/plan-chart-reflect.md` states is whether a stored value would now
+ * mean something *wrong*, and an unread key means nothing at all. They come out
+ * on the next write so the entry does not carry a generation of dead keys
+ * forever. `refLines` is in the list even though it defaulted to true: what it
+ * held was a document-wide answer to a question that is now asked per panel.
  */
+const DEAD_VIEW_KEYS = new Set([
+    'window', 'log', 'fullRange', 'reflect', 'returnPeriod', 'invert', 'refLines',
+]);
+
 export function migrateChartView(stored) {
     if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
     const migrated = {};
     for (const [key, value] of Object.entries(stored)) {
-        if (key !== 'window') migrated[key] = value;
+        if (!DEAD_VIEW_KEYS.has(key)) migrated[key] = value;
     }
     return migrated;
 }

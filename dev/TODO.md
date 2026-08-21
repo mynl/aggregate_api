@@ -768,8 +768,63 @@ one version bump each.
       relief's readings on a surface only, so `contours` toggled off on a
       `heatmap` survives a reset.
 
+- [x] **The 2-D control strip goes per panel, and three axes stop lying**
+      (→ 1.0.0a121, against `aggregate 1.0.0a314`).
+      `dev/done/plan-2d-punchups.md`, both halves executed 2026-08-21. `log`
+      split into `log x` and `log y`, the seven readings moved from one centered
+      row into one group per panel keyed on the panel id, `full range` stopped
+      falling back to the drawn extent so a probability axis stops being labeled
+      to 1.5, and the return-period window stopped being discarded outright,
+      which was four independent faults on two lines of `xyPanel`. Properly
+      fixes the a-generation punch item "log y on rh plot triggers reshape/draw
+      of left plot" (`dev/api-punchlist.md:238`). Two further rulings taken on
+      execution and recorded as decisions 10 and 11: the log release acts on a
+      density ordinate alone, keyed on the axis unit so it survives `invert`,
+      and a panel offers on every axis that can reach a position rather than on
+      the one occupying it now. No `VIEW_KEY` bump. Still owed: the **browser
+      pass**, sections 5 and 6 of the plan's verification, which is the group
+      alignment at both sides of `WIDE_PX` and the sticky state carrying across
+      documents.
+
+- [ ] **The companion axis auto-fits over data the return-period ladder no
+      longer shows.** Raised in review 2026-08-21, not ruled, recorded rather
+      than built. Under a period reading the companion is given no window so
+      echarts fits it, which was right when the period axis showed everything
+      and is loose now that `aggregate 1.0.0a314` ends the suggested ladder at
+      1-in-10,000: the visible part of the curve fills 41% to 100% of the axis
+      across the fixtures and 47% on the author's own program. The fix is to
+      take the companion's extent over the points whose period coordinate falls
+      inside the period window, about three lines in `xyPanel`. See the "left
+      behind" section of `dev/done/plan-2d-punchups.md`.
+
+- [ ] **A linear return-period axis is labeled from zero.** `niceWindow` rounds
+      the declared `(1, 10000)` outward to a tick interval and floors the low
+      end at 0, so the first tick reads `1-in-0`. New at a121 and harmless: the
+      axis was unconditionally log before `aggregate 1.0.0a314`, so the question
+      could not arise. Not fixed with it because clamping `niceWindow` to a
+      declared minimum would act on every axis in every document.
+
+- [ ] **Should the per-panel groups carry their panel title in the wide layout
+      too?** a121 labels them only when stacked below `WIDE_PX`, on the grounds
+      that panel titles are long ("Probability mass function") and the panel
+      headings are already on screen right above them. Turning them on
+      everywhere is one condition in `renderControls`. A styling call, open.
+
 ## Raised with `aggregate` (not fixed here)
 
+- [ ] **The portfolio's density ordinate should declare its full extent, as the
+      aggregate's now does.** `aggregate 1.0.0a314` (L3 of
+      `dev/done/plan-2d-punchups.md`) had `charts._emit_aggregate.outcome_doc`
+      publish the tallest drawn mass as the `mass` axis' `full_range`, which
+      serves `agg`, `pnl`, `discrete` and `reins`. The **portfolio** emitter is
+      a separate one and still declines, though it crops the same way: on the
+      `port` fixture the ordinate is cropped 3.75 times, suggested top
+      `1.60e-4` against a drawn peak of `6.01e-4`, with no extent published.
+      App side a121 covers it by falling back to the drawn extent, so nothing is
+      broken and the two documents reach the same number by two routes; the
+      declaration would retire that fallback and make `full range` open the
+      ordinate on a `port` as it does on an `agg`. One line, no contract change,
+      which is why it is here rather than in a round note.
 - [ ] Two `role:hero` portfolios carry `note{}` after the last unit, where the
       positional rule binds it to that unit: `TwoLineBook` and
       `BodoffWindQuake`. Visible as a blank tooltip and Overview lead on the

@@ -58,15 +58,27 @@ test('auto deletes the key rather than storing a null', () => {
     assert.deepEqual(windowsWith(null, 'joint_surface', null), {});
 });
 
-test('the v3 migration drops the flat window and keeps the readings', () => {
-    const stored = { log: true, kind: 'surface', cut: 'total', window: 8 };
+test('the migration drops the flat window and keeps what is still read', () => {
+    const stored = { kind: 'surface', cut: 'total', window: 8,
+                     panels: { lee: { logY: true } }, windows: { agg: 18 } };
     assert.deepEqual(migrateChartView(stored),
-                     { log: true, kind: 'surface', cut: 'total' });
-    // The v3 entry itself is untouched: the caller drops the key.
+                     { kind: 'surface', cut: 'total',
+                       panels: { lee: { logY: true } }, windows: { agg: 18 } });
+    // The stored entry itself is untouched: the caller drops the key.
     assert.equal(stored.window, 8);
 });
 
-test('a corrupt v3 entry migrates to nothing rather than throwing', () => {
+test('the migration drops the six readings that went per panel at a121', () => {
+    // Inert rather than wrong, which is why `VIEW_KEY` did not need a bump for
+    // the move: nothing reads them at the top level any more. They come out so
+    // the entry does not carry a generation of dead keys forever.
+    const stored = { log: true, fullRange: true, reflect: true,
+                     returnPeriod: true, invert: true, refLines: false,
+                     kind: 'surface' };
+    assert.deepEqual(migrateChartView(stored), { kind: 'surface' });
+});
+
+test('a corrupt entry migrates to nothing rather than throwing', () => {
     for (const stored of [null, undefined, 7, 'log', [1, 2]]) {
         assert.deepEqual(migrateChartView(stored), {});
     }
