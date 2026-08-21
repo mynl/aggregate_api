@@ -62,6 +62,32 @@ def test_build_summary_fields(client):
     assert body["components"] == []
 
 
+def test_build_carries_the_declared_note(client):
+    """The program's own ``note{}`` rides on the build response, verbatim.
+
+    The status strip prints it under the facts line, on every build, which is
+    why it cannot come from ``/v1/objects/{id}/meta``: that route is asked for
+    once per object and only while the Overview group is open, so a reader
+    sitting in Pricing would never see what the program says about itself.
+
+    Verbatim means verbatim: no label, no trimming to a first sentence, and no
+    filtering of the ``sharpen: `` verdict a grid audit merges into the same
+    field. A program without a note reports ``None``, which is ordinary rather
+    than defective, so the strip simply has no prose line.
+    """
+    plain = client.post("/v1/objects", json={"decl": _DICE}).json()
+    assert plain["note"] is None
+    text = "three dice, the smallest object that still has a distribution"
+    decl = f"{_DICE} note{{{text}}}"
+    body = client.post("/v1/objects", json={"decl": decl}).json()
+    assert body["note"] == text
+    # And on the cache-hit path, which builds its response from the stored
+    # object rather than from the one it just made.
+    again = client.post("/v1/objects", json={"decl": decl}).json()
+    assert again["cached"] is True
+    assert again["note"] == text
+
+
 def test_build_reports_the_sign_convention(client):
     """``value_type`` names the convention on every kind that has one.
 

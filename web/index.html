@@ -314,11 +314,15 @@
              one container, so the instrumentation reads as one thing:
 
                1. the object    name · kind · bs · log2 · mean · CV · validation
-               2. the note      what a derivation did, when one just ran
+               2. the note      the program's own note{}, then what a derivation
+                                did and what the library warned about
                3. the timing    Calculated in 0.000 seconds
 
              The note is its own line as of a49. Sharpen's verdict used to be
              written onto the timing line, which the next render then overwrote.
+             It carries the declared note{} too since a118, on the reading that
+             a program's own account of itself belongs next to its numbers and
+             not only on the Overview header, which is drawn for one group.
 
              main.js sets `is-warn` / `is-fail` on the wrapper from the build's
              own verdict, which tints the whole strip: hue alone is too weak for

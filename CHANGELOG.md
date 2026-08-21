@@ -4,6 +4,37 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a118
+
+**A program's `note{}` now prints on the status strip, on every build.** It goes
+in the strip's note slot, between the facts line (name, kind, bs, log2, mean,
+CV, validation) and the timing line, so the reading order is what the object is,
+what its author said about it, then how long it took or that it came from cache.
+
+Verbatim, with no label. The slot is already the place on the strip where prose
+lives rather than instrument readings, so a sentence appearing there is
+self-evidently a sentence; a leading "Notes:" would spend a line's worth of
+width saying what the reader can see. The declared note leads the slot's three
+tenants because it is the only one the object carries on its own account, and
+the other two, a derivation's account of what it just did and the library's
+build warnings, are then remarks about the build that just ran, in the order
+they happened.
+
+**The note rides on the build response rather than being fetched.**
+`_summary_fields` reads `obj.note` and `BuildResponse` carries it, so all three
+paths that build a manifest report it: the cache miss, the cache hit, and the
+one a derivation returns. `GET /v1/objects/{id}/meta` was the obvious source and
+is the wrong one: it is requested once per object and only while the Overview
+group is open, so a reader sitting in Pricing or Reinsurance would never see
+what the program says about itself. The Overview header keeps drawing the note
+too, which is a duplicate on that one group and left alone for now.
+
+Verbatim means the whole field, including the `sharpen: ` verdict the library
+merges into it (`aggregate._program._SHARPEN_NOTE`, the chunk `capability.py`
+already tests for). After a Sharpen the strip therefore carries the library's
+sentence beside the author's. Trimming it down would be the app editing the
+object's own words, which is not the app's call.
+
 ## 1.0.0a117
 
 **A tap on the 3-D surface places the cuts, and every chart has a reset that

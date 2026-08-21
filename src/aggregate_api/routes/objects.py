@@ -716,7 +716,7 @@ def _value_type(obj: Any) -> str | None:
 
 def _summary_fields(obj: Any) -> dict:
     """Headline grid and moments for the build summary: ``bs``, ``log2``,
-    ``mean``, ``cv``, ``validation``.
+    ``mean``, ``cv``, ``validation``, plus the program's own ``note``.
 
     ``Aggregate`` and ``Portfolio`` carry the analytic moments on ``actual_m`` /
     ``actual_cv`` and the realized (model-output) ones on ``est_m`` / ``est_cv``.
@@ -786,6 +786,20 @@ def _summary_fields(obj: Any) -> dict:
 
     value_type = _value_type(obj)
 
+    # The program's own ``note{}`` body, so the status strip can say it on every
+    # build without a second request. It rides with the moments rather than on a
+    # field of its own because all three call sites (cache miss, cache hit, the
+    # manifest a derivation returns) want it, and one of them would otherwise
+    # forget to ask.
+    #
+    # **Verbatim, and not only the author's prose.** A grid audit merges its own
+    # verdict into the same field (``aggregate._program._SHARPEN_NOTE``, the
+    # ``sharpen: `` chunk :mod:`aggregate_api.capability` tests for), so after a
+    # Sharpen the note carries the library's sentence beside the author's. That
+    # is what the note says, and editing it down is not the app's call.
+    note = getattr(obj, "note", None)
+    note = str(note).strip() if note is not None else ""
+
     return {
         "bs": _num("bs"),
         "log2": log2,
@@ -794,6 +808,7 @@ def _summary_fields(obj: Any) -> dict:
         "validation": validation,
         "has_reins": reinsured,
         "value_type": str(value_type) if value_type is not None else None,
+        "note": note or None,
         "components": _component_fields(obj),
     }
 

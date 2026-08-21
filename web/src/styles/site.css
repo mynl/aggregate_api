@@ -399,18 +399,19 @@ header .navbar { min-height: 56px; }
     cursor: pointer; line-height: 1; padding: .1rem .3rem; font-size: 1rem; display: none;
 }
 .summary.expanded .summary-more i { transform: rotate(180deg); }
-/* The note slot, between the summary row and the timing line: what a derivation
-   just did, in its own words. Set in the UI face rather than in mono, because
-   it is the one prose sentence on a strip that is otherwise all instrument
-   readings, and one step darker than the timing line, because it is worth
-   reading and the timing is not. */
+/* The note slot, between the summary row and the timing line: the program's own
+   note{}, what a derivation just did, and what the library warned about. Set in
+   the UI face rather than in mono, because these are the prose sentences on a
+   strip that is otherwise all instrument readings, and one step darker than the
+   timing line, because they are worth reading and the timing is not. */
 .summary-note {
     font-size: var(--fs-meta); color: var(--ink-2); line-height: 1.4;
     max-width: var(--measure); margin: .25rem 0 0;
 }
 .summary-note:empty { display: none; }
-/* Each tenant of the note slot on its own line, so a derivation's sentence and
-   two build warnings do not run together into one paragraph. */
+/* Each tenant of the note slot on its own line, so a declared note, a
+   derivation's sentence and two build warnings do not run together into one
+   paragraph. */
 .summary-note > span { display: block; }
 /* A build warning: what the library said on its way to the object. Marked with
    the warn hue and a leading rule rather than an icon, and it does NOT tint the

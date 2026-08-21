@@ -411,24 +411,32 @@ function noteDerivation(text) {
 }
 
 /**
- * The note slot's two tenants, and why they share one line.
+ * The note slot's three tenants, and why they share one line.
  *
+ * `declared` is the program's own `note{}` body, verbatim: what the author of
+ * the declaration wrote about it, whether they typed it in the box or picked it
+ * out of the examples menu.
  * `derivation` is what Sharpen or PnL just did, in the library's own words.
  * `warnings` is what the library said while building, at WARNING and above:
  * a splice reaching below zero, a clause ignored, a grid clipping the tail.
  *
  * They share a slot because they are the same kind of thing, prose about this
- * object rather than a reading off it, and a second strip line for something
- * usually empty would cost the layout more than it returns. The derivation
- * leads: it describes an action the reader just took, where a warning
- * describes a standing property they can come back to.
+ * object rather than a reading off it, and a strip line each for three things
+ * usually empty would cost the layout more than it returns.
+ *
+ * The declared note leads. It is the only one of the three the object carries
+ * on its own account, so it reads as a caption on the facts line right above
+ * it, and the other two are then remarks about the build that just ran, in the
+ * order they happened. Printed with no label: a sentence of prose under a line
+ * of instrument readings does not need to be told apart from one.
  */
-const _note = { derivation: '', warnings: [] };
+const _note = { declared: '', derivation: '', warnings: [] };
 
 function renderNote() {
     const line = $('summary-note');
     if (!line) return;
     empty(line);
+    if (_note.declared) line.appendChild(el('span', {}, _note.declared));
     if (_note.derivation) line.appendChild(el('span', {}, _note.derivation));
     for (const w of _note.warnings) {
         line.appendChild(el('span', { className: 'note-warn' }, w));
@@ -437,6 +445,7 @@ function renderNote() {
 
 /** Clear the note slot. Called on every build: a note belongs to one object. */
 function clearNote() {
+    _note.declared = '';
     _note.derivation = '';
     _note.warnings = [];
     renderNote();
@@ -709,6 +718,11 @@ function renderSummary(res) {
     // rather than only for the cached ones.
     inner.append(...bits);
     clearNote();
+    // What the program says about itself, on the line under its own numbers.
+    // Straight off the build response rather than off `/v1/objects/{id}/meta`,
+    // which is fetched once per object and only while Overview is open: a note
+    // worth reading is worth reading from wherever the reader happens to be.
+    _note.declared = res.note || '';
     // Whatever the library said while building this object. Deliberately does
     // NOT tint the strip: the ground carries the validation verdict, which is
     // a narrower and more actionable statement, and letting a warning repaint

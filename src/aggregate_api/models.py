@@ -241,6 +241,13 @@ class BuildResponse(BaseModel):
     # field the author asked for never once appeared. ``None`` now means the
     # kind has no orientation to report, not that its orientation is ordinary.
     value_type: str | None = None
+    # The program's ``note{}`` body, verbatim, or ``None`` when it has none (or
+    # the kind carries no note at all). The status strip prints it under the
+    # facts line on every build, which is why it rides on the build response
+    # rather than being fetched from ``/meta``: that route is asked for once per
+    # object and only while the Overview group is open, so a note the reader is
+    # meant to see whatever they are looking at cannot come from there.
+    note: str | None = None
     # Per-component grid and moments, for an object built from a pair. Empty
     # for every kind but ``bvagg``, whose ``bs`` is genuinely two numbers (one
     # grid per axis) and whose scalar fields above are therefore all ``None``.
