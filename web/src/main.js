@@ -1716,23 +1716,23 @@ function mountTable(paneId, host, source, gridOpts = GRID_FULL) {
 // of fact that goes stale in a copy.
 
 /**
- * The object's own header block: its tags, and its note.
+ * The object's own header block: its tags.
  *
- * Reads `/v1/objects/{id}/meta`, so it works for anything that was built,
- * including a hand-typed program carrying `note{}`. This replaces the old
- * `pendingNote` route, where the lead could only ever come from an example that
- * had just been clicked.
- *
- * A missing note is ordinary, not a defect: most library entries carry one and
- * nothing requires it, so an object without one simply has no lead paragraph.
+ * Reads `/v1/objects/{id}/meta`, so it works for anything that was built. This
+ * replaces the old `pendingNote` route, where the lead could only ever come from
+ * an example that had just been clicked.
  *
  * Notes
  * -----
  * **The name and the kind are gone from here.** They are the first two things
  * the status strip says, a couple of centimetres up the page, so this row
  * repeated them at a larger size and read as a second heading for the same
- * object. What is left is what the strip does not carry: the tags and the note,
- * on one quiet line above the group strip.
+ * object.
+ *
+ * **And so is the note, as of a119.** The strip prints it now, on every build
+ * and under every group, where this row is drawn for Overview alone. Two copies
+ * of one sentence a few centimetres apart is one too many, and the one that
+ * survives is the one the reader can see from wherever they are.
  *
  * The program and its hints are deliberately **not** shown here either. They
  * sit in the editor, so a disclosure repeating them was spending the most
@@ -1740,14 +1740,13 @@ function mountTable(paneId, host, source, gridOpts = GRID_FULL) {
  */
 function renderOverviewHeader(meta) {
     if (!meta) return null;
-    // Always a node, even when the object carries neither, so the caller's
+    // Always a node, even when the object carries no tags, so the caller's
     // "already fetched" guard still has something to test; `:empty` in the CSS
     // is what stops an empty one taking up space.
     const head = el('div', { className: 'overview-head' });
     for (const tag of meta.tags || []) {
         head.appendChild(el('span', { className: 'overview-tag' }, tag));
     }
-    if (meta.note) head.appendChild(el('span', { className: 'overview-note' }, meta.note));
     return head;
 }
 

@@ -4,6 +4,54 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a119
+
+**The library's own entries keep their notes, and the note is on the strip
+only.** a118 put the declared `note{}` on the status strip and it worked for
+exactly one case, a program the reader typed themselves. Every entry loaded from
+the Examples menu or the landing gallery arrived with its note already gone, so
+the object built from it carried none and the strip had nothing to print. Which
+is most of the library: 154 of its 170 entries carry a note, 97 of them `agg`.
+
+**Where it went.** `Recipe.decl` is `spec_to_decl` followed by `format_program`
+at the default `trailer=False`, and that argument drops the `note{}` that
+`spec_to_decl` had just written. The app then stripped `note{}` a second time on
+its fallback path, believing the field carried on the menu item was the whole
+story. It is not: the menu field is what the row and the search index read
+before anything is built, and the clause inside the program is what makes the
+built object carry it afterward. Both are needed and they are not duplicates.
+
+`examples._decl_of` now spells the pair out with `trailer=True`, which is what
+`routes.objects` already does for the `.agg` export and for the same reason,
+then strips `tags{}` alone. Tags classify the entry for the menu and say nothing
+about the object, so they stay out of the editor; the note is the entry's own
+account of itself and belongs in the program that declares it. Verified against
+the whole shipped library: the new text reproduces `Recipe.decl` exactly on 169
+of 170 entries once the note is removed, and the one exception is the composite
+distortion whose `Recipe.decl` was already empty and which falls back to the
+stored program as before.
+
+**Placement is the library's business, which is the real reason to route through
+its writer.** DecL binds a trailer clause to the declaration it follows, so the
+note goes last on an `agg` and directly after the name on a `port`, before the
+first unit. Writing it at the end of a portfolio instead binds it to the last
+unit and leaves `Portfolio.note` empty, silently: the program parses and the
+object builds. `format_program` gets this right, and `test_examples.py` now
+builds one entry of each kind and asserts the note reached the object, with the
+`port` case there to catch exactly that.
+
+One consequence worth noting. `TwoLineBook` and `BodoffWindQuake` carry their
+`note{}` after the last unit in `library.agg`, which `dev/TODO.md` records as an
+upstream item. Served through the writer they come out correctly placed and both
+now build a portfolio carrying its note, so the app-visible half of that item no
+longer reproduces. The text in `library.agg` is still positioned wrong and the
+upstream ask stands.
+
+**And the note is no longer printed twice.** The Overview header block drew it
+too. That row is drawn for one group where the strip is drawn under all six, so
+the copy that survives is the one the reader can see from wherever they are. The
+header keeps the tags.
+
 ## 1.0.0a118
 
 **A program's `note{}` now prints on the status strip, on every build.** It goes

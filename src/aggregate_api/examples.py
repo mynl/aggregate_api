@@ -61,6 +61,8 @@ import re
 from functools import lru_cache
 from typing import Literal
 
+from aggregate.decl_writer import format_program, spec_to_decl
+
 from .library import get_underwriter
 
 logger = logging.getLogger(__name__)
@@ -118,19 +120,23 @@ def _sort_key(order: tuple[str, ...]):
     return key
 
 
-# Trailer clauses stripped on the fallback path below, matching what
-# ``Recipe.decl`` emits: ``hints{}`` stays, because it changes how the object
-# builds and a program without it would not reproduce the entry; ``note`` and
-# ``tags`` are carried in their own fields.
+# Trailer clauses stripped on the fallback path below: ``hints{}`` stays,
+# because it changes how the object builds and a program without it would not
+# reproduce the entry, and ``tags{}`` goes, because it classifies the entry for
+# the menu rather than saying anything about the object.
 #
-# A third pattern used to lead this tuple, for ``doc{{{...}}}``, and it was the
+# ``note{}`` used to lead this tuple and is gone from it as of a119. It is the
+# entry's own account of itself, the app prints it on the status strip for every
+# object, and an object can only carry a note that its program carries. See
+# :func:`_with_note`.
+#
+# A third pattern used to stand here, for ``doc{{{...}}}``, and it was the
 # load-bearing one: in a stored program that body was the preprocessor's base64
 # one-liner rather than the readable text, so it had to be caught before it
 # reached the editor. ``aggregate`` 1.0.0a301 removed the clause from the
 # grammar (a298 to a301, ``dev/done/plan-decommission-docs.md``), so there is no
 # longer anything for it to match.
 _STRIP_CLAUSES = (
-    re.compile(r"\s*note\{[^}]*\}"),
     re.compile(r"\s*tags\{[^}]*\}"),
 )
 
@@ -170,26 +176,70 @@ def _library_only(frame):
     return frame[frame["source"] != _SESSION_SOURCE]
 
 
-def _decl_of(recipe) -> str:
-    """The runnable declaration for an entry, preferring the canonical form.
+def _decl_of(kind: str, name: str, recipe) -> str:
+    """The runnable declaration for an entry, canonical and carrying its note.
 
-    ``Recipe.decl`` re-renders the entry from its parsed spec: canonical, in
-    spread layout, carrying ``hints{}``. That is what the editor wants.
+    ``spec_to_decl`` then ``format_program`` is the same pair the ``.agg`` export
+    in ``routes.objects`` uses, and for the same reason: it is the library's own
+    writer, so the app assembles no DecL text of its own.
 
-    It can come back **empty**, though, when the unparser cannot render the spec.
-    The shipped case is a composite distortion (``dist X minimum dist.A
-    dist.B``), whose spec holds constructed ``Distortion`` objects rather than
-    names, so there is nothing for ``spec_to_decl`` to write. Falling back to the
-    stored program keeps the entry usable and loses only the canonical layout;
-    its trailer is trimmed to match, ``hints`` kept and the rest dropped.
+    **``trailer=True`` is the whole point of spelling the pair out here.**
+    ``Recipe.decl`` is this pair with the default ``trailer=False``, which drops
+    the ``note{}`` that ``spec_to_decl`` just wrote. Through a118 that is what
+    the menu served, so every library entry arrived in the editor stripped of its
+    note, built an object carrying none, and had nothing to show on the status
+    strip. Only a hand-typed ``note{}`` ever reached it. ``hints{}`` survives
+    either way and matters as much: a program without it rebuilds on a different
+    grid from the one the entry was written for.
+
+    Placement is the library's business, not the app's, which is the other reason
+    to route through the writer. DecL binds a trailer to the declaration it
+    follows, so the note goes last on an ``agg`` and directly after the name on a
+    ``port``, before the first unit. Appending it to a portfolio instead binds it
+    to the **last unit** and leaves ``Portfolio.note`` empty, which is a live
+    defect in ``library.agg`` itself (``dev/TODO.md``, ``TwoLineBook`` and
+    ``BodoffWindQuake``). ``format_program`` places it correctly for both.
+
+    ``tags{}`` is stripped afterward and deliberately: it classifies the entry
+    for the menu, says nothing about the object, and is carried in its own field.
+
+    Parameters
+    ----------
+    kind : str
+        The recipe's kind, as the writer needs it.
+    name : str
+        The entry's name, likewise.
+    recipe : Any
+        A resolved :class:`aggregate.recipe.Recipe`.
+
+    Returns
+    -------
+    str
+
+    Notes
+    -----
+    The writer can **refuse**, and one shipped entry makes it. A composite
+    distortion (``dist X minimum dist.A dist.B``) holds constructed
+    ``Distortion`` objects in its spec rather than names, so ``spec_to_decl``
+    raises ``NotImplementedError`` and there is nothing canonical to render.
+    Falling back to the stored program keeps the entry usable and loses only the
+    canonical layout; the note in a stored program is already where the library
+    put it.
     """
-    decl = (getattr(recipe, "decl", "") or "").strip()
-    if decl:
-        return decl
-    program = (getattr(recipe, "program", "") or "").strip()
+    text = ""
+    try:
+        text = spec_to_decl(getattr(recipe, "spec", None), kind, name) or ""
+    except Exception:  # noqa: BLE001 (one un-round-trippable entry must not 500)
+        logger.debug("spec_to_decl declined %s.%s; using the stored program", kind, name)
+    if not text.strip():
+        text = getattr(recipe, "program", "") or ""
+    try:
+        text = format_program(text, fmt="text", trailer=True)
+    except Exception:  # noqa: BLE001 -- keep the unwrapped text
+        pass
     for pattern in _STRIP_CLAUSES:
-        program = pattern.sub("", program)
-    return program.strip()
+        text = pattern.sub("", text)
+    return text.strip()
 
 
 def _entry(kind: str, name: str, recipe) -> dict:
@@ -198,6 +248,11 @@ def _entry(kind: str, name: str, recipe) -> dict:
     ``note`` is **optional**: most library entries carry one and it is preferred,
     but nothing guarantees it, so a missing note serializes as ``None`` and every
     consumer treats that as ordinary rather than as a defect.
+
+    The note appears twice over, in this field and inside ``decl``, and the two
+    are not redundant. The field is what the menu row and the search index read,
+    before anything is built; the clause inside the program is what makes the
+    built object carry it, so the status strip can print it afterward.
     """
     note = getattr(recipe, "note", "") or ""
     return {
@@ -205,7 +260,7 @@ def _entry(kind: str, name: str, recipe) -> dict:
         "kind": kind,
         "tags": list(getattr(recipe, "tags", ()) or ()),
         "note": note.strip() or None,
-        "decl": _decl_of(recipe),
+        "decl": _decl_of(kind, name, recipe),
     }
 
 

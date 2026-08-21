@@ -66,24 +66,66 @@ def test_example_items_carry_decl_kind_and_tags(client):
     assert seen > 100, "the shipped library has ~186 entries"
 
 
-def test_example_decl_is_trailer_free_and_reloadable(client):
-    """``Recipe.decl`` is canonical DecL: no trailer noise.
+def test_example_decl_carries_the_note_and_not_the_tags(client):
+    """The served declaration keeps ``note{}`` and drops ``tags{}``.
 
-    It carries ``hints{}``, which change how the object builds, and drops
-    ``note`` and ``tags``, which are carried in their own fields.
+    ``Recipe.decl`` is ``spec_to_decl`` then ``format_program`` at the default
+    ``trailer=False``, which drops both. ``examples._decl_of`` spells the pair
+    out with ``trailer=True`` and strips the tags itself, because the two clauses
+    are different kinds of thing. A note is the entry's own account of itself and
+    the app prints it on the status strip for every object, which it can only do
+    if the program carries it. Tags classify the entry for the menu and say
+    nothing about the object, so they stay out of the editor.
 
-    A third assertion stood here, against ``doc{{{``, and it was the one that
+    ``hints{}`` stays either way: it changes how the object builds, so a program
+    without it would not reproduce the entry.
+
+    An assertion against ``doc{{{`` used to stand here and it was the one that
     mattered: a stored program held the preprocessor's base64 one-liner, so
     leaking it into the editor would have put an unreadable blob in front of the
     user. ``aggregate`` 1.0.0a301 retired the clause, so there is nothing left
     to assert about.
     """
     r = client.get("/v1/examples")
+    noted = 0
     for cat in r.json()["categories"]:
         for item in cat["items"]:
             decl = item["decl"]
-            assert "note{" not in decl
             assert "tags{" not in decl
+            if item["note"]:
+                noted += 1
+                assert f"note{{{item['note']}}}" in decl, item["name"]
+            else:
+                assert "note{" not in decl
+    assert noted > 100, "most of the shipped library carries a note"
+
+
+@pytest.mark.parametrize(
+    "kind,name",
+    [("agg", "BasicBook"), ("port", "BasicPortfolio"), ("sev", "Bodoff2017.Pareto"),
+     ("distortion", "PHDistortion"), ("pnl", "PnLLoss")],
+)
+def test_a_library_entry_builds_an_object_that_keeps_its_note(client, kind, name):
+    """One of each kind: the note reaches the object, so the strip can print it.
+
+    The ``port`` case is the one worth having. DecL binds a trailer to the
+    declaration it follows, so a note written after the last unit belongs to that
+    unit and the portfolio's own note is empty. ``format_program`` places it
+    correctly (directly after the name, before the first unit), and this asserts
+    that it did rather than trusting it, because the wrong placement fails
+    silently: the program parses, the object builds, and the note is simply on
+    something else.
+
+    The ``bvagg`` kind is left out on cost, not on principle. Its entries build a
+    joint grid, which is the slowest thing in the suite, and the placement rule
+    it exercises is the one ``agg`` already covers.
+    """
+    items = {i["name"]: i for cat in client.get("/v1/examples").json()["categories"]
+             for i in cat["items"] if i["kind"] == kind}
+    item = items[name]
+    assert item["note"], f"{name} is chosen because it carries a note"
+    body = client.post("/v1/objects", json={"decl": item["decl"]}).json()
+    assert body["note"] == item["note"]
 
 
 def test_heroes_are_the_role_hero_entries(client):

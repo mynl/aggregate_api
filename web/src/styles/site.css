@@ -965,12 +965,13 @@ header .navbar { min-height: 56px; }
 
 /* ---- Overview tab ---- */
 
-/* Header block: the tags and the note, read off the object itself via /meta.
+/* Header block: the tags, read off the object itself via /meta.
    One line, not the two-deck heading it was through a48: the name and the kind
    moved out because the status strip already opens with both, and --fs-title
-   now has no subject on the page. What is left is the material the strip does
-   NOT carry, set quietly, so the eye goes from the strip straight to the tabs
-   and reads this on the way past rather than stopping on it. */
+   now has no subject on the page. The note followed them at a119, onto the
+   strip's note slot, which is drawn under every group where this row is drawn
+   under one. What is left is set quietly, so the eye goes from the strip
+   straight to the tabs and reads this on the way past rather than stopping. */
 .overview-head {
     display: flex; align-items: baseline; flex-wrap: wrap; gap: .45rem;
     margin: .1rem .1rem .85rem;
@@ -980,10 +981,6 @@ header .navbar { min-height: 56px; }
     font-family: var(--mono); font-size: .68rem; color: var(--ink-2);
     background: var(--soft); border: 1px solid var(--line);
     border-radius: 999px; padding: .05rem .5rem;
-}
-.overview-note {
-    font-size: var(--fs-body); color: var(--ink-2);
-    max-width: var(--measure); line-height: 1.45;
 }
 /* The exhibit sizes itself: ECharts sets the canvas height from the panel
    layout (side by side, stacked, or square), so no fixed height here. The cap
