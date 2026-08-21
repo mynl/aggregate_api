@@ -85,11 +85,12 @@ One commit carrying the whole batch:
 gitignored and rebuilt at deploy. The web build (`.\scripts\build-web.ps1`) is a
 deploy step, not a commit step.
 
-Watch for symlinked plans. `dev/plan-3d-plot.md` and
-`dev/plan-pricing-natural-allocation.md` are canonical **here**, with symlinks
-pointing at them from the LIB `dev/` directory. Moving one into `dev/done/`
-dangles the LIB symlink, so retire the LIB side in the same breath or leave the
-plan in place until both halves have landed.
+Watch for symlinked plans. `dev/done/plan-3d-plot.md` and
+`dev/done/plan-pricing-natural-allocation.md` are canonical **here**, with
+symlinks pointing at them from the LIB `dev/done/` directory; both were retired
+on 2026-08-21. Moving one into `dev/done/` dangles the LIB symlink, so retire
+the LIB side in the same breath, which for the joint surface meant repointing
+the link and updating the LIB `.gitignore` entry that keeps it uncommitted.
 
 ## 5. Write the CHANGELOG section
 

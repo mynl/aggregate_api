@@ -676,23 +676,31 @@ one version bump each.
       that `reflect` with `return period` opens out the *other* end of the
       curve. If it changes nothing there, a double flip is back somewhere.
 
-- [ ] **The joint surface, end to end**: `dev/plan-3d-plot.md`, three parties,
-      the canonical copy here and a symlink in the library. In flight rather
-      than pending: a72 landed the api half (section 3, the three query
-      parameters, the ceiling setting and the chart document cache), a73 the
-      app's foundation (section 4.1's one decode, section 8.3's `node --test`
-      runner, the `echarts-gl` pin) and a74 the drawing geometry (the window
-      range, the sampler, the level line, the cuts, the fit rule).
-      **Blocked on the author for section 4.2.1**: the full grid rule and the
-      payload budget cannot both be had, measured at 181k to 551k cells against
-      the budget's 4,158, and the way out is the library serving the four one
-      dimensional curves the rule protects (the total's density, kappa, both
-      conditional means) so that the app computes none of them. Everything left
-      on this side (the walls, the cuts on screen, the walk, the eight controls)
-      draws that answer, so it waits on it. Also waiting on the library for the
-      corrected block coordinates, the window chosen before the reduction, and
-      the emitted fields, without which the knob is a knob on nothing and two of
-      the api tests stay skipped.
+- [x] **The joint surface, end to end**: `dev/done/plan-3d-plot.md`, three
+      parties, the canonical copy here and a symlink in the library, **both
+      moved to `dev/done/` 2026-08-21**. This side is complete: a72 the api
+      half (section 3, the three query parameters, the ceiling setting and the
+      chart document cache), a73 the foundation (section 4.1's one decode,
+      section 8.3's `node --test` runner, the `echarts-gl` pin), a74 the
+      drawing geometry, a75 the two halves read against each other, a76 the
+      relief and both author rulings, a77 the look, a78 the controls, a79 the
+      cuts, the marks and the walk, a80 the window box, with later fixes
+      through a92.
+      **Section 4.2.1 was ruled 2026-08-12**: keep the full grid rule, so the
+      derived quantities stay this side and the library emits the whole
+      reduced grid with `window` as the drawing range inside it. Section
+      4.2.1.1, the library serving the total lattice and kappa, is declined by
+      the same ruling.
+      **What is left is entirely library**, two edits carried by
+      `aggregate_REFACTOR/dev/plan-3d-plot-LIB.md`: `edge = "mid"` and the
+      whole reduced grid. Nothing here changes when they land, verified
+      2026-08-21 against `windowRange` and the `surface-grid.js` decode. The
+      one chore on landing is re-capturing `dev/fixtures/charts.json` and
+      re-running `smoke-charts.mjs`. Until then every conditional and every
+      mark is computed on the part of the grid that is on screen, up to 4.9
+      percent out on kappa, and the `window` box set to 0 is the escape hatch.
+      The prototype stays in `dev/prototypes/joint-surface/` under section
+      8.0's rule, as the reference the shipped surface is diffed against.
 
 - [x] **The Pricing pane through the official channels**:
       `dev/plan-pricing-exhibits.md` (canonical here, symlinked in the

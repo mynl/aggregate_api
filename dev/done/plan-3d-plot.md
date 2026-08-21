@@ -1,6 +1,32 @@
 # plan-3d-plot: the bivariate joint surface, end to end
 
-Status: **in execution**, updated 2026-08-12. Three parties: Steve, Agent for
+Status: **DONE app side, moved to `dev/done/` 2026-08-21.** The API and SPA
+halves are complete, a72 to a80 in order, with later fixes through a92. What
+is left is entirely LIB, is two edits to one file, and is carried by
+`aggregate_REFACTOR/dev/plan-3d-plot-LIB.md`, the live document the library
+agent executes from: **5.1.2**, the representative point and `edge = "mid"`,
+and **5.8**, emit the whole reduced grid with `window` as the drawing range.
+Both were ruled by the author 2026-08-12 and neither is built as of
+`aggregate` a306. Read the sections below for the reasoning and the
+measurements; the LIB document carries the edits, the tests and the
+acceptance checks.
+
+**Nothing here changes when they land**, verified 2026-08-21 against
+`surface-geometry.js` `windowRange`, which already reads `window` as a
+sub-rectangle inside the grid and falls back to the whole grid when a
+document declares none, and against the `surface-grid.js` decode, which
+already reads `mid`. The app's only chore on landing is re-capturing
+`dev/fixtures/charts.json` for `smoke-charts.mjs`. The prototype stays in
+`dev/prototypes/joint-surface/` under section 8.0's rule: it is the reference
+implementation until the shipped surface is diffed against it.
+
+**Section 4.2.1.1 is closed as declined** by the same 2026-08-12 ruling. The
+library does not grow a third lattice carrying the total's density and kappa;
+it serves a complete grid and the derived curves stay the app's. Do not build
+the `total: {t0, dt, nt, k, density, kappa}` block that section costs out.
+
+Status before the move, kept for the record: **in execution**, updated
+2026-08-12. Three parties: Steve, Agent for
 LIB and Agent for API/SPA. The LIB half is delivered (`aggregate` a257 and
 a258; see 5.0 for what landed and where the code departs from this document).
 The API and the first SPA leaves are in (`aggregate_api` a72 to a75).
@@ -24,8 +50,8 @@ This is one document for `aggregate` (LIB), `aggregate_api` (API) and the SPA,
 because the thing being agreed is a wire format and a format described in two
 documents has two versions of itself within a month.
 
-The canonical copy is `aggregate_api/dev/plan-3d-plot.md`, tracked there.
-`aggregate_REFACTOR/dev/plan-3d-plot.md` is a **symlink** to it, and gitignored
+The canonical copy is `aggregate_api/dev/done/plan-3d-plot.md`, tracked there.
+`aggregate_REFACTOR/dev/done/plan-3d-plot.md` is a **symlink** to it, and gitignored
 in that repo so it is never committed as a link. A hard link was tried first and
 is the wrong tool: most editors, and every agent file tool tested, write a new
 file and rename over the old one, which leaves the hard link pointing at the

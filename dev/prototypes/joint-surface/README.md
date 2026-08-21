@@ -1,6 +1,6 @@
 # joint-surface prototype
 
-The reference implementation for `dev/plan-3d-plot.md`. Where that plan says
+The reference implementation for `dev/done/plan-3d-plot.md`. Where that plan says
 "the prototype does X", this is X, and where it quotes a number, one of the
 scripts here produced it.
 
