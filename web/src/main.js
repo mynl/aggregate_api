@@ -21,7 +21,7 @@ import './styles/cm6.css';
 // ---- App modules ----
 import { api, ApiError, errorMessage } from './api.js';
 import { createPricingForm } from './pricing-form.js';
-import { createEditor, emacsEnabledDefault } from './editor.js';
+import { createEditor, emacsEnabledDefault, modifierName } from './editor.js';
 import { mountExamples, mountPalette, loadExamples } from './examples.js';
 import { renderInfo } from './renderers.js';
 import { fetchFailed, mountChart, mountChartDoc, notDrawable } from './charts/mount.js';
@@ -94,6 +94,15 @@ const editor = createEditor($('editor-host'), {
     onHistoryNext: () => navigateHistory('next'),
     onExamplePrev: () => exampleStep('prev'),
     onExampleNext: () => exampleStep('next'),
+    // The document changed. A change the reader made ends a walk in progress;
+    // one `setText` made is the walk itself and must not. Either way the
+    // control is refreshed, because `canPrev` reads the text in the box: what
+    // the first step back reaches depends on whether the editor is still
+    // holding the program that was built.
+    onEdit: (fromApp) => {
+        if (!fromApp) history.resetCursor();
+        renderHistoryNav();
+    },
 });
 
 // The program the page lands on, in `format_program`'s own spread layout so it
@@ -106,49 +115,74 @@ const LANDING_DECL = 'agg DiceOfDice\n  dfreq [1 2 3 4 5 6]\n  dsev [1 2 3 4 5 6
 editor.setText(LANDING_DECL);
 editor.focus();
 
-// Reset the history cursor whenever the user types something new, so Ctrl-↑
-// resumes from the latest entry on the next press.
-editor.view.dom.addEventListener('keydown', (ev) => {
-    // Arrows are movement, not typing. Ctrl-↑/↓ is the history walk itself and
-    // must not reset what it is walking; a plain ↑/↓ moves the caret, which is
-    // no reason to abandon a walk in progress either.
-    if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') return;
-    if (!ev.ctrlKey && !ev.metaKey) history.resetCursor();
-});
-
 function navigateHistory(dir) {
     // `prev` is told what is on screen: it skips the newest entry when that is
-    // already the text in the editor, so the first press back always moves.
+    // already the text in the editor, so the first press back always moves, and
+    // it stashes the text when it is a draft no build has recorded.
     const text = dir === 'prev' ? history.prev(editor.getText()) : history.next();
     if (text !== null) {
         editor.setText(text);
         clearCessionDraft();
     }
-    renderHistoryPos();
+    renderHistoryNav();
 }
 
 /**
- * The `[m/n]` history readout, under the editor's clear icon.
+ * The whole history control: the `[m/n]` readout and the two step buttons.
  *
- * Answers "did that do anything", which nothing on the page did before. Walking
- * back with Ctrl+Up to a program you have built before and building it redraws
- * the strip with the same words, so the only evidence the build happened was
- * the timing line ticking over, which is not something anyone watches.
+ * One function and one source of truth for what the control shows, called from
+ * every site that can move the walk. Split in two it would be two, and the
+ * greying is exactly the sort of thing that gets refreshed at four of five call
+ * sites.
  *
- * It does **not** answer the same question for a build of the text already on
- * screen: `history.record` dedups against the most recent entry, so m and n
- * both hold. The strip flash in `renderSummary` is what covers that case, and
- * the two together are the whole answer.
+ * The readout answers "did that do anything", which nothing on the page did
+ * before it: walking back to a program you have built before and building it
+ * redraws the strip with the same words, so the only evidence the build
+ * happened was the timing line ticking over, which is not something anyone
+ * watches. The greying answers the same question at the two ends of the walk,
+ * where the readout cannot: a refused press and a dropped keystroke look
+ * identical when the number does not move.
+ *
+ * Neither answers it for a build of the text already on screen, since
+ * `history.record` dedups against the most recent entry, so m and n both hold.
+ * The strip flash in `renderSummary` is what covers that case.
  */
-function renderHistoryPos() {
+function renderHistoryNav() {
     const node = $('history-pos');
-    if (!node) return;
-    const { m, n } = history.position();
-    // `[3/4]`, not `DecL 3/4`. The word was doing no work beside a box that is
-    // visibly full of DecL, and the brackets are what make four characters read
-    // as a counter rather than as a fraction someone forgot to finish.
-    node.textContent = n ? `[${m}/${n}]` : '';
+    if (node) {
+        const { m, n } = history.position();
+        // `[3/4]`, not `DecL 3/4`. The word was doing no work beside a box that
+        // is visibly full of DecL, and the brackets are what make four
+        // characters read as a counter rather than as a fraction someone forgot
+        // to finish. Blank at `m === 0`, which is nothing built yet or a walk
+        // showing the stashed draft: neither is a position in the history.
+        node.textContent = m ? `[${m}/${n}]` : '';
+    }
+    const text = editor.getText();
+    const back = $('history-prev');
+    const forward = $('history-next');
+    if (back) back.disabled = !history.canPrev(text);
+    if (forward) forward.disabled = !history.canNext();
 }
+
+// The two step buttons, which are the walk's only route on a touch device: an
+// iPad's on-screen keyboard has no arrow keys, so through a115 the readout
+// described a control the reader could not operate.
+//
+// No refocus, per the author. The clear icon refocuses because clearing is a
+// prelude to typing; walking is not, and on a phone a refocus pops the
+// keyboard over the thing the reader is trying to look at.
+$('history-prev').addEventListener('click', () => navigateHistory('prev'));
+$('history-next').addEventListener('click', () => navigateHistory('next'));
+
+// Whichever modifier this device's `Mod-` really is, written into the button
+// titles and into the three hints that hardcoded `Ctrl`. On an iPad it is Cmd,
+// and the page taught the wrong key on the one device where the keys are the
+// harder route.
+const MOD_KEY = modifierName();
+$('history-prev').title = `step back through your history (${MOD_KEY}+↑)`;
+$('history-next').title = `step forward through your history (${MOD_KEY}+↓)`;
+for (const node of document.querySelectorAll('.mod-key')) node.textContent = MOD_KEY;
 
 // Clear-X clears the editor and refocuses.
 $('editor-clear').addEventListener('click', () => {
@@ -236,7 +270,7 @@ async function rebuildMissing(program) {
     try {
         await api.build(program, {});
         history.record(program);
-        renderHistoryPos();
+        renderHistoryNav();
     } catch (err) {
         renderBuildFailure(err);
         return;
@@ -254,7 +288,7 @@ async function build() {
         const res = await api.build(decl, {});
         adoptBuild(res);
         history.record(decl);
-        renderHistoryPos();
+        renderHistoryNav();
         renderActionRow();
     } catch (err) {
         forgetBuild();
@@ -349,7 +383,7 @@ async function runDerivation(btn, busy, call, land) {
         // is still what you are looking at.
         editor.setText(res.program);
         history.record(res.program);
-        renderHistoryPos();
+        renderHistoryNav();
         adoptBuild(res);
         renderActionRow();
         if (res.description) noteDerivation(res.description);
@@ -523,7 +557,7 @@ async function applyViews(kw) {
         editor.setText(decl);
         adoptBuild(await api.build(decl, {}));
         history.record(decl);
-        renderHistoryPos();
+        renderHistoryNav();
         noteDerivation(`Read as ${VIEW_LABEL[kw] || kw}.`);
         showTab('overview');
     } catch (err) {

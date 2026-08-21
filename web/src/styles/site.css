@@ -260,17 +260,56 @@ header .navbar { min-height: 56px; }
     color: var(--mut); font-size: 1.15rem; z-index: 3;
 }
 .editor-clear:hover { color: var(--mut); }
-/* The history readout, tucked under the clear icon and lined up with it. Same
-   face, size and ink as the key hints below the button row, which is what the
-   author asked for: instrumentation, not a label. `pointer-events: none` so the
-   editor's right margin still takes a click through it. */
-/* `top` clears the icon rather than guessing at it: the icon sits at .85rem and
-   its line box measures 28px, so it ends at 41px and this starts below that. */
-.editor-pos {
+/* The history walk, stacked under the clear icon and lined up with it: step
+   back, the readout, step forward. Up is older and a lower number, down is
+   newer and a higher one, so the stack draws the list it walks.
+
+   `top` clears the icon rather than guessing at it: the icon sits at .85rem and
+   its line box measures 28px, so it ends at 41px and this starts below that.
+   The room below is the editor's own floor of six text lines, about 143px, so
+   two 2.1rem buttons, the readout and two .1rem gaps end near 128px with a
+   little slack.
+
+   2.1rem is 33.6px, under Apple's 44px touch guidance, and the trade is
+   deliberate: there is no more room without pushing the stack outside the
+   editor box or moving the clear icon, and what 44px guards against is pressing
+   the WRONG control. Everything around these two is dead margin, so a near miss
+   moves the caret and does nothing else. If the device round says it is still
+   too small, the escape hatch is to move the clear icon to the bottom right and
+   give the stack the full height of the box, which buys 44px squares.
+
+   `pointer-events: none` on the wrapper, per the note this replaces: the
+   editor's right margin still takes a click through the gaps, and the readout
+   must not start eating them. Only the buttons take it back. */
+.editor-hist {
     position: absolute; right: 1rem; top: 2.8rem; z-index: 3;
+    display: flex; flex-direction: column; align-items: center; gap: .1rem;
     pointer-events: none; user-select: none;
+}
+/* Same face, size and ink as the key hints below the button row, which is what
+   the author asked for: instrumentation, not a label. */
+.editor-pos {
     font-family: var(--mono); font-size: var(--fs-meta); color: var(--mut);
     line-height: 1;
+}
+.hist-step {
+    pointer-events: auto;
+    width: 2.1rem; height: 2.1rem; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--line); border-radius: .3rem;
+    background: var(--soft); color: var(--mut);
+    font-size: .95rem; line-height: 1; cursor: pointer;
+}
+.hist-step:hover:not(:disabled) {
+    background: var(--line-2); color: var(--ink); border-color: var(--mut);
+}
+/* Greyed by color rather than opacity, as the nav strips are: opacity creates a
+   stacking context over the whole subtree and a faded control just looks
+   broken. The greying is the answer to "did that do anything" in the one case
+   the readout cannot give it, which is a press at either end of the walk. */
+.hist-step:disabled {
+    color: var(--line); border-color: var(--line-2);
+    background: transparent; cursor: default;
 }
 
 /* ---- Action row ----

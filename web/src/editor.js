@@ -12,7 +12,7 @@
 // `createEditor(host, callbacks)` returns an object with helpers the
 // rest of the SPA uses (getText / setText / focus / dispatch).
 
-import { EditorState, Compartment } from '@codemirror/state';
+import { Annotation, EditorState, Compartment } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine,
          highlightSpecialChars } from '@codemirror/view';
 import { defaultKeymap, emacsStyleKeymap, history, historyKeymap,
@@ -36,6 +36,39 @@ const languageCompartment = new Compartment();
 // localStorage under EMACS_KEY.
 const emacsCompartment = new Compartment();
 const EMACS_KEY = 'aggapi.emacsKeys';
+
+// Marks a document change this module made on the app's behalf, so the app can
+// tell "the reader typed something" from "the history walk loaded an entry".
+// Both are real changes into CodeMirror's own undo history, which is what makes
+// Ctrl+Z recover a program the walk replaced, and the annotation is the only
+// thing that distinguishes them afterwards.
+const programmatic = Annotation.define();
+
+/**
+ * The modifier `Mod-` actually resolves to on this device, as a word.
+ *
+ * CodeMirror maps `Mod` to Meta on a Mac and to Ctrl everywhere else, and its
+ * idea of a Mac includes an iPad: `navigator.platform` reports `MacIntel` in
+ * desktop-class Safari and `maxTouchPoints` is 5, so both halves of its test
+ * fire. Every hint on the page said `Ctrl` regardless, which on the one device
+ * this matters most for taught a key that does nothing.
+ *
+ * The test is copied from `@codemirror/view` (`browser.mac`, `dist/index.js`)
+ * rather than approximated, because the only useful answer is the one the
+ * keymap itself will give. Re-read it if a CodeMirror upgrade moves it. The
+ * `!ie` guard is dropped: Internet Explorer does not report an Apple vendor and
+ * is not a browser this app runs in.
+ *
+ * @returns {'Ctrl'|'Cmd'}
+ */
+export function modifierName() {
+    const nav = typeof navigator === 'undefined' ? null : navigator;
+    if (!nav) return 'Ctrl';
+    const safari = /Apple Computer/.test(nav.vendor || '');
+    const ios = safari && (/Mobile\/\w+/.test(nav.userAgent || '')
+        || (nav.maxTouchPoints || 0) > 2);
+    return (ios || /Mac/.test(nav.platform || '')) ? 'Cmd' : 'Ctrl';
+}
 
 /** Whether emacs keys should start enabled (persisted choice; default on). */
 export function emacsEnabledDefault() {
@@ -101,10 +134,23 @@ const editorTheme = EditorView.theme({
     },
     '.cm-content': {
         fontFamily: '"Cascadia Mono", Menlo, Consolas, monospace',
-        padding: '12px 10px',
+        // The right side is a reserved channel, not padding: it is what keeps a
+        // long line from running under the history step buttons in the margin.
+        // The clear icon has been getting away with a weaker version of this
+        // claim, since a glyph a line runs under is ugly and a button a line
+        // runs under is broken. 54px covers the 1rem offset plus a 2.1rem
+        // button, with a little air.
+        //
+        // Written here rather than in site.css on purpose. CodeMirror injects
+        // its theme rules at load, a plain `.cm-content` selector in the
+        // stylesheet has the same specificity, and which one wins would come
+        // down to injection order.
+        padding: '12px 54px 12px 10px',
         // Floor of six text lines; CM grows past this with content (capped by
         // the scroller's maxHeight below). `em` so it tracks the font size,
-        // including the 16px mobile bump.
+        // including the 16px mobile bump. The vertical arithmetic below is
+        // about `minHeight` alone and the right-hand reservation does not
+        // touch it.
         //
         // The number is the border box, which is what made the previous one
         // wrong about itself: the line box is 1.4em and the padding is 12px on
@@ -132,11 +178,19 @@ const editorTheme = EditorView.theme({
  * Build the editor on `host` (a DOM node).
  *
  * Callbacks:
- *   onBuild()         -- Ctrl-Enter / Cmd-Enter
- *   onHistoryPrev()   -- Ctrl-ArrowUp / Cmd-ArrowUp
- *   onHistoryNext()   -- Ctrl-ArrowDown / Cmd-ArrowDown
+ *   onBuild()         -- Mod-Enter, so Ctrl-Enter or Cmd-Enter by platform
+ *   onHistoryPrev()   -- Ctrl-ArrowUp and Cmd-ArrowUp, both, everywhere
+ *   onHistoryNext()   -- Ctrl-ArrowDown and Cmd-ArrowDown
  *   onExamplePrev()   -- Ctrl-Shift-ArrowUp, step through the example library
  *   onExampleNext()   -- Ctrl-Shift-ArrowDown
+ *   onEdit(fromApp)   -- the document changed; `fromApp` is true when setText
+ *                        made the change rather than the reader
+ *
+ * The four arrow bindings are the only ones bound twice, and it is deliberate:
+ * `Mod-` alone resolves to Cmd on a Mac and on an iPad, and there is no reason
+ * a reader with a hardware keyboard should have to know which. `buildKeymap`
+ * throws on prefix conflicts, not on duplicates, so on Windows the two spell one
+ * name and coexist. The rest of the page still speaks `Mod`; see modifierName.
  *
  * Every one of these is documented in the feedback line under the editor and in
  * the Help panel. The example nav used to be an undisclosed Alt- binding, which
@@ -165,6 +219,16 @@ export function createEditor(host, callbacks = {}) {
             key: 'Mod-ArrowDown',
             run: () => { callbacks.onHistoryNext?.(); return true; },
         },
+        // And Ctrl explicitly, which is what `Mod` is not on a Mac or an iPad.
+        // Same command, so either key works on every platform.
+        {
+            key: 'Ctrl-ArrowUp',
+            run: () => { callbacks.onHistoryPrev?.(); return true; },
+        },
+        {
+            key: 'Ctrl-ArrowDown',
+            run: () => { callbacks.onHistoryNext?.(); return true; },
+        },
         // Ctrl-Shift-↑/↓: step through the example library. Loads into the
         // editor and stops there, deliberately: walking a library of 186 recipes
         // at one build each is not a thing to do by accident.
@@ -174,6 +238,14 @@ export function createEditor(host, callbacks = {}) {
         },
         {
             key: 'Mod-Shift-ArrowDown',
+            run: () => { callbacks.onExampleNext?.(); return true; },
+        },
+        {
+            key: 'Ctrl-Shift-ArrowUp',
+            run: () => { callbacks.onExamplePrev?.(); return true; },
+        },
+        {
+            key: 'Ctrl-Shift-ArrowDown',
             run: () => { callbacks.onExampleNext?.(); return true; },
         },
         // Tab accepts a completion if the popup is open, otherwise inserts a tab.
@@ -225,6 +297,18 @@ export function createEditor(host, callbacks = {}) {
                 autocapitalize: 'off',
                 spellcheck: 'false',
             }),
+            // The document changed, which is the event the history walk was
+            // always meant to end on. It listened for a keydown through a115,
+            // and a keydown is not typing: Shift held to start a selection, or
+            // Home, End, PageUp, Escape or Tab, all silently ended a walk in
+            // progress. This fires on a paste and an undo too, and not on a
+            // caret move, which is the right set.
+            EditorView.updateListener.of((update) => {
+                if (!update.docChanged) return;
+                const fromApp = update.transactions
+                    .some((tr) => tr.annotation(programmatic));
+                callbacks.onEdit?.(Boolean(fromApp));
+            }),
             editorTheme,
         ],
     });
@@ -237,6 +321,10 @@ export function createEditor(host, callbacks = {}) {
         setText: (text) => {
             view.dispatch({
                 changes: { from: 0, to: view.state.doc.length, insert: text || '' },
+                // Annotated so `onEdit` can tell this from the reader typing.
+                // Without it the history walk would reset its own cursor every
+                // time it loaded an entry.
+                annotations: programmatic.of(true),
             });
         },
         focus: () => view.focus(),

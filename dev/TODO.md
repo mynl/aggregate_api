@@ -738,10 +738,11 @@ one version bump each.
       no api or library change. **Phase 1 landed a115**: the group and leaf
       strips are laid out at their selected width so they stop moving under a
       thumb, and `touch-action: manipulation` on `body` stops a double tap
-      zooming the page. Phase 2, the history walk: a vertical up / readout /
-      down control in the editor's right margin, the counter reversed to count
-      up JupyterLab style, the cap from 20 to 500, the unbuilt draft stashed
-      and handed back, `Ctrl` bound beside `Mod` and the key hints naming
+      zooming the page. **Phase 2 landed a116**: a vertical up / readout / down
+      control in the editor's right margin, the counter reversed to count up
+      JupyterLab style, the cap from 20 to 500 with a 256KB ceiling, the unbuilt
+      draft stashed and handed back, the walk ending on a document change rather
+      than on any keydown, `Ctrl` bound beside `Mod` and the key hints naming
       whichever modifier the device reports. Phase 3, the charts: a touch
       coordinate shim so a tap on the 3-D surface picks, and one `reset` on
       every chart that clears the held zoom. **Phase 4 is a device round and

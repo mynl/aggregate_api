@@ -4,6 +4,103 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a116
+
+**The program history walk reaches a finger, and the counter starts counting
+up.** `dev/plan-idevice-ui.md`, phase 2. Five defects in one control, which is
+why it took a phase of its own rather than a line in phase 1.
+
+**Two buttons in the editor's right margin, stacked: up, the readout, down.**
+The walk was `Ctrl+↑` and `Ctrl+↓` and nothing else, and an iPad's on-screen
+keyboard has no arrow keys, so on the device the author is demoing on there was
+no route to it at all. The page already half knew this: the key hints fold away
+below `sm` because phones have no Ctrl key, which left the `[m/n]` readout
+visible on a phone describing a control the reader could not operate.
+
+The nav sits with the box it navigates rather than on the action row, which
+already carries Build, Examples, Reformat and a five-wide derive group. Both
+buttons are present from the first paint, greyed, so nothing moves when the
+first program lands, and neither refocuses the editor: walking is not a prelude
+to typing, and on a phone a refocus pops the keyboard over the thing the reader
+is looking at.
+
+**The counter counts up now, JupyterLab style, and the cap raise is what makes
+that honest.** The newest entry carries the highest number: the first program
+built is `[1/1]`, the second `[2/2]`, and stepping back from the tenth reads
+`[9/10]`. This reverses the a68 ruling deliberately. That ruling's argument was
+that a counter whose position changes on every build (`[19/19]`, then `[20/20]`,
+then `[20/20]` again once the cap bites) describes the pile rather than your
+place in it, and the parenthesis is the whole argument: it is about **the cap**,
+not the direction. At 20 entries the number froze within a day of use. At 500 it
+climbs on every build for as long as anyone will use the app in one sitting,
+which is the point of a number that moves.
+
+**So the store went from 20 entries to 500, with a 256KB character ceiling
+beside it.** The ceiling is the cap that actually binds: a DecL program is
+short, the landing program is 63 characters and a large portfolio about a
+thousand, so 500 entries is roughly 150KB in an origin that gets about 5MB. The
+oldest end is trimmed until both hold, and the newest entry always survives.
+`save` no longer swallows a refused write in silence, which at 20 entries meant
+nothing and at 500 would drop the program just built: it retries once on a
+trimmed copy and adopts the copy only if that lands. Retrying on a copy matters
+beyond a full store, since a browser with storage switched off refuses every
+write, and trimming the live entries there would eat the session's own history a
+quarter at a time.
+
+**The arrows are drawn to match the numbering, and that is the one thing a later
+reader could get backwards.** Up steps to an older program and a lower number,
+down to a newer one and a higher number. Stacked, the buttons draw the list they
+walk: oldest above, newest below, the way a notebook puts earlier cells higher
+and a terminal puts newer output lower.
+
+**An unbuilt draft is stashed and handed back.** Walking away from text no build
+has recorded used to throw it away, and walking forward ran out at the newest
+entry rather than returning it. `Ctrl+Z` did recover it, since `setText`
+dispatches a real change into CodeMirror's own history, but nothing said so and
+a phone has no `Ctrl+Z`. The draft is now held in the stored state, handed back
+on one more step forward off the newest entry, and kept rather than spent so it
+can be walked down to again. It is not an entry, so it has no number and the
+readout draws blank, exactly as it does before the first build.
+
+**The walk stops dying on keys that are not typing.** It ended on any unmodified
+keydown, so `Shift` held to start a selection, or `Home`, `End`, `PageUp`,
+`Escape` or `Tab`, all silently ended a walk in progress. The test is now the
+event that was always meant: the document changed. `setText` marks its own
+transaction with an annotation so the walk does not reset itself when it loads
+an entry.
+
+**And the keys tell the truth about themselves.** `Mod-ArrowUp` resolves to
+**Cmd** on a Mac and on an iPad, where `navigator.platform` reports `MacIntel`
+and `maxTouchPoints` is 5, so both halves of CodeMirror's own test fire. Every
+hint on the page said `Ctrl`. `Ctrl-` is now bound beside `Mod-` for all four
+arrow bindings, so either key works everywhere, and a `modifierName` helper
+copied from CodeMirror's own test writes the right word into the two button
+titles and the three hints that hardcoded it.
+
+**Two things worth knowing.** The touch targets are 2.1rem, or 33.6px, against
+Apple's 44px guidance, and that is a deliberate trade: there is no more room
+without pushing the stack outside the editor box or moving the clear icon, and
+what 44px guards against is pressing the *wrong* control, which does not arise
+when everything around these two is dead margin. If the device round says
+otherwise, the escape hatch is to move the clear icon to the bottom right, which
+buys 44px squares. And the four hints that are still not platform aware
+(`Ctrl+Enter`, `Ctrl+Space`, `Ctrl+K`, `Ctrl+Shift+U`) have the same defect on a
+Mac, out of this plan's scope and left for a ruling rather than widened into it.
+
+**`.cm-content` reserves 54px on the right**, in the editor theme rather than in
+`site.css`, since CodeMirror injects its theme at load and a plain `.cm-content`
+selector in the stylesheet would win or lose on injection order. It is a channel
+rather than padding: a glyph a long line runs under is ugly, a button a long line
+runs under is broken.
+
+**Tests.** `web/test/history-walk.test.js` goes from 6 cases to 14, covering the
+reversed direction, the stash walked away from and back to, both predicates at
+both ends and on the draft, and both caps. The suite is 85 tests, up from 77.
+The DOM half was read against a real page instead: the width reservation from
+a115 measured identical in both states, the greyed tab's tooltip still draws,
+and the geometry landed on the plan's arithmetic to the pixel, with the stack
+ending at 127px inside a 144px box.
+
 ## 1.0.0a115
 
 **The tab strips stop moving under a thumb, and a double tap stops zooming the

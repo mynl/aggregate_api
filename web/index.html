@@ -169,22 +169,46 @@
                 <div id="editor-host"></div>
             </div>
             <i class="bi bi-x-circle editor-clear" id="editor-clear" title="clear" role="button" aria-label="clear editor"></i>
-            <!-- Where Ctrl+↑↓ has you in your history, as a bare `[3/4]`.
-                 Without it, stepping back to a program you have built before and
-                 building it looks like nothing happened, because the strip
-                 redraws to the same words.
+            <!-- The history walk: up, the readout, down, stacked in the
+                 editor's right margin. The nav belongs with the box it
+                 navigates, not on the action row, which already carries Build,
+                 Examples, Reformat and a five-wide derive group.
 
-                 Here rather than on the action row, and four characters rather
-                 than a sentence, per the author (Round 5 item 14). On the row it
-                 was the one `.fb-text` outside `.fb-right`, so it missed the
-                 rule that makes those hints small, grey and monospaced and
-                 rendered at body size in the UI face: a third larger and darker
-                 than the keys it sat beside. Under the clear icon it reads as
-                 instrumentation on the box it describes.
+                 **The arrows are drawn to match the numbering, and this is the
+                 one thing a later reader could get backwards.** The counter
+                 counts up, so up steps to an OLDER program and a LOWER number,
+                 down to a newer one and a higher number. Stacked, the two
+                 buttons draw the list they walk: oldest above, newest below,
+                 the way a notebook puts earlier cells higher and a terminal
+                 puts newer output lower.
 
-                 `pointer-events: none` so it never intercepts a click meant for
-                 the editor's right margin. Empty until the first build. -->
-            <span class="editor-pos" id="history-pos" aria-live="polite"></span>
+                 Through a115 this was keys only, which on an iPad is no route
+                 at all: the on-screen keyboard has no arrow keys, so the
+                 readout described a control the reader had no way to operate.
+
+                 The readout is where it has been since Round 5 item 14: a bare
+                 `[3/4]`, here rather than on the action row, because stepping
+                 back to a program you have built before and building it looks
+                 like nothing happened when the strip redraws to the same words.
+                 On the row it was the one `.fb-text` outside `.fb-right`, so it
+                 missed the rule that makes those hints small, grey and
+                 monospaced. Empty until the first build, and empty again while
+                 the walk is showing a stashed draft, which is not an entry and
+                 has no number.
+
+                 The wrapper keeps `pointer-events: none` so the editor's right
+                 margin still takes a click through the gaps; only the two
+                 buttons take it back. Both are present from the first paint,
+                 greyed, so nothing moves when the first program lands. -->
+            <div class="editor-hist" id="history-nav">
+                <button type="button" class="hist-step" id="history-prev"
+                        aria-label="step back through your history" disabled>
+                    <i class="bi bi-arrow-up" aria-hidden="true"></i></button>
+                <span class="editor-pos" id="history-pos" aria-live="polite"></span>
+                <button type="button" class="hist-step" id="history-next"
+                        aria-label="step forward through your history" disabled>
+                    <i class="bi bi-arrow-down" aria-hidden="true"></i></button>
+            </div>
         </div>
 
         <!-- Action row. One band: through a46 this was the button row over a
@@ -228,10 +252,12 @@
                  grid is pinned by an audit that explains itself rather than by
                  a menu choice that vanishes when you reload.
 
-                 Reset used to close this group and came out at a58: Ctrl+↑ and
-                 Ctrl+↓ already walk back through the programs you built, and a
+                 Reset used to close this group and came out at a58: the history
+                 walk already steps back through the programs you built, and a
                  button that undid exactly one derivation was a second, weaker
-                 way to do it. GCN took its place. -->
+                 way to do it. GCN took its place. The walk's own buttons live in
+                 the editor's right margin as of a116, so it is no longer a pair
+                 of keys a phone cannot type. -->
             <span class="derive-label">derive</span>
             <div class="btn-group" role="group" aria-label="derive a new program">
                 <button id="sharpen-btn" class="btn btn-outline-secondary"
@@ -277,7 +303,10 @@
                  choice. -->
             <span class="fb-right d-none d-sm-flex">
                 <span class="fb-text">Ctrl+Enter build<span class="sep">·</span>Ctrl+Space complete</span>
-                <span class="fb-text">Ctrl+↑↓ history<span class="sep">·</span>Ctrl+Shift+U tables</span>
+                <!-- `.mod-key` is rewritten at startup to whichever modifier
+                     CodeMirror's `Mod-` resolves to here, which is Cmd on a Mac
+                     and on an iPad. See `modifierName` in editor.js. -->
+                <span class="fb-text"><span class="mod-key">Ctrl</span>+↑↓ history<span class="sep">·</span>Ctrl+Shift+U tables</span>
             </span>
         </div>
 
@@ -580,8 +609,8 @@
                 <span><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span><span>build</span>
                 <span><kbd>Ctrl</kbd>+<kbd>K</kbd></span><span>search the example library</span>
                 <span><kbd>Ctrl</kbd>+<kbd>Space</kbd></span><span>autocomplete</span>
-                <span><kbd>Ctrl</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span><span>step through history</span>
-                <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span><span>step through the example library (loads, does not build)</span>
+                <span><kbd class="mod-key">Ctrl</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span><span>step through history (or the two arrows in the editor's right margin)</span>
+                <span><kbd class="mod-key">Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span><span>step through the example library (loads, does not build)</span>
                 <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd></span><span>flip every table between static and interactive</span>
                 <span><kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>6</kbd></span><span>jump to an output group</span>
                 <span><kbd>✕</kbd></span><span>clear the editor</span>
@@ -598,8 +627,9 @@
                 <li><span class="t">PnL</span>: wrap what you built in a profit and loss account</li>
             </ul>
             <p class="small text-muted">Each derivation writes DecL into the editor, so you can
-                read what it did, edit it, and build it again anywhere. Ctrl+↑ walks back
-                through the programs you built, which is how you undo one.</p>
+                read what it did, edit it, and build it again anywhere. The
+                <kbd>↑</kbd> in the editor's right margin walks back through the programs you
+                built, which is how you undo one.</p>
 
             <h6>Output groups</h6>
             <ul class="help-tabs">
