@@ -147,7 +147,21 @@
     border-color: var(--house); box-shadow: 0 0 0 .25rem var(--house-ring);
 }
 
-body { font-family: var(--ui); color: var(--ink); background: #fff; }
+body {
+    font-family: var(--ui); color: var(--ink); background: #fff;
+    /* Third of the iOS family, with the two 16px input bumps further down: a
+       stray double tap used to zoom the page, and a zoomed page pans under a
+       finger with the sticky header drifting across the content, which is the
+       most likely reading of "floating around".
+
+       `touch-action` does not inherit, but the effective behavior is computed
+       up the ancestor chain, so the one declaration covers the page.
+       `manipulation` keeps panning and keeps PINCH zoom, which is what a reader
+       magnifies a dense table with; only double tap to zoom goes. Page wide and
+       the scoped alternative declined, per the author: he does not use the
+       gesture. */
+    touch-action: manipulation;
+}
 code, .mono { font-family: var(--mono); }
 code { color: var(--code); }
 
@@ -414,6 +428,30 @@ header .navbar { min-height: 56px; }
     padding: .32rem var(--tabpad); font-size: var(--fs-body); line-height: 1.3;
     color: var(--ink-2);
 }
+/* Lay every tab out at its BOLD width, selected or not. The selected state is
+   700 and the rest inherit normal weight, so through a114 selecting a tab made
+   it 2 to 6px wider and shoved every tab to its right along by that much. With
+   a mouse that is nothing. With a thumb it is the target moving while you aim,
+   which is most of the "the tabs float around" report.
+
+   A block `::after` at zero height contributes to the element's intrinsic width
+   and to nothing else, so the box is always as wide as the bold label and the
+   visible text never moves inside it. `attr(data-label)` rather than JavaScript
+   at paint time, which means the attribute in index.html must keep matching the
+   label beside it.
+
+   The look is untouched, per the author's ruling: the bold stays. Only the
+   reflow goes. The greyed weight below (400 !important) is unaffected for the
+   same reason: the ghost is always 700, so greying a tab does not resize it.
+
+   It costs about 5px a tab, roughly 30px across the six. The iPad still fits;
+   a phone, where the strip already scrolls, scrolls a little further. */
+.out-tabs .nav-link::after, .sub-tabs .sub-link::after {
+    content: attr(data-label);
+    display: block; height: 0; overflow: hidden;
+    visibility: hidden; pointer-events: none;
+    font-weight: 700;
+}
 .out-tabs .nav-link:not(.active):hover { background: var(--line-2); color: var(--ink); }
 .out-tabs .nav-link.active {
     background: var(--primary); border-color: var(--primary);
@@ -514,6 +552,12 @@ header .navbar { min-height: 56px; }
    also why the arrow lost its fill and became a hairline. */
 .nav-off[data-why]:hover::after, .nav-off[data-why]:focus-visible::after {
     content: attr(data-why);
+    /* An element has one `::after`, and the width ghost above claims it on
+       every tab. This rule outranks it on `content` and on the paint, but it
+       declares nothing about the three properties that make the ghost a
+       measuring stick rather than a thing on screen, so they would leak in here
+       and hide the tooltip. Undo them explicitly. */
+    height: auto; overflow: visible; visibility: visible;
     position: absolute; left: 50%; transform: translateX(-50%);
     top: calc(100% + 7px); z-index: 60;
     background: var(--soft); color: var(--ink-2);

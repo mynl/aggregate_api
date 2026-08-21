@@ -1093,6 +1093,11 @@ function renderSubTabs(group) {
             type: 'button',
             className: `sub-link${key === current ? ' active' : ''}`
                 + (off ? ' nav-off' : ''),
+            // The same label again, for the hidden bold ghost site.css draws
+            // inside the button: the row is `flex-wrap`, so a leaf that widens
+            // when it is selected can rewrap the row under a thumb that is
+            // already moving toward it. `nav.js` owns the label; this reads it.
+            'data-label': leaf.label,
         }, leaf.label);
         // Roving tabindex: only the selected leaf is a Tab stop, and the arrow
         // keys move within the row. See wireStripKeys.

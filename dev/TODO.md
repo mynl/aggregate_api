@@ -733,6 +733,22 @@ one version bump each.
       recorded in the closed plan's "What stays unread" section, and come back
       as punchlist entries if they matter.
 
+- [ ] **The app on an iPhone and an iPad**: `dev/plan-idevice-ui.md`, FINAL
+      2026-08-14, extended and re-verified 2026-08-21. Five defects, SPA only,
+      no api or library change. **Phase 1 landed a115**: the group and leaf
+      strips are laid out at their selected width so they stop moving under a
+      thumb, and `touch-action: manipulation` on `body` stops a double tap
+      zooming the page. Phase 2, the history walk: a vertical up / readout /
+      down control in the editor's right margin, the counter reversed to count
+      up JupyterLab style, the cap from 20 to 500, the unbuilt draft stashed
+      and handed back, `Ctrl` bound beside `Mod` and the key hints naming
+      whichever modifier the device reports. Phase 3, the charts: a touch
+      coordinate shim so a tap on the 3-D surface picks, and one `reset` on
+      every chart that clears the held zoom. **Phase 4 is a device round and
+      is owed**: fifteen minutes on the author's iPad against the six checks
+      in the plan's section 6, plus the unconfirmed editor focus zoom in 6.1,
+      whose fix is pre-specified and takes its own bump.
+
 ## Raised with `aggregate` (not fixed here)
 
 - [ ] Two `role:hero` portfolios carry `note{}` after the last unit, where the

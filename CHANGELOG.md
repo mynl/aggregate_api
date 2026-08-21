@@ -4,6 +4,57 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a115
+
+**The tab strips stop moving under a thumb, and a double tap stops zooming the
+page.** `dev/plan-idevice-ui.md`, phase 1, the first of three. Both items are
+defects on a touch device and neither changes what the app can do.
+
+**Every tab is laid out at its selected width now, and the selected state looks
+exactly as it did.** `.out-tabs .nav-link.active` and `.sub-tabs .sub-link.active`
+carry `font-weight: 700` while the rest inherit normal weight, so selecting a tab
+made it wider: 5.5px on Overview, 1.9px on More, measured on the live site. Every
+tab to the right of the change moved by that much on every switch. With a mouse
+it is nothing. With a thumb the target moves while you aim at it, and on the leaf
+row, which is `flex-wrap: wrap`, a width change can rewrap the row, drop a leaf
+onto another line and move everything below it.
+
+The fix reserves the width rather than dropping the bold, per the author's
+ruling: each tab carries `data-label` repeating its own text, and a block
+`::after` at zero height draws that text at 700, laid out and not painted. A
+zero-height block contributes to the element's intrinsic width and to nothing
+else, so the box is always as wide as its bold label and the visible text never
+moves inside it. Six static attributes in `index.html` and one line where the
+leaf buttons are built. No JavaScript runs at paint time.
+
+**The measured price, so it is not a surprise later.** Reserving the bold width
+widens the group strip by about 5px a tab, roughly 30px across the six. On an
+iPad in portrait it goes from about 575px to about 605px against roughly 720px of
+usable width, so nothing changes. On a phone, where the strip already scrolls by
+60 to 70px under 576px, it will scroll by 90 to 100px. A strip that scrolls a
+little further is a lesser problem than a strip that moves while you aim at it.
+
+**One collision the plan did not foresee.** An element has one `::after`, and the
+greyed tab's `data-why` tooltip already claimed it. That rule outranks the ghost
+on `content` and on the paint, but it declares nothing about `height`, `overflow`
+or `visibility`, so the ghost's `height: 0; overflow: hidden; visibility: hidden`
+would have leaked in and hidden the tooltip, which is the explanation a dark tab
+owes the reader. The tooltip rule now undoes those three explicitly.
+
+**`touch-action: manipulation` on `body`.** The page declared no `touch-action`
+anywhere, so a stray double tap zoomed it, and a zoomed page pans under a finger
+with the sticky header drifting across the content: the most likely reading of
+the "floating around" report. `manipulation` keeps panning and keeps **pinch
+zoom**, which is how a reader magnifies a dense table, so this is not an
+accessibility regression; only double tap to zoom goes. Page wide, and the
+scoped alternative declined, per the author. It is the third member of the iOS
+family in `site.css`, beside the two 16px input bumps that stop Safari
+magnifying the page when a small field takes focus.
+
+**Not verifiable from a Windows desktop.** Both items are iOS behavior. They ride
+to the author's iPad with phases 2 and 3, and the checks are written out in the
+plan's phase 4.
+
 ## 1.0.0a114
 
 **The PnL button writes a priced book: every cession carries a premium, and the
