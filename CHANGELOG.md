@@ -4,6 +4,79 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a117
+
+**A tap on the 3-D surface places the cuts, and every chart has a reset that
+actually resets.** `dev/plan-idevice-ui.md`, phase 3, which closes the plan's
+code. Phase 4 is a device round in the author's hands and carries no code unless
+it finds something.
+
+**New module, `web/src/charts/touch.js`, and it compensates for a defect in a
+dependency rather than in this app.** The chain, each link read in the shipped
+source: `zrender` finds no usable pointer events on Safari and takes its touch
+branch; it normalizes a touch event by writing `zrX` and `zrY`, and a
+`TouchEvent` carries no `offsetX` or `offsetY`; `zrender`'s `Handler` copies
+those onto the event **packet**, which is why orbit rotation already worked on
+an iPad; and then `echarts-gl`'s `LayerGL` drops from the packet back to the raw
+event before calling `pickObject(e.offsetX, e.offsetY)`, which on touch is
+`pickObject(undefined, undefined)`. Nothing is picked, so no data event fires, so
+the `click` handler that places the cuts never runs. Three more lines in
+`LayerGL` have the same defect, which is why hover and the surface readout were
+dead there too, and why they come back with the same cure.
+
+`stampTouchCoordinates(host)` attaches one **capture phase** listener each for
+`touchstart`, `touchmove` and `touchend` and defines the two properties from
+`changedTouches[0]` against the touch target's own rectangle. Capture phase on
+the host is what makes this work without patching anything: zrender's listeners
+are on its viewport root, a descendant, so ours runs first and the coordinates
+are there by the time `LayerGL` reads them. It hangs off `host` rather than the
+chart instance, so it survives the dispose and re-`init` that switching between
+the flat and relief readings performs. The dependency is left alone, and the
+docstring names the file and line so the next reader can check whether a later
+`echarts-gl` has fixed it and the shim can go.
+
+**One limit this does not answer, deliberately.** zrender synthesizes a click
+from touch only when `touchend` lands within 300ms, and a carefully aimed tap on
+an iPad often takes longer; the native click iOS sends afterward is discarded
+too, inside a 700ms touch guard. The recognizer that would answer it is sketched
+in the plan's section 6 and is not built until the device says it bites.
+
+**One `resetView`, reached from the button, the double click and the puck.**
+There were two and they disagreed: the button put the surface's readings and
+camera back and left a held `zoom` in place, so a zoomed relief stayed zoomed
+after being reset, while double click dropped the zoom and touched nothing else.
+Each was half a reset. The surface's own reset leaving a held zoom behind was a
+bug on every device, not only on an iPad.
+
+**The `reset` button now exists on every chart, and it is last in the group.**
+It lived inside the surface-only block, so a 2-D chart had no button at all, and
+double click was its only route: spent on page zoom on iOS, and refused by the
+touch guard besides. A reader could pinch a chart into a corner and the only way
+back was to leave the leaf and come back. The rule, stated because the group has
+grown: reset acts on the whole drawing rather than on one reading, so it goes
+after the readings, after the surface controls, after the mesh export cluster and
+after the realization control. **On a surface that moves it**, from mid group
+ahead of the mesh buttons to the end.
+
+**A dead guard is deleted rather than kept.** With `reset` always appended,
+`if (!box.childNodes.length) return null` covers a case that can no longer arise,
+so it goes. The author ruled `reset` unconditional on the reading that every plot
+has some controls in practice, which a check of the realizations bears out.
+
+**One gap for a ruling rather than a quiet widening.** `resetView` restores the
+relief's readings only when the realization is a surface, which is what the plan
+specifies. A `heatmap` also offers `contours`, so a reader who turns contours off
+on a flat grid and presses reset still has them off. It is one line to extend if
+the author wants the button to mean the same thing in both readings.
+
+**Tests.** `touchPoint(rect, touch)` is the pure half of the shim and is split
+out for exactly that reason, since the listener needs a DOM the web suite does
+not have. `web/test/touch.test.js` covers a rectangle at the origin, one down the
+page, and a touch outside it, which reads negative rather than clamping because
+picking nothing is the right answer for a touch that missed. The suite is 88
+tests, up from 85. The strip changes need a DOM and get none: their verification
+is this diff plus the device round.
+
 ## 1.0.0a116
 
 **The program history walk reaches a finger, and the counter starts counting

@@ -1,6 +1,13 @@
 # plan-idevice-ui: the app on an iPhone and an iPad
 
-Status: **FINALIZED 2026-08-14, extended and re-verified 2026-08-21**. The
+Status: **EXECUTED 2026-08-21, phases 1 to 3, at a115, a116 and a117. Phase 4,
+the device round, is owed and is tracked in `dev/TODO.md`.** See "Execution
+notes" at the foot of this file for what the tree taught that the plan did not
+say. Filed in `dev/done/` because its code is complete; the round that verifies
+it needs the author and an iPad.
+
+Status when written: **FINALIZED 2026-08-14, extended and re-verified
+2026-08-21**. The
 original scope and its three review questions were ruled by the author on
 2026-08-14. A fourth item, the program history walk, was raised and ruled on
 2026-08-21 and is now phase 2; the chart work moves to phase 3 and the device
@@ -786,3 +793,69 @@ testable and the plan should not pretend otherwise. Phase 2 is the exception.
   in our own code and leaves the dependency alone. If a later `echarts-gl`
   fixes `LayerGL`, the shim becomes dead and can be deleted; that is why 5.1
   requires the docstring to name the file and line.
+
+---
+
+## 10. Execution notes, 2026-08-21
+
+Five things the tree taught that the plan did not say. Everything else landed as
+written, including the geometry in 4.4, which measured to the pixel: the stack
+starts at 44.8px with the clear icon ending at 41.2px, the buttons are 33.6px
+square, and the stack ends at 127px inside a 144.4px box.
+
+1. **The width ghost in 3.1 collided with the greyed tab's tooltip.** An element
+   has one `::after`, and `.nav-off[data-why]:hover::after` already claimed it.
+   That rule outranks the ghost on `content` and on the paint, but it declares
+   nothing about `height`, `overflow` or `visibility`, so the ghost's
+   `height: 0; overflow: hidden; visibility: hidden` leaked in and would have
+   hidden the tooltip, which is the explanation a dark tab owes the reader and
+   was reported twice as "the tabs do nothing" when it was last broken. The
+   tooltip rule now undoes those three explicitly, with a comment saying why.
+
+2. **`save()`'s retry in 4.1 must run on a copy.** The plan says trim the oldest
+   quarter and retry, then "leave the in-memory state alone" if that fails too.
+   Trimming the live entries does the opposite: a refused write is not always a
+   full store, it is also a browser with storage switched off and `node --test`,
+   which has no `localStorage` at all. In both of those every save throws, and
+   the plan's reading would eat the session's own history a quarter at a time
+   for no gain. The retry builds a trimmed copy, writes that, and adopts it only
+   if the write lands.
+
+3. **`trim()` keeps the newest entry unconditionally**, even when it alone
+   breaks the character ceiling. Dropping the program just built is the exact
+   failure 4.1 exists to avoid, and a reader who pastes a very long program
+   would rather keep it than be told the store has a rule about it.
+
+4. **The `onEdit` callback carries a flag rather than main.js owning the
+   annotation.** 4.5 puts the `updateListener` in `main.js`, which would mean
+   exporting the annotation from `editor.js` and installing an extension after
+   construction. The listener lives in `editor.js` beside the annotation, and
+   `onEdit(fromApp)` tells the app which kind of change it was. That also fixed
+   something 4.5 did not reach: the control is refreshed on **every** document
+   change, including the ones `setText` makes, because `canPrev` reads the
+   editor text and a `setText` from Clear or the example walk changes what the
+   first step back would reach.
+
+5. **`resetView` restores the relief's readings on a surface only**, exactly as
+   5.2 specifies, and a `heatmap` also offers `contours` (the one
+   `SURFACE_CONTROLS` entry carrying `flat: true`). So contours turned off on a
+   flat grid survive a reset. Left as written rather than widened, and raised in
+   the a117 notes for a ruling.
+
+### What was verified, and how
+
+Phase 2's arithmetic has real coverage: `web/test/history-walk.test.js` went
+from 6 cases to 14 and `web/test/touch.test.js` is new, the suite going 77 to
+88. The DOM half, which section 7 expected to get nothing, was read against a
+real page instead, serving the built SPA statically with no api behind it:
+
+* every group tab measured **identical** in width with and without `.active`,
+  the ghost carrying its own label at 700;
+* the greyed tab's tooltip still draws, content, height, `visibility` and
+  position all correct through the collision above;
+* `touch-action` on `body` computes as `manipulation`;
+* the walk stepped `[3/3]`, `[2/3]`, `[1/3]`, greyed at the oldest, retraced,
+  and handed the stashed draft back with the readout blank;
+* `End` alone did **not** end a walk in progress, which is 4.5's whole point.
+
+What could not be reached without an iPad is what section 6 lists, plus 6.1.

@@ -178,13 +178,13 @@ const editorTheme = EditorView.theme({
  * Build the editor on `host` (a DOM node).
  *
  * Callbacks:
- *   onBuild()         -- Mod-Enter, so Ctrl-Enter or Cmd-Enter by platform
- *   onHistoryPrev()   -- Ctrl-ArrowUp and Cmd-ArrowUp, both, everywhere
- *   onHistoryNext()   -- Ctrl-ArrowDown and Cmd-ArrowDown
- *   onExamplePrev()   -- Ctrl-Shift-ArrowUp, step through the example library
- *   onExampleNext()   -- Ctrl-Shift-ArrowDown
- *   onEdit(fromApp)   -- the document changed; `fromApp` is true when setText
- *                        made the change rather than the reader
+ *   onBuild()         : Mod-Enter, so Ctrl-Enter or Cmd-Enter by platform
+ *   onHistoryPrev()   : Ctrl-ArrowUp and Cmd-ArrowUp, both, everywhere
+ *   onHistoryNext()   : Ctrl-ArrowDown and Cmd-ArrowDown
+ *   onExamplePrev()   : Ctrl-Shift-ArrowUp, step through the example library
+ *   onExampleNext()   : Ctrl-Shift-ArrowDown
+ *   onEdit(fromApp)   : the document changed; `fromApp` is true when setText
+ *                       made the change rather than the reader
  *
  * The four arrow bindings are the only ones bound twice, and it is deliberate:
  * `Mod-` alone resolves to Cmd on a Mac and on an iPad, and there is no reason

@@ -31,6 +31,7 @@ import { chartParamsFor, migrateChartView, windowsWith } from './request-params.
 import { feelControls, feelForNav } from './spacemouse-panel.js';
 import { createSurfaceNav } from './surface-nav.js';
 import { loadSurface, readCamera, surfaceOverrides } from './surface.js';
+import { stampTouchCoordinates } from './touch.js';
 import { VIRIDIS, echarts, loadStyle } from './theme.js';
 
 // Set once `loadSurface()` has resolved. Read synchronously inside a build,
@@ -570,16 +571,6 @@ function renderControls(doc, hooks) {
         }, 'walk');
         box.appendChild(walkBtn);
 
-        // Reset, last of the group. Back to the preset, camera included, which
-        // is why it goes through its own handler rather than through
-        // `onChange`: the camera lives in the renderer instance and survives an
-        // ordinary redraw by design.
-        box.appendChild(el('button', {
-            type: 'button',
-            className: 'exhibit-toggle',
-            title: 'Back to the default view, camera included',
-            onClick: () => onReset && onReset(),
-        }, 'reset'));
         // The mesh, which is the drawing leaving the app: the surface on
         // screen as a file that 3Dconnexion's viewer, Windows 3D Viewer,
         // Blender or a slicer opens, and navigates with a 6DOF puck natively.
@@ -638,7 +629,35 @@ function renderControls(doc, hooks) {
         }, KIND_LABELS[kind] || kind);
         box.appendChild(btn);
     }
-    if (!box.childNodes.length) return null;
+
+    // Reset, last of the group, on every chart. It acts on the whole drawing
+    // rather than on one reading, so it belongs after the readings, after the
+    // surface controls, after the mesh export cluster and after the realization
+    // control. On a surface that moves it from mid group, where it sat ahead of
+    // the mesh buttons, to the end.
+    //
+    // Unconditional, per the author: every plot has some controls in practice,
+    // so a one-button strip is close to hypothetical, and a chart a reader has
+    // pinch zoomed into a corner needs a way back whatever else it offers. On a
+    // 2-D chart there was none: the reset lived inside the surface-only block
+    // and double click, which is the gesture that did the job, is spent on page
+    // zoom on iOS and refused by zrender's own 700ms touch guard besides.
+    //
+    // It goes through its own handler rather than through `onChange` because
+    // the camera lives in the renderer instance and survives an ordinary redraw
+    // by design, so the one control whose job is to swing the box back needs a
+    // new instance.
+    box.appendChild(el('button', {
+        type: 'button',
+        className: 'exhibit-toggle',
+        title: 'Back to the default view: the full range, and the camera with '
+            + 'it on a surface',
+        onClick: () => onReset && onReset(),
+    }, 'reset'));
+
+    // No `if (!box.childNodes.length) return null` guard here any more. With
+    // reset always appended the box is never empty, and a line claiming a case
+    // that cannot arise is worse than no line.
     row.appendChild(box);
     if (feelPanel) row.appendChild(feelPanel);
     return row;
@@ -1030,7 +1049,7 @@ function draw(container, tools, host, doc, spec = null) {
             // previous one and the box would swim.
             chart.setOption({ grid3D: { viewControl: { ...patch, animation: false } } });
         },
-        reset: () => { if (ready) onReset(); },
+        reset: () => { if (ready) resetView(); },
         setProjection: (projection) => {
             const chart = renderer && renderer.chart;
             if (!ready || !chart) return;
@@ -1102,12 +1121,18 @@ function draw(container, tools, host, doc, spec = null) {
      * back into the new dataZoom config, so the gesture survives its own
      * consequence.
      *
-     * **Double-click** resets the view. On the zrender layer rather than on the
-     * chart, because `chart.on('dblclick')` fires only over a graphic element
-     * and the reader who has zoomed too far is usually over blank canvas.
-     * Preferred to `toolbox.feature.restore`, which ships a corner cluster of
-     * buttons and works against how hard a26 to a29 worked to keep the chrome
-     * down: the gesture costs no pixels.
+     * **Double-click** runs `resetView`, the same one the `reset` button runs.
+     * On the zrender layer rather than on the chart, because
+     * `chart.on('dblclick')` fires only over a graphic element and the reader
+     * who has zoomed too far is usually over blank canvas. It costs no pixels,
+     * which is why it is kept over `toolbox.feature.restore` and its corner
+     * cluster of buttons.
+     *
+     * It is no longer the only way back, and could not be on an iPad: the
+     * second tap of a double tap lands inside zrender's 700ms `scope.touching`
+     * guard and is discarded, and with `touch-action: manipulation` the gesture
+     * is spent on the page anyway. That is what the `reset` button on every
+     * chart is for, and it is the answer for a projector and a keyboard too.
      */
     function wireGestures() {
         const chart = renderer && renderer.chart;
@@ -1140,14 +1165,11 @@ function draw(container, tools, host, doc, spec = null) {
         });
         const zr = chart.getZr();
         zr.off('dblclick');
-        zr.on('dblclick', () => {
-            // Dropping the held zoom is the whole reset: the rebuilt option
-            // carries a dataZoom with no start or end, which is the component's
-            // own full-range default, and the redraw puts the drawing back on
-            // the rung a full window deserves.
-            zoom = null;
-            if (ready) render();
-        });
+        // The same reset the button runs, rather than the half of it this used
+        // to do. It dropped the held zoom and left the surface's readings and
+        // camera alone, while the button did the reverse, so neither was a
+        // reset and a reader could get a drawing into a state neither undid.
+        zr.on('dblclick', () => { if (ready) resetView(); });
         if (!drawn || !drawn.lossWindow) return;
         chart.off('dataZoom');
         chart.on('dataZoom', () => {
@@ -1181,7 +1203,7 @@ function draw(container, tools, host, doc, spec = null) {
         const strip = renderControls(doc, {
             chart: spec ? spec.chart : null,
             onChange: () => { if (ready) onToggle(); },
-            onReset: () => { if (ready) onReset(); },
+            onReset: () => { if (ready) resetView(); },
             onWindow: spec ? () => { if (ready) refetch(); } : null,
             walking: () => walking,
             onWalk: () => setWalk(!walking),
@@ -1212,20 +1234,35 @@ function draw(container, tools, host, doc, spec = null) {
     }
 
     /**
-     * Back to the preset, camera included.
+     * Back to the default view, on every chart and from every route.
      *
-     * The camera is the reason this is not just a view reset and a redraw. It
-     * lives in the renderer instance and survives `setOption` deliberately, so
-     * that a reading toggled while the reader is looking at the ridge does not
-     * swing the box back to the default angle. Which makes the one control
-     * whose whole job is to swing it back need a new instance.
+     * One function, because there were two and they disagreed. The `reset`
+     * button put the surface's readings and camera back and left a held `zoom`
+     * in place, so a zoomed relief stayed zoomed after being reset; double
+     * click dropped the zoom and touched nothing else, and existed only as a
+     * gesture, which on iOS is spent on page zoom and refused by zrender's
+     * 700ms touch guard anyway. Each was half a reset. This is the whole one.
+     *
+     * Dropping the held `zoom` is what puts the range back: the rebuilt option
+     * carries a dataZoom with no start or end, which is the component's own
+     * full-range default, and the redraw lands the drawing on the rung a full
+     * window deserves.
+     *
+     * The camera is the reason the surface arm is not just a view reset and a
+     * redraw. It lives in the renderer instance and survives `setOption`
+     * deliberately, so that a reading toggled while the reader is looking at
+     * the ridge does not swing the box back to the default angle. Which makes
+     * the one control whose whole job is to swing it back need a new instance.
      */
-    function onReset() {
+    function resetView() {
         setWalk(false);
-        const patch = {};
-        for (const key of SURFACE_KEYS) patch[key] = VIEW_DEFAULTS[key];
-        setView(patch);
-        if (renderer) { renderer.dispose(); renderer = null; }
+        zoom = null;
+        if ((view.kind || defaultKind(doc)) === 'surface') {
+            const patch = {};
+            for (const key of SURFACE_KEYS) patch[key] = VIEW_DEFAULTS[key];
+            setView(patch);
+            if (renderer) { renderer.dispose(); renderer = null; }
+        }
         renderTools();
         render();
     }
@@ -1362,6 +1399,11 @@ function overridesFor(doc) {
 function echartsRenderer(host, option) {
     let is3d = Boolean(option.is3d);
     let chart = echarts.init(host, null, { renderer: 'canvas' });
+    // On `host` rather than on the instance, so the listeners outlive the
+    // dispose and re-`init` that `update` performs when a panel switches
+    // between its flat and relief readings. See touch.js for what they are
+    // compensating for, which is a defect in `echarts-gl` rather than here.
+    const unstamp = stampTouchCoordinates(host);
     chart.setOption(option);
     linkPanels(chart, option);
     return {
@@ -1379,6 +1421,7 @@ function echartsRenderer(host, option) {
             linkPanels(chart, next);
         },
         dispose() {
+            unstamp();
             try { chart.dispose(); } catch { /* already gone */ }
         },
     };
