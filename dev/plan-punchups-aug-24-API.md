@@ -779,3 +779,42 @@ edit does not innocently turn it into a `const` arrow and break the first paint.
 
 **Verified beyond the suites**, since none of this is unit tested: `npm run
 build` completes, so the module graph and the new references resolve.
+
+### Item 9, at `1.0.0a130`
+
+Executed as written. `web/src/utils/tip.js` with `clampTip`'s job, the CSS
+`transform` gains `var(--tip-shift, 0px)`, the wiring is delegated on
+`document`, the arrow stays put, and the phone breakpoint's "that is the trade"
+comment is gone.
+
+**Divergence one: the exported name and shape.** The plan names
+`clampTip(node)`. The module exports `mountTipClamp()`, which does the wiring,
+and `tipShift(rect, viewport)`, which is the pure arithmetic. Splitting them is
+what makes the item testable at all: a function that reads
+`getBoundingClientRect` and writes a style property needs a DOM, and the six
+cases worth pinning are all arithmetic. `mountTipClamp` is then four
+`addEventListener` calls with nothing to get wrong.
+
+**Divergence two: capture phase, which the plan did not mention and which the
+feature does not work without.** `pointerenter`, `pointerleave`, `focus` and
+`blur` do not bubble, so a delegated listener on `document` never sees them in
+the bubble phase. All four are registered with `capture: true`. Keeping `focus`
+matters rather than being thorough: the CSS draws the box for `:focus-visible`
+as well as `:hover`, so a keyboard reader tabbing onto a dark leaf has to get
+the clamped box too.
+
+**Divergence three, scope.** The plan asked for no tests; six were written.
+Three of the first drafts asserted the wrong number, which is the argument for
+having them: the shift is arithmetic with an off-by-a-rounding failure mode that
+nothing on screen would make obvious. One test is the rejected alternative
+written down, a button mid row that is clear at 1200px and clipped at 400px, so
+the reason `:first-child` anchoring was refused is pinned rather than only
+argued.
+
+**Note on `TIP_WIDTH`.** The 230 is duplicated between `site.css` and
+`tip.js` and cannot be measured, because the box is a pseudo-element and there
+is no node to call `getBoundingClientRect` on. The duplication is documented at
+both ends. The failure mode if they drift is mild and one-directional: the shift
+is computed against the cap rather than the real text, so a short footnote is
+sometimes moved further than it strictly needs, and it stays on screen either
+way.

@@ -45,6 +45,7 @@ import * as history from './history.js';
 import { $, el, empty } from './utils/dom.js';
 import { debounce } from './utils/debounce.js';
 import { fmt } from './utils/format.js';
+import { mountTipClamp } from './utils/tip.js';
 
 // ----------------------------------------------------------------------
 // CsvGrid option presets (see grid.js)
@@ -3230,6 +3231,11 @@ function loadLanding() {
     // in the moment before this runs and get what they typed.
     build();
 }
+
+// The `data-why` footnote keeps itself on screen. Wired once, delegated on the
+// document, so the sub-tab rows and the group tabs can be rebuilt as often as
+// they like without anything having to re-bind. See `utils/tip.js`.
+mountTipClamp();
 
 // Before anything is built there is no object, so every derivation is greyed.
 // Drawn once at startup rather than left to the first build, which would leave

@@ -655,7 +655,14 @@ header .navbar { min-height: 56px; }
        measuring stick rather than a thing on screen, so they would leak in here
        and hide the tooltip. Undo them explicitly. */
     height: auto; overflow: visible; visibility: visible;
-    position: absolute; left: 50%; transform: translateX(-50%);
+    /* `--tip-shift` is written on the anchor by `utils/tip.js` on hover and on
+       focus, and is the least shift that keeps a 230px box inside the window.
+       Unset it is 0px, so this is byte identical to the plain `-50%` it
+       replaces and the footnote still centers if the script never runs. The
+       arrow below is deliberately NOT shifted: it points at the control while
+       the box slides to stay readable. */
+    position: absolute; left: 50%;
+    transform: translateX(calc(-50% + var(--tip-shift, 0px)));
     top: calc(100% + 7px); z-index: 60;
     background: var(--soft); color: var(--ink-2);
     border: 1px solid var(--line);
@@ -674,7 +681,9 @@ header .navbar { min-height: 56px; }
 
 @media (max-width: 575.98px) {
     /* Phones: tighten the tabs, and let the strip scroll when six spelled-out
-       group names do not fit. The tooltip is clipped here; that is the trade. */
+       group names do not fit. The tooltip used to be clipped here and that was
+       recorded as the trade; since a130 it clamps to the viewport instead, so
+       there is no trade left to record. */
     .out-tabs { gap: .15rem; overflow-x: auto; }
     .out-tabs .nav-link { padding: .28rem .55rem; font-size: var(--fs-ui); }
     .out-tabs .nav-link.active { padding-bottom: calc(.28rem + 2px); }

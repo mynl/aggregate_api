@@ -252,8 +252,8 @@ and the standing REMINDER below about what is worth plotting.
           Summary, Validation, Stats, Tail.
     - [x] 8 [Reformat-Keeps-Trailer] Reformat stops deleting the note and the
           hints (→ 1.0.0a126). `trailer=True`, and tags come back with them.
-    - [ ] 9 [Tooltips-Stay-On-Screen] the `data-why` footnote clamps to the
-          viewport.
+    - [x] 9 [Tooltips-Stay-On-Screen] the `data-why` footnote clamps to the
+          viewport (→ 1.0.0a130). `utils/tip.js` writes `--tip-shift`.
     - [ ] 10 [Surface-Strip-Punchups] four fixes to the 3-D control strip.
     - [x] 11 [Counter-Follows-The-Example-Walk] the `[m/n]` readout numbers the
           example walk (→ 1.0.0a129). The counter follows the last press; the

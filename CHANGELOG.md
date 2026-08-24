@@ -4,6 +4,49 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a130
+
+**[Tooltips-Stay-On-Screen] the `data-why` footnote clamps to the viewport.**
+Item 9 of `dev/plan-punchups-aug-24-API.md`. Hover the Reinsurance group's Plot
+leaf while it is dark and the explanation ran off the left edge of the screen.
+The footnote is a CSS `::after` centered on its button (`left: 50%` with
+`translateX(-50%)`) and capped at 230px, and Plot is the first leaf in its row,
+the row starts at the content's left edge, and the button is about 45px wide, so
+a 230px box centered on it overhung by roughly 90px. The mirror case exists at
+the right edge and both get worse as the window narrows.
+
+The rule now reads `translateX(calc(-50% + var(--tip-shift, 0px)))`, and a new
+`web/src/utils/tip.js` writes `--tip-shift` on the anchor on `pointerenter` and
+`focus`, computing the least shift that keeps the box inside the window with an
+8px margin, then clears it on the way out. **With the variable unset the rule is
+byte identical to what it replaces**, so the footnote still centers if the
+script never runs.
+
+Wired once, delegated on `document`, so nothing has to be re-bound when
+`renderSubTabs` rebuilds a row or the group tabs are re-marked on every build.
+Both listeners are registered in the capture phase, because `pointerenter` and
+`focus` do not bubble, and `focus` matters: the box is drawn for
+`:focus-visible` too, so a keyboard reader gets the same clamped footnote.
+
+**The arrow is not shifted.** It is a separate `::before`, still centered on the
+button, because the arrow points at the control while the box slides to stay
+readable. That is what every tooltip library does when it shifts rather than
+flips.
+
+This is the page's only hand rolled tooltip, used by the dark group tabs, the
+dark sub-tab leaves and the Allocate leaf's `.massive-toggle` placeholder, so
+one fix covers every case. The Bootstrap tooltips elsewhere are Popper
+positioned and already flip. The phone breakpoint's "the tooltip is clipped
+here; that is the trade" comment comes out, having stopped being true.
+
+Six tests over `tipShift`, which is the whole of what the module decides:
+`mountTipClamp` is four `addEventListener` calls. One of them is the argument
+against the pure-CSS alternative, `:first-child` and `:last-child` anchoring: a
+button in the middle of a row is untouched by an end-of-row rule and clips
+anyway once the window narrows. CSS anchor positioning with
+`position-try-fallbacks` is the real answer and is not on the iPad, which is a
+supported target.
+
 ## 1.0.0a129
 
 **[Counter-Follows-The-Example-Walk] the readout numbers the example walk.**
