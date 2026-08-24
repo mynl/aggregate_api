@@ -430,3 +430,49 @@ Divergences:
    entirely, and subscribes to the filter set to reset it. Holding a copy of the
    list would make the walk and the menu two lists that agree until someone
    clicks a pill.
+
+### A5, `1.0.0a124`
+
+**uFuzzy's `outOfOrder` is enough, so the `fzf` port is not needed.** The plan
+says to decide by trying it on the real payload rather than in the abstract, so
+that is what happened, over the shipped 151 rows with the live haystack:
+
+| needle | ordered | permuted |
+|---|---|---|
+| `reins tower` | 5 | 6 |
+| `tower reins` | 3 | 6 |
+| `advanced tower` | 5 | 6 |
+| `cat xol` | 1 | 2 |
+| `lognorm poisson` | 0 | 1 |
+| `poisson lognorm` | 1 | 1 |
+| `mixed severity` | 3 | 4 |
+| `severity mixed` | 4 | 4 |
+| `porfolio` | 21 | 21 |
+
+No query lost a result, the pairs that should agree now agree, and
+`ReinsuranceOccurrenceTower` ranks in the top two of every tower query either
+way. Timing: every query inside 3ms, most of them faster permuted than ordered,
+because uFuzzy's out-of-order path prefilters. Nothing about the ranking
+disappoints enough to earn a dependency.
+
+Divergences: none. The change is the one argument the plan predicted, held in a
+named constant with the measurement recorded beside it.
+
+Also in this bump, plan section 5 item 5: `CLAUDE.md`'s "Relationship to
+aggregate" records `Recipe.seq` and `Recipe.as_read`, and now says outright that
+its list is not the whole surface, pointing at the audited one in
+`T:/worktrees/CLAUDE.md`. The oversight charter has flagged that understatement
+since 2026-08-11; correcting the list in full is an oversight task, not this
+plan's, so this adds the pointer rather than the audit.
+
+## 8. Closed
+
+All five phases landed, `1.0.0a122` to `1.0.0a124`, against `aggregate
+1.0.0a320`.
+
+**Owed upstream, and the one thing that outlives this plan.** `topic:pnl` sits
+on all eight `pnl` entries and `topic:distortion` on all six `distortion` ones,
+so fourteen rows draw the same word twice in two colors. The author is removing
+the two tags from `library.agg` (ruling 2026-08-24). Nothing app side changes
+when they go: the pills are built from what is served, the facets recount
+themselves, and the two topic values simply stop appearing.

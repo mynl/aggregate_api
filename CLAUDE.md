@@ -26,6 +26,17 @@ This package **depends on** `aggregate`; it does not vendor it. The api imports:
 - `aggregate.parser._PARSER` and `aggregate.parser_errors`, for completion and rich
   parse-error reporting (line/column/caret/suggestions)
 - `aggregate.style`, the plot styling context
+- the recipe base behind the Examples menu: `Underwriter.recipes` and
+  `Underwriter.recipe(name)`, plus `Recipe.seq` (the zero-based order the entry
+  was read in, so `recipes.sort_values('seq')` is `library.agg`'s reading order)
+  and `Recipe.as_read` (the entry's DecL as its file spells it, which is what
+  reaches the editor). Both arrived in `aggregate` 1.0.0a320 and both are
+  load bearing here: without `seq` the menu has no order to show, and without
+  `as_read` an example that exists to teach `ph 2/3` arrives spelled
+  `ph 0.6666666666666666`.
+
+This list is not the whole surface. `T:/worktrees/CLAUDE.md` carries the audited
+one, including the three tolerated private names.
 
 `aggregate.parser_errors` is recent and lives only in the in-development
 `1.0.0a` line (PyPI stops at 0.30.1). So `aggregate` is the one dependency that

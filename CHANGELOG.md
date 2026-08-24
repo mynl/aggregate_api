@@ -4,6 +4,30 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a124
+
+**[Examples-Fuzzy] the example search takes its terms in any order.** Phase A5,
+the last of `dev/plan-examples-dropdown.md`, which retires to `dev/done/`.
+uFuzzy's `search` takes an `outOfOrder` argument the call here never passed, so
+a needle only matched where its terms appeared in the order they were typed:
+"reins tower" reached `ReinsuranceOccurrenceTower` and "tower reins" did not,
+and "lognorm poisson" found nothing at all while "poisson lognorm" found the one
+entry that says both. Nobody remembers which way round they wrote it. Passing 4
+permutes up to 24 passes.
+
+**Measured on the real payload before choosing it**, which is what the plan
+asked for. No query lost a result; "tower reins" went from 3 hits to the same 6
+as "reins tower", "lognorm poisson" from 0 to 1, "mixed severity" from 3 to 4,
+and the entries a reader is describing rank at the top of both orders. Every
+query came back inside 3ms over the 151 rows, most of them *faster* than the
+ordered search, because uFuzzy's out-of-order path prefilters. So the `fzf` port
+the plan held in reserve is not needed and no dependency is added.
+
+**`CLAUDE.md` records the recipe base on the import surface**: `Recipe.seq` and
+`Recipe.as_read`, both load bearing here, with a pointer to the audited list in
+the oversight charter, since the section's four bullets understate what the app
+actually imports.
+
 ## 1.0.0a123
 
 **[Examples-Tag-Pills] every pill is a filter and every filter is a pill.**
