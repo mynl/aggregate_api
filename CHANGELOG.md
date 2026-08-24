@@ -4,6 +4,44 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a129
+
+**[Counter-Follows-The-Example-Walk] the readout numbers the example walk.**
+Item 11 of `dev/plan-punchups-aug-24-API.md`. Ctrl+Shift+Up and Down step
+through the library and the `[m/n]` beside the editor did not move. It could
+not: it read `history.position()`, and the example ring is a different stack
+that nothing reported on.
+
+One readout, two stacks, and the rule for which is showing is the rule the
+reader already has: **the counter describes whatever the last press walked.**
+`walkMode` is `'history'` or `'examples'`; `exampleStep` and `pickExample` set
+it to `'examples'`, `navigateHistory` sets it to `'history'`, and a build or an
+edit by the reader puts it back, since both mean the box has stopped showing a
+library row.
+
+`n` is the count of what is being walked, which since a123 is what the active
+pills leave, so a reader filtered to `role:hero` walks `[1/7]` to `[7/7]`. That
+is the readout doing its job: it says where you are in what you are walking, not
+how big the library is. The length is read off the same call `exampleStep`
+makes, not off a copy, or the two drift the first time a filter changes mid
+walk. A pill click now redraws the readout as well as dropping the cursor,
+because the number it was showing indexed a list that just changed shape; an
+unset cursor draws blank, the same rule the history readout already uses for
+"not in the stack".
+
+**The two step buttons stay bound to history and keep their own greying.** They
+are the walk's only route on a touch device, an iPad's on-screen keyboard having
+no arrow keys, and the example ring has no buttons. So while the counter is
+describing the library the arrows describe the history. Greying them against
+whichever stack is live would make the touch route disappear mid walk, which is
+worse; if the two are ever to agree, the answer is a second pair of buttons.
+
+The four sites that build something did `history.record(...)` then
+`renderHistoryNav()`, and each now needed a third line to put `walkMode` back.
+They go through one `recordProgram()` instead, which is where the fourth copy
+would otherwise have gone quietly missing. The Help panel's Ctrl+Shift line now
+says the counter follows the walk.
+
 ## 1.0.0a128
 
 **[Clear-Twice-Clears-History] a second press of the clear icon empties the

@@ -255,8 +255,9 @@ and the standing REMINDER below about what is worth plotting.
     - [ ] 9 [Tooltips-Stay-On-Screen] the `data-why` footnote clamps to the
           viewport.
     - [ ] 10 [Surface-Strip-Punchups] four fixes to the 3-D control strip.
-    - [ ] 11 [Counter-Follows-The-Example-Walk] the `[m/n]` readout numbers the
-          example walk.
+    - [x] 11 [Counter-Follows-The-Example-Walk] the `[m/n]` readout numbers the
+          example walk (→ 1.0.0a129). The counter follows the last press; the
+          two buttons stay bound to history.
 
 - [x] **Bounds was dark for every object** (→ 1.0.0a48). `can_bounds` and
       `can_allocate` reached the browser and were never copied onto the flags

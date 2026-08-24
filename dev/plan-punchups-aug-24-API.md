@@ -743,3 +743,39 @@ to prevent. Both are last in the file, because they empty the shared store that
 the cap tests above spend the run filling; the file's header comment now says
 so. The first also asserts `clear()` on that full store before seeding its own
 three, so the "works on a couple of hundred entries" case is covered for free.
+
+### Item 11, at `1.0.0a129`
+
+Executed as written, including the "decide before executing", which the plan
+settles itself: the two step buttons stay bound to history and keep their own
+greying, on the touch-route argument. That reasoning is now recorded on
+`walkMode` rather than only in this file.
+
+**Divergence one: `recordProgram`.** The plan says "a build sets it back to
+`'history'`". There are four build sites, not one (`build`, `rebuildMissing`,
+`runDerivation` and the `grossceded` view path), and each was already a
+`history.record(...)` plus `renderHistoryNav()` pair. Adding a third line to
+each is where the fourth copy goes missing later, so the pair became one
+`recordProgram(text)` call and the mode reset lives inside it. Strictly more
+than the plan asked for, and the smaller change would have been the fragile one.
+
+**Divergence two: the filter subscription redraws the readout.** The plan lists
+the call sites as `exampleStep` and `pickExample`. `onExamplesFilterChange`
+needs it too: it drops the cursor because the list changed shape, and without a
+redraw the readout goes on showing the position it had in the old list. It now
+calls `renderHistoryNav()` beside dropping the cursor, so the number goes blank
+until the next press. This follows directly from the plan's own reasoning about
+why the cursor is dropped at all.
+
+**Divergence three: `examplePosition` is a hoisted `function`, not a method on
+the ring or an inline expression, and that is load bearing.**
+`renderHistoryNav` is defined near the top of `main.js` and runs during startup,
+when `editor.setText(LANDING_DECL)` fires `onEdit`. `exampleRing` is a `const`
+declared two thousand lines below, so it is still in its temporal dead zone at
+that moment. A hoisted function declaration is safe because it is only *called*
+when `walkMode` is `'examples'`, and nothing can set that until module
+evaluation has finished. The reasoning is written into its docstring so the next
+edit does not innocently turn it into a `const` arrow and break the first paint.
+
+**Verified beyond the suites**, since none of this is unit tested: `npm run
+build` completes, so the module graph and the new references resolve.

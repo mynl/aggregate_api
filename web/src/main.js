@@ -103,7 +103,13 @@ const editor = createEditor($('editor-host'), {
     // the first step back reaches depends on whether the editor is still
     // holding the program that was built.
     onEdit: (fromApp) => {
-        if (!fromApp) history.resetCursor();
+        if (!fromApp) {
+            history.resetCursor();
+            // The reader typed, so the box has stopped showing a library row and
+            // the readout goes back to describing the history. A `setText` the
+            // app made is the walk itself, example or history, and must not.
+            walkMode = 'history';
+        }
         renderHistoryNav();
     },
 });
@@ -119,6 +125,8 @@ editor.setText(LANDING_DECL);
 editor.focus();
 
 function navigateHistory(dir) {
+    // This press walked the history, so the readout describes the history.
+    walkMode = 'history';
     // `prev` is told what is on screen: it skips the newest entry when that is
     // already the text in the editor, so the first press back always moves, and
     // it stashes the text when it is a draft no build has recorded.
@@ -129,6 +137,26 @@ function navigateHistory(dir) {
     }
     renderHistoryNav();
 }
+
+/**
+ * Which of the two stacks the `[m/n]` readout is describing.
+ *
+ * `'history'` or `'examples'`. One readout, two walks, and the rule for which is
+ * showing is the rule the reader already has in their head: **the counter
+ * describes whatever the last press walked.** Ctrl+Shift stepped the library, so
+ * the counter numbers the library; Ctrl+Up stepped the history, so it numbers
+ * the history. A build and an edit both put it back, because both mean the box
+ * has stopped showing a library row.
+ *
+ * The two **buttons** stay bound to history whatever this says, which is
+ * deliberate. They are the walk's only route on a touch device, since an iPad's
+ * on-screen keyboard has no arrow keys, and the example ring has no buttons of
+ * its own. So while this reads `'examples'` the counter and the arrows describe
+ * different stacks. The alternative, greying the arrows against whichever stack
+ * is live, makes the touch route vanish mid walk and is worse. If the two are
+ * ever to agree the answer is a second pair of buttons for the library.
+ */
+let walkMode = 'history';
 
 /**
  * The whole history control: the `[m/n]` readout and the two step buttons.
@@ -149,11 +177,17 @@ function navigateHistory(dir) {
  * Neither answers it for a build of the text already on screen, since
  * `history.record` dedups against the most recent entry, so m and n both hold.
  * The strip flash in `renderSummary` is what covers that case.
+ *
+ * Since a129 the readout answers for the **example** walk too, per `walkMode`.
+ * Only the number changes: the greying below still reads the history, for the
+ * reasons recorded on `walkMode`.
  */
 function renderHistoryNav() {
     const node = $('history-pos');
     if (node) {
-        const { m, n } = history.position();
+        const { m, n } = walkMode === 'examples'
+            ? examplePosition()
+            : history.position();
         // `[3/4]`, not `DecL 3/4`. The word was doing no work beside a box that
         // is visibly full of DecL, and the brackets are what make four
         // characters read as a counter rather than as a fraction someone forgot
@@ -166,6 +200,23 @@ function renderHistoryNav() {
     const forward = $('history-next');
     if (back) back.disabled = !history.canPrev(text);
     if (forward) forward.disabled = !history.canNext();
+}
+
+/**
+ * Record a program that was just built, and refresh the readout.
+ *
+ * The four sites that build something all did `history.record(...)` followed by
+ * `renderHistoryNav()`, and a129 needed a third line at each: a build puts
+ * `walkMode` back to `'history'`, because whatever the box was showing before,
+ * it is now a program in the history stack. Three lines repeated four times is
+ * where the fourth copy quietly goes missing, so they are one call.
+ *
+ * @param {string} text the program to record, already the text in the editor.
+ */
+function recordProgram(text) {
+    history.record(text);
+    walkMode = 'history';
+    renderHistoryNav();
 }
 
 // The two step buttons, which are the walk's only route on a touch device: an
@@ -301,8 +352,7 @@ function forgetBuild() {
 async function rebuildMissing(program) {
     try {
         await api.build(program, {});
-        history.record(program);
-        renderHistoryNav();
+        recordProgram(program);
     } catch (err) {
         renderBuildFailure(err);
         return;
@@ -319,8 +369,7 @@ async function build() {
     try {
         const res = await api.build(decl, {});
         adoptBuild(res);
-        history.record(decl);
-        renderHistoryNav();
+        recordProgram(decl);
         renderActionRow();
     } catch (err) {
         forgetBuild();
@@ -414,8 +463,7 @@ async function runDerivation(btn, busy, call, land) {
         // The editor first: if adopting the object threw, the text that made it
         // is still what you are looking at.
         editor.setText(res.program);
-        history.record(res.program);
-        renderHistoryNav();
+        recordProgram(res.program);
         adoptBuild(res);
         renderActionRow();
         if (res.description) noteDerivation(res.description);
@@ -614,8 +662,7 @@ async function applyViews(kw) {
         } catch { /* formatting is a courtesy; build the text either way */ }
         editor.setText(decl);
         adoptBuild(await api.build(decl, {}));
-        history.record(decl);
-        renderHistoryNav();
+        recordProgram(decl);
         noteDerivation(`Read as ${VIEW_LABEL[kw] || kw}.`);
         showTab('overview');
     } catch (err) {
@@ -3059,6 +3106,34 @@ document.querySelector('[data-plot-download]').addEventListener('click', () => {
 // walk and the menu two lists that agree until someone clicks a pill.
 const exampleRing = { cursor: -1 };
 
+/**
+ * Where the example walk is, as `{m, n}`, in `history.position()`'s shape.
+ *
+ * `n` is the length of the list actually being walked, which since a123 is what
+ * the active pills leave, so a reader filtered to `role:hero` walks `[1/7]` to
+ * `[7/7]`. That is the readout doing its job: it says where you are in what you
+ * are walking, not how big the library is.
+ *
+ * Read off the same call `exampleStep` makes rather than off a copy. Two
+ * readings of the length would agree until a pill was clicked mid walk, and then
+ * disagree silently.
+ *
+ * `m === 0` for an unset cursor, so the readout draws blank. That is the same
+ * rule `history.position` uses for "not in the stack", and it is the state a
+ * fresh page and a just-changed filter are both in.
+ *
+ * Declared as a hoisted function on purpose: `renderHistoryNav` is defined far
+ * above `exampleRing` and runs during startup, before that `const` is
+ * initialized. It only calls this when `walkMode` is `'examples'`, which nothing
+ * can set until module evaluation has finished, so the ring is always live by
+ * the time this runs.
+ */
+function examplePosition() {
+    const n = filteredExamples().length;
+    const at = exampleRing.cursor;
+    return { m: at < 0 ? 0 : at + 1, n };
+}
+
 // Load a program into the editor. A library example arrives as `Recipe.decl`,
 // already canonical spread-form DecL carrying its hints, so there is nothing to
 // normalize: the old post-load /v1/decl/format round-trip is gone. Pass
@@ -3082,8 +3157,14 @@ function loadExample(decl, formatted = true) {
 // clicked; each entry now has exactly one row, so there is one place to resume
 // from and `indexOf` finds it whichever surface handed the item over.
 function pickExample(item) {
+    walkMode = 'examples';
     exampleRing.cursor = filteredExamples().indexOf(item);
     loadExample(item.decl);
+    // Explicitly, rather than relying on the `setText` inside `loadExample` to
+    // fire `onEdit`: picking the row the editor already holds changes no text
+    // and so fires nothing, and that is exactly the press whose number the
+    // reader is looking for.
+    renderHistoryNav();
 }
 
 mountExamples($('examples-menu'), pickExample);
@@ -3108,7 +3189,14 @@ loadExamples().catch(() => { /* dropdown still works; the ring just stays empty 
 // A changed filter set changes the list the cursor indexes into, so the cursor
 // stops meaning anything. Dropping it restarts the walk at the end the next
 // press asks for, which is where an unset cursor already lands.
-onExamplesFilterChange(() => { exampleRing.cursor = -1; });
+//
+// The readout is redrawn with it, since a129: it may be showing a position in
+// the list that just changed shape, and an unset cursor draws blank, which is
+// the honest reading until the next press.
+onExamplesFilterChange(() => {
+    exampleRing.cursor = -1;
+    renderHistoryNav();
+});
 
 // ----------------------------------------------------------------------
 // The landing build
@@ -3169,7 +3257,10 @@ function exampleStep(dir) {
     const at = exampleRing.cursor;
     if (at < 0) exampleRing.cursor = dir === 'prev' ? n - 1 : 0;
     else exampleRing.cursor = dir === 'prev' ? (at - 1 + n) % n : (at + 1) % n;
+    // This press walked the library, so the readout describes the library.
+    walkMode = 'examples';
     loadExample(items[exampleRing.cursor].decl);
+    renderHistoryNav();
 }
 
 // ----------------------------------------------------------------------
