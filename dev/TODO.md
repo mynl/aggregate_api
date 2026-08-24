@@ -250,8 +250,8 @@ and the standing REMINDER below about what is worth plotting.
     - [x] 6 [Stats-Joins-Overview] and 7 [Overview-Leaf-Order] (→ 1.0.0a125).
           One edit: Stats moves from More to Overview and the row reads Plot,
           Summary, Validation, Stats, Tail.
-    - [ ] 8 [Reformat-Keeps-Trailer] Reformat stops deleting the note and the
-          hints.
+    - [x] 8 [Reformat-Keeps-Trailer] Reformat stops deleting the note and the
+          hints (→ 1.0.0a126). `trailer=True`, and tags come back with them.
     - [ ] 9 [Tooltips-Stay-On-Screen] the `data-why` footnote clamps to the
           viewport.
     - [ ] 10 [Surface-Strip-Punchups] four fixes to the 3-D control strip.

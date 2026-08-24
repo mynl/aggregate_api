@@ -4,6 +4,44 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a126
+
+**[Reformat-Keeps-Trailer] Reformat stops deleting the note and the hints.**
+Item 8 of `dev/plan-punchups-aug-24-API.md`, one keyword.
+`routes/decl.py` called `format_program(decl, fmt="text")`, and the writer's
+signature is
+`(spec_or_text, *, fmt='text', layout='spread', trailer=False)`. It emits the
+trailer as a unit, so at the default every `note{}`, `hints{}` and `tags{}` in
+the program was dropped. Press Sharpen, which writes a `hints{}` clause pinning
+the grid the probe chose, then press Reformat, and the pinning is gone. That is
+meaning lost rather than formatting: a program that does not state its grid is
+one the next build is free to put on a different one. The call now passes
+`trailer=True`.
+
+**Tags come back with the note and the hints** (author ruling, 2026-08-24),
+because the writer emits the three together and a reader who typed their own
+`tags{}` should keep it on the same rule as their own `note{}`. This does not
+fight the Examples library: an entry loaded from the menu arrives with note and
+tags already stripped, so there is nothing on that path for Reformat to restore.
+
+Two tests, asserted clause by clause rather than on the whole string, since the
+writer decides layout and placement and this is a test about what survives. The
+second uses a `port`, where DecL binds the trailer directly after the name and
+before the first unit, so the round trip is not accidentally checked only at the
+end of a program.
+
+Reformat still rewrites `ph 2/3` as a float and `dsev [1:6]` as six values,
+because `format_program` round trips through the spec. That is the writer
+working as designed, is out of scope here, and is tracked upstream as
+`[Unparser-Reference-Gaps]`. It is also why the Examples menu serves
+`Recipe.as_read` rather than coming through this route.
+
+The route's own docstring said it standardizes a program loaded from the
+Examples library. That stopped being true at a122. Its callers are the Reformat
+button and the `grossceded` prefix path, and it now says so. The file's legacy
+` -- ` glosses were cleaned in the same pass, per the house rule that they go as
+their file is next edited.
+
 ## 1.0.0a125
 
 **[Stats-Joins-Overview] and [Overview-Leaf-Order] the Stats leaf moves up, and

@@ -653,3 +653,28 @@ The reading map needed no edit. `charts/reading-map.js` is about chart axis
 readings and holds no leaf keys at all; the `['overview', 'stats']` half of the
 loader key is read by `ledeFor`, which looks the leaf up through `leafOf`, which
 is why both halves had to move together.
+
+### Item 8, at `1.0.0a126`
+
+Executed as written, one keyword. The section's "decide before executing"
+question was put to the author and **ruled 2026-08-24: keep tags**, on the
+plan's own reasoning, that a hand typed `tags{}` should survive a Reformat on
+the same rule as a hand typed `note{}`, and that item 1 keeps the two from
+fighting. So `trailer=True` and nothing else; no second pass stripping tags.
+
+Both docstrings updated as asked. The route's said it standardizes a program
+loaded from the Examples library, which stopped being true at a122, and now
+names its two real callers.
+
+**Divergence, one, and it is scope rather than substance.** The plan asked for
+no tests. Two were added, `test_decl_format_keeps_the_whole_trailer` and
+`test_decl_format_keeps_a_trailer_written_after_a_port_name`, beside the two
+format-route tests already in `tests/test_objects.py`. A one keyword change with
+no test is a change the next refactor silently undoes, and this one has already
+been undone once by inattention. They assert clause by clause rather than on the
+whole string, because the writer owns layout and placement; the `port` case is
+there so the round trip is not checked only at the end of a program.
+
+**Also cleaned:** the five legacy ` -- ` glosses in `routes/decl.py`, per the
+house rule that they go as their file is next edited rather than in one
+mechanical sweep.

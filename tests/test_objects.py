@@ -1632,6 +1632,48 @@ def test_decl_format_echoes_garbage(client):
     assert r.json()["decl"] == junk
 
 
+def test_decl_format_keeps_the_whole_trailer(client):
+    """Reformat no longer deletes ``note{}``, ``hints{}`` or ``tags{}``.
+
+    ``format_program`` defaults to ``trailer=False`` and emits the trailer as a
+    unit, so through a125 the route dropped all three. The one that mattered was
+    ``hints{}``: Sharpen writes it to pin the grid the object was probed onto,
+    and a Reformat straight afterward silently threw the pinning away, leaving a
+    program the next build is free to put on a different grid.
+
+    Asserted clause by clause rather than on the whole string, because the
+    writer is free to move the trailer and to respell what precedes it, and this
+    is a test about what survives rather than about layout.
+    """
+    decl = ('agg TrailerProbe 5 claims sev lognorm 10 cv 0.8 poisson '
+            'note{a sentence about the book} hints{log2=12, bs=1/64} '
+            'tags{topic:probe}')
+    r = client.post("/v1/decl/format", json={"decl": decl})
+    assert r.status_code == 200, r.text
+    out = r.json()["decl"]
+    assert "note{a sentence about the book}" in out
+    assert "hints{" in out and "log2=12" in out
+    assert "topic:probe" in out
+
+
+def test_decl_format_keeps_a_trailer_written_after_a_port_name(client):
+    """The trailer travels wherever DecL binds it, not only at the end.
+
+    DecL binds a trailer to the declaration it follows, so a portfolio's own
+    trailer sits directly after the name and before the first unit. The writer
+    decides that placement, and this asserts the round trip preserves the
+    clauses without asserting where they land, which is the library's business.
+    """
+    decl = ('port TrailerPortProbe note{the book itself} tags{topic:probe}\n'
+            '    agg UnitA 3 claims sev lognorm 10 cv 0.5 poisson\n'
+            '    agg UnitB 4 claims sev lognorm 12 cv 0.6 poisson')
+    r = client.post("/v1/decl/format", json={"decl": decl})
+    assert r.status_code == 200, r.text
+    out = r.json()["decl"]
+    assert "note{the book itself}" in out
+    assert "topic:probe" in out
+
+
 
 # ----------------------------------------------------------------------
 # GET /v1/objects/{id}/frame/{which}?format=ir  (the table document)
