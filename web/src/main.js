@@ -1452,7 +1452,7 @@ async function loadTab(group) {
 // The live ECharts instances, one per pane that can hold a chart, disposed
 // before each re-render so canvases and ResizeObservers do not leak across
 // builds. CsvGrid teardown is keyed on the grid registry; charts are not, so we
-// track them ourselves. `liveChart` reads these to answer "save what I can see".
+// track them ourselves.
 let overviewChart = null;
 let boundsChart = null;
 // The Pricing group's Plot leaf. A chart on the built object rather than on a
@@ -1993,8 +1993,8 @@ async function loadExhibitLeaf(paneId, name, leaf, block = null) {
  *
  * Charts are tracked here rather than in the grid registry (they are not
  * `destroy()`ables), so emptying a pane leaves its instance alive over a
- * detached canvas: a live ResizeObserver, and a `liveChart` the download button
- * would happily save a picture of. Each chart loader already disposed its own
+ * detached canvas, and a live ResizeObserver with it. Each chart loader already
+ * disposed its own
  * before drawing, which covered plot-to-plot and missed plot-to-table. That gap
  * mattered for one leaf before a68 and for four after it, so the disposal moved
  * to the one place every pane replacement goes through.
@@ -3052,45 +3052,17 @@ const evaluateForm = createPricingForm($('evaluate-form'), {
 // answer to the same question sitting in the more prominent spot.
 // ----------------------------------------------------------------------
 
-/**
- * The live ECharts instance the reader is looking at, or null.
- *
- * Three panes hold one each and only one pane is on screen, so "which chart"
- * is answered by which group is active rather than by tracking focus. Each
- * pane holds a **mount handle**, not the instance, and the handle exposes the
- * instance through a getter rather than a field: a reading that flips a panel
- * between its 2-D and 3-D realizations disposes and rebuilds the instance, and
- * a captured reference would go stale on that path.
- */
-function liveChart() {
-    const group = activeTabName();
-    const handle = group === 'bounds' ? boundsChart
-        : (group === 'reinsurance' ? reinsChart : overviewChart);
-    return (handle && handle.chart) || null;
-}
-
-/**
- * Save the chart on screen as a PNG.
- *
- * Client side since a60. It used to open the server's matplotlib SVG in a new
- * tab, which was a *different picture* of the same object: a second rendering,
- * at whatever window the server chose, ignoring the reader's zoom and toggles.
- * `getDataURL` returns exactly what is on screen, including every interaction
- * since it was drawn, and it costs no round trip.
- *
- * `pixelRatio: 2` so the file is worth pasting into a document rather than
- * being a screenshot of a 400px canvas.
- */
-document.querySelector('[data-plot-download]').addEventListener('click', () => {
-    const chart = liveChart();
-    if (!chart) return;
-    const url = chart.getDataURL({ type: 'png', pixelRatio: 2,
-                                   backgroundColor: '#fff' });
-    const a = el('a', { href: url, download: `${state.name || 'chart'}.png` });
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-});
+// The PNG download used to hang off a `[data-plot-download]` item in the header
+// menu and is gone from here as of a131. It is an item in each chart's own
+// Download menu now, in the strip beside the picture, alongside the three mesh
+// writers on a relief, so the menu is the one place a drawing leaves the app.
+//
+// The move also fixed something the header item never could. The `liveChart`
+// helper behind it mapped the active group to one of three chart handles, and
+// the Pricing group's kappa curves are a fourth, so that chart had no way to be
+// saved at all. The strip is rendered by every chart mount, so every chart can
+// now save itself, and `liveChart` had no callers left and is gone with the
+// item.
 
 // ----------------------------------------------------------------------
 // Examples dropdown + Ctrl+Shift-↑/↓ ring navigation

@@ -818,3 +818,65 @@ both ends. The failure mode if they drift is mild and one-directional: the shift
 is computed against the cap rather than the real text, so a short footnote is
 sometimes moved further than it strictly needs, and it stays on screen either
 way.
+
+### Item 10, at `1.0.0a131`, all four in one bump
+
+10.1, 10.3 and 10.4 executed as written. Both of 10.2's "decide before
+executing" questions were put to the author. **`Download` then `reset`**, the
+plan's own recommendation, so `reset` keeps the end and the a117 comment stands
+unrewritten. **PNG folded in**, ruled 2026-08-24, and that ruling had a
+consequence the plan did not foresee, below.
+
+**Divergence one, and the significant one: the Download menu is drawn on every
+chart, not only on a relief.** The plan places the menu inside the
+`grid && realized === 'surface'` block, where the mesh buttons were. Folding PNG
+into a surface-only menu and deleting the header item, which is what the ruling
+literally asks for, would take PNG export away from every 2-D chart, since none
+of them would have a menu to put it in. That is a regression the ruling cannot
+have intended: the case put to the author was about *moving a control out of the
+header menu*, not about withdrawing it from four of five charts. So the menu is
+built for every chart, with PNG always and the three mesh writers only while a
+surface is realized. The header item then really is redundant everywhere and
+comes out cleanly.
+
+**This also closed a pre-existing gap rather than opening one.** The header
+item's handler read `liveChart()`, which maps the active group to one of exactly
+three chart handles, `bounds`, `reinsurance` and `overview`. The Pricing group's
+kappa curves are a fourth chart and were not among them, so that chart could
+never be saved at all. The strip is rendered by every chart mount, so the new
+menu reaches all five. `liveChart` was left with no callers and was deleted, and
+the two comments elsewhere that described it were corrected rather than left
+naming a function that no longer exists.
+
+**Divergence two: `savePng` moved into the mount.** It had to, since the picture
+is now saved from the chart's own strip rather than from a page level menu, and
+the mount is the only place that holds the instance. It is a sibling of
+`saveMesh` with the same argument for being client side, and `onExport` branches
+on the format so the strip does not have to know which kind of file it is asking
+for.
+
+**Divergence three, scope: `charts/cell-reading.js`.** The plan has 10.4 copy
+the tooltip's formatter into `writeCutReadout` verbatim, "including its two
+careful cases". Copying it into `mount.js` would have left it as untestable as it
+was in `surface.js`, which imports `theme.js` and so `echarts` and will not load
+under `node --test` without stubs. It is a leaf module instead, importing one
+formatter and nothing else, which is the `reading-map.js`, `request-params.js`
+and `surface-grid.js` arrangement this repo already uses for exactly this
+reason. Seven tests, and the two careful cases are two of them. The plan called
+those cases out by name, which is the signal that they are worth pinning rather
+than trusting.
+
+**Divergence four, small: `cellReader` returns placeholders rather than null.**
+The plan asks for "placeholders from the first paint, with the names present and
+the values blank". Putting that inside the reader rather than at the call site
+means the strip has one code path instead of two, and it makes the placeholder
+behavior a tested property rather than an incidental one.
+
+**Watch, answered.** The forcing of `cut: 'all'` on a click with no cut showing
+is left alone, exactly as the plan says: with the reading in the strip a click
+now always does something visible, so it *could* go, but that is a separate
+behavior decision and this item is about where numbers are printed.
+
+**Verified beyond the suites**: `npm run build` completes. The strip's own
+behavior, the single group fold and the three line readout, is not unit tested
+and cannot be from node; it needs a look in the browser at a `bvagg`.

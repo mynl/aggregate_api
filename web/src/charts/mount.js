@@ -92,7 +92,6 @@ const VIEW_DEFAULTS = {
     // click to a bare surface.
     contours: true,
     lights: true,
-    tips: true,
     cut: 'none',         // none | components | total | all
     // Where each cut sits, as a fraction of its own range. Three rather than
     // one because a click places a cut where the reader pointed, which is two
@@ -108,8 +107,12 @@ const VIEW_DEFAULTS = {
 };
 
 /** Which view keys the relief owns, for the reset button to put back. */
+// `tips` was here through a130 and is retired, not repurposed: with the cell
+// reading in a fixed place there is no second question for a button to ask. A
+// stored `tips` key in a reader's persisted view is harmless once nothing
+// reads it.
 const SURFACE_KEYS = ['mesh', 'wallGrid', 'marginals', 'contours', 'lights',
-                      'tips', 'cut', 'cutX', 'cutY', 'cutS'];
+                      'cut', 'cutX', 'cutY', 'cutS'];
 
 /** The cut control cycles rather than branching into four buttons. */
 const CUT_MODES = ['none', 'components', 'total', 'all'];
@@ -286,13 +289,9 @@ const SURFACE_CONTROLS = [
         label: 'wall grid',
         title: 'Grid lines on the three walls of the box',
     },
-    {
-        key: 'tips',
-        label: 'tips',
-        title: 'The hover tooltip, which reads one cell under the cursor. The '
-            + 'strip above the chart carries the cut\'s own numbers either way, '
-            + 'and it neither moves nor covers what it describes',
-    },
+    // A `tips` toggle stood here through a130, offering the hover tooltip that
+    // read one cell under the cursor. Both are gone: the cell reading is in the
+    // strip now, in a fixed place, so there is no second question left to ask.
     {
         key: 'lights',
         label: 'lights',
@@ -502,18 +501,26 @@ function windowBox(chart, onWindow) {
 /**
  * The SpaceMouse control: connect, connected, or greyed with a why.
  *
- * Its own function because it is the one button on the strip whose label and
- * title change without the strip being rebuilt: the device sleeps, the
- * receiver is unplugged, and the reader is told, in place. The `watch`
- * subscription is registered with the strip, which drops it when the strip is
- * rebuilt: without that, every rebuild would leave another dead button being
- * repainted for the life of the page.
+ * Its own function because it is the one button on the strip whose title changes
+ * without the strip being rebuilt: the device sleeps, the receiver is unplugged,
+ * and the reader is told, in place. The `watch` subscription is registered with
+ * the strip, which drops it when the strip is rebuilt: without that, every
+ * rebuild would leave another dead button being repainted for the life of the
+ * page.
+ *
+ * **The label is always `spacemouse`.** Through a130 it became
+ * `spacemouse: SpaceMouse Wireless` on connect, which signaled the state twice
+ * and made the button grow enough to rewrap the whole strip, so connecting a
+ * puck moved every control beside it. `.active` carries connected, which is the
+ * fill the rest of the strip already uses for on, and the device name moves into
+ * the title. A reader who wants to know *which* puck asks the button; a reader
+ * who wants to know whether it is on sees the color.
  */
 function spaceMouseButton(onSpaceMouse, register) {
-    const btn = el('button', { type: 'button', className: 'exhibit-toggle' });
+    const btn = el('button', { type: 'button', className: 'exhibit-toggle' },
+                   'spacemouse');
     const paint = () => {
         const on = spacemouse.isConnected();
-        btn.textContent = on ? `spacemouse: ${spacemouse.deviceName()}` : 'spacemouse';
         btn.classList.toggle('active', on);
         btn.disabled = !spacemouse.isSupported();
         btn.setAttribute('aria-disabled', btn.disabled ? 'true' : 'false');
@@ -523,10 +530,11 @@ function spaceMouseButton(onSpaceMouse, register) {
                 + 'download is the way in on every other browser: '
                 + "3Dconnexion's own viewer navigates it natively"
             : (on
-                ? 'Connected. Twist to orbit, tilt to raise the camera, push '
-                    + 'and pull to zoom, slide to pan. The left button puts the '
-                    + 'view back, the right one swaps perspective and '
-                    + 'orthographic. Click to let the device go'
+                ? `Connected to ${spacemouse.deviceName()}. Twist to orbit, `
+                    + 'tilt to raise the camera, push and pull to zoom, slide '
+                    + 'to pan. The left button puts the view back, the right '
+                    + 'one swaps perspective and orthographic. Click to let the '
+                    + 'device go'
                 : 'Drive the relief with a 3Dconnexion SpaceMouse. One grant '
                     + 'per browser: after that it reattaches silently. Mouse '
                     + 'dragging keeps working throughout');
@@ -536,6 +544,94 @@ function spaceMouseButton(onSpaceMouse, register) {
     btn.addEventListener('click', () => { onSpaceMouse().then(paint, paint); });
     return btn;
 }
+
+/**
+ * The Download menu: one button, one item per format the drawing can leave as.
+ *
+ * Parameters
+ * ----------
+ * formats : Array<object>
+ *     `{ext, label, why}` per item, in menu order.
+ * onExport : function
+ *     Called with the `ext` of the item pressed.
+ * canExport : function
+ *     Whether there is a drawing to write. Greys the button rather than hiding
+ *     it, and carries the reason once instead of once per item.
+ *
+ * Returns
+ * -------
+ * HTMLElement
+ *
+ * Notes
+ * -----
+ * A menu rather than a button per format, which is what stood here through a130:
+ * a `mesh` label followed by `.glb`, `.obj` and `.stl` sitting mid strip, four
+ * nodes for one idea. The three per format sentences become the items' own hover
+ * text, so nothing written is lost, and the button's title carries the sentence
+ * they shared about the file being the box on screen.
+ *
+ * Bootstrap's dropdown is already loaded and delegates from the document, so a
+ * menu built here works without being initialized. The Examples menu is the
+ * pattern.
+ */
+function downloadMenu(formats, onExport, canExport) {
+    const can = canExport();
+    const wrap = el('div', { className: 'dropdown' });
+    const btn = el('button', {
+        type: 'button',
+        className: 'exhibit-toggle dropdown-toggle',
+        'data-bs-toggle': 'dropdown',
+        'aria-expanded': 'false',
+        title: can
+            ? 'Save what is on screen. The file is the box you are looking at, '
+                + 'so the log reading and the proportions come with it'
+            : 'Nothing is drawn yet, so there is nothing to save',
+        'aria-disabled': can ? 'false' : 'true',
+    }, 'Download');
+    btn.disabled = !can;
+    wrap.appendChild(btn);
+    const menu = el('ul', { className: 'dropdown-menu' });
+    for (const { ext, label, why } of formats) {
+        menu.appendChild(el('li', {}, el('button', {
+            type: 'button', className: 'dropdown-item', title: why,
+            onClick: () => onExport(ext),
+        }, label)));
+    }
+    wrap.appendChild(menu);
+    return wrap;
+}
+
+/** The picture, offered on every chart. */
+const IMAGE_FORMAT = {
+    ext: 'png',
+    label: 'PNG image',
+    why: 'The chart exactly as drawn, at twice the screen resolution, including '
+        + 'every toggle and zoom since it was drawn',
+};
+
+/** The mesh writers, offered while a relief is the drawing on screen. */
+const MESH_FORMATS = [
+    {
+        ext: 'glb',
+        label: 'GLB mesh',
+        why: 'One file, colored by height in the chart\'s own viridis, which is '
+            + 'what makes it read as the picture rather than as a gray sheet',
+    },
+    {
+        ext: 'obj',
+        label: 'OBJ mesh',
+        why: 'Geometry only, which every viewer and Blender read. This is the '
+            + 'way in for a 6DOF puck on a browser with no WebHID: '
+            + '3Dconnexion\'s own viewer navigates it natively',
+    },
+    {
+        ext: 'stl',
+        label: 'STL mesh',
+        why: 'Geometry only, and the format a slicer wants. Masked cells are '
+            + 'holes rather than invented geometry, so it is a surface and not '
+            + 'a solid',
+    },
+];
 
 function renderControls(doc, hooks) {
     const { chart, onChange, onReset, onWindow, walking, onWalk, onExport,
@@ -556,6 +652,11 @@ function renderControls(doc, hooks) {
     // labeled halves reads as less cluttered than seven in one undifferentiated
     // centered row, because each half visibly belongs to the panel above it,
     // which the centered row could not say at all.
+    // The document's own group. Created before the panel loop rather than after
+    // it, because with a single panel the panel's buttons are folded into this
+    // one and there has to be somewhere to fold them into.
+    const box = el('div', { className: 'exhibit-group' });
+    const panelGroups = [];
     for (const panel of offered.panels) {
         const group = el('div', { className: 'exhibit-group exhibit-group-panel' });
         if (stacked && offered.panels.length > 1 && panel.title) {
@@ -583,12 +684,32 @@ function renderControls(doc, hooks) {
         }
         // A panel declaring nothing gets no group at all rather than an empty
         // one, which would draw a rule with nothing beside it.
-        if (group.querySelector('button')) row.appendChild(group);
+        if (group.querySelector('button')) panelGroups.push(group);
     }
-    // The document's own group, last: everything below acts on the whole
-    // drawing rather than on one panel, so it sits apart from the panel groups
-    // and takes only the width it needs while they share what is left.
-    const box = el('div', { className: 'exhibit-group' });
+    // **One group is not a group.** `.exhibit-group-panel` is
+    // `flex: 1 1 0; justify-content: center`, which exists so that with two
+    // panels each group sits over its own half of the canvas, and
+    // `.exhibit-group + .exhibit-group` draws a rule between them. With a single
+    // panel that layout takes all the spare width, centers one or two buttons in
+    // the middle of it, and separates them from everything else by a rule: the
+    // surface's lone `log y` floating away from the strip is exactly this. The
+    // layout was doing what it was built to do, on a case it was not built for.
+    //
+    // So a single panel's buttons go into the document group instead, at the
+    // front, which keeps the house order of axis readings before realizations.
+    // Not a surface special case: with one panel there is nothing for the half
+    // and half layout to align to, and a labeled column of one is the
+    // disconnected look on any chart. The `setPanelView` handlers are untouched;
+    // only the parent node moves.
+    if (panelGroups.length === 1) {
+        const only = panelGroups[0];
+        while (only.firstChild) box.appendChild(only.firstChild);
+    } else {
+        for (const group of panelGroups) row.appendChild(group);
+    }
+    // Everything below acts on the whole drawing rather than on one panel, so
+    // the document group sits apart from the panel groups and takes only the
+    // width it needs while they share what is left.
     // The feel panel, when there is a puck to have one: a full width row under
     // the buttons rather than a popover, so nothing floats over the chart and
     // nothing has to be positioned.
@@ -651,37 +772,6 @@ function renderControls(doc, hooks) {
         }, 'walk');
         box.appendChild(walkBtn);
 
-        // The mesh, which is the drawing leaving the app: the surface on
-        // screen as a file that 3Dconnexion's viewer, Windows 3D Viewer,
-        // Blender or a slicer opens, and navigates with a 6DOF puck natively.
-        // No round trip and no wire change: this writes the same drawn heights
-        // ECharts is holding, which is what makes it a rendering of the served
-        // document rather than a second opinion about it.
-        box.appendChild(el('span', { className: 'exhibit-group-label' }, 'mesh'));
-        for (const [ext, what] of [
-            ['glb', 'one file, colored by height in the chart\'s own viridis, '
-                + 'which is what makes it read as the picture rather than as a '
-                + 'gray sheet'],
-            ['obj', 'geometry only, which every viewer and Blender read'],
-            ['stl', 'geometry only, and the format a slicer wants'],
-        ]) {
-            const can = canExport();
-            const btn = el('button', {
-                type: 'button',
-                className: 'exhibit-toggle',
-                title: can
-                    ? `Save the drawn surface as ${ext.toUpperCase()}: ${what}. `
-                        + 'The file is the box on screen, so the log reading and '
-                        + 'the proportions come with it; masked cells are holes '
-                        + 'rather than invented geometry, so it is a surface and '
-                        + 'not a solid'
-                    : 'No surface is drawn yet, so there is nothing to save',
-                'aria-disabled': can ? 'false' : 'true',
-                onClick: () => onExport(ext),
-            }, `.${ext}`);
-            btn.disabled = !can;
-            box.appendChild(btn);
-        }
         // The puck. Greyed with a why where WebHID is not, which is Firefox,
         // Safari and the iPad, so the control still says the feature exists
         // and that this browser is not covered, per the never-hide rule.
@@ -710,11 +800,36 @@ function renderControls(doc, hooks) {
         box.appendChild(btn);
     }
 
+    // Download, second to last, on every chart. It is the drawing leaving the
+    // app, so it belongs after everything that decides what the drawing is.
+    //
+    // **PNG on every chart, the three mesh writers only on a relief.** The menu
+    // is meant to be the one place a drawing leaves, so offering three mesh
+    // formats and not the picture would be an odd set, and the header More
+    // menu's "Download plot" came out at a131 rather than sitting beside it
+    // saying the same thing in another place. That item also only ever reached
+    // three of the five charts, because the handler behind it read a hard coded
+    // trio of chart handles and the Pricing group's kappa curves were not among
+    // them. The strip is rendered by every chart mount, so this reaches all of
+    // them.
+    //
+    // Client side and off the option in hand, for both kinds of file: the reader
+    // is looking at a particular drawing, at a particular window, on the log
+    // reading or not, and a file fetched instead would be a second rendering
+    // that agrees with the picture only by luck.
+    const surfaceDrawn = grid && realized === 'surface';
+    box.appendChild(downloadMenu(
+        surfaceDrawn ? [IMAGE_FORMAT, ...MESH_FORMATS] : [IMAGE_FORMAT],
+        onExport,
+        // A picture can always be written; a mesh needs a drawn relief. So the
+        // menu is only greyed when the one thing it offers is unavailable.
+        surfaceDrawn ? canExport : () => true));
+
     // Reset, last of the group, on every chart. It acts on the whole drawing
     // rather than on one reading, so it belongs after the readings, after the
-    // surface controls, after the mesh export cluster and after the realization
-    // control. On a surface that moves it from mid group, where it sat ahead of
-    // the mesh buttons, to the end.
+    // surface controls, after the Download menu and after the realization
+    // control. The author's a117 note put it at the end on the grounds that it
+    // acts on the whole drawing, and that still holds.
     //
     // Unconditional, per the author: every plot has some controls in practice,
     // so a one-button strip is close to hypothetical, and a chart a reader has
@@ -923,6 +1038,28 @@ function draw(container, tools, host, doc, spec = null) {
      *   values rather than emptying the strip.
      */
     /**
+     * The last cell clicked, as `[x, y, h]`, or null before the first click.
+     *
+     * Held here rather than in `view` because it is about this drawing rather
+     * than about how the document is read: it does not belong in a persisted
+     * view and it has nothing to say to a rebuilt chart.
+     */
+    let pointer = null;
+
+    /**
+     * The clicked cell as readout rows: three names, blank until a click.
+     *
+     * The formatting lives on the document's own `cellReader`, put there by
+     * `surfaceOverrides`, so the strip prints the height to the precision the
+     * encoding actually carried and keeps the log-floor and quantized cases the
+     * tooltip used to make. See `surface.js`.
+     */
+    function pointerRows() {
+        const read = drawn && drawn.cellReader;
+        return read ? read(pointer) : [];
+    }
+
+    /**
      * The relief's strip: what the cut is standing on, in a fixed place.
      *
      * Not a tooltip. On a 3-D scene a tooltip follows the cursor over the thing
@@ -935,15 +1072,22 @@ function draw(container, tools, host, doc, spec = null) {
         empty(readout);
         const where = (rows && rows.where) || [];
         const leaves = (rows && rows.leaves) || [];
-        if (!where.length && !leaves.length) {
+        // The clicked cell, drawn first: it is where the reader pointed, which
+        // comes before what the cut through that point is standing on and before
+        // what it leaves. Names present with blank values from the first paint,
+        // so the strip holds its height and nothing below the chart moves on the
+        // first click. That is the same reason the readout node is created
+        // before the first render.
+        const at = pointerRows();
+        if (!at.length && !where.length && !leaves.length) {
             readout.appendChild(el('span', { className: 'chart-readout-head is-idle' },
-                                   'click the surface to cut it'));
+                                   'click the surface to cut it and read the cell'));
             return;
         }
-        // Two lines: where the cut is, then what it leaves. One row would put
-        // the position of the cut and the answer it produces in the same
-        // sentence, and they are not the same kind of thing.
-        for (const group of [where, leaves]) {
+        // Three lines: the cell clicked, where the cut is, then what it leaves.
+        // One row would put the position of the cut and the answer it produces
+        // in the same sentence, and they are not the same kind of thing.
+        for (const group of [at, where, leaves]) {
             if (!group.length) continue;
             const line = el('div', { className: 'chart-readout-line' });
             for (const row of group) {
@@ -951,10 +1095,15 @@ function draw(container, tools, host, doc, spec = null) {
                     className: 'chart-readout-item',
                     title: row.hint || row.name,
                 });
-                chip.appendChild(el('i', {
-                    className: 'chart-readout-swatch',
-                    style: `background:${row.color}`, 'aria-hidden': 'true',
-                }));
+                // The cell reading carries no color, and should not: the cut
+                // lines have swatches because they name curves drawn on the
+                // wall, while these three name a point the reader put there.
+                if (row.color) {
+                    chip.appendChild(el('i', {
+                        className: 'chart-readout-swatch',
+                        style: `background:${row.color}`, 'aria-hidden': 'true',
+                    }));
+                }
                 chip.appendChild(el('span', { className: 'chart-readout-name' }, row.name));
                 chip.appendChild(el('b', {}, row.value));
                 line.appendChild(chip);
@@ -1063,6 +1212,39 @@ function draw(container, tools, host, doc, spec = null) {
      * mesh, and here that means the button does nothing. Saving a file with no
      * triangles in it would be worse: it opens, and it is empty.
      */
+    /**
+     * Save the chart on screen as a PNG.
+     *
+     * Parameters
+     * ----------
+     * stem : str
+     *     The file stem, without the extension.
+     *
+     * Notes
+     * -----
+     * `getDataURL` returns exactly what is on screen, including every
+     * interaction since it was drawn, which is the same argument `saveMesh`
+     * makes below. `pixelRatio: 2` so the file is worth pasting into a document
+     * rather than being a screenshot of a 400px canvas, and an explicit white
+     * ground because the canvas itself is transparent and a PNG of a chart on
+     * nothing reads as a chart on black in half the viewers that open it.
+     *
+     * This moved here from `main.js` at a131 with the header menu item it used
+     * to back. There it read a hard coded trio of chart handles and so missed
+     * the Pricing group's kappa curves; here it is the mount's own chart, so
+     * every chart that draws a strip can save itself.
+     */
+    function savePng(stem) {
+        const chart = renderer && renderer.chart;
+        if (!chart) return;
+        const url = chart.getDataURL({ type: 'png', pixelRatio: 2,
+                                       backgroundColor: '#fff' });
+        const link = el('a', { href: url, download: `${stem}.png` });
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+    }
+
     function saveMesh(format) {
         const source = drawn && drawn.meshSource;
         if (!source) return;
@@ -1235,9 +1417,17 @@ function draw(container, tools, host, doc, spec = null) {
             if (!box || !Array.isArray(value) || value.length < 2) return;
             if (!Number.isFinite(value[0]) || !Number.isFinite(value[1])) return;
             setWalk(false);
+            // The cell reading, into the strip. The same gesture that places the
+            // cuts, because the reader is pointing at one place and asking two
+            // questions about it: what is here, and what does a cut through here
+            // leave. Updating on click rather than live is what the author asked
+            // for and is also what the picking cost allows.
+            pointer = value;
             const patch = cutFractions(box, value[0], value[1]);
             // A click with no cut showing has to show one, or it does nothing
-            // visible and reads as a dead gesture.
+            // visible and reads as a dead gesture. Kept even though the reading
+            // now always gives a click something visible to do: changing it is a
+            // separate behavior decision.
             if (view.cut === 'none') patch.cut = 'all';
             setView(patch);
             renderTools();
@@ -1287,7 +1477,12 @@ function draw(container, tools, host, doc, spec = null) {
             onWindow: spec ? () => { if (ready) refetch(); } : null,
             walking: () => walking,
             onWalk: () => setWalk(!walking),
-            onExport: (format) => saveMesh(format),
+            // One entry point for every format the Download menu offers. The
+            // picture is the chart's own canvas, the three meshes are the drawn
+            // height field, and the strip does not have to know which is which.
+            onExport: (format) => (format === 'png'
+                ? savePng(fileStem(doc.title || (spec && spec.chart) || 'chart'))
+                : saveMesh(format)),
             canExport: () => Boolean(drawn && drawn.meshSource),
             onSpaceMouse: () => (spacemouse.isConnected()
                 ? spacemouse.disconnect()
@@ -1472,9 +1667,7 @@ function overridesFor(doc) {
     return grid
         ? ((ctx) => (ctx.logZ === undefined
             ? null
-            : surfaceOverrides({ ...ctx,
-                                 lights: view.lights !== false,
-                                 tips: view.tips !== false })))
+            : surfaceOverrides({ ...ctx, lights: view.lights !== false })))
         : null;
 }
 

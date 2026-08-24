@@ -254,7 +254,10 @@ and the standing REMINDER below about what is worth plotting.
           hints (→ 1.0.0a126). `trailer=True`, and tags come back with them.
     - [x] 9 [Tooltips-Stay-On-Screen] the `data-why` footnote clamps to the
           viewport (→ 1.0.0a130). `utils/tip.js` writes `--tip-shift`.
-    - [ ] 10 [Surface-Strip-Punchups] four fixes to the 3-D control strip.
+    - [x] 10 [Surface-Strip-Punchups] four fixes to the 3-D control strip
+          (→ 1.0.0a131), all four in one bump. The Download menu carries
+          PNG and is drawn on every chart, so "Download plot" leaves the
+          header menu.
     - [x] 11 [Counter-Follows-The-Example-Walk] the `[m/n]` readout numbers the
           example walk (→ 1.0.0a129). The counter follows the last press; the
           two buttons stay bound to history.

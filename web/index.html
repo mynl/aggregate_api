@@ -128,12 +128,13 @@
                             <li><hr class="dropdown-divider"></li>
                             <li><button type="button" class="dropdown-item" data-bs-toggle="offcanvas" data-bs-target="#helpPanel">Help</button></li>
                             <li><button type="button" class="dropdown-item" id="dl-agg">Download models</button></li>
-                            <!-- The chart on screen, as it is drawn. Labeled by
-                                 what it does rather than by a format: it has
-                                 saved a PNG since the matplotlib route left,
-                                 and a 3-D relief is a WebGL canvas, so there is
-                                 no vector form of it to promise. -->
-                            <li><button type="button" class="dropdown-item" data-plot-download>Download plot</button></li>
+                            <!-- "Download plot" stood here through a130. It is
+                                 the chart's own Download menu now, in the strip
+                                 beside the picture, which is where the reader is
+                                 looking and which reaches every chart: the
+                                 handler behind this item read a hard coded trio
+                                 of chart handles, so the Pricing group's kappa
+                                 curves could never be saved from it. -->
                             <li><button type="button" class="dropdown-item" data-bs-toggle="offcanvas" data-bs-target="#aboutPanel">About</button></li>
                         </ul>
                     </div>

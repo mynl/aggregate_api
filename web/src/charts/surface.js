@@ -20,6 +20,7 @@
 // tooltip dressing, lighting, and the camera.
 
 import { echarts, houseStyle, fade, VIRIDIS } from './theme.js';
+import { makeCellReader } from './cell-reading.js';
 import { fmt } from '../utils/format.js';
 
 let pending = null;
@@ -144,45 +145,30 @@ function tick(v) {
 export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
                                    quantized = false, side = 420,
                                    hostHeight = 480, camera = null,
-                                   lights = true, tips = true } = {}) {
+                                   lights = true } = {}) {
     const s = houseStyle();
-    // Read the height to the precision the wire carried and no further. The
-    // log-quantized encoding recovers a density to about four significant
-    // figures, so printing five would be inventing a digit; float32 is exact
-    // to seven. `digits` comes off the document's declared dtype rather than
-    // from a constant here, which is what keeps the two in step when the
-    // default encoding changes.
-    const readHeight = (v) => Number(v).toExponential(Math.max(0, digits - 1));
+    // `digits` and `quantized` are passed straight through to the cell reader,
+    // which is where the precision argument now lives: read the height to the
+    // precision the wire carried and no further. Both come off the document's
+    // declared dtype rather than from a constant, which is what keeps the
+    // reading in step with the encoding.
     return {
         // No `...baseOption()`: that carries a 2-D grid, legend and axisPointer,
         // none of which a grid3D understands.
         color: s.colors,
         textStyle: { fontSize: Math.max(10, s.font_size + 2), color: s.text_color },
         animation: false,
-        tooltip: {
-            // The strip above the chart carries the cut's numbers whatever this
-            // says: it is the reading, and it does not move or cover anything.
-            // This is the hover reading of a single cell, which is a different
-            // question and one a reader may not want asked every time the
-            // cursor crosses the box.
-            show: tips,
-            confine: true,
-            backgroundColor: 'rgba(255,255,255,.96)',
-            borderColor: s.grid_color,
-            textStyle: { fontSize: 11, color: s.text_color },
-            formatter: (p) => {
-                const [x, y, h] = p.value;
-                const density = logZ ? 10 ** h : h;
-                // A cell resting on the log floor is one the model puts nothing
-                // in; saying "1e-12" there would be reporting the floor as data.
-                const height = (logZ && h <= zMin)
-                    ? `&lt; ${(10 ** zMin).toExponential(0)}`
-                    : readHeight(density);
-                return `${xName} ${fmt(x)}<br>${yName} ${fmt(y)}`
-                    + `<br>density <b>${height}</b>`
-                    + (quantized ? '<br><i>height is quantized</i>' : '');
-            },
-        },
+        // One clicked cell, as rows the fixed strip draws. A function on the
+        // option rather than a string, so the strip can draw chips the way it
+        // draws its other two lines; `meshSource` and `readings` ride the same
+        // way. The reading itself is a leaf module, so it can be tested outside
+        // a browser: see `cell-reading.js` for what it decides and why.
+        cellReader: makeCellReader({ xName, yName, logZ, zMin, digits, quantized }),
+        // No tooltip. Retired at a131 with the `tips` control that offered it:
+        // on a 3-D scene a tooltip follows the cursor over the thing it is
+        // describing and hides it, and with the reading in a fixed place above
+        // the chart there is no second question for a button to ask.
+        tooltip: { show: false },
         // Two maps: the surface's, which draws the colorbar, and the floor
         // image's, which reads the same scale through the fourth column and
         // shows no bar of its own. Merged element-wise onto the pair the

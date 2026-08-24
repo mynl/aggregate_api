@@ -4,6 +4,77 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a131
+
+**[Surface-Strip-Punchups] four fixes to the 3-D control strip.** Item 10 of
+`dev/plan-punchups-aug-24-API.md`, all four in one bump.
+
+**[Surface-Single-Panel-Group] the log button joins the strip.** `renderControls`
+drew one `.exhibit-group.exhibit-group-panel` per panel, and that class is
+`flex: 1 1 0; justify-content: center` so that with two panels each group sits
+over its own half of the canvas, with `.exhibit-group + .exhibit-group` ruling
+between them. A surface document has one panel, so its group took all the spare
+width, centered a single `log y` in the middle of it, and was cut off from
+everything else by a rule. The layout was doing exactly what it was built to do,
+on a case it was not built for. A single panel's buttons now go into the document
+group instead, at the front, which keeps the house order of axis readings before
+realizations. Not a surface special case: with one panel there is nothing for the
+half and half layout to align to, and a labeled column of one is the
+disconnected look on any chart.
+
+**[Surface-Download-Menu] one Download button, four formats.** The `mesh` label
+and the three bare `.glb` / `.obj` / `.stl` buttons sitting mid strip become one
+`Download` dropdown, second to last, before `reset`, which keeps the end on the
+grounds a117 recorded. The three per format sentences become the items' own
+hover text, so nothing written is lost, and the shared sentence about the file
+being the box on screen moves to the button.
+
+**PNG joins it** (author ruling, 2026-08-24), and the header More menu's
+"Download plot" comes out. The menu is meant to be the one place a drawing
+leaves the app, and three mesh formats without the picture is an odd set. So the
+menu is drawn on **every** chart, not only on a relief: PNG always, the three
+mesh writers while a surface is the realization on screen. That is what lets the
+header item go without loss, and it fixes something that item never could: the
+`liveChart` helper behind it mapped the active group to one of three chart
+handles, so the Pricing group's kappa curves had no way to be saved at all. The
+strip is rendered by every chart mount. `liveChart` had no callers left and is
+gone with the item.
+
+**[Surface-Puck-Button-Width] the puck button stops growing.** Its label became
+`spacemouse: SpaceMouse Wireless` on connect, which signaled the state twice and
+grew the button enough to rewrap the strip, so connecting a puck moved every
+control beside it. The label is always `spacemouse` now; `.active` carries
+connected, which is the fill the rest of the strip already uses for on; and the
+device name moves into the title, whose connected branch reads "Connected to
+SpaceMouse Wireless." A reader who wants to know which puck asks the button, and
+one who wants to know whether it is on sees the color.
+
+**[Surface-Reading-In-The-Strip] the cell reading moves to the fixed legend.**
+No floating tooltip on the surface, per the author. A tooltip on a 3-D scene
+follows the cursor over the very thing it is describing and hides it, and it
+asks its question every time the cursor crosses the box. `writeCutReadout` now
+draws a third group, the clicked cell, ahead of where the cut is and what it
+leaves, from the `[x, y, h]` the click handler already received. Placeholders
+from the first paint, names present and values blank, so the strip holds its
+height and nothing below the chart moves on the first click. The `tips` control
+is retired from `SURFACE_CONTROLS`, `SURFACE_KEYS` and the view defaults, rather
+than repurposed: with the reading in a fixed place there is no second question
+for a button to ask, and a stored `tips` key in a reader's persisted view is
+harmless once nothing reads it.
+
+The reading itself is a new leaf module, `charts/cell-reading.js`, on the
+`reading-map.js` pattern: it imports one formatter and nothing else, so it can
+be tested outside a browser, which it could not be inside `surface.js` because
+that imports `theme.js` and so `echarts`. Seven tests pin what it decides,
+including the two careful cases the tooltip made and this keeps: a cell resting
+on the log floor reads `< 1e-12` rather than reporting the floor as data, and a
+quantized encoding says so rather than implying four significant figures are
+seven.
+
+A click with `cut === 'none'` still forces `cut: 'all'`. With the reading in the
+strip a click now always does something visible, so that forcing could go, but
+changing it is a separate behavior decision.
+
 ## 1.0.0a130
 
 **[Tooltips-Stay-On-Screen] the `data-why` footnote clamps to the viewport.**
