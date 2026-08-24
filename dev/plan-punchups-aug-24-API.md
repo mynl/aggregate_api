@@ -678,3 +678,32 @@ there so the round trip is not checked only at the end of a program.
 **Also cleaned:** the five legacy ` -- ` glosses in `routes/decl.py`, per the
 house rule that they go as their file is next edited rather than in one
 mechanical sweep.
+
+### Item 3, at `1.0.0a127`
+
+Executed as written. `.editor-hist` takes `align-items: flex-end`, `.hist-step`
+loses its border and background and keeps its 2.1rem box as an invisible hit
+area with `justify-content: flex-end`, `:disabled` greys by color alone, and the
+glyphs become `bi-arrow-up-circle` and `bi-arrow-down-circle`.
+
+**The circles were taken over the chevrons**, which the plan offered as the
+lighter alternative to decide by looking at. The circles are what the plan's own
+argument points to: the mark above them is `bi-x-circle`, and a circled arrow
+matches its family, weight and enclosed silhouette where a chevron would put a
+third shape in a column of three. Recorded rather than silently chosen, since
+the plan asked for a look.
+
+**Divergence, one.** The plan named the border, the background and the two
+colors and did not mention the type size. `.hist-step` was `.95rem` against
+`.editor-clear`'s `1.15rem`, which is invisible while the glyph sits inside a
+box and obvious the moment the box comes off: three bare marks in a column at
+two sizes do not read as one set. `.hist-step` now carries `1.15rem`, matching
+the icon it was told to follow. This is the plan's stated goal, "the same
+family, weight and optical size", applied to the one property it did not
+enumerate.
+
+**Watch, answered.** The a115 comment's arithmetic survives the change. The
+height is declared (`2.1rem`) rather than derived, so dropping the 1px border on
+each side changes what is painted from 33.6px to 31.6px and leaves the laid out
+box, and therefore the stack total, where it was. The comment now records that
+rather than being left quoting numbers about a box that had moved under it.

@@ -240,8 +240,8 @@ and the standing REMINDER below about what is worth plotting.
           `tags{}`, and the strip prints the note off the item's own fields.
     - [x] ~~2~~ withdrawn 2026-08-24: units of a `port` or a `bivariate` are
           not entries, and nothing is owed upstream.
-    - [ ] 3 [Editor-Margin-Controls] the walk buttons align right and lose
-          their boxes.
+    - [x] 3 [Editor-Margin-Controls] the walk buttons align right and lose
+          their boxes (→ 1.0.0a127). Circled arrows, bare, at the icon's size.
     - [ ] 4 [Clear-Twice-Clears-History] a second press of the clear icon
           empties the store.
     - [ ] 5 [Example-Ring-Follows-Search] the ring follows the search box as

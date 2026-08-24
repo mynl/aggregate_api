@@ -199,15 +199,23 @@
                  The wrapper keeps `pointer-events: none` so the editor's right
                  margin still takes a click through the gaps; only the two
                  buttons take it back. Both are present from the first paint,
-                 greyed, so nothing moves when the first program lands. -->
+                 greyed, so nothing moves when the first program lands.
+
+                 **Circled arrows, not bare ones, and that is about the set
+                 rather than about the arrow.** These two sit under
+                 `bi-x-circle`, and at a126 they were bare `bi-arrow-up` /
+                 `bi-arrow-down` inside bordered boxes, so the margin held an
+                 icon and then a widget. Same family, same weight, same optical
+                 size makes the three read as one column of marks. The boxes came
+                 off in the same edit; see `.hist-step`. -->
             <div class="editor-hist" id="history-nav">
                 <button type="button" class="hist-step" id="history-prev"
                         aria-label="step back through your history" disabled>
-                    <i class="bi bi-arrow-up" aria-hidden="true"></i></button>
+                    <i class="bi bi-arrow-up-circle" aria-hidden="true"></i></button>
                 <span class="editor-pos" id="history-pos" aria-live="polite"></span>
                 <button type="button" class="hist-step" id="history-next"
                         aria-label="step forward through your history" disabled>
-                    <i class="bi bi-arrow-down" aria-hidden="true"></i></button>
+                    <i class="bi bi-arrow-down-circle" aria-hidden="true"></i></button>
             </div>
         </div>
 

@@ -4,6 +4,35 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a127
+
+**[Editor-Margin-Controls] the walk buttons align right and lose their boxes.**
+Item 3 of `dev/plan-punchups-aug-24-API.md`, all of it in `site.css` and two
+`<i>` classes.
+
+The editor's right margin holds three marks: the clear icon, then the two walk
+buttons under it. The icon was a bare glyph pinned to `right: 1rem` and the
+buttons were 2.1rem boxed controls with a border and a fill, centered in the
+column, so none of the three right edges agreed and the pair read as a widget
+bolted under an icon. `.editor-hist` now takes `align-items: flex-end`, so the
+buttons and the `[m/n]` readout share the icon's right edge, and `.hist-step`
+drops its border and background and follows `.editor-clear` instead:
+`var(--mut)`, going to `var(--ink)` on hover. `:disabled` greys by
+`color: var(--line)` alone, which is what its own comment already said the
+greying should be. The glyphs become `bi-arrow-up-circle` and
+`bi-arrow-down-circle`, the same family, weight and optical size as the
+`bi-x-circle` above them, so the three stack as one set of marks.
+
+**The 2.1rem hit area is kept on purpose.** The a115 comment computes the stack
+against the editor's six line floor and records why 33.6px was chosen against
+Apple's 44px guidance, and none of that reasoning is about whether the target is
+outlined. The declared height is unchanged, so the arithmetic still lands near
+the same 128px; the comment now says so rather than being left quoting numbers
+for a box that had changed.
+
+Nothing in `main.js` moved. The `title` strings, the `aria-label`s and the
+disabled logic are all as they were.
+
 ## 1.0.0a126
 
 **[Reformat-Keeps-Trailer] Reformat stops deleting the note and the hints.**
