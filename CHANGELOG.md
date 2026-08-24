@@ -4,6 +4,63 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a132
+
+**[Example-Load-Strips-Trailer] the picked entry loses its note and tags, and
+the strip prints the note anyway.** Item 1 of
+`dev/plan-punchups-aug-24-API.md`. A program loaded from the Examples menu now
+arrives in the editor with its `note{}` and `tags{}` stripped. A reader watching
+the app should see the program, not the program plus its filing metadata, and
+the prose belongs on the status strip where prose goes.
+
+**`hints{}` stays, and that is not negotiable.** Sixteen library entries pin a
+grid, a reference to one of them means one fixed thing only while the clause
+travels, and a program without it rebuilds on whatever grid the next build
+chooses.
+
+**This is not a revert of a119.** That change put the clauses on deliberately,
+and the reason is still true: an object carries the note and tags its own
+program declares, so a stripped entry builds an object with neither and the
+strip has nothing to print. The fix is to keep the strip fed on a different
+channel rather than to put the clauses back. The picked item already carries
+`note` and `tags` as fields, which is what the menu row reads, so the SPA takes
+them from there.
+
+Server side, `examples.py` gains `_strip_filing_clauses` and a module constant
+`_FILING_CLAUSES`. The pattern is exact rather than approximate: `decl.lark`
+lines 830 to 832 define the trailer terminals as `/note\{[^}]*\}/`,
+`/hints\{[^}]*\}/` and `/tags\{[^}]*\}/`, so a body cannot contain a closing
+brace and `[^}]*` is the grammar's own rule and not a guess at it. It is
+documented as mirroring those three, the way `web/src/decl-keywords.json` is
+documented as mirroring `parser_errors._TERMINAL_LABELS`, which puts it under
+agreement 6 of the oversight charter: a grammar change to the trailer gets
+checked against it.
+
+**The whitespace tidies itself.** The pattern carries a leading `\s*`, so a
+clause on its own line takes the newline and indent in front of it and the line
+goes with it, while a clause trailing one that also carries `hints{}` takes the
+single space in front of it and leaves no double space. Nothing else on the line
+is touched, including any alignment the file wrote inside a bracketed list. One
+`re.sub` pass, no second cleanup, verified over all 151 shipped entries: no
+blank lines, no trailing spaces, and the sixteen `hints{}` intact.
+
+App side, the strip's note slot gains a fourth tenant, the library caption,
+holding the picked item's `note` and `tags`. `pickExample` and `exampleStep`
+both record it before the program is loaded, so the caption is on screen the
+moment the program is rather than one build later. `renderNote` prefers the
+object's own declaration and falls back to the caption per field, so a reader who
+types their own `note{}` still sees theirs and the hand typed path is exactly as
+it was. `clearNote` no longer clears the caption: the three build derived
+tenants belong to one object and go on every build, while the caption belongs to
+the **program in the box** and has to survive being built. It is cleared in
+`onEdit` when the reader typed, which is the page's "the box holds something
+else now" hook.
+
+`ExampleItem` does not move and no consumer of the api loses anything; only
+`decl` changed. Three tests rewritten and two added, including a `port` case,
+where DecL binds the trailer directly after the name rather than at the end, so
+the removal cannot be accidentally anchored to the end of a program.
+
 ## 1.0.0a131
 
 **[Surface-Strip-Punchups] four fixes to the 3-D control strip.** Item 10 of

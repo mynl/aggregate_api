@@ -66,6 +66,7 @@ Returned shape mirrors :class:`aggregate_api.models.ExamplesResponse`::
 from __future__ import annotations
 
 import logging
+import re
 from functools import lru_cache
 from typing import Sequence
 
@@ -89,21 +90,62 @@ logger = logging.getLogger(__name__)
 PILL_NAMESPACES = ("kind", "topic", "role")
 
 
-# A tuple of trailer patterns stood here and is gone as of a120. It stripped
-# ``doc{{{...}}}``, then ``note{}``, then ``tags{}``, and every removal was for
-# a different reason, only the first of them good. In a stored program the
-# ``doc`` body was the preprocessor's base64 one-liner rather than the readable
-# text, so leaking it into the editor would have put an unreadable blob in front
-# of the reader; ``aggregate`` 1.0.0a301 retired the clause from the grammar
-# (a298 to a301, ``dev/done/plan-decommission-docs.md``), so there is nothing
-# left to catch.
+# The two filing clauses a library entry loses on the way to the editor, as the
+# grammar's own terminals rather than as a guess at them. ``decl.lark`` lines 830
+# to 832 define the trailer as ``/note\{[^}]*\}/``, ``/hints\{[^}]*\}/`` and
+# ``/tags\{[^}]*\}/``: the body cannot contain a closing brace, so ``[^}]*`` is
+# exact here and not an approximation.
 #
-# ``note{}`` and ``tags{}`` were dropped on the theory that the menu item carries
-# both in their own fields, which it does, and that this made the clauses
-# redundant, which it did not: an object carries the note and tags **its own
-# program** declares, so an entry loaded into the editor without them built an
-# object with none and the status strip had nothing to print. The fields feed the
-# menu row before anything is built; the clauses are what survive the build.
+# **This mirrors those three terminals**, the way ``web/src/decl-keywords.json``
+# is documented as mirroring ``parser_errors._TERMINAL_LABELS``, which puts it
+# under agreement 6 of the oversight charter: a grammar change to the trailer is
+# checked against this constant.
+#
+# ``\s*`` before the clause is what does the tidying, and it is why no second
+# pass is needed. A clause on its own line takes the newline and the indent in
+# front of it, so the line goes with it; a clause trailing one that also carries
+# ``hints{}`` takes the single space in front of it, so no double space is left
+# behind. Everything else in the line, including any alignment the file wrote
+# inside a bracketed list, is untouched.
+_FILING_CLAUSES = re.compile(r"\s*(?:note|tags)\{[^}]*\}")
+
+
+def _strip_filing_clauses(text: str) -> str:
+    """Return `text` without its ``note{}`` and ``tags{}`` clauses.
+
+    Parameters
+    ----------
+    text : str
+        A DecL program, as its file spells it.
+
+    Returns
+    -------
+    str
+
+    Notes
+    -----
+    **``hints{}`` stays, and that is not negotiable.** Sixteen library entries
+    pin a grid, and a reference to one of them means one fixed thing only while
+    the clause travels with the program. A program without it rebuilds on
+    whatever grid the next build chooses.
+
+    **The note and the tags go because they are filing metadata in front of a
+    reader.** Someone watching the app should see the program, not the program
+    plus its catalog card, and the prose belongs on the status strip where prose
+    goes. The strip is fed from the menu item's own ``note`` and ``tags`` fields
+    instead, which is a different channel and one that does not require the
+    clauses to survive a build.
+
+    This deliberately differs from what happens when a reader types a ``note{}``
+    themselves, which is kept and shown. The asymmetry is accepted (author,
+    2026-08-24): one is the library filing an entry, the other is a reader saying
+    something about their own program.
+
+    One pass, because ``re.sub`` scans the original string: two clauses in a row
+    are both matched against the text as it stands, so the second is not left
+    holding whitespace the first exposed.
+    """
+    return _FILING_CLAUSES.sub("", text).strip()
 
 # The ``source`` marking an entry the api itself built. Every object built
 # through ``POST /v1/objects`` is added to the underwriter's recipe base, so
@@ -147,9 +189,22 @@ def _decl_of(kind: str, name: str, recipe) -> str:
     ``Recipe.as_read`` (``aggregate`` 1.0.0a320) is the entry's DecL exactly as
     it stands in ``library.agg``: laid out over several lines, indented as
     written, comments and the terminating ``;`` removed, the trailer kept. It is
-    what this serves whenever it is there, which is every library entry. It is
-    empty only for a session build, which never had a file to come from, and
-    that is what the writer pair below is still here for.
+    what this serves whenever it is there, which is every library entry, **less
+    its ``note{}`` and ``tags{}``**. It is empty only for a session build, which
+    never had a file to come from, and that is what the writer pair below is
+    still here for.
+
+    **Why the filing clauses come off**, since a119 and a120 deliberately put
+    them on and the reasoning for that is recorded below. Both are true at once:
+    an object carries the note and tags its own program declares, so a stripped
+    entry builds an object with neither, *and* a reader watching the app should
+    see the program rather than the program plus its catalog card. The way out
+    is not to undo a119, it is to feed the status strip on a different channel.
+    The menu item already carries ``note`` and ``tags`` as fields, and the SPA
+    now reads them from there when the object declares none of its own. So the
+    clauses can go and nothing on screen is lost.
+
+    ``hints{}`` is untouched. See :func:`_strip_filing_clauses`.
 
     **Why the file's own text rather than the canonical render.**
     ``spec_to_decl`` then ``format_program`` round trips through the spec, and
@@ -210,7 +265,7 @@ def _decl_of(kind: str, name: str, recipe) -> str:
     """
     as_read = (getattr(recipe, "as_read", "") or "").strip()
     if as_read:
-        return as_read
+        return _strip_filing_clauses(as_read)
     text = ""
     try:
         text = spec_to_decl(getattr(recipe, "spec", None), kind, name) or ""
@@ -232,11 +287,18 @@ def _entry(kind: str, name: str, recipe) -> dict:
     but nothing guarantees it, so a missing note serializes as ``None`` and every
     consumer treats that as ordinary rather than as a defect.
 
-    ``note`` and ``tags`` each appear twice over, in their own field and inside
-    ``decl``, and the two copies are not redundant. The fields are what the menu
-    row and the search index read, before anything is built; the clauses inside
-    the program are what make the built object carry them, so the status strip
-    can print them afterward.
+    ``note`` and ``tags`` are served **only** as fields. They were also inside
+    ``decl`` from a119 to a125, on the argument that the clauses are what make a
+    built object carry them so the status strip can print them afterward. That
+    was true and is no longer the arrangement: the clauses are filing metadata,
+    and a reader watching the app should see the program rather than the program
+    plus its catalog card, so they are stripped and the strip reads these fields
+    instead. See :func:`_strip_filing_clauses`.
+
+    So these two fields are now load bearing rather than a convenience: they are
+    the only channel by which an entry's prose reaches the page. Nothing is lost
+    from the payload, and no consumer of the api loses anything either; only
+    ``decl`` changed.
     """
     note = getattr(recipe, "note", "") or ""
     tags = list(getattr(recipe, "tags", ()) or ())

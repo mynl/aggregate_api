@@ -880,3 +880,45 @@ behavior decision and this item is about where numbers are printed.
 **Verified beyond the suites**: `npm run build` completes. The strip's own
 behavior, the single group fold and the three line readout, is not unit tested
 and cannot be from node; it needs a look in the browser at a `bvagg`.
+
+### Item 1, at `1.0.0a132`
+
+Executed as written on both sides. `_FILING_CLAUSES` is documented as mirroring
+`decl.lark` 830 to 832, which were checked against the LIB tree and are spelled
+exactly as the plan quotes them.
+
+**Divergence one: the whitespace tidy is the pattern, not a second pass.** The
+plan asks to "strip trailing blanks and re-collapse runs of spaces on the
+affected lines only, then `.strip()`". Putting `\s*` in front of the clause in
+the pattern does the whole job in one `re.sub`, and does it better: collapsing
+runs of spaces on an affected line would also collapse any alignment the file
+wrote inside a bracketed list on that line, which is exactly the kind of
+spelling `as_read` exists to preserve. Verified over all 151 shipped entries:
+no blank lines, no trailing spaces, no doubled spaces, and the sixteen `hints{}`
+intact.
+
+**Divergence two: `exampleStep` needed the caption too, and the plan says it
+would not.** The plan states that the menu, Ctrl+K and the Ctrl+Shift ring "all
+three go through `pickExample` / `loadExample`, so all three inherit it". The
+first two do; `exampleStep` calls `loadExample(items[cursor].decl)` directly and
+never touches `pickExample`. Left as the plan describes it, walking the library
+with the arrows would have stripped the clauses and set no caption, so the strip
+would have gone silent on exactly the path the reader uses to browse. The
+caption assignment is a small `captionExample(item)` helper called from both.
+
+**Divergence three, scope: three tests rewritten and two added.**
+`test_example_decl_carries_its_whole_trailer` and
+`test_a_library_entry_builds_an_object_that_keeps_its_trailer` asserted the a119
+behavior this reverses and had to be rewritten to assert the opposite; the
+second keeps its `port` parametrization, which is the case the plan calls for.
+Two are new: one that the fields still carry what the clauses did, so the
+removal is provably lossless, and one that the removal leaves no whitespace
+behind, asserted over the whole shipped library because that failure is
+cosmetic, silent, and would reach the editor.
+
+**A correction to the plan's reading of the tests.** The plan asks for "an entry
+with no trailer is byte identical to its `as_read`", which is not testable
+through the api: `as_read` is not served, only `decl` is, so the test would have
+to reach into `aggregate` to fetch the original. The property that matters and
+is testable is the one written instead, that the declaration head and body
+survive intact and no whitespace is left behind.

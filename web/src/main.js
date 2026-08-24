@@ -110,6 +110,13 @@ const editor = createEditor($('editor-host'), {
             // the readout goes back to describing the history. A `setText` the
             // app made is the walk itself, example or history, and must not.
             walkMode = 'history';
+            // The library caption goes for the same reason: it described the row
+            // that was in the box, and the box now holds something else. Guarded
+            // so an ordinary keystroke does not redraw the strip.
+            if (_note.caption) {
+                _note.caption = null;
+                renderNote();
+            }
         }
         renderHistoryNav();
     },
@@ -496,9 +503,26 @@ function noteDerivation(text) {
  *
  * `tags` and `declared` are the program's own `tags{}` and `note{}`, verbatim:
  * how the author of the declaration classified it and what they said about it,
- * whether they typed it in the box or picked it out of the examples menu. They
- * are one tenant between them, on one line, tags first as chips and the note
- * running on after them.
+ * as the reader typed it in the box. They are one tenant between them, on one
+ * line, tags first as chips and the note running on after them.
+ *
+ * `caption` is the library's, and it is the fourth tenant, added at a132. A
+ * program picked out of the Examples menu arrives with its `note{}` and
+ * `tags{}` stripped, because filing metadata in front of a reader is not what
+ * anyone is there to look at, so the prose reaches the strip on this channel
+ * instead: the picked item's own `note` and `tags` fields, which the menu row
+ * already reads. It is drawn in the same slot and looks identical, which is the
+ * point.
+ *
+ * **`declared` wins over `caption`.** A reader who types their own `note{}`
+ * over a loaded example sees theirs, which keeps the hand typed path exactly as
+ * it was.
+ *
+ * **They have different lifetimes**, which is why the caption is not simply
+ * assigned to `declared`. The three build derived tenants belong to one object
+ * and are cleared on every build; the caption belongs to the **program in the
+ * box** and survives being built, so the strip still says what the example is
+ * once it has run. It goes when the reader types over it.
  * `derivation` is what Sharpen or PnL just did, in the library's own words.
  * `warnings` is what the library said while building, at WARNING and above:
  * a splice reaching below zero, a clause ignored, a grid clipping the tail.
@@ -518,20 +542,27 @@ function noteDerivation(text) {
  * cost a `/meta` fetch to draw; the strip stands under all six and is already
  * holding the build response that carries both fields.
  */
-const _note = { tags: [], declared: '', derivation: '', warnings: [] };
+const _note = { tags: [], declared: '', derivation: '', warnings: [],
+                caption: null };
 
 function renderNote() {
     const line = $('summary-note');
     if (!line) return;
     empty(line);
-    if (_note.tags.length || _note.declared) {
+    // The object's own declaration first, the library's caption behind it. Read
+    // per field rather than per source, so a program that declares tags and no
+    // note still picks the caption's sentence up.
+    const caption = _note.caption || {};
+    const tags = _note.tags.length ? _note.tags : (caption.tags || []);
+    const declared = _note.declared || caption.note || '';
+    if (tags.length || declared) {
         // One block, so the chips and the sentence wrap as one paragraph rather
         // than the note starting a line of its own under a short row of tags.
         const own = el('span', { className: 'note-declared' });
-        for (const tag of _note.tags) {
+        for (const tag of tags) {
             own.appendChild(el('span', { className: 'note-tag' }, tag));
         }
-        if (_note.declared) own.appendChild(el('span', {}, _note.declared));
+        if (declared) own.appendChild(el('span', {}, declared));
         line.appendChild(own);
     }
     if (_note.derivation) line.appendChild(el('span', {}, _note.derivation));
@@ -540,7 +571,14 @@ function renderNote() {
     }
 }
 
-/** Clear the note slot. Called on every build: a note belongs to one object. */
+/**
+ * Clear the note slot's build derived tenants. Called on every build.
+ *
+ * A note belongs to one object, which is why these three go on every build. The
+ * **caption** does not: it belongs to the program in the box, so a library entry
+ * that has just been built still says what it is. It is cleared where the box
+ * stops holding that program, which is `onEdit` when the reader typed.
+ */
 function clearNote() {
     _note.tags = [];
     _note.declared = '';
@@ -3129,9 +3167,31 @@ function loadExample(decl, formatted = true) {
 // two topics had a row in each group, so this resumed from the showing that was
 // clicked; each entry now has exactly one row, so there is one place to resume
 // from and `indexOf` finds it whichever surface handed the item over.
+/**
+ * Put a library entry's own prose in the strip's caption slot.
+ *
+ * Since a132 the served program has its `note{}` and `tags{}` stripped, so this
+ * field pair is the only channel by which the library's own words reach the
+ * page. Called before the program is loaded, so the caption is on screen the
+ * moment the program is rather than one build later, and it survives that build
+ * because `clearNote` leaves the caption alone.
+ *
+ * Both routes into the editor call it: the menu and the palette through
+ * `pickExample`, and the Ctrl+Shift ring through `exampleStep`, which loads the
+ * program itself rather than going through `pickExample`. The Help panel's
+ * sample is not a library entry and deliberately gets none.
+ *
+ * @param {object} item a row from `/v1/examples`, carrying `note` and `tags`.
+ */
+function captionExample(item) {
+    _note.caption = item ? { note: item.note, tags: item.tags || [] } : null;
+    renderNote();
+}
+
 function pickExample(item) {
     walkMode = 'examples';
     exampleRing.cursor = filteredExamples().indexOf(item);
+    captionExample(item);
     loadExample(item.decl);
     // Explicitly, rather than relying on the `setText` inside `loadExample` to
     // fire `onEdit`: picking the row the editor already holds changes no text
@@ -3237,7 +3297,9 @@ function exampleStep(dir) {
     else exampleRing.cursor = dir === 'prev' ? (at - 1 + n) % n : (at + 1) % n;
     // This press walked the library, so the readout describes the library.
     walkMode = 'examples';
-    loadExample(items[exampleRing.cursor].decl);
+    const item = items[exampleRing.cursor];
+    captionExample(item);
+    loadExample(item.decl);
     renderHistoryNav();
 }
 

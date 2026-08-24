@@ -236,8 +236,9 @@ and the standing REMINDER below about what is worth plotting.
       eleven item list, item 2 withdrawn the same day. Each item is self
       contained and takes its own bump. The author's numbering is kept, gap
       included, because that is how the items get named in conversation.
-    - [ ] 1 [Example-Load-Strips-Trailer] a picked entry loses `note{}` and
-          `tags{}`, and the strip prints the note off the item's own fields.
+    - [x] 1 [Example-Load-Strips-Trailer] a picked entry loses `note{}` and
+          `tags{}`, and the strip prints the note off the item's own fields
+          (→ 1.0.0a132). `hints{}` stays.
     - [x] ~~2~~ withdrawn 2026-08-24: units of a `port` or a `bivariate` are
           not entries, and nothing is owed upstream.
     - [x] 3 [Editor-Margin-Controls] the walk buttons align right and lose

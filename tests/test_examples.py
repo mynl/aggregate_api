@@ -154,31 +154,65 @@ def test_the_served_decl_is_the_file_text_not_a_re_render(client):
     assert "\n" in items["BasicBook"]["decl"]
 
 
-def test_example_decl_carries_its_whole_trailer(client):
-    """The served declaration keeps ``note{}`` and ``tags{}``.
+def test_example_decl_arrives_without_its_filing_clauses(client):
+    """The served declaration drops ``note{}`` and ``tags{}`` and keeps the rest.
 
-    ``Recipe.as_read`` keeps the trailer the file wrote, which is what makes the
-    built object carry the note and the tags its own program declares, so the
-    status strip has something to print. An entry served without them builds an
-    object with neither.
+    Filing metadata in front of a reader is not what anyone opened the app to
+    look at: they should see the program. The prose still reaches the status
+    strip, on the item's own ``note`` and ``tags`` fields rather than through the
+    built object, which is the whole of what a125 changed.
 
-    ``hints{}`` matters as much and travels the same way: a program without it
-    rebuilds on a different grid from the one the entry was written for.
+    ``hints{}`` stays, and that is not negotiable: a program without it rebuilds
+    on a different grid from the one the entry was written for.
+    """
+    # The words a DecL program can open with. Not the recipe ``kind``, which is
+    # a different vocabulary: a ``bvagg`` is declared ``bivariate``, or by one of
+    # the view keywords when it is a gross / ceded / net reading.
+    heads = {"agg", "port", "sev", "distortion", "dist", "pnl", "xpnl",
+             "bivariate", "grossceded", "grossnet", "netceded"}
+    hinted = 0
+    for item in client.get("/v1/examples").json()["items"]:
+        decl = item["decl"]
+        assert "note{" not in decl, item["name"]
+        assert "tags{" not in decl, item["name"]
+        # The removal is exact, so the declaration itself is untouched.
+        assert decl.strip(), item["name"]
+        assert decl.split()[0] in heads, \
+            f"{item['name']} opens with {decl.split()[0]!r}"
+        if "hints{" in decl:
+            hinted += 1
+    assert hinted > 10, "the shipped library pins a grid on about sixteen entries"
+
+
+def test_the_fields_still_carry_what_the_clauses_did(client):
+    """Stripping the clauses loses nothing: the fields are the channel now.
+
+    The two are served side by side, so a client that wants the prose has it
+    without parsing DecL, which is what makes the removal safe.
     """
     noted = tagged = 0
     for item in client.get("/v1/examples").json()["items"]:
-        decl = item["decl"]
         if item["note"]:
             noted += 1
-            assert f"note{{{item['note']}}}" in decl, item["name"]
-        else:
-            assert "note{" not in decl
+            assert isinstance(item["note"], str)
         if item["tags"]:
             tagged += 1
-            for tag in item["tags"]:
-                assert tag in decl, f"{item['name']} lost {tag}"
     assert noted > 100, "most of the shipped library carries a note"
     assert tagged > 100, "the shipped library is tagged throughout"
+
+
+def test_the_removal_leaves_no_whitespace_behind(client):
+    """A clause on its own line takes the line; one trailing another takes a space.
+
+    The pattern carries a leading ``\\s*`` so the tidying is the removal, with no
+    second pass. Asserted over the whole shipped library rather than on a case,
+    because the failure is cosmetic, silent, and would reach the editor.
+    """
+    for item in client.get("/v1/examples").json()["items"]:
+        for line in item["decl"].splitlines():
+            assert line.strip(), f"{item['name']} kept a blank line"
+            assert line == line.rstrip(), f"{item['name']} kept trailing space"
+        assert "\n\n" not in item["decl"], item["name"]
 
 
 @pytest.mark.parametrize(
@@ -186,16 +220,20 @@ def test_example_decl_carries_its_whole_trailer(client):
     [("agg", "BasicBook"), ("port", "BasicPortfolio"),
      ("distortion", "PHDistortion"), ("pnl", "PnLLoss")],
 )
-def test_a_library_entry_builds_an_object_that_keeps_its_trailer(client, kind, name):
-    """One of several kinds: note and tags reach the object, so the strip prints them.
+def test_a_library_entry_builds_and_declares_no_note_of_its_own(client, kind, name):
+    """One of several kinds: the entry builds, and the object carries no trailer.
 
-    The ``port`` case is the one worth having. DecL binds a trailer to the
-    declaration it follows, so a note written after the last unit belongs to that
-    unit and the portfolio's own note is empty. ``library.agg`` writes it
-    directly after the name, before the first unit, and this asserts that the
-    served text kept it there rather than trusting it, because the wrong
-    placement fails silently: the program parses, the object builds, and the
-    note is simply on something else.
+    The object having no note is the assertion, not a shortcoming. The strip is
+    fed from the item's ``note`` and ``tags`` fields, which is a channel that
+    does not require the clauses to survive a build, so the built object is free
+    of them and the reader sees the program rather than its catalog card.
+
+    **The ``port`` case is the one worth having**, and it is why this is
+    parametrized. DecL binds a trailer to the declaration it follows, so a
+    portfolio's own trailer sits directly after the name and before the first
+    unit rather than at the end of the program. If the removal were anchored to
+    the end of the text it would leave that one untouched, and the failure would
+    be silent: the program still parses and the object still builds.
 
     The ``bvagg`` kind is left out on cost, not on principle. Its entries build a
     joint grid, which is the slowest thing in the suite, and the placement rule
@@ -206,9 +244,12 @@ def test_a_library_entry_builds_an_object_that_keeps_its_trailer(client, kind, n
     item = items[name]
     assert item["note"], f"{name} is chosen because it carries a note"
     assert item["tags"], f"{name} is chosen because it carries tags"
-    body = client.post("/v1/objects", json={"decl": item["decl"]}).json()
-    assert body["note"] == item["note"]
-    assert sorted(body["tags"]) == sorted(item["tags"])
+    assert "note{" not in item["decl"] and "tags{" not in item["decl"]
+    r = client.post("/v1/objects", json={"decl": item["decl"]})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert not body["note"], f"{name} built an object carrying a note"
+    assert not body["tags"], f"{name} built an object carrying tags"
 
 
 def test_heroes_are_the_role_hero_entries(client):
