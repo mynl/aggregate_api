@@ -1039,6 +1039,12 @@ const LOADERS = {
     // Moved to Overview from More at a55, onto the exhibit route at a68.
     'overview:validation': () => loadExhibitLeaf('pane-overview', 'validation',
         ['overview', 'validation']),
+    // Moved to Overview from More at a125. Both halves of the key move: the
+    // pane id decides which pane the table is drawn into and the reading-map
+    // key decides where its reading is filed, so a half move would draw the
+    // Stats table into the More pane behind an Overview pill.
+    'overview:stats': () => loadExhibitLeaf('pane-overview', 'stats',
+        ['overview', 'stats']),
 
     'economics:ledger': () => loadExhibitLeaf('pane-economics', 'economic',
         ['economics', 'ledger']),
@@ -1069,7 +1075,6 @@ const LOADERS = {
     'bounds:pricing': () => showBoundsLeaf('pricing'),
     'bounds:allocation': () => showBoundsLeaf('allocation'),
 
-    'more:stats': () => loadExhibitLeaf('pane-more', 'stats', ['more', 'stats']),
     'more:density': () => {
         // `resolution: 'display'` here and nowhere else. The *plots* take every
         // grid point, because a binned atom is a lie; a *table* of 65,536 rows

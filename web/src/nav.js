@@ -70,22 +70,37 @@ export const NAV_GROUPS = {
                 why: 'a severity carries no summary frame',
                 hint: 'moments and key percentiles',
             },
-            tail: {
-                label: 'Tail',
-                exhibit: 'tail',
-                why: 'needs a full loss distribution, so an aggregate or a portfolio',
-                hint: 'VaR, TVaR and xsVaR by return period',
-            },
             // Moved up from More at a55. It answers "can I believe any of the
             // numbers above", which is the question a reader has while looking
-            // at them, not one worth walking into a specialist menu for. It
-            // sits after Tail because it is a verdict on what Plot, Summary
-            // and Tail just showed.
+            // at them, not one worth walking into a specialist menu for.
+            //
+            // It sat after Tail through a124, as a verdict on what Plot,
+            // Summary and Tail had just shown. It leads the moment pair now:
+            // Summary states the moments, Validation says whether to believe
+            // them, Stats breaks them out by component, and Tail is the one
+            // reading that leaves the body of the distribution behind.
             validation: {
                 label: 'Validation',
                 exhibit: 'validation',
                 why: 'needs computed moments',
                 hint: 'theoretical vs empirical moments; reads “not unreasonable” on a clean build',
+            },
+            // Moved up from More, the same move Validation made at a55 and for
+            // the same reason: it is a longer look at the row above it rather
+            // than a specialist frame, and its gating set is identical to
+            // Summary's and Validation's, so the move lights nothing new and
+            // darkens nothing. `dev/scripts/check-nav.mjs` asserts that.
+            stats: {
+                label: 'Stats',
+                exhibit: 'stats',
+                why: 'needs computed moments',
+                hint: 'frequency / severity / aggregate moments; raw moment rows are dropped',
+            },
+            tail: {
+                label: 'Tail',
+                exhibit: 'tail',
+                why: 'needs a full loss distribution, so an aggregate or a portfolio',
+                hint: 'VaR, TVaR and xsVaR by return period',
             },
         },
     },
@@ -230,12 +245,7 @@ export const NAV_GROUPS = {
     more: {
         label: 'More',
         leaves: {
-            stats: {
-                label: 'Stats',
-                exhibit: 'stats',
-                why: 'needs computed moments',
-                hint: 'frequency / severity / aggregate moments; raw moment rows are dropped',
-            },
+            // Stats left for Overview at a125, on the reasoning recorded there.
             density: {
                 label: 'Density',
                 hint: 'binned to a power-of-two display grid; copy / save from the grid',

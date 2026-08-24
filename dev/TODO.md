@@ -232,6 +232,32 @@ and the standing REMINDER below about what is worth plotting.
 
 ## Near term (get it healthy)
 
+- [ ] **Punchups, August 24** (`dev/plan-punchups-aug-24-API.md`). The author's
+      eleven item list, item 2 withdrawn the same day. Each item is self
+      contained and takes its own bump. The author's numbering is kept, gap
+      included, because that is how the items get named in conversation.
+    - [ ] 1 [Example-Load-Strips-Trailer] a picked entry loses `note{}` and
+          `tags{}`, and the strip prints the note off the item's own fields.
+    - [x] ~~2~~ withdrawn 2026-08-24: units of a `port` or a `bivariate` are
+          not entries, and nothing is owed upstream.
+    - [ ] 3 [Editor-Margin-Controls] the walk buttons align right and lose
+          their boxes.
+    - [ ] 4 [Clear-Twice-Clears-History] a second press of the clear icon
+          empties the store.
+    - [ ] 5 [Example-Ring-Follows-Search] the ring follows the search box as
+          well as the pills. The pill half landed with the examples dropdown
+          work; only the search needle is left.
+    - [x] 6 [Stats-Joins-Overview] and 7 [Overview-Leaf-Order] (→ 1.0.0a125).
+          One edit: Stats moves from More to Overview and the row reads Plot,
+          Summary, Validation, Stats, Tail.
+    - [ ] 8 [Reformat-Keeps-Trailer] Reformat stops deleting the note and the
+          hints.
+    - [ ] 9 [Tooltips-Stay-On-Screen] the `data-why` footnote clamps to the
+          viewport.
+    - [ ] 10 [Surface-Strip-Punchups] four fixes to the 3-D control strip.
+    - [ ] 11 [Counter-Follows-The-Example-Walk] the `[m/n]` readout numbers the
+          example walk.
+
 - [x] **Bounds was dark for every object** (→ 1.0.0a48). `can_bounds` and
       `can_allocate` reached the browser and were never copied onto the flags
       the rules read, so the group greyed everywhere while `check-nav.mjs`

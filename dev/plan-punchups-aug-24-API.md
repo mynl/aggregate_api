@@ -603,3 +603,53 @@ Each remaining item bumps the version and carries its own one paragraph
 CHANGELOG section under its label. Move this file to `dev/done/` when the last
 item that is going to land has landed, and note in `dev/TODO.md` whichever items
 the author defers.
+
+---
+
+## Execution notes
+
+Kept as the run proceeds, one entry per item, each recording what shipped and
+every divergence from what this file asked for. Started 2026-08-24 against API
+`1.0.0a124` and LIB `1.0.0a320`, both trees clean, the environment synced
+(`importlib.metadata` reports `a320` and `a124`, so the `seq` and `as_read`
+fields item 1 stands on are really installed).
+
+**Review, 2026-08-24: executable.** Every file, symbol and line number the plan
+names was checked against the tree on both sides. `decl.lark` lines 830 to 832
+carry `NOTE.3`, `HINTS.3` and `TAGS.3` spelled exactly as quoted;
+`format_program`'s signature really defaults `trailer=False`; `routes/decl.py`
+line 39 is the call; `more:stats` sits in `nav.js`, in `LOADERS` and in
+`check-nav.mjs` with the gating set the plan claims; the example ring's four
+sites in `main.js` are at the quoted lines. The examples work items 1 and 5 sit
+on is committed through a124, so the standing context's hold is lifted. Two
+rulings were taken before starting, both recorded under the items they belong
+to.
+
+**Line numbers drift by a few lines in `site.css` and `mount.js`** and are not
+re-quoted below. `.editor-hist` is at 305 rather than 284, the tooltip `::after`
+at 628 rather than 611, `renderControls` at 540 rather than 559. Every one names
+the right thing.
+
+### Items 6 and 7, at `1.0.0a125`
+
+Executed as written. `stats` moved out of `NAV_GROUPS.more.leaves` into
+`NAV_GROUPS.overview.leaves`, the Overview keys are written Plot, Summary,
+Validation, Stats, Tail, `LOADERS` carries `'overview:stats'` with both halves
+of the key moved, and `check-nav.mjs` has the row renamed. `node
+dev/scripts/check-nav.mjs` reads clean on all eight fixture kinds and confirms
+the new row is byte identical to `overview:summary` and `overview:validation`.
+
+**Divergence, one, and it makes the Watch smaller rather than larger.** The plan
+says `state.leaf` is "remembered per group and persisted". It is remembered per
+group but it is **not** persisted: `main.js` declares it as a bare `leaf: {}` on
+the in-memory `state` object and nothing writes it to `localStorage`. So a
+remembered `more:stats` cannot outlive a reload, and within a session the
+`activeLeaf` fallback the plan asked to be confirmed is the whole of the repair.
+That fallback was confirmed by reading rather than assumed:
+`leafAvailable('more', 'stats')` now returns false because `leafOf` returns
+undefined for the key, and `activeLeaf` then takes its first live leaf.
+
+The reading map needed no edit. `charts/reading-map.js` is about chart axis
+readings and holds no leaf keys at all; the `['overview', 'stats']` half of the
+loader key is read by `ledeFor`, which looks the leaf up through `leafOf`, which
+is why both halves had to move together.

@@ -64,6 +64,11 @@ const EXPECTED = {
     // menu. The live set is unchanged by the move, which is the point of
     // asserting it here.
     'overview:validation': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl'],
+    // Moved out of More at a125, the same move Validation made and asserted the
+    // same way. This row is byte-identical to the two above it, which is the
+    // whole argument for the move: the live set is unchanged, so the Overview
+    // row lights nothing new and the More row darkens nothing.
+    'overview:stats': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl'],
     'economics:ledger': ['pnl', 'xpnl'],
     'economics:ratios': ['pnl', 'xpnl'],
     'economics:waterfall': ['xpnl'],
@@ -94,7 +99,6 @@ const EXPECTED = {
     'bounds:bounds': ['agg', 'agg_reins', 'port'],
     'bounds:pricing': ['agg', 'agg_reins', 'port'],
     'bounds:allocation': ['port'],
-    'more:stats': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl'],
     'more:density': ['agg', 'agg_reins', 'port', 'sev', 'distortion', 'bvagg', 'pnl', 'xpnl'],
     // Same set as overview:tail, and for the same reason: both need a full loss
     // distribution. They answer different questions about it, which is why they

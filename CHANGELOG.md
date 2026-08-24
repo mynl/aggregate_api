@@ -4,6 +4,41 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a125
+
+**[Stats-Joins-Overview] and [Overview-Leaf-Order] the Stats leaf moves up, and
+the Overview row is reordered.** Items 6 and 7 of
+`dev/plan-punchups-aug-24-API.md`, one edit because they are one edit. Stats
+leaves More for Overview and the row now reads **Plot, Summary, Validation,
+Stats, Tail**. Summary states the moments, Validation says whether to believe
+them, Stats breaks them out by frequency, severity and aggregate, and Tail is
+the one reading that leaves the body of the distribution behind. Validation
+therefore stops sitting after Tail, where it had been since a55.
+
+**The move lights nothing new and darkens nothing, and the check asserts that
+rather than leaving it to be believed.** `more:stats` was live for `agg`,
+`agg_reins`, `port`, `distortion`, `bvagg`, `pnl` and `xpnl`, which is exactly
+the set `overview:summary` and `overview:validation` carry, so the new
+`overview:stats` row in `dev/scripts/check-nav.mjs` is byte-identical to the two
+above it. `node dev/scripts/check-nav.mjs` reads clean on all eight fixture
+kinds. This is the same move Validation made at a55 and it is recorded the same
+way.
+
+**Both halves of the loader key move.** `LOADERS` goes from
+`loadExhibitLeaf('pane-more', 'stats', ['more', 'stats'])` to
+`loadExhibitLeaf('pane-overview', 'stats', ['overview', 'stats'])`: the pane id
+decides which pane the table is drawn into and the reading-map key decides which
+leaf definition `ledeFor` reads its label and hint from, so a half move would
+have drawn the Stats table into the More pane behind an Overview pill, with no
+lede.
+
+A reader whose More group was sitting on Stats has a remembered key that no
+longer exists. `activeLeaf` falls back to the first live leaf when the
+remembered one is not available, and `leafAvailable` returns false for an
+unknown key because `leafOf` returns undefined, so this self heals on the next
+render. `state.leaf` is in-memory and per session, not persisted, so it does not
+survive a reload either.
+
 ## 1.0.0a124
 
 **[Examples-Fuzzy] the example search takes its terms in any order.** Phase A5,
