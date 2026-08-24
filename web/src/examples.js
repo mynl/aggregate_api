@@ -61,6 +61,18 @@ const active = new Set(readFilters());
 const watchers = new Set();
 
 /**
+ * The search box's text, as module state beside the filter set.
+ *
+ * It is here for the same reason `active` is: both narrow the list on screen,
+ * so both have to reach the Ctrl+Shift arrow ring, and one subscriber channel
+ * should carry both rather than two carrying one each. Written by `renderList`
+ * from the `q` it has already computed, so there is no second place that decides
+ * what the reader typed. Deliberately not persisted: a filter is a standing
+ * choice a reader makes once, a needle is what they are doing this second.
+ */
+let needle = '';
+
+/**
  * The persisted filter keys, or none.
  *
  * Wrapped because `localStorage` throws rather than returning null in a private
@@ -85,18 +97,39 @@ function writeFilters() {
     }
 }
 
-/** Tell every mounted surface the filter set moved. */
+/**
+ * Whether a `notify()` fanout is in progress.
+ *
+ * The guard against an obvious loop, and it is not hypothetical. `renderList`
+ * notifies when the needle changes, and every mounted surface redraws through
+ * `renderList` on a notify. The dropdown and the palette each have their own
+ * search box, so a keystroke in one would set the needle, notify, redraw the
+ * other from *its* empty box, change the needle back, notify again, and the two
+ * would trade the needle for ever. Nothing notifies from inside a fanout.
+ */
+let notifying = false;
+
+/** Tell every mounted surface the view moved. */
 function notify() {
-    for (const watcher of watchers) watcher();
+    if (notifying) return;
+    notifying = true;
+    try {
+        for (const watcher of watchers) watcher();
+    } finally {
+        notifying = false;
+    }
 }
 
 /**
- * Watch the filter set. Returns the function that stops watching.
+ * Watch the visible view: the filter set and the search needle both.
  *
  * `main.js` uses this to drop the Ctrl+Shift arrow ring's cursor, which indexes
- * into the filtered list and means nothing once that list changes shape.
+ * into the visible list and means nothing once that list changes shape, and to
+ * redraw the `[m/n]` readout that was numbering it.
+ *
+ * Named for filters alone through a131, when that was all it carried.
  */
-export function onExamplesFilterChange(fn) {
+export function onExamplesViewChange(fn) {
     watchers.add(fn);
     return () => watchers.delete(fn);
 }
@@ -181,12 +214,36 @@ export function applyFilters(items, keys) {
 /**
  * The entries passing the active filters, in file order.
  *
- * Exported for the Ctrl+Shift arrow ring, which walks the dropdown read top to
- * bottom and so has to walk what the dropdown is actually showing.
+ * The pool `search` ranks within, and the ring's list whenever nothing is typed.
+ * See `visibleExamples`, which is what the ring actually calls.
  */
 export function filteredExamples() {
     if (!flat) return [];
     return active.size ? applyFilters(flat, active) : flat;
+}
+
+/**
+ * What the reader last saw: the filtered list, or the search results over it.
+ *
+ * **This is the ring's list.** The Ctrl+Shift arrow ring walks the dropdown read
+ * top to bottom, so it has to walk what the dropdown is actually showing, and
+ * since a123 that is what the pills leave *and* what the needle matches. Through
+ * a131 the ring read `filteredExamples()`, so typing `hero` narrowed the list on
+ * screen to seven rows and the arrows went on walking all 151.
+ *
+ * **Ranked, not in file order, while a needle is live.** `search` returns best
+ * first, which `renderList` draws and which this therefore walks. That is the
+ * ring's contract holding rather than breaking: it is the list read top to
+ * bottom, and with a needle typed the top is the best match.
+ *
+ * **Last render wins**, which is worth saying because there are two surfaces.
+ * The dropdown and the Ctrl+K palette both draw through `renderList` and each
+ * has its own box, so `needle` is whichever was typed into most recently. The
+ * ring walks what the reader last looked at, which is the only reading of "the
+ * list on screen" that means anything when two of them exist.
+ */
+export function visibleExamples() {
+    return needle.trim() ? search(needle) : filteredExamples();
 }
 
 /**
@@ -312,10 +369,26 @@ function filterBar(payload) {
  * comments, nothing in `aggregate` parses them, and inventing headings here is
  * the app deciding what the library means. File order is what the file carries,
  * so file order is what this draws.
+ *
+ * **It also publishes the needle**, which is what lets the Ctrl+Shift ring walk
+ * what is on screen. This is the one place that knows what the reader typed, and
+ * it already has it, so recording it here beats a second listener on each box
+ * that would have to be kept in step. `notify` is called only when the value
+ * really moved, and never from inside a fanout: see `notifying`.
+ *
+ * @param {string} typed the search box's raw text.
  */
-function renderList(container, payload, needle, onPick) {
+function renderList(container, payload, typed, onPick) {
     empty(container);
-    const q = needle.trim();
+    const q = typed.trim();
+    // Not while a fanout is running, and the guard covers the assignment and not
+    // just the `notify`. A redraw caused by a notify is the *other* surface
+    // being repainted from its own box, which is usually empty, and letting that
+    // write the needle would throw away what the reader just typed here.
+    if (!notifying && q !== needle) {
+        needle = q;
+        notify();
+    }
     const bar = filterBar(payload);
     if (bar) container.appendChild(el('li', {}, bar));
 
@@ -368,7 +441,7 @@ export async function mountExamples(menuEl, onPick) {
     // navigation, which steals the arrow keys and closes on Escape mid-word.
     input.addEventListener('keydown', (ev) => ev.stopPropagation());
     // A pill clicked in the palette has to move this list too.
-    onExamplesFilterChange(draw);
+    onExamplesViewChange(draw);
 
     menuEl.appendChild(el('li', { className: 'example-search-wrap' }, input));
     menuEl.appendChild(el('li', {}, list));
@@ -411,7 +484,7 @@ export function mountPalette(onPick) {
         const draw = () => renderList(list, payload, input.value, pick);
         input.addEventListener('input', draw);
         // A pill clicked in the dropdown has to move this list too.
-        onExamplesFilterChange(draw);
+        onExamplesViewChange(draw);
         root = el('div', { className: 'palette-backdrop', role: 'dialog', 'aria-modal': 'true' },
             el('div', { className: 'palette' }, input, list));
         // Click outside closes; clicks on the panel itself must not.

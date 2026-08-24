@@ -922,3 +922,61 @@ through the api: `as_read` is not served, only `decl` is, so the test would have
 to reach into `aggregate` to fetch the original. The property that matters and
 is testable is the one written instead, that the declaration head and body
 survive intact and no whitespace is left behind.
+
+### Item 5, at `1.0.0a133`
+
+**The pill half was confirmed done on the current tree before anything was
+touched**, as the plan asks. `examples.js` exports `filteredExamples()` and
+`onExamplesFilterChange()`, `exampleRing` holds a cursor and no list,
+`exampleStep` re-reads the list on every press, and a pill click resets the
+cursor. Only the search needle was left, and only the search needle was written.
+
+The rest executed as written: `needle` as module state, `visibleExamples()` as
+the ring's list, `renderList` publishing the needle from the `q` it already has,
+the export renamed to `onExamplesViewChange`, and the three `main.js` call sites
+moved.
+
+**Divergence one, and it is the guard the plan asked for made stricter.** The
+plan says to "notify only when the needle's value actually changed, and never on
+a redraw that was itself caused by a notify". The `notifying` flag suppresses
+the **assignment** as well as the notify, and it has to. Suppressing only the
+notify still lets the re-entrant `renderList`, which is the *other* surface being
+repainted from its own usually empty box, overwrite `needle` with the empty
+string. The loop would not spin, but the needle the reader just typed would be
+silently discarded, which is a quieter version of the same bug.
+
+**Divergence two, small: three comments in `main.js` were rewritten** rather than
+left describing the ring as following the pills alone. They named a123 as the
+moment the ring started following what is on screen; they now name a133 beside
+it. Not required by the plan, but a comment that says the ring walks what the
+pills leave is now wrong rather than merely incomplete.
+
+**Watch, recorded as the plan asks.** With a needle live the ring walks in
+**relevance order**, not file order, because `search` ranks and `renderList`
+draws what it ranks. That is the ring's contract holding: it is the list read top
+to bottom. It is in the CHANGELOG in those terms.
+
+---
+
+## Close
+
+All ten live items landed, `1.0.0a125` to `1.0.0a133`, one item per bump except
+6 and 7, which are one edit and landed together at a125, and item 10, whose four
+sub-items landed together at a131 as the plan permits. Item 2 was withdrawn by
+the author on 2026-08-24 and nothing is owed for it.
+
+Two questions went to the author before the run and both were ruled: PNG joins
+the surface Download menu, and `trailer=True` keeps tags along with the note and
+the hints.
+
+**Nothing is owed upstream.** The one place this list touched the LIB boundary
+was item 1's mirroring of the three trailer terminals, and that stays here by
+design, as agreement 6 rather than as an ask. `decl-keywords.json` needed no
+edit: the trailer clauses are terminals rather than keywords and were never in
+it.
+
+**What is not verified by either suite**, and wants a look in a browser: the
+surface control strip at a `bvagg`, meaning the single group fold, the three line
+readout and the Download menu; the editor margin's three marks stacked; and the
+tooltip clamp at the left and right ends of a narrow window. The arithmetic
+behind the last two is unit tested, the layout is not and cannot be from node.

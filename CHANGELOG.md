@@ -4,6 +4,47 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a133
+
+**[Example-Ring-Follows-Search] the ring follows the search box as well as the
+pills.** Item 5 of `dev/plan-punchups-aug-24-API.md`, and the last of it.
+
+Half of this landed with the examples dropdown work: a123 made
+`filteredExamples()` the Ctrl+Shift arrow ring's list and reset the cursor on a
+pill click, so filtering to `role:hero` and walking those seven already worked.
+The search box was the half still missing, and it is the half the author named.
+`filteredExamples()` returns the **pill filtered** set while the visible list is
+`search(q)` over that set, so a needle narrowed what was on screen and the ring
+went on walking everything the pills had left. Type `hero`, see seven rows, walk
+151.
+
+The needle becomes module state in `examples.js`, exactly as the filter set
+already is, so one subscriber channel carries both. `renderList` writes it from
+the `q` it has already computed, which is the one place that knows what the
+reader typed. A new `visibleExamples()` is the ring's list from now on:
+`search(needle)` when the needle is non-empty, `filteredExamples()` otherwise.
+`main.js` calls it at all three sites, `pickExample`, `exampleStep` and the reset
+subscription.
+
+`onExamplesFilterChange` is renamed `onExamplesViewChange`, since it stops being
+about filters alone, and it now fires on a needle change for the same reason it
+fires on a pill click: the cursor indexes a list that just changed shape, so it
+is dropped and the `[m/n]` readout is redrawn.
+
+**The loop this could have become is guarded, and it was not hypothetical.**
+`renderList` runs inside a `notify()` fanout, and the dropdown and the Ctrl+K
+palette each have their own search box. A keystroke in one would set the needle,
+notify, redraw the other from *its* empty box, set the needle back, and the two
+would trade it for ever. A `notifying` flag makes a fanout suppress both the
+notify **and** the assignment, so a redraw caused by a notify cannot throw away
+what the reader just typed in the other surface.
+
+**Search results are ranked, not in file order**, which `renderList` and the
+plan both state deliberately, so with a needle live the ring walks in relevance
+order. That is the ring's contract holding rather than breaking: it is the list
+read top to bottom, and with a needle typed the top is the best match. Combined
+with a129, `hero` now walks `[1/7]` to `[7/7]` with the counter following.
+
 ## 1.0.0a132
 
 **[Example-Load-Strips-Trailer] the picked entry loses its note and tags, and

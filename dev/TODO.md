@@ -232,10 +232,13 @@ and the standing REMINDER below about what is worth plotting.
 
 ## Near term (get it healthy)
 
-- [ ] **Punchups, August 24** (`dev/plan-punchups-aug-24-API.md`). The author's
-      eleven item list, item 2 withdrawn the same day. Each item is self
-      contained and takes its own bump. The author's numbering is kept, gap
-      included, because that is how the items get named in conversation.
+- [x] **Punchups, August 24** (`dev/done/plan-punchups-aug-24-API.md`), all
+      ten live items, **a125 to a133**. The author's eleven item list, item 2
+      withdrawn the same day. One item per bump except 6 and 7, which are one
+      edit, and item 10, whose four sub-items landed together. The author's
+      numbering is kept, gap included, because that is how the items got
+      named in conversation. Execution notes and every divergence are in the
+      plan's own "Execution notes" section.
     - [x] 1 [Example-Load-Strips-Trailer] a picked entry loses `note{}` and
           `tags{}`, and the strip prints the note off the item's own fields
           (→ 1.0.0a132). `hints{}` stays.
@@ -245,9 +248,9 @@ and the standing REMINDER below about what is worth plotting.
           their boxes (→ 1.0.0a127). Circled arrows, bare, at the icon's size.
     - [x] 4 [Clear-Twice-Clears-History] a second press of the clear icon
           empties the store (→ 1.0.0a128). No dialog; the readout says "cleared".
-    - [ ] 5 [Example-Ring-Follows-Search] the ring follows the search box as
-          well as the pills. The pill half landed with the examples dropdown
-          work; only the search needle is left.
+    - [x] 5 [Example-Ring-Follows-Search] the ring follows the search box as
+          well as the pills (→ 1.0.0a133). The pill half had landed with the
+          examples dropdown work; the search needle was what was left.
     - [x] 6 [Stats-Joins-Overview] and 7 [Overview-Leaf-Order] (→ 1.0.0a125).
           One edit: Stats moves from More to Overview and the row reads Plot,
           Summary, Validation, Stats, Tail.

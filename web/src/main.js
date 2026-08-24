@@ -23,8 +23,8 @@ import { api, ApiError, errorMessage } from './api.js';
 import { createPricingForm } from './pricing-form.js';
 import { createEditor, emacsEnabledDefault, modifierName } from './editor.js';
 import {
-    mountExamples, mountPalette, loadExamples, filteredExamples,
-    onExamplesFilterChange,
+    mountExamples, mountPalette, loadExamples, visibleExamples,
+    onExamplesViewChange,
 } from './examples.js';
 import { renderInfo } from './renderers.js';
 import { fetchFailed, mountChart, mountChartDoc, notDrawable } from './charts/mount.js';
@@ -3111,19 +3111,21 @@ const evaluateForm = createPricingForm($('evaluate-form'), {
 // documented in the feedback line and the Help panel since a37. It was an
 // undisclosed Alt- binding before that, which is a working feature nobody could
 // find.
-// Only the cursor is held. The list itself is `filteredExamples()`, read at
-// each step, because the ring is the dropdown read top to bottom and since a123
-// the dropdown shows what the active pills leave. Holding a copy would make the
-// walk and the menu two lists that agree until someone clicks a pill.
+// Only the cursor is held. The list itself is `visibleExamples()`, read at
+// each step, because the ring is the dropdown read top to bottom and the
+// dropdown shows what the active pills leave (a123) and what the search box
+// matches (a133). Holding a copy would make the walk and the menu two lists
+// that agree until someone clicks a pill or types a letter.
 const exampleRing = { cursor: -1 };
 
 /**
  * Where the example walk is, as `{m, n}`, in `history.position()`'s shape.
  *
- * `n` is the length of the list actually being walked, which since a123 is what
- * the active pills leave, so a reader filtered to `role:hero` walks `[1/7]` to
- * `[7/7]`. That is the readout doing its job: it says where you are in what you
- * are walking, not how big the library is.
+ * `n` is the length of the list actually being walked, which is what the active
+ * pills leave (a123) and what the search box matches (a133), so a reader
+ * filtered to `role:hero` walks `[1/7]` to `[7/7]` and one who has typed `hero`
+ * walks whatever that matched. That is the readout doing its job: it says where
+ * you are in what you are walking, not how big the library is.
  *
  * Read off the same call `exampleStep` makes rather than off a copy. Two
  * readings of the length would agree until a pill was clicked mid walk, and then
@@ -3140,7 +3142,7 @@ const exampleRing = { cursor: -1 };
  * the time this runs.
  */
 function examplePosition() {
-    const n = filteredExamples().length;
+    const n = visibleExamples().length;
     const at = exampleRing.cursor;
     return { m: at < 0 ? 0 : at + 1, n };
 }
@@ -3190,7 +3192,7 @@ function captionExample(item) {
 
 function pickExample(item) {
     walkMode = 'examples';
-    exampleRing.cursor = filteredExamples().indexOf(item);
+    exampleRing.cursor = visibleExamples().indexOf(item);
     captionExample(item);
     loadExample(item.decl);
     // Explicitly, rather than relying on the `setText` inside `loadExample` to
@@ -3219,14 +3221,15 @@ mountPalette(pickExample);
 // the dropdown and the palette read the same payload when they mount.
 loadExamples().catch(() => { /* dropdown still works; the ring just stays empty */ });
 
-// A changed filter set changes the list the cursor indexes into, so the cursor
-// stops meaning anything. Dropping it restarts the walk at the end the next
-// press asks for, which is where an unset cursor already lands.
+// A changed pill set or a changed search needle changes the list the cursor
+// indexes into, so the cursor stops meaning anything. Dropping it restarts the
+// walk at the end the next press asks for, which is where an unset cursor
+// already lands.
 //
 // The readout is redrawn with it, since a129: it may be showing a position in
 // the list that just changed shape, and an unset cursor draws blank, which is
 // the honest reading until the next press.
-onExamplesFilterChange(() => {
+onExamplesViewChange(() => {
     exampleRing.cursor = -1;
     renderHistoryNav();
 });
@@ -3289,7 +3292,7 @@ loadLanding();
 // `pickExample` can also leave the cursor unset, when the row picked is not one
 // of the ring's own, so this is not only the opening press.
 function exampleStep(dir) {
-    const items = filteredExamples();
+    const items = visibleExamples();
     const n = items.length;
     if (!n) return;
     const at = exampleRing.cursor;
