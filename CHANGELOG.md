@@ -4,6 +4,84 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a122
+
+**[Examples-File-Order] the Examples menu reads the library in the file's own
+order, and hands the editor the author's own text.** Phases A1 to A3 of
+`dev/plan-examples-dropdown.md`. The library half landed at `aggregate 1.0.0a320`
+(`Recipe.seq`, the zero-based reading order, and `Recipe.as_read`, the entry's
+DecL as its `.agg` file spells it), so the environment must be synced before any
+of this is believed.
+
+**Two re-orderings between the file and the reader are gone.** `library.agg` is
+written as a reading order and the entries inside a part build on one another.
+`Underwriter._recipes_frame` ends in `.sort_index()`, so the frame arrives
+alphabetical by `(kind, name)`; `examples.py` then grouped on the `topic:`
+namespace, ordered the groups by a hand kept tuple, ordered the entries inside
+each group by a second `sorted()`, and title-cased the group key. Reading order
+is meaning, and under the purist ruling the library owns meaning, so the app now
+says `recipes.sort_values('seq')` and stops. With it go `_TOPIC_ORDER`,
+`_ROLE_ORDER`, `_UNGROUPED`, `_GROUP_TITLES`, `_KIND_TITLES`, `_title`,
+`_sort_key`, both `sorted()` calls and the `Grouping` literal: every place the
+app decided what the library means. The ordering tables were also wrong, which
+is what a hand kept table becomes. `_TOPIC_ORDER` held slots for `bounds` and
+`ruin`, which no entry claims, and was missing `picks` and `tweedie`, which
+existed, so those two fell into an alphabetical tail.
+
+**Breaking, `GET /v1/examples`.** The payload is now `{"items": [...],
+"facets": {...}}`, one flat list with no groups and no headings, each entry
+appearing exactly once. The grouped payload emitted a row per `topic:` tag, 182
+rows for 151 entries, purely to feed the grouped view, and the SPA then
+deduplicated them again to build its search index. `?group=topic|kind|role` is
+retired rather than deprecated, since the api is private and pre-release; a clean
+break costs nothing and keeping a grouped view would have kept the tables it
+needed. `ExampleCategory` is replaced by `Pill` and `FacetValue`.
+
+**Pills are served render-ready.** Every item carries `pills`, already ordered
+kind, then `topic:`, then `role:`, so the SPA draws the row as given and the
+namespace-to-color mapping has one authority. `tags` stays as full slugs for the
+search haystack and for anyone reading the api directly, and `kind` keeps a
+field of its own, because the recipe's type is not a tag. `facets` is keyed by
+those same three namespaces and each list is ordered by first appearance in
+`items`, so a filter bar built from it reads in file order too, with counts over
+the entries actually returned. Two values repeat across namespaces today:
+`topic:pnl` sits on all eight `pnl` entries and `topic:distortion` on all six
+`distortion` ones, so those fourteen rows draw the same word twice. Both pills
+are served, because the library owns its vocabulary and the redundant tags come
+out of `library.agg` upstream.
+
+**Optional server-side filters**, repeatable `kind=`, `topic=` and `role=`, OR
+within a namespace and AND across them. The SPA does not pass them: the whole
+payload is 151 entries fetched once and filtering in the browser keeps the pills
+and the list in step with no round trip. They exist so a notebook can say
+`GET /v1/examples?role=intro`.
+
+**The served declaration is the file's own text.** `_decl_of` answers with
+`Recipe.as_read`, keeping the `spec_to_decl` then `format_program` pair only as
+the fallback for a session build, which never had a file. That pair round trips
+through the spec, and the parser evaluates or expands several spellings on the
+way in and keeps only the result, so the editor used to receive `ph 2/3` as
+`ph 0.6666666666666666`, `ceded to tower [0 25 50 75 100 125]` as five
+and-chained layers, `dsev [1:6]` as `dsev [1 2 3 4 5 6]` and
+`sev (100 / exp(1.5**2/2)) * lognorm 1.5` as `sev 32.465246735834974 * lognorm
+1.5`. Those spellings are what several entries exist to teach. An entry now
+arrives laid out over several lines exactly as written, trailer and `hints{}`
+included, and the sixteen hinted entries still rebuild on the grid they were
+written for. Inverting the desugared clauses stays upstream work, tracked there
+as `[Unparser-Reference-Gaps]`, and nothing here waits on it.
+
+**Heroes come back in file order too**, so `load_heroes` loses its name sort.
+The order is read off each resolved `Recipe.seq` rather than by sorting the
+frame, because `discover`'s directory path returns a name-indexed frame carrying
+`program` and nothing else.
+
+**App side, only what the payload change requires.** `examples.js` renders
+`payload.items` with no headers or dividers, `buildIndex` stops deduplicating by
+name, the hardcoded `186` in the search placeholder reads the payload length
+(the library has been 151 for some time), and the Ctrl+Shift arrow ring in
+`main.js` walks `data.items`. The pill row, the filter bar and the fuzzy search
+are phases A4 and A5.
+
 ## 1.0.0a121
 
 **[Chart-2D-Punchups] the control strip goes per panel, and three axis windows

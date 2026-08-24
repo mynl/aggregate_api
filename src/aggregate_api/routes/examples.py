@@ -2,22 +2,22 @@
 
 Two endpoints over ``aggregate``'s recipe base (``library.agg``):
 
-* ``GET /v1/examples?group=topic|kind|role``: the whole library, grouped.
+* ``GET /v1/examples``: the whole library, one flat list in file order.
 * ``GET /v1/examples/heroes``: just the ``role:hero`` entries, for the
   landing gallery.
 
 Both loaders are ``lru_cache``d in :mod:`aggregate_api.examples`, so the recipe
-base is walked once per process per view. The routes are thin wrappers.
+base is walked once per process. The routes are thin wrappers.
 """
 
 from __future__ import annotations
 
-from typing import Literal
-
 from fastapi import APIRouter, Query
 
 from .. import models
-from ..examples import load_examples, load_hero_sparklines, load_heroes
+from ..examples import (
+    filter_examples, load_examples, load_hero_sparklines, load_heroes,
+)
 
 
 router = APIRouter()
@@ -25,20 +25,37 @@ router = APIRouter()
 
 @router.get("/examples", response_model=models.ExamplesResponse)
 def list_examples(
-    group: Literal["topic", "kind", "role"] = Query(
-        "topic",
-        description=(
-            "Grouping axis: 'topic' (the topic: tag namespace, the default), "
-            "'kind' (object type), or 'role' (the role: namespace)."
-        ),
+    kind: list[str] | None = Query(
+        None, description="Keep only these recipe kinds (agg, port, sev, ...)."
+    ),
+    topic: list[str] | None = Query(
+        None, description="Keep only these topic: values, unprefixed."
+    ),
+    role: list[str] | None = Query(
+        None, description="Keep only these role: values, unprefixed."
     ),
 ) -> dict:
-    """Return the example library grouped on one axis.
+    """Return the example library, one flat list in the library's own order.
 
-    See :class:`ExamplesResponse` for the payload shape. An entry carrying two
-    tags in the grouping namespace appears under both.
+    See :class:`ExamplesResponse` for the payload shape. Every entry appears
+    exactly once, in the order ``library.agg`` declares it.
+
+    Notes
+    -----
+    The three filters are repeatable and compose as OR within a namespace and
+    AND across them, so ``?role=intro&role=intermediate&topic=severity`` is the
+    easy half of the severity entries.
+
+    **The SPA does not pass them.** The whole payload is 151 entries fetched
+    once and filtered in the browser, where the pills and the list stay in step
+    with no round trip. These exist for a notebook reading the api directly.
+
+    ``?group=topic|kind|role`` stood here through a121 and is gone rather than
+    deprecated: the api is private and pre-release, so a clean break costs
+    nothing and leaving a grouped view behind would have kept the ordering
+    tables it needed.
     """
-    return load_examples(group)
+    return filter_examples(load_examples(), kind=kind, topic=topic, role=role)
 
 
 @router.get("/examples/heroes", response_model=models.HeroesResponse)

@@ -17,40 +17,49 @@ Everything now comes off the loaded ``Underwriter``:
     The :class:`aggregate.recipe.Recipe` itself, carrying the text: ``note``,
     ``tags``, ``hints`` and ``decl``.
 
-``Recipe.decl`` is the entry's own declaration re-rendered canonically, carrying
-``hints{}`` and nothing else. That is exactly what the editor wants, so the SPA
-no longer has to round-trip a loaded example through ``POST /v1/decl/format``.
+``Recipe.as_read`` is the entry's DecL as its ``.agg`` file spells it, and
+``Recipe.seq`` is the position it was read at. Both arrived in ``aggregate``
+1.0.0a320 and both are also columns on ``recipes``.
 
-Grouping is by tag namespace rather than by filing letter:
+**One flat list, in the file's own order.** ``library.agg`` is written as a
+reading order and the entries inside a part build on one another. Through a121
+none of that reached the app: the frame arrives alphabetical, because
+``Underwriter._recipes_frame`` ends in ``.sort_index()``, and this module then
+grouped on a tag namespace, ordered the groups by a hand kept tuple and sorted
+again inside each one. Reading order is meaning, and under the purist ruling
+(author, 2026-08-10) the library owns meaning, so the app sorts on ``seq`` and
+stops there. The ``# ---`` banners in ``library.agg`` are comments and stay
+comments: nothing in ``aggregate`` parses them, so the list carries no headings
+at all.
 
-``topic:``
-    what the entry is about (severity, aggregate, portfolio, ...). The default,
-    and the successor to the letter categories.
-``kind``
-    the object type, straight off the recipe index (agg, port, sev, bvagg, pnl,
-    distortion). Not a tag: type is what ``kind`` is for.
-``role:``
-    where the entry stands (hero, intro, reference, paper). Sparse by design, so
-    this view carries an "other" group for the untagged majority.
+**Pills, not groups.** Every item carries a render-ready ``pills`` list, ordered
+kind, then ``topic:``, then ``role:``, so the SPA draws it as given and the
+namespace-to-color mapping has exactly one authority. ``tags`` stays as full
+slugs, for the search haystack and for anyone reading the api directly, and
+``kind`` keeps a field of its own, because the recipe's type is not a tag.
 
-Cached per process and per grouping; call ``load_examples.cache_clear()`` to pick
-up an edited library without a restart.
+Cached per process; call ``load_examples.cache_clear()`` to pick up an edited
+library without a restart.
 
 Returned shape mirrors :class:`aggregate_api.models.ExamplesResponse`::
 
     {
-        "grouping": "topic",
-        "categories": [
-            {
-                "key": "severity",
-                "title": "Severity",
-                "items": [
-                    {"name": "...", "kind": "sev", "tags": [...],
-                     "note": "...", "decl": "..."}
-                ]
-            },
+        "items": [
+            {"name": "ExposureLimitProfile", "kind": "agg",
+             "note": "A premium by limit by loss ratio profile, ...",
+             "decl": "agg ExposureLimitProfile\\n  [10_000 ...",
+             "tags": ["topic:aggregate", "role:hero", "role:advanced"],
+             "pills": [{"ns": "kind", "value": "agg"},
+                       {"ns": "topic", "value": "aggregate"},
+                       {"ns": "role", "value": "hero"},
+                       {"ns": "role", "value": "advanced"}]},
             ...
-        ]
+        ],
+        "facets": {
+            "kind":  [{"value": "agg", "count": 94}, ...],
+            "topic": [{"value": "aggregate", "count": 27}, ...],
+            "role":  [{"value": "intro", "count": 32}, ...]
+        }
     }
 """
 
@@ -58,7 +67,7 @@ from __future__ import annotations
 
 import logging
 from functools import lru_cache
-from typing import Literal
+from typing import Sequence
 
 from aggregate.decl_writer import format_program, spec_to_decl
 
@@ -66,57 +75,18 @@ from .library import get_underwriter
 
 logger = logging.getLogger(__name__)
 
-Grouping = Literal["topic", "kind", "role"]
-
-# Display titles for the kind keys the parser emits. Anything unlisted falls
-# back to the key itself, so a new kind surfaces rather than disappearing.
-_KIND_TITLES = {
-    "agg": "Aggregate",
-    "port": "Portfolio",
-    "sev": "Severity",
-    "bvagg": "Bivariate aggregate",
-    "pnl": "P&L",
-    "distortion": "Distortion",
-}
-
-# Order the topic groups so the menu reads in teaching order rather than by
-# entry count. Unlisted topics sort alphabetically after these.
-_TOPIC_ORDER = (
-    "aggregate", "severity", "frequency", "reinsurance", "portfolio",
-    "distortion", "pnl", "bivariate", "bounds", "ruin", "numerics",
-)
-
-# Ditto for roles, most prominent first. ``_UNGROUPED`` collects entries with no
-# tag in the namespace being grouped on; it always sorts last.
-_ROLE_ORDER = ("hero", "intro", "reference", "paper")
-_UNGROUPED = "other"
-
-_GROUP_TITLES = {_UNGROUPED: "Other"}
-
-
-def _title(key: str) -> str:
-    """Human-readable heading for a group key.
-
-    Kind keys get their spelled-out class name, everything else is title-cased
-    with hyphens opened out, so ``heavy-tail`` reads "Heavy tail".
-    """
-    if key in _GROUP_TITLES:
-        return _GROUP_TITLES[key]
-    if key in _KIND_TITLES:
-        return _KIND_TITLES[key]
-    return key.replace("-", " ").replace("_", " ").capitalize()
-
-
-def _sort_key(order: tuple[str, ...]):
-    """Return a sort key placing `order` first, then alphabetical, `other` last."""
-    def key(group_key: str) -> tuple[int, str]:
-        if group_key == _UNGROUPED:
-            return (2, "")
-        if group_key in order:
-            return (0, f"{order.index(group_key):03d}")
-        return (1, group_key)
-
-    return key
+# The three pill namespaces, in the order a row draws them. ``kind`` leads
+# because it is the recipe's own type rather than a tag, and it is read off the
+# frame index rather than out of ``tags``.
+#
+# An ordering table stood here through a121, three of them in fact
+# (``_TOPIC_ORDER``, ``_ROLE_ORDER``, ``_KIND_TITLES``) plus ``_title`` and
+# ``_sort_key`` to read them, and they are gone with the grouped view. They were
+# the app deciding what the library means: the topic tuple had entries in it
+# that no library entry claimed (``bounds``, ``ruin``) and was missing two that
+# existed (``picks``, ``tweedie``), so the two real ones fell into an
+# alphabetical tail. ``seq`` answers the whole question and the library owns it.
+PILL_NAMESPACES = ("kind", "topic", "role")
 
 
 # A tuple of trailer patterns stood here and is gone as of a120. It stripped
@@ -172,13 +142,33 @@ def _library_only(frame):
 
 
 def _decl_of(kind: str, name: str, recipe) -> str:
-    """The runnable declaration for an entry, canonical and carrying its trailer.
+    """The runnable declaration for an entry, as its own file spells it.
 
-    ``spec_to_decl`` then ``format_program`` is the same pair the ``.agg`` export
-    in ``routes.objects`` uses, and for the same reason: it is the library's own
-    writer, so the app assembles no DecL text of its own.
+    ``Recipe.as_read`` (``aggregate`` 1.0.0a320) is the entry's DecL exactly as
+    it stands in ``library.agg``: laid out over several lines, indented as
+    written, comments and the terminating ``;`` removed, the trailer kept. It is
+    what this serves whenever it is there, which is every library entry. It is
+    empty only for a session build, which never had a file to come from, and
+    that is what the writer pair below is still here for.
 
-    **``trailer=True`` is the whole point of spelling the pair out here.**
+    **Why the file's own text rather than the canonical render.**
+    ``spec_to_decl`` then ``format_program`` round trips through the spec, and
+    the parser evaluates or expands several spellings on the way in and keeps
+    only the result. So through a121 the editor received ``ph 2/3`` as
+    ``ph 0.6666666666666666``, ``ceded to tower [0 25 50 75 100 125]`` as five
+    and-chained layers, ``dsev [1:6]`` as ``dsev [1 2 3 4 5 6]`` and
+    ``sev (100 / exp(1.5**2/2)) * lognorm 1.5`` as
+    ``sev 32.465246735834974 * lognorm 1.5``. Those spellings are what several
+    of the entries exist to teach, and an example that teaches a spelling has to
+    arrive carrying it. Teaching the reader to write ``ph 2/3`` and then handing
+    them the float is the example failing at its one job.
+
+    Making the writer invert them is real work and a separate decision, tracked
+    upstream as ``[Unparser-Reference-Gaps]``; it is worth doing for
+    ``Recipe.decl``, the ``.agg`` export and the cookbook pages. Nothing here
+    waits on it, because ``as_read`` never went through the spec at all.
+
+    **The fallback keeps its trailer, and that is why the pair is spelled out.**
     ``Recipe.decl`` is this pair at the default ``trailer=False``, which drops the
     ``note{}`` and ``tags{}`` that ``spec_to_decl`` just wrote. Through a118 that
     is what the menu served, so every library entry arrived in the editor stripped
@@ -214,8 +204,13 @@ def _decl_of(kind: str, name: str, recipe) -> str:
     ``Distortion`` objects in its spec rather than names, so ``spec_to_decl``
     raises ``NotImplementedError`` and there is nothing canonical to render.
     Falling back to the stored program keeps the entry usable and loses only the
-    canonical layout; a stored trailer is already where the library put it.
+    canonical layout; a stored trailer is already where the library put it. Both
+    of those paths are now reached only by a session build, since a library
+    entry answers with ``as_read`` before either runs.
     """
+    as_read = (getattr(recipe, "as_read", "") or "").strip()
+    if as_read:
+        return as_read
     text = ""
     try:
         text = spec_to_decl(getattr(recipe, "spec", None), kind, name) or ""
@@ -244,12 +239,14 @@ def _entry(kind: str, name: str, recipe) -> dict:
     can print them afterward.
     """
     note = getattr(recipe, "note", "") or ""
+    tags = list(getattr(recipe, "tags", ()) or ())
     return {
         "name": name,
         "kind": kind,
-        "tags": list(getattr(recipe, "tags", ()) or ()),
+        "tags": tags,
         "note": note.strip() or None,
         "decl": _decl_of(kind, name, recipe),
+        "pills": _pills(kind, tags),
     }
 
 
@@ -259,65 +256,183 @@ def _namespace_values(tags, namespace: str) -> list[str]:
     return [t[len(prefix):] for t in tags if t.startswith(prefix)]
 
 
-@lru_cache(maxsize=len(Grouping.__args__))
-def load_examples(grouping: Grouping = "topic") -> dict:
-    """Return the example library grouped by `grouping`.
+def _pills(kind: str, tags: Sequence[str]) -> list[dict]:
+    """Render-ready pills for one entry: kind first, then topics, then roles.
 
     Parameters
     ----------
-    grouping : {'topic', 'kind', 'role'}, optional
-        Which axis to group on. ``topic`` (the default) uses the ``topic:`` tag
-        namespace, ``kind`` the recipe's own type, ``role`` the ``role:``
-        namespace. An entry carrying several tags in the namespace appears under
-        each of them, which is intended: ``role:hero, role:paper`` really does
-        belong in both.
+    kind : str
+        The recipe's type, straight off the frame index.
+    tags : sequence of str
+        The entry's tags as full slugs, in the order its file declares them.
+
+    Returns
+    -------
+    list of dict
+        ``{"ns": ..., "value": ...}`` per pill, ``ns`` one of
+        :data:`PILL_NAMESPACES`.
+
+    Notes
+    -----
+    Built here rather than in the SPA so the namespace-to-color mapping has one
+    authority, and so a client that renders the row does not have to know how a
+    slug splits.
+
+    Within a namespace the file's own tag order is kept rather than sorted, on
+    the same reasoning as the list order itself: the entry declares its tags in
+    an order and nothing in the app knows better.
+
+    **A value can repeat across namespaces, and both pills are drawn.**
+    ``topic:pnl`` sits on all eight ``pnl`` entries and ``topic:distortion`` on
+    all six ``distortion`` ones, so those fourteen rows spell the same word
+    twice in two colors. The library owns its vocabulary, so the app serves what
+    is there and the redundant tags come out of ``library.agg`` upstream (author
+    ruling, 2026-08-24). Suppressing one here would put the app back in the
+    business of deciding what the library means, and would leave a topic filter
+    selecting rows that show no matching topic pill.
+    """
+    pills = [{"ns": "kind", "value": kind}]
+    for namespace in ("topic", "role"):
+        pills += [{"ns": namespace, "value": value}
+                  for value in _namespace_values(tags, namespace)]
+    return pills
+
+
+def _facets(items: list[dict]) -> dict[str, list[dict]]:
+    """Count each pill value per namespace, in order of first appearance.
+
+    Parameters
+    ----------
+    items : list of dict
+        Entries in file order, each carrying ``pills``.
+
+    Returns
+    -------
+    dict
+        One list of ``{"value": ..., "count": ...}`` per namespace in
+        :data:`PILL_NAMESPACES`, every namespace present even when empty.
+
+    Notes
+    -----
+    First appearance, not alphabetical and not by count, so the filter bar reads
+    in the library's order too: ``severity`` stands where the severity entries
+    start rather than between ``reinsurance`` and ``tweedie``. A plain ``dict``
+    is the whole mechanism, since it keeps insertion order.
+
+    Counted over the items actually returned, so a filtered payload is self
+    describing: its counts always add up to what the caller can see.
+    """
+    counts: dict[str, dict[str, int]] = {ns: {} for ns in PILL_NAMESPACES}
+    for item in items:
+        for pill in item["pills"]:
+            bucket = counts[pill["ns"]]
+            bucket[pill["value"]] = bucket.get(pill["value"], 0) + 1
+    return {
+        namespace: [{"value": value, "count": count}
+                    for value, count in bucket.items()]
+        for namespace, bucket in counts.items()
+    }
+
+
+@lru_cache(maxsize=1)
+def load_examples() -> dict:
+    """Return the whole example library, one flat list in the file's own order.
 
     Returns
     -------
     dict
         Matches :class:`aggregate_api.models.ExamplesResponse`.
 
+    Raises
+    ------
+    RuntimeError
+        If ``recipes`` carries no ``seq`` column, which means an ``aggregate``
+        older than 1.0.0a320 and no reading order to serve.
+
     Notes
     -----
-    Cached per grouping. The cache is sized to the number of legal groupings so
-    every view is computed at most once per process; resolving the base is cheap
-    (nothing is built), but it walks all of it, so it is not worth repeating per
-    request.
-    """
-    if grouping not in Grouping.__args__:
-        raise ValueError(
-            f"unknown grouping {grouping!r}; expected one of {Grouping.__args__}"
-        )
+    ``sort_values('seq')`` is the reading order, and asking for it is the whole
+    of what this does about order. The frame's own default is alphabetical by
+    ``(kind, name)`` and stays that way, which is what a person reading it at a
+    prompt wants; ``seq`` is the column that says where the statement stood in
+    its ``.agg`` file.
 
+    **Each entry appears exactly once.** The grouped payload emitted one row per
+    ``topic:`` tag, 182 rows for 151 entries, purely to feed a view that no
+    longer exists, and the SPA then deduplicated them again to build its search
+    index.
+
+    Cached for the process. Resolving the base is cheap, since nothing is built,
+    but it walks all of it, so it is not worth repeating per request. Filtering
+    runs against this cached payload rather than against the frame, which is why
+    :func:`filter_examples` is a separate call.
+    """
     uw = get_underwriter()
     frame = _library_only(uw.recipes)
-    grouped: dict[str, list[dict]] = {}
+    if "seq" not in frame.columns:
+        raise RuntimeError(
+            "Underwriter.recipes carries no 'seq' column, so there is no reading "
+            "order to serve; aggregate 1.0.0a320 or newer is required"
+        )
 
-    for kind, name in frame.index:
+    items = []
+    for kind, name in frame.sort_values("seq").index:
         try:
             recipe = uw.recipe(name, kind)
         except Exception:  # noqa: BLE001 (one bad entry must not blank the menu)
             logger.warning("skipping library entry %s.%s: cannot resolve", kind, name)
             continue
-        item = _entry(kind, name, recipe)
-        if grouping == "kind":
-            keys = [kind]
-        else:
-            keys = _namespace_values(item["tags"], grouping) or [_UNGROUPED]
-        for key in keys:
-            grouped.setdefault(key, []).append(item)
+        items.append(_entry(kind, name, recipe))
+    return {"items": items, "facets": _facets(items)}
 
-    order = _TOPIC_ORDER if grouping == "topic" else _ROLE_ORDER
-    keys = sorted(grouped, key=_sort_key(order))
-    categories = [
-        {
-            "key": key,
-            "title": _title(key),
-            "items": sorted(grouped[key], key=lambda i: i["name"]),
-        }
-        for key in keys
+
+def filter_examples(payload: dict, kind=None, topic=None, role=None) -> dict:
+    """Narrow a payload to the entries matching every namespace given.
+
+    Parameters
+    ----------
+    payload : dict
+        The full payload from :func:`load_examples`.
+    kind, topic, role : sequence of str, optional
+        Pill values to keep, per namespace. An empty or absent sequence means
+        that namespace does not filter.
+
+    Returns
+    -------
+    dict
+        The same shape, with ``items`` narrowed and ``facets`` recounted over
+        what survived. The unfiltered payload is returned unchanged when nothing
+        was asked for.
+
+    Notes
+    -----
+    OR within a namespace, AND across them, which is what makes "advanced
+    reinsurance" and "intro or intermediate" both expressible.
+
+    **The SPA does not use this.** The whole payload is 151 entries fetched
+    once, and filtering in the browser is instant and keeps the pills and the
+    list in step with no round trip. This exists so a notebook user can say
+    ``GET /v1/examples?role=intro``.
+
+    Nothing is mutated: `payload` is the ``lru_cache``d object every other
+    caller holds, and the items inside the returned list are shared with it, so
+    a caller must treat the result as read-only too.
+    """
+    wanted = {
+        namespace: set(values)
+        for namespace, values in (("kind", kind), ("topic", topic), ("role", role))
+        if values
+    }
+    if not wanted:
+        return payload
+    items = [
+        item for item in payload["items"]
+        if all(
+            any(p["ns"] == namespace and p["value"] in values for p in item["pills"])
+            for namespace, values in wanted.items()
+        )
     ]
-    return {"grouping": grouping, "categories": categories}
+    return {"items": items, "facets": _facets(items)}
 
 
 @lru_cache(maxsize=1)
@@ -328,10 +443,17 @@ def load_heroes() -> dict:
     -------
     dict
         ``{"items": [...]}`` in the same item shape as :func:`load_examples`,
-        name-sorted.
+        in the library's reading order.
 
     Notes
     -----
+    File order, like the full listing, so the name sort that stood here through
+    a121 is gone with the rest of the app's ordering machinery. The order is
+    read off each resolved ``Recipe.seq`` rather than by sorting the frame,
+    because ``discover``'s lightweight directory path returns a name-indexed
+    frame carrying ``program`` and nothing else: ``seq`` is a column on
+    ``recipes``, not on what ``discover`` hands back.
+
     ``discover(tags=...)`` is the library's own selection verb and the tag is
     **plural**. Its lightweight directory path filters the recipe frame without
     building anything, so this is a frame filter, not eight FFTs. (The singular
@@ -344,7 +466,7 @@ def load_heroes() -> dict:
     uw = get_underwriter()
     library = set(_library_only(uw.recipes).index.get_level_values("name"))
     found = uw.discover(tags="role:hero")
-    items = []
+    ranked = []
     for name in found.index:
         if name not in library:
             continue
@@ -353,8 +475,9 @@ def load_heroes() -> dict:
         except Exception:  # noqa: BLE001
             logger.warning("skipping hero %s: cannot resolve", name)
             continue
-        items.append(_entry(recipe.kind, name, recipe))
-    return {"items": sorted(items, key=lambda i: i["name"])}
+        ranked.append((getattr(recipe, "seq", 0), _entry(recipe.kind, name, recipe)))
+    ranked.sort(key=lambda pair: pair[0])
+    return {"items": [item for _, item in ranked]}
 
 
 # Points in a hero sparkline. Enough to show a shape at thumbnail size and

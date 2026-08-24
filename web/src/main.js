@@ -3036,10 +3036,10 @@ function loadExample(decl, formatted = true) {
     }).catch(() => { /* keep raw */ });
 }
 
-// Sync the ring on the row's own identity, so an entry filed under two topics
-// resumes from the showing that was clicked rather than from its first one. The
-// palette and the search view hand back the first showing, which is the right
-// answer there: they are not showing you a place in the groups.
+// Sync the ring on the row's own identity. Through a121 an entry filed under
+// two topics had a row in each group, so this resumed from the showing that was
+// clicked; each entry now has exactly one row, so there is one place to resume
+// from and `indexOf` finds it whichever surface handed the item over.
 function pickExample(item) {
     exampleRing.cursor = exampleRing.items.indexOf(item);
     loadExample(item.decl);
@@ -3052,16 +3052,14 @@ mountExamples($('examples-menu'), pickExample);
 // with focus in the editor.
 mountPalette(pickExample);
 
-// The ring is the dropdown read top to bottom: every row of every group, in the
-// payload's own order (topics in teaching order, entries name-sorted inside
-// one). An entry tagged in two topics is a row under each, so it is a stop under
-// each. Through a101 the ring deduped on the decl, which dropped 20 of the 209
-// rows and left the alphabet inside the later groups gap-toothed, and a walk
-// that silently omits rows you can see on screen is what reads as random order.
+// The ring is the dropdown read top to bottom, which since a122 is the library
+// in its own reading order, each entry once. Through a101 it deduped on the
+// decl, which dropped 20 of the 209 rows the grouped payload carried and left
+// the alphabet inside the later groups gap-toothed; a walk that silently omits
+// rows you can see on screen is what reads as random order. The grouped payload
+// is what made both the repeats and the dedup necessary, and it is gone.
 loadExamples().then((data) => {
-    for (const cat of data.categories || []) {
-        for (const item of cat.items || []) exampleRing.items.push(item);
-    }
+    exampleRing.items.push(...(data.items || []));
 }).catch(() => { /* dropdown still works; the ring just stays empty */ });
 
 // ----------------------------------------------------------------------

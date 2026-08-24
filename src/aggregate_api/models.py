@@ -763,13 +763,44 @@ class LexResponse(BaseModel):
 # Examples (aggregate's library.agg, via the recipe base)
 # ======================================================================
 
+class Pill(BaseModel):
+    """One render-ready label on an example row.
+
+    ``ns`` is the namespace the value came from and is what the SPA colors on:
+    ``kind`` off the recipe index, ``topic`` and ``role`` off the tag slugs. The
+    value is the bare word, so ``topic:reinsurance`` draws as ``reinsurance``,
+    and it is the text inside the pill, which is why a reader who cannot
+    separate the three hues still reads what the pill says.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    ns: Literal["kind", "topic", "role"]
+    value: str
+
+
+class FacetValue(BaseModel):
+    """One value of one facet, with how many of the returned entries carry it."""
+
+    model_config = _RESPONSE_CFG
+
+    value: str
+    count: int
+
+
 class ExampleItem(BaseModel):
     """One library entry.
 
     ``note`` is preferred but never guaranteed: most entries carry one, and an
     entry without a note is ordinary, not defective. ``decl`` is the entry's
-    canonical doc-free declaration (``Recipe.decl``), already in spread layout
-    and carrying ``hints{}``, so it drops straight into the editor.
+    DecL as its ``.agg`` file spells it (``Recipe.as_read``), several lines,
+    indented as written and carrying its trailer, so it drops straight into the
+    editor teaching the spelling the author chose.
+
+    ``pills`` is the row as it should be drawn, already ordered kind, then
+    topics, then roles. ``tags`` is the same information as full slugs, kept for
+    the search haystack and for anyone reading the api directly, and ``kind``
+    keeps a field of its own because the recipe's type is not a tag.
     """
 
     model_config = _RESPONSE_CFG
@@ -779,25 +810,27 @@ class ExampleItem(BaseModel):
     tags: list[str] = []
     note: str | None = None
     decl: str
-
-
-class ExampleCategory(BaseModel):
-    """One group of entries. ``key`` is the raw tag / kind, ``title`` is display."""
-
-    model_config = _RESPONSE_CFG
-
-    key: str
-    title: str
-    items: list[ExampleItem]
+    pills: list[Pill] = []
 
 
 class ExamplesResponse(BaseModel):
-    """``GET /v1/examples`` -- the library grouped on one axis."""
+    """``GET /v1/examples`` -- the whole library, one flat list in file order.
+
+    ``items`` is the library in its own reading order (``Recipe.seq``), each
+    entry appearing exactly once. There are no groups and no headings: the
+    ``# ---`` banners in ``library.agg`` are comments, nothing in ``aggregate``
+    parses them, and reading order is what the file actually carries.
+
+    ``facets`` is keyed by the three pill namespaces, and each list is ordered by
+    first appearance in ``items``, so a filter bar built from it reads in file
+    order too. Counts are over the entries returned, so a filtered payload adds
+    up to what the caller can see.
+    """
 
     model_config = _RESPONSE_CFG
 
-    grouping: Literal["topic", "kind", "role"]
-    categories: list[ExampleCategory]
+    items: list[ExampleItem]
+    facets: dict[str, list[FacetValue]]
 
 
 class HeroesResponse(BaseModel):

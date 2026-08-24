@@ -518,7 +518,7 @@ def test_the_menu_survives_a_session_overwriting_a_library_name(library_client):
     build(library_client, "session-zzzzzzzz", "sev FixtureSeverity 900 * expon")
     r = library_client.get("/v1/examples", headers={SEV: "session-zzzzzzzz"})
     assert r.status_code == 200
-    names = {item["name"] for cat in r.json()["categories"] for item in cat["items"]}
+    names = {item["name"] for item in r.json()["items"]}
     assert "FixtureSeverity" in names
 
 

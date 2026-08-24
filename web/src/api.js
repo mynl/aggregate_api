@@ -244,7 +244,7 @@ export const api = {
 
     // Metadata
     // group: 'topic' (default) | 'kind' | 'role'
-    examples:     (group = '')      => _json('GET',  `/v1/examples?${qs({ group })}`),
+    examples:     ()                => _json('GET',  '/v1/examples'),
     /**
      * The `role:hero` entries, with their sparklines.
      *

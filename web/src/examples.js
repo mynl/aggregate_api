@@ -1,17 +1,22 @@
-// The examples picker: a topic-grouped dropdown with fuzzy find, and the same
-// list as a wider Ctrl+K palette.
+// The examples picker: the library in its own reading order, and the same list
+// as a wider Ctrl+K palette.
 //
-// The library is 186 entries. A plain grouped dropdown was the right successor
-// to the letter categories, but scrolling nine groups to find `CatXOLTower` is
-// not finding, it is remembering. So the same payload drives two surfaces:
+// `library.agg` is written as a reading order and the entries inside a part
+// build on one another. Through a121 none of that reached here: the server
+// grouped on the topic namespace, ordered the groups by a hand kept tuple and
+// sorted by name inside each one, so the list was neither the file's order nor
+// a teaching order. It is now one flat list in the file's own order, with no
+// headings at all, and the payload arrives ordered so nothing here re-sorts.
 //
-//   * the dropdown, grouped by topic, with a search box pinned at its top;
+// Two surfaces off one payload:
+//
+//   * the dropdown, with a search box pinned at its top;
 //   * Ctrl+K, the same rows full width with more room for the note.
 //
 // Both filter through uFuzzy over `name + kind + tags + note`, so "cat xol",
-// "reins tower" and "ilw" all reach the same entry. Typing switches the view
-// from groups to a flat ranked list, because once you are searching, the
-// grouping is noise.
+// "reins tower" and "ilw" all reach the same entry. Search results are ranked
+// rather than file-ordered, because a ranked list that keeps file order is not
+// ranked.
 
 import uFuzzy from '@leeoniya/ufuzzy';
 import { api } from './api.js';
@@ -35,19 +40,15 @@ export async function loadExamples() {
 }
 
 /**
- * Flatten the grouped payload into one searchable list.
+ * Build the search index over the payload, in the payload's own order.
  *
- * An entry tagged in two topics appears in two groups; the flat list holds it
- * once, keyed by name, so a search never shows a duplicate.
+ * The dedup by name that stood here is gone with the grouped payload: the
+ * server emitted an entry once per topic tag, 182 rows for 151 entries, and
+ * this had to collapse them again. Each entry now arrives exactly once, so the
+ * list is the payload and the order is the library's.
  */
 function buildIndex(payload) {
-    const byName = new Map();
-    for (const cat of payload.categories || []) {
-        for (const item of cat.items || []) {
-            if (!byName.has(item.name)) byName.set(item.name, item);
-        }
-    }
-    flat = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+    flat = payload.items || [];
     // Tags keep their namespace so "topic:reinsurance" and "reinsurance" both
     // match, and the note is included so a search can be about the subject
     // rather than the name.
@@ -81,28 +82,21 @@ function row(item, onPick, className = 'dropdown-item example-row') {
 }
 
 /**
- * Render results into a container: grouped by topic when idle, flat when
- * searching.
+ * Render results into a container: the library in file order when idle, ranked
+ * when searching.
  *
- * The grouped view is the browsable one; a search result is already ordered by
- * relevance, and re-grouping it would scatter the best matches down the page.
+ * No headings and no dividers. The `# ---` banners in `library.agg` are
+ * comments, nothing in `aggregate` parses them, and inventing headings here is
+ * the app deciding what the library means. File order is what the file carries,
+ * so file order is what this draws.
  */
 function renderList(container, payload, needle, onPick, rowClass) {
     empty(container);
     const q = needle.trim();
 
     if (!q) {
-        let first = true;
-        for (const cat of payload.categories || []) {
-            if (!cat.items || !cat.items.length) continue;
-            if (!first) container.appendChild(el('li', {},
-                el('hr', { className: 'dropdown-divider' })));
-            first = false;
-            container.appendChild(el('li', {},
-                el('h6', { className: 'dropdown-header' }, cat.title)));
-            for (const item of cat.items) {
-                container.appendChild(el('li', {}, row(item, onPick, rowClass)));
-            }
+        for (const item of payload.items || []) {
+            container.appendChild(el('li', {}, row(item, onPick, rowClass)));
         }
         return;
     }
@@ -139,7 +133,7 @@ export async function mountExamples(menuEl, onPick) {
     const input = el('input', {
         type: 'search',
         className: 'form-control form-control-sm example-search',
-        placeholder: 'search 186 examples…',
+        placeholder: `search ${(payload.items || []).length} examples…`,
         autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: false,
     });
     input.addEventListener('input', () => renderList(list, payload, input.value, onPick));

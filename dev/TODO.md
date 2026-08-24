@@ -810,6 +810,20 @@ one version bump each.
       headings are already on screen right above them. Turning them on
       everywhere is one condition in `renderControls`. A styling call, open.
 
+- [ ] **The Examples dropdown reads the library in file order**:
+      `dev/plan-examples-dropdown.md`, five phases, in flight. The LIB half
+      landed at `aggregate 1.0.0a320` (`Recipe.seq`, `Recipe.as_read`). A1 to A3
+      landed at **a122**: the payload is one flat file-ordered list with pills
+      and facets, the app's three ordering tables are deleted, and the editor
+      receives the entry's own text rather than a canonical re-render. Open: A4
+      (the three-line row, the pill filter bar, `localStorage` persistence), A5
+      (uFuzzy `outOfOrder` so search terms may arrive in any order) and the
+      `CLAUDE.md` "Relationship to aggregate" note recording the two new fields.
+      **Owed upstream, ruled 2026-08-24**: `topic:pnl` and `topic:distortion`
+      duplicate their entry's own `kind` on fourteen rows, so the pill row spells
+      the same word twice; the author is removing the two tags from
+      `library.agg`, and nothing app side changes when they go.
+
 ## Raised with `aggregate` (not fixed here)
 
 - [ ] **The portfolio's density ordinate should declare its full extent, as the

@@ -92,7 +92,7 @@ def test_the_menu_reads_the_same_library(library_client):
     """And the Examples menu shows those two entries and nothing else."""
     r = library_client.get("/v1/examples")
     assert r.status_code == 200
-    names = {item["name"] for cat in r.json()["categories"] for item in cat["items"]}
+    names = {item["name"] for item in r.json()["items"]}
     assert names == {"FixtureSeverity", "FixtureAggregate"}
 
 
