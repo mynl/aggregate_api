@@ -391,3 +391,42 @@ widest pill row is **five**, not four (`BodoffFour` and `DiscretePortfolio`, bot
 Also noted, no action: the `test_examples_group_by_role` failure was already
 there before this work, because `role:` now covers the library and the "other"
 bucket it asserted on is empty. It is deleted with the grouped view.
+
+### A4, `1.0.0a123`
+
+Open questions 1 to 3 of section 6, settled by building them the way the plan
+names and leaving them visible for review:
+
+1. **The pill row wraps.** The widest row carries five, not the four the plan
+   estimated (`BodoffFour` and `DiscretePortfolio`, both `port` with three
+   topics), which only strengthens the case: a "+2" affordance for two rows is
+   more machinery than the case deserves.
+2. **The note is clamped to three lines with the whole text on `title`**, and
+   the clamp comes off in the palette, which has the width for it.
+3. **The filter bar shows counts**, one per active pill, off the payload's
+   facets.
+
+Divergences:
+
+1. **The bar also carries a running "47 of 151".** The plan's question 3 argues
+   counts by "`advanced 47` tells a reader what a click will do before they
+   click it", which is the argument for a facet browser; the bar shows what is
+   already on, where the useful number is what the combination left. Both are
+   presentation off numbers the payload already carries, so both are there.
+2. **The pills sit outside the row's anchor**, as siblings inside the `<li>`,
+   which is now the row. A `<button>` nested in an `<a>` is neither valid nor
+   clickable, since the link swallows the press. The `<li>` highlights as one,
+   so the row still reads as a row.
+3. **`applyFilters` is a separate pure export** from `filteredExamples`. The
+   plan describes the filter as a `filter()` in the render path. Splitting the
+   composition rule out is what makes it testable with no DOM, and OR within a
+   namespace against AND across them is exactly the rule worth pinning: both
+   failure modes read as a wrong list rather than as an error.
+4. **`web/test/example-filters.test.js` is new**, ten cases. The plan names no
+   app-side test for A4.
+5. **The menu is 20px wider**, `min-width` 340 to 360 and `max-width` 460 to
+   480, for the pill row.
+6. **`main.js` keeps only the ring's cursor**, dropping `exampleRing.items`
+   entirely, and subscribes to the filter set to reset it. Holding a copy of the
+   list would make the walk and the menu two lists that agree until someone
+   clicks a pill.

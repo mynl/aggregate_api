@@ -88,6 +88,24 @@
     --warn:    #c2410c;
     --bad:     #e11d2e;
 
+    /* ---- Example pills ----
+       Three hues, one per tag namespace, no shading inside a namespace. The
+       page reserves color hard: the accent means selection and nothing else,
+       and green, orange and scarlet mean state. So these are chosen to be
+       chips rather than signals: low saturation, well clear of --house, --ok,
+       --warn and --bad, and separated from each other by hue rather than by
+       intensity, so no pill can be mistaken for a warning and none of the
+       three reads as louder than the others.
+
+       Color is never the meaning. The value is the text inside the pill, so a
+       reader who cannot separate slate from indigo still reads `advanced`.
+       That is also why the roles share one hue: six values in one color is not
+       a legend anyone has to learn, and the word says which is a level and
+       which is a marker. */
+    --pill-kind-bg:   #e9ecef;  --pill-kind-ink:  #343a40;
+    --pill-topic-bg:  #e7e9f5;  --pill-topic-ink: #3c4a8a;
+    --pill-role-bg:   #f2ebdf;  --pill-role-ink:  #7a5a2b;
+
     /* ---- Measure and rhythm ----
        One measure for every run of prose. In rem rather than ch, because the
        lede, the exhibit ledes and the captions sit at three different font
@@ -935,34 +953,68 @@ header .navbar { min-height: 56px; }
 .lede-terms a:hover { text-decoration: underline; }
 
 /* ---- Examples picker: dropdown search + Ctrl+K palette ---- */
-/* One list component, two surfaces. The dropdown is browsable, grouped by
-   topic; typing switches both to a flat ranked list, because once you are
-   searching the grouping is noise. */
+/* One list component, two surfaces, one flat list in the library's own reading
+   order. Typing ranks it; clicking a pill narrows it. */
 /* The menu itself must not scroll, or the pinned search box scrolls away with
    the results. The inner .example-list is the scroller. */
-.examples-menu { min-width: 340px; max-width: 460px; padding-top: 0; }
+.examples-menu { min-width: 360px; max-width: 480px; padding-top: 0; }
 .example-search-wrap { padding: .35rem .5rem .25rem; position: sticky; top: 0;
     background: #fff; z-index: 1; }
 .example-search { font-size: .8rem; }
 .example-list { max-height: 52vh; overflow-y: auto; list-style: none;
     padding: 0; margin: 0; }
 .example-list li { list-style: none; }
+/* The row is the whole `li`: the anchor carries the name and the note, the
+   pills sit beside it as buttons, and the two highlight together. A button
+   inside an anchor is neither valid nor clickable, since the link swallows the
+   press, which is why the pills are not inside .example-row. */
+.example-item { display: block; }
+.example-item:hover { background: var(--soft); }
 .example-row {
-    display: grid; grid-template-columns: auto auto; column-gap: .5rem;
-    align-items: baseline; padding: .25rem .75rem; white-space: normal;
+    display: block; padding: .3rem .75rem .05rem; white-space: normal;
 }
-.example-name { font-family: var(--mono); font-size: .8rem; font-weight: 600; }
-.example-kind {
-    font-family: var(--mono); font-size: .64rem; color: var(--mut);
-    justify-self: start;
+.example-row:hover, .example-row:focus { background: none; }
+.example-name {
+    display: block; font-family: var(--mono); font-size: .8rem; font-weight: 600;
 }
+/* Clamped to three lines with the whole text on `title`. The longest note in
+   the library is a 320 character citation, which is five or six lines at this
+   width, and one entry that tall pushes everything after it off the screen. */
 .example-note {
-    grid-column: 1 / -1; font-size: .72rem; color: var(--mut);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    overflow: hidden; font-size: .72rem; line-height: 1.35; color: var(--mut);
+}
+.example-pills {
+    display: flex; flex-wrap: wrap; gap: .2rem; padding: .1rem .75rem .3rem;
+}
+/* Wrapping, not truncating. The widest row today carries five pills, and a
+   "+2" affordance is more machinery than that case deserves. */
+.pill {
+    border: 0; border-radius: 999px; padding: .05rem .42rem;
+    font-family: var(--mono); font-size: .64rem; line-height: 1.55;
+    cursor: pointer;
+}
+.pill-kind  { background: var(--pill-kind-bg);  color: var(--pill-kind-ink); }
+.pill-topic { background: var(--pill-topic-bg); color: var(--pill-topic-ink); }
+.pill-role  { background: var(--pill-role-bg);  color: var(--pill-role-ink); }
+.pill:hover { box-shadow: inset 0 0 0 1px currentColor; }
+.pill.is-on { font-weight: 700; }
+.pill-x { margin-left: .3rem; }
+/* The active filters, above the list and inside the scroller, so a long list
+   scrolls past them rather than pinning a second sticky band under the search
+   box. */
+.example-filters {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .2rem;
+    padding: .35rem .75rem; border-bottom: 1px solid var(--line-2);
+}
+.example-shown { margin-left: auto; font-size: .68rem; color: var(--mut); }
+.example-clear {
+    border: 0; background: none; padding: 0 0 0 .4rem;
+    font-size: .68rem; color: var(--primary); cursor: pointer;
 }
 
 /* The palette is the same list given room to breathe: wider, centred, and
-   with the note on one line rather than truncated to a chip. */
+   with the note whole rather than clamped. */
 .palette-backdrop {
     display: none; position: fixed; inset: 0; z-index: 1080;
     background: rgba(33,37,41,.28); padding: 8vh 1rem 1rem;
@@ -977,9 +1029,13 @@ header .navbar { min-height: 56px; }
     border-radius: 0; font-size: .95rem; padding: .7rem .9rem; }
 .palette .example-search:focus { box-shadow: none; }
 .palette-list { max-height: 60vh; padding: .25rem 0 .4rem; }
-.palette-list .example-row { padding: .3rem 1rem; }
-.palette-list .example-note { white-space: normal; }
-.palette-list .example-row:hover { background: var(--soft); }
+.palette-list .example-row { padding: .35rem 1rem .05rem; }
+.palette-list .example-pills { padding: .1rem 1rem .35rem; }
+.palette-list .example-filters { padding: .4rem 1rem; }
+/* Room enough for the longest note, so the clamp comes off here. `display:
+   block` is what lifts it: -webkit-line-clamp only bites inside a -webkit-box. */
+.palette-list .example-note { display: block; }
+.palette-list .example-item:hover { background: var(--soft); }
 
 /* ---- Overview tab ----
    A header block stood above the sub-tab row through a119, one quiet line of tag

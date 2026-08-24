@@ -815,8 +815,10 @@ one version bump each.
       landed at `aggregate 1.0.0a320` (`Recipe.seq`, `Recipe.as_read`). A1 to A3
       landed at **a122**: the payload is one flat file-ordered list with pills
       and facets, the app's three ordering tables are deleted, and the editor
-      receives the entry's own text rather than a canonical re-render. Open: A4
-      (the three-line row, the pill filter bar, `localStorage` persistence), A5
+      receives the entry's own text rather than a canonical re-render. A4 landed
+      at **a123**: the three-line row, the pill filter bar with counts,
+      `localStorage` persistence shared with the Ctrl+K palette, and the
+      Ctrl+Shift arrow ring walking the filtered list. Open: A5
       (uFuzzy `outOfOrder` so search terms may arrive in any order) and the
       `CLAUDE.md` "Relationship to aggregate" note recording the two new fields.
       **Owed upstream, ruled 2026-08-24**: `topic:pnl` and `topic:distortion`

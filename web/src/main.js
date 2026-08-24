@@ -22,7 +22,10 @@ import './styles/cm6.css';
 import { api, ApiError, errorMessage } from './api.js';
 import { createPricingForm } from './pricing-form.js';
 import { createEditor, emacsEnabledDefault, modifierName } from './editor.js';
-import { mountExamples, mountPalette, loadExamples } from './examples.js';
+import {
+    mountExamples, mountPalette, loadExamples, filteredExamples,
+    onExamplesFilterChange,
+} from './examples.js';
 import { renderInfo } from './renderers.js';
 import { fetchFailed, mountChart, mountChartDoc, notDrawable } from './charts/mount.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
@@ -3016,7 +3019,11 @@ document.querySelector('[data-plot-download]').addEventListener('click', () => {
 // documented in the feedback line and the Help panel since a37. It was an
 // undisclosed Alt- binding before that, which is a working feature nobody could
 // find.
-const exampleRing = { items: [], cursor: -1 };
+// Only the cursor is held. The list itself is `filteredExamples()`, read at
+// each step, because the ring is the dropdown read top to bottom and since a123
+// the dropdown shows what the active pills leave. Holding a copy would make the
+// walk and the menu two lists that agree until someone clicks a pill.
+const exampleRing = { cursor: -1 };
 
 // Load a program into the editor. A library example arrives as `Recipe.decl`,
 // already canonical spread-form DecL carrying its hints, so there is nothing to
@@ -3041,7 +3048,7 @@ function loadExample(decl, formatted = true) {
 // clicked; each entry now has exactly one row, so there is one place to resume
 // from and `indexOf` finds it whichever surface handed the item over.
 function pickExample(item) {
-    exampleRing.cursor = exampleRing.items.indexOf(item);
+    exampleRing.cursor = filteredExamples().indexOf(item);
     loadExample(item.decl);
 }
 
@@ -3058,9 +3065,16 @@ mountPalette(pickExample);
 // the alphabet inside the later groups gap-toothed; a walk that silently omits
 // rows you can see on screen is what reads as random order. The grouped payload
 // is what made both the repeats and the dedup necessary, and it is gone.
-loadExamples().then((data) => {
-    exampleRing.items.push(...(data.items || []));
-}).catch(() => { /* dropdown still works; the ring just stays empty */ });
+//
+// The fetch is still kicked off here so the ring answers on the first press
+// rather than on the first time the menu is opened; `loadExamples` memoizes, so
+// the dropdown and the palette read the same payload when they mount.
+loadExamples().catch(() => { /* dropdown still works; the ring just stays empty */ });
+
+// A changed filter set changes the list the cursor indexes into, so the cursor
+// stops meaning anything. Dropping it restarts the walk at the end the next
+// press asks for, which is where an unset cursor already lands.
+onExamplesFilterChange(() => { exampleRing.cursor = -1; });
 
 // ----------------------------------------------------------------------
 // The landing build
@@ -3103,7 +3117,7 @@ renderActionRow();
 loadLanding();
 
 // The arrows move on the dropdown, not on the history walk beside them: up goes
-// up the list, towards the first row of the first group, and down goes down it.
+// up the list, towards the library's first entry, and down goes down it.
 // The two walks share a pair of keys and read their direction the opposite way
 // round, which sounds like a trap and is not: history's up is older, because the
 // list it moves on is not on screen, while this one is looking at the menu.
@@ -3115,12 +3129,13 @@ loadLanding();
 // `pickExample` can also leave the cursor unset, when the row picked is not one
 // of the ring's own, so this is not only the opening press.
 function exampleStep(dir) {
-    const n = exampleRing.items.length;
+    const items = filteredExamples();
+    const n = items.length;
     if (!n) return;
     const at = exampleRing.cursor;
     if (at < 0) exampleRing.cursor = dir === 'prev' ? n - 1 : 0;
     else exampleRing.cursor = dir === 'prev' ? (at - 1 + n) % n : (at + 1) % n;
-    loadExample(exampleRing.items[exampleRing.cursor].decl);
+    loadExample(items[exampleRing.cursor].decl);
 }
 
 // ----------------------------------------------------------------------

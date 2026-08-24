@@ -4,6 +4,55 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a123
+
+**[Examples-Tag-Pills] every pill is a filter and every filter is a pill.**
+Phase A4 of `dev/plan-examples-dropdown.md`, the app side of the flat list a122
+started serving. The row is now three lines: the name in bold, the note in muted
+text, and a row of pills. Nothing is right aligned, so the list has one clean
+left edge and a long name never collides with anything.
+
+**The kind is the first pill rather than a column of its own**, then the topics,
+then the roles, in the order the payload serves them. Three hues, one per
+namespace, no shading inside a namespace, defined as `--pill-kind-*`,
+`--pill-topic-*` and `--pill-role-*` on `:root`. They are chips, not signals:
+low saturation, well clear of the accent and of the three state colors, and
+separated from each other by hue rather than by intensity, because the page
+reserves the house red for selection and green, orange and scarlet for state.
+Color is never the meaning either way, since the value is the text inside the
+pill. `site.css` has no dark mode at all, so the tokens are light only rather
+than the place to introduce the page's first `prefers-color-scheme` block.
+
+**Clicking a pill filters on it.** Values compose OR within a namespace and AND
+across them, so "intro or intermediate" and "advanced reinsurance" are both
+expressible, and the new `applyFilters` is the pure function that says so, with
+`web/test/example-filters.test.js` covering both rules, their composition, and
+the property the whole plan is about: filtering hides rows and never reorders
+what remains. A bar above the list carries the active pills, each with its own
+count off the payload's facets and an x, plus a running "47 of 151" and a clear
+control. There is no separate facet UI to design, learn or keep in sync with the
+pills.
+
+**The filter set persists per viewer** in `localStorage`, read on mount and
+written on change, both wrapped: `localStorage` throws rather than returning
+null in a private window and where site data is blocked, so a viewer who cannot
+store loses a filter, not a menu. A stored key that no longer parses is skipped
+for the same reason. The set is one module-level `Set` shared by the dropdown
+and the Ctrl+K palette, which watch it and redraw together, so a filter set in
+one is on in the other.
+
+**The Ctrl+Shift arrow ring walks the filtered list**, which is its own stated
+contract, the dropdown read top to bottom. It no longer holds a copy of the
+items, only a cursor, and the cursor is dropped whenever the filter set moves,
+since an index into a list that changed shape means nothing.
+
+**The note is clamped to three lines with the whole text on `title`**, and the
+clamp comes off in the palette, which is wide enough to show it. The longest
+note in the library is a 320 character citation, five or six lines in a
+dropdown, and one entry that tall pushes everything after it off the screen. The
+pill row wraps rather than truncating; the widest today carries five, and a "+2"
+affordance is more machinery than that case deserves.
+
 ## 1.0.0a122
 
 **[Examples-File-Order] the Examples menu reads the library in the file's own
