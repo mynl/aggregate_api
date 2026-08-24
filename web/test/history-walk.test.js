@@ -17,12 +17,15 @@
 // place made the opening step back hand over the text already on screen, a
 // press that visibly did nothing.
 //
+// The `clear` test is last for the same reason, from the other end: it empties
+// the shared store outright, so anything after it would start from nothing.
+//
 // Run: `npm test` from `web/`, or `node --test web/test/` from the repo root.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { canNext, canPrev, next, position, prev, record,
+import { canNext, canPrev, clear, next, position, prev, record,
          resetCursor } from '../src/history.js';
 
 const A = 'agg A 1 claim dsev [1]';
@@ -154,4 +157,40 @@ test('the character ceiling binds before the count does', () => {
     assert.ok(n < 300, `the sum trimmed the oldest end, kept ${n}`);
     assert.ok(n > 200, `and did not overtrim, kept ${n}`);
     assert.equal(prev(''), `agg K299 ${body}`, 'the newest end is what is kept');
+});
+
+// The second press of the clear icon. Last in the file: it empties the store
+// the tests above spent their run filling.
+test('clear empties the store, the readout and the walk', () => {
+    resetCursor();
+    // Clear the couple of hundred entries the cap tests above left behind, which
+    // is the first assertion: it works on a full store, not only a seeded one.
+    clear();
+    assert.deepEqual(position(), { m: 0, n: 0 },
+                     'the store the cap tests filled is gone');
+
+    record(C);
+    record(B);
+    record(A);
+    assert.equal(position().n, 3, 'seeded, so the clear has something to do');
+
+    clear();
+    assert.deepEqual(position(), { m: 0, n: 0 },
+                     'the readout draws blank at m === 0');
+    assert.equal(canPrev(''), false, 'and the walk has nothing to walk');
+    assert.equal(canNext(), false);
+    assert.equal(prev(''), null, 'a press at either end returns nothing');
+});
+
+test('clear takes the stashed draft with it', () => {
+    record(A);
+    // Step back off a typed draft, which is what stashes it, then clear while
+    // the walk is standing on an entry.
+    prev('agg Typed 1 claim dsev [9]');
+    clear();
+    // A surviving stash would surface as a program nobody asked for the next
+    // time the reader walked forward, which is the failure `resetCursor` guards
+    // against on an edit and this has to guard against too.
+    record(B);
+    assert.equal(next(), null, 'nothing newer, and no draft to step onto');
 });

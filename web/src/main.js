@@ -187,9 +187,38 @@ $('history-prev').title = `step back through your history (${MOD_KEY}+↑)`;
 $('history-next').title = `step forward through your history (${MOD_KEY}+↓)`;
 for (const node of document.querySelectorAll('.mod-key')) node.textContent = MOD_KEY;
 
-// Clear-X clears the editor and refocuses.
+// Clear-X clears the editor and refocuses. Press it again on an empty box and
+// it clears the stored history, which is the walk the two arrows below it
+// navigate: the readout goes blank and both arrows grey.
+//
+// A second press rather than a control of its own, per the author, and
+// deliberately with no confirmation dialog: a modal would defeat the point of
+// asking for a gesture. "The cache of programs" is read as the localStorage
+// history under `aggregate-web:history`, which is the only store a reader would
+// describe that way and the one this icon's neighbors walk. The server side
+// object cache is shared and is not the app's to drop.
+//
+// The word matters more here than anywhere else the button flashes one. The box
+// was already empty, so nothing visible changes except a readout going blank,
+// which is easy to miss, and without a word the second press reads as a dead
+// control. It goes on `#history-pos`, which is the thing that just emptied and
+// already carries `aria-live="polite"`, so it is announced as well as drawn.
+//
+// Guarded on the history being non-empty, which is not fussiness. `flashLabel`
+// restores the text it captured, so two presses inside its 900ms would have the
+// second capture the word the first was showing and put it back for good. There
+// is also nothing to say: a press that clears nothing should report nothing.
 $('editor-clear').addEventListener('click', () => {
-    editor.setText('');
+    if (editor.getText().trim()) {
+        editor.setText('');
+        editor.focus();
+        return;
+    }
+    if (history.position().n) {
+        history.clear();
+        renderHistoryNav();
+        flashLabel($('history-pos'), 'cleared');
+    }
     editor.focus();
 });
 

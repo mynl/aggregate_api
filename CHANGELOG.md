@@ -4,6 +4,43 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a128
+
+**[Clear-Twice-Clears-History] a second press of the clear icon empties the
+store.** Item 4 of `dev/plan-punchups-aug-24-API.md`. Press the clear icon with
+a program in the box and it clears the box, as before. Press it again on an
+empty box and it clears the stored history: the `[m/n]` readout goes blank, both
+arrows grey, and the walk has nothing to walk.
+
+"The cache of programs" is read as the localStorage history under
+`aggregate-web:history`. It is the store the icon's two neighbors navigate and
+the only one a reader would describe that way. The server side object cache is
+shared and is not the app's to drop.
+
+`history.js` gains `clear()`, which empties `entries`, puts `cursor` back to
+`-1`, drops the stashed `draft` and saves once. It belongs there because that
+module owns the stored shape and the two caps in `trim`.
+
+**No confirmation dialog, deliberately.** The author asked for a second click,
+and a modal in front of it would defeat the point of asking for a gesture rather
+than a control. What is lost is a local convenience store, not work.
+
+The readout flashes "cleared" for a moment, on `#history-pos`, which is the
+element that just emptied and already carries `aria-live="polite"`, so the word
+is announced as well as drawn. Without it the second press looks like a dead
+control: the box was already empty and a readout going blank is easy to miss.
+The flash is guarded on the history being non-empty, because `flashLabel`
+restores the text it captured, so two presses inside its 900ms would otherwise
+leave the word up for good. A press that clears nothing now says nothing, which
+is also the honest reading.
+
+Two tests in `web/test/history-walk.test.js`, last in the file because they
+empty the store the tests above spend the run filling: one records three,
+clears, and checks the readout reads `{m: 0, n: 0}` with both directions dead;
+the other checks the stashed draft goes too, since a survivor would surface
+later as a program nobody asked for. The Help panel's `✕` line now names the
+second job.
+
 ## 1.0.0a127
 
 **[Editor-Margin-Controls] the walk buttons align right and lose their boxes.**

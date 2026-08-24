@@ -707,3 +707,39 @@ height is declared (`2.1rem`) rather than derived, so dropping the 1px border on
 each side changes what is painted from 33.6px to 31.6px and leaves the laid out
 box, and therefore the stack total, where it was. The comment now records that
 rather than being left quoting numbers about a box that had moved under it.
+
+### Item 4, at `1.0.0a128`
+
+Executed as written. `history.clear()` added, the `editor-clear` handler
+branches on whether the box has text, no confirmation dialog, and the Help
+panel's `✕` line gains the second job.
+
+**Divergence one: where the word goes.** The plan wrote `flashLabel(...)` with
+the arguments elided. The target is `#history-pos`, the `[m/n]` readout. It is
+the element that just emptied, it sits in the same column as the icon that was
+pressed, and it already carries `aria-live="polite"`, so the word is announced
+to a screen reader as well as drawn. The obvious alternative, the clear icon
+itself, does not work: it is an `<i class="bi bi-x-circle">` whose glyph is
+`::before` content, so writing `textContent` would put the word beside the icon
+rather than in place of it. The word is "cleared" rather than the plan's
+"history cleared", because the readout's slot is four characters wide in a mono
+face and the longer string would push the column.
+
+**Divergence two: the flash is guarded, and this is a real bug the plan's
+sketch would have shipped.** `flashLabel` captures `btn.textContent` and
+restores it after 900ms. Two presses inside that window would have the second
+capture the word the first was displaying, so the later timeout would put
+"cleared" back permanently and the readout would be stuck on it. The handler
+therefore only clears and flashes when `history.position().n` is non-zero. That
+also reads better on its own terms: a press that clears nothing should report
+nothing, and after the first clear there is nothing left to clear.
+
+**Divergence three, scope.** The plan asked for one test, three records then a
+clear then `position()` and `canPrev`. That is the first of the two written. The
+second covers the stashed draft, which `clear()` drops and which the plan's case
+would not have caught: a surviving stash surfaces later as a program nobody
+asked for, which is exactly the failure `resetCursor`'s docstring says it exists
+to prevent. Both are last in the file, because they empty the shared store that
+the cap tests above spend the run filling; the file's header comment now says
+so. The first also asserts `clear()` on that full store before seeding its own
+three, so the "works on a couple of hundred entries" case is covered for free.

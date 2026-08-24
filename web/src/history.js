@@ -288,3 +288,24 @@ export function resetCursor() {
     state.draft = null;
     save(state);
 }
+
+/**
+ * Empty the store: no entries, no walk in progress, no stashed draft.
+ *
+ * The second press of the clear icon, with the box already empty. It belongs
+ * here rather than in `main.js` because this module owns the stored shape and
+ * the two caps in `trim`, and a caller reaching in to blank three fields would
+ * be a second place that has to know what a state looks like.
+ *
+ * No confirmation, per the author, and the second click is itself the guard: a
+ * modal in front of it would defeat the point of asking for a gesture rather
+ * than a control. What is lost is a local convenience store, not work. Nothing
+ * on the server is touched: the object cache is shared and is not the app's to
+ * drop.
+ */
+export function clear() {
+    state.entries = [];
+    state.cursor = -1;
+    state.draft = null;
+    save(state);
+}

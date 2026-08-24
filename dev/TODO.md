@@ -242,8 +242,8 @@ and the standing REMINDER below about what is worth plotting.
           not entries, and nothing is owed upstream.
     - [x] 3 [Editor-Margin-Controls] the walk buttons align right and lose
           their boxes (→ 1.0.0a127). Circled arrows, bare, at the icon's size.
-    - [ ] 4 [Clear-Twice-Clears-History] a second press of the clear icon
-          empties the store.
+    - [x] 4 [Clear-Twice-Clears-History] a second press of the clear icon
+          empties the store (→ 1.0.0a128). No dialog; the readout says "cleared".
     - [ ] 5 [Example-Ring-Follows-Search] the ring follows the search box as
           well as the pills. The pill half landed with the examples dropdown
           work; only the search needle is left.
