@@ -4,6 +4,33 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a134
+
+**[Table-View-Cycle] Ctrl+Shift+U walks all three table readings.** Author
+request, no plan doc.
+
+The keystroke flipped two states, static and interactive, and deliberately never
+entered the third: it toggled against the static reading you last had, so a
+reader living in full precision kept it but nobody arrived there except from the
+menu. That was the a69 ruling ("not the full prec version") and the author has
+now reversed it. It cycles in menu order instead: static, static at full
+precision, interactive, and round to static again.
+
+Full precision belongs in the cycle for the reason the other two are there. It
+answers the same question, how should this table read, and comparing a printed
+digit against every digit is a thing done while reading rather than while
+deciding, which is the whole test for what earns a keystroke.
+
+`_lastStaticView` goes with the toggle, replaced by `TABLE_VIEW_CYCLE`, the menu
+order written once. A stored preference outside that ring, which nothing writes
+but `localStorage` can hold from an older build, steps to static rather than to
+`undefined`.
+
+Ctrl+Shift+V is untouched and still flips perspective. The help panel already
+described the menu's three readings and needed no edit.
+
+---
+
 ## 1.0.0a133
 
 **[Example-Ring-Follows-Search] the ring follows the search box as well as the

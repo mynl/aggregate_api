@@ -1672,17 +1672,19 @@ function syncPreferenceMenu() {
     }
 }
 /**
- * Ctrl+Shift+U: flip between the instrument and the page.
+ * Ctrl+Shift+U: step through the three readings of a table.
  *
  * The one preference worth a keystroke, because it is the one you change while
  * reading rather than while deciding: a table you want to sort is a table you
  * are already looking at, and going up to the header menu and back loses your
  * place on the page.
  *
- * It toggles against the static reading you last had rather than against
- * `'static'`, so a reader living in full precision keeps it. It therefore never
- * *enters* full precision either, which is the author's "not the full prec
- * version": the third state stays a deliberate choice from the menu.
+ * It **cycles** rather than flips, in the order the menu lists: static, static
+ * at full precision, interactive, and round to static again. Full precision was
+ * held out of the keystroke through a133 and reachable from the menu only. It
+ * earns its place here because it answers the same question the other two do,
+ * how should this table read, and because checking a printed digit against all
+ * of them is exactly a thing done while reading.
  *
  * **Capture phase, and `stopPropagation`, and this is the whole trick.**
  * CodeMirror drops the Shift when it matches a character key held with Ctrl, so
@@ -1707,14 +1709,14 @@ function syncPreferenceMenu() {
  * preference and the reader is usually in a pane, not in the editor, when they
  * want it.
  */
-let _lastStaticView = isStatic(_tableView) ? _tableView : 'static';
-function toggleTableView() {
-    if (isStatic(_tableView)) {
-        _lastStaticView = _tableView;
-        setTableView('interactive');
-    } else {
-        setTableView(_lastStaticView);
-    }
+// Menu order, so the keystroke and the dropdown tell one story. `indexOf`
+// returns -1 for a value outside the ring, which steps to the first entry: the
+// seed comes from `localStorage` and an old or hand-edited key lands on static
+// rather than nowhere.
+const TABLE_VIEW_CYCLE = ['static', 'precise', 'interactive'];
+function cycleTableView() {
+    const at = TABLE_VIEW_CYCLE.indexOf(_tableView);
+    setTableView(TABLE_VIEW_CYCLE[(at + 1) % TABLE_VIEW_CYCLE.length]);
 }
 document.addEventListener('keydown', (ev) => {
     if (!ev.ctrlKey || !ev.shiftKey || ev.altKey) return;
@@ -1724,7 +1726,7 @@ document.addEventListener('keydown', (ev) => {
     if (ev.code !== 'KeyU') return;
     ev.preventDefault();
     ev.stopPropagation();
-    toggleTableView();
+    cycleTableView();
 }, true);       // capture: see above, the editor must never see this
 
 /** Flip between the two business readings, the pair being only two. */
