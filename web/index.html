@@ -621,24 +621,39 @@
             <h6>Keys</h6>
             <div class="help-keys">
                 <span><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span><span>build</span>
+                <span><kbd>Ctrl</kbd>+<kbd>Space</kbd></span><span>autocomplete; <kbd>Tab</kbd> takes the suggestion</span>
                 <span><kbd>Ctrl</kbd>+<kbd>K</kbd></span><span>search the example library</span>
-                <span><kbd>Ctrl</kbd>+<kbd>Space</kbd></span><span>autocomplete</span>
                 <span><kbd class="mod-key">Ctrl</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span><span>step through history (or the two arrows in the editor's right margin)</span>
-                <span><kbd class="mod-key">Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span><span>step through the example library (loads, does not build); the counter beside the editor says where you are</span>
+                <span><kbd class="mod-key">Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span><span>step through the example library (loads, does not build); the counter beside the editor says where you are, and walks whatever the Examples menu is filtered and searched down to</span>
                 <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd></span><span>flip every table between static and interactive</span>
-                <span><kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>6</kbd></span><span>jump to an output group</span>
+                <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd></span><span>flip every exhibit between the raw frame and the insurer reading; the pair beside the versions says which one you are on</span>
+                <span><kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>6</kbd></span><span>jump to an output group, numbered in the order they are listed below</span>
+                <span><kbd>←</kbd> <kbd>→</kbd> <kbd>Home</kbd> <kbd>End</kbd></span><span>walk a group or leaf row once it has focus, skipping whatever is dark</span>
                 <span><kbd>✕</kbd></span><span>clear the editor; press it again on an empty box to clear your history</span>
             </div>
+            <p class="small text-muted">Ctrl+Shift+V stands aside inside the program box and the
+                entry forms, where the browser claims it for paste, and works everywhere else.
+                Menu ▸ Editor ▸ Emacs keys adds Ctrl+A/E/K/Y, N/P and F/B/D in the
+                program box.</p>
 
             <h6>Controls</h6>
             <ul class="help-tabs">
                 <li><span class="t">Build</span>: run the program (same as Ctrl+Enter)</li>
-                <li><span class="t">Examples</span>: load a ready-made program</li>
+                <li><span class="t">Examples</span>: load a ready-made program. Type to search it,
+                    or click the tag pills to narrow it; the arrow walk follows what is left on
+                    screen</li>
+                <li><span class="t">Reformat</span>: rewrite the program in canonical form, keeping
+                    its <code>note{}</code>, <code>hints{}</code> and <code>tags{}</code></li>
                 <li><span class="t">Sharpen</span>: audit the grid and move to a better one, writing
                     the <code>hints{}</code> clause that pins it</li>
                 <li><span class="t">Hints</span>: keep the grid you have and write it into
                     <code>hints{}</code>, so <code>agg.Name</code> elsewhere means one fixed thing</li>
-                <li><span class="t">PnL</span>: wrap what you built in a profit and loss account</li>
+                <li><span class="t">PnL</span>: wrap what you built in a profit and loss account.
+                    Once a P&amp;L is what you are reading the button becomes
+                    <span class="t">Explode</span>, which opens it back into its parts</li>
+                <li><span class="t">GCN</span>: read a program with an occurrence cession as a pair
+                    of views. The button takes gross / ceded; the caret beside it offers
+                    gross / net and net / ceded</li>
             </ul>
             <p class="small text-muted">Each derivation writes DecL into the editor, so you can
                 read what it did, edit it, and build it again anywhere. The
@@ -647,15 +662,44 @@
 
             <h6>Output groups</h6>
             <ul class="help-tabs">
-                <li><span class="t">Overview</span>: the distribution and its tail, then the risk tables</li>
-                <li><span class="t">Economics</span>: a P&amp;L's ledger, its ratios, and the margin walk</li>
-                <li><span class="t">Reinsurance</span>: ceded and net by layer, with a gross / ceded / net exhibit</li>
-                <li><span class="t">Pricing</span>: calibrate a distortion set and allocate it, or evaluate a premium already set</li>
-                <li><span class="t">Bounds</span>: how much of a price the choice of distortion decides</li>
-                <li><span class="t">More</span>: Validation · Stats · Density · Window · Dependency · Narrative</li>
+                <li><span class="t">Overview</span>: the distribution and its tail, then the moments
+                    and whether to believe them (Plot, Summary, Validation, Stats, Tail)</li>
+                <li><span class="t">Reinsurance</span>: ceded and net by layer, with the shape and
+                    the densities the cession leaves. The Quick Re row writes one layer into the
+                    program above, on the occurrence or the aggregate tier</li>
+                <li><span class="t">Pricing</span>: calibrate a distortion set to a target, price
+                    the parts stand-alone, allocate one premium across them, read the kappa curves
+                    behind the split, or evaluate a premium already set</li>
+                <li><span class="t">Economics</span>: a P&amp;L's ledger, its ratios, and the margin
+                    walk</li>
+                <li><span class="t">Bounds</span>: how much of a price the choice of distortion
+                    decides, for the whole and for the parts</li>
+                <li><span class="t">More</span>: Density · Tail behavior · Window
+                    · Dependency · Sharpen · Narrative</li>
             </ul>
             <p class="small text-muted">A group or a leaf greyed out is one this object cannot
-                answer. Nothing is hidden, so the menu is always the same shape.</p>
+                answer; hover it to read why. Nothing is hidden, so the menu is always the same
+                shape.</p>
+
+            <h6>Tables and charts</h6>
+            <ul class="help-tabs">
+                <li><span class="t">Tables</span>: static, static at full precision, or interactive,
+                    from the menu or with Ctrl+Shift+U. An interactive grid sorts, filters and
+                    searches, and its toolbar copies or saves the underlying values rather than the
+                    printed text</li>
+                <li><span class="t">Perspective</span>: Raw is the frame as computed, Insurer is the
+                    business reading of it. The two words beside the versions are a readout and a
+                    switch at once</li>
+                <li><span class="t">Charts</span>: the strip under a picture carries that panel's
+                    axis readings, log x, log y, full range, reflect, return period, invert, and its
+                    reference lines. Download saves the picture as a PNG</li>
+                <li><span class="t">Joint surface</span>: a relief adds contours, marginals, mesh,
+                    wall grid and lights; cut cycles through the slices; a click reads that cell out
+                    in the strip; double-click, or reset, puts the camera back. Download also writes
+                    the drawn surface as GLB, OBJ or STL, and a SpaceMouse can fly it in Chromium</li>
+            </ul>
+            <p class="small text-muted">Menu ▸ Download models saves every program you built
+                this session as one <code>.agg</code> file.</p>
 
             <h6>Learn more</h6>
             <p class="help-links mb-0">
