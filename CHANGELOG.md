@@ -4,6 +4,59 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a137
+
+**[Reformat-Keeps-The-Program] Reformat stops flattening a program it cannot
+read.** Author report: the button used to answer with a spread program, a clause
+to a line, and now answers with one long line.
+
+The button was not the thing that changed. `format_program` renders a program
+statement by statement through `decl_writer._render_statement`, which catches
+every exception and returns the statement instead of a render node, and that
+fallback is documented as verbatim. It is not verbatim. The statement it holds
+has already been through `UnderwritingLexer.preprocess`, which is what split the
+program into statements in the first place, and preprocessing folds every line
+break and every run of indentation into a single space. So a program the writer
+cannot read comes back **collapsed onto one line**, the SPA sees an answer that
+differs from what it sent, and `editor.setText` writes it over the reader's
+spread program. Pressing the button that formats a program was how you lost its
+formatting.
+
+Three ways in, all of them ordinary:
+
+1. A statement spelled the way the grammar used to allow. `doc{{{...}}}` left at
+   `aggregate` 1.0.0a301 and the `so` placement keyword at a249, so a program
+   from a fortnight ago is still in the history ring and no longer readable.
+2. A statement naming something the default underwriter cannot resolve.
+3. A **second** statement naming something the **first** statement defines.
+   `sev MySev lognorm 50 cv 1.5` then `agg A 100 claims sev.MySev poisson`
+   canonicalizes the first and collapses the second, though the program builds:
+   the writer parses each statement against `aggregate.build` alone, which has
+   never read statement one.
+
+`routes/decl.py` now asks the parser before it asks the writer:
+`_every_statement_parses` splits with `UnderwritingLexer.preprocess` and parses
+each statement with `build.parser.parse`, the same two calls the writer makes,
+and a program that fails either comes back exactly as it arrived. That is the
+promise the route's docstring has made since a4 and could not keep. Both names
+are public, so the sanctioned import surface is unchanged.
+
+It parses the program twice on the way to a canonical answer. That is the right
+trade for a button a reader presses by hand: a few milliseconds nobody can
+perceive, against a program nobody can get back.
+
+**What it does not fix.** Case 3 is a working program the button now declines
+rather than damages, which is honest and is still a gap. Both halves are written
+up in `dev/TODO.md` under the asks raised with `aggregate`: return the source
+slice rather than the preprocessed copy, and resolve a statement against the
+ones already read in the same call. The guard retires when either lands.
+
+Four tests in `tests/test_objects.py`: a one-line program spreads, a program
+carrying a retired clause comes back byte identical, the two statement case
+comes back byte identical, and the existing trailer tests still pass.
+
+---
+
 ## 1.0.0a136
 
 **[SpaceMouse-Feel-Retired] the feel panel goes, and the puck runs on one

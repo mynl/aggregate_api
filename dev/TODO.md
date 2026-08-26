@@ -861,6 +861,29 @@ one version bump each.
 
 ## Raised with `aggregate` (not fixed here)
 
+- [ ] **`format_program`'s fallback answers with the preprocessed statement
+      rather than the source, so an unreadable program comes back collapsed onto
+      one line.** `decl_writer._render_statement` catches everything and returns
+      the statement, and its docstring calls that verbatim, but the statement it
+      holds has already been through `UnderwritingLexer.preprocess`: every line
+      break and every run of indentation is one space by then, and the bracket
+      step has padded `[` and `]` besides. So `pprogram` on a program the writer
+      cannot read prints it flattened, and any caller that writes the result back
+      where the program came from destroys the reader's layout. That is what it
+      did to the API's Reformat button, guarded app side at a137 by asking the
+      parser first (`routes/decl.py::_every_statement_parses`). Ask: keep the
+      source slice and return that, or report which statements fell back so a
+      caller can decline the answer. The guard retires the moment either lands.
+- [ ] **`format_program` cannot read a program whose second statement names
+      something the first defines.** It renders statement by statement against
+      `aggregate.build` alone, so `sev MySev lognorm 50 cv 1.5` followed by
+      `agg A 100 claims sev.MySev poisson` canonicalizes the first and drops the
+      second to the fallback above, though the program builds. Ask: resolve
+      against the statements already read in the same call, the way `build` does
+      when it reads a file. Until then the API declines to reformat such a
+      program at all, which is honest but is a working program the button
+      cannot help with.
+
 - [ ] **The portfolio's density ordinate should declare its full extent, as the
       aggregate's now does.** `aggregate 1.0.0a314` (L3 of
       `dev/done/plan-2d-punchups.md`) had `charts._emit_aggregate.outcome_doc`

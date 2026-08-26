@@ -1717,6 +1717,61 @@ def test_decl_format_keeps_a_trailer_written_after_a_port_name(client):
     assert "topic:probe" in out
 
 
+def test_decl_format_spreads_a_program_typed_on_one_line(client):
+    """The point of the button: one line in, a clause a line out.
+
+    Asserted as "more lines than it arrived with" rather than against an exact
+    layout, which is the library's to decide and does change.
+    """
+    decl = "agg SpreadProbe 100 claims 1000 xs 0 sev lognorm 50 cv 1.5 poisson"
+    out = client.post("/v1/decl/format", json={"decl": decl}).json()["decl"]
+    assert out.count("\n") >= 3
+    assert "SpreadProbe" in out
+
+
+def test_decl_format_leaves_an_unreadable_program_exactly_as_it_arrived(client):
+    """A program the writer cannot read keeps its own line breaks.
+
+    The a137 regression, and the reason the route parses before it formats.
+    ``format_program`` answers an unreadable statement with the **preprocessed**
+    copy of it, which has every newline folded to a space, so the SPA wrote a
+    one-line program over the reader's spread one: pressing the format button
+    was how you lost your formatting.
+
+    ``doc{{{...}}}`` is the vehicle because it is a clause the grammar carried
+    until ``aggregate`` 1.0.0a301 and does not now, which is exactly the shape
+    of the trap: a program that was good yesterday, still spread across lines in
+    the editor, and no longer readable.
+    """
+    decl = ("agg StaleClause\n"
+            "  100 claims\n"
+            "  sev lognorm 50 cv 1.5\n"
+            "  poisson\n"
+            "  doc{{{a clause the grammar has retired}}}")
+    out = client.post("/v1/decl/format", json={"decl": decl}).json()["decl"]
+    assert out == decl
+
+
+def test_decl_format_declines_a_program_that_names_its_own_first_statement(
+        client):
+    """Two statements, the second naming the first, come back untouched.
+
+    The writer renders statement by statement against the default underwriter,
+    which has never read statement one, so it canonicalizes that and drops the
+    second to the fallback. The program builds, so this is a working program the
+    button cannot help with; what it must not do is flatten it. Tracked upstream
+    in ``dev/TODO.md``.
+    """
+    decl = ("sev FormatProbeSev lognorm 50 cv 1.5\n"
+            "\n"
+            "agg FormatProbeAgg\n"
+            "  100 claims\n"
+            "  sev.FormatProbeSev\n"
+            "  poisson")
+    out = client.post("/v1/decl/format", json={"decl": decl}).json()["decl"]
+    assert out == decl
+
+
 
 # ----------------------------------------------------------------------
 # GET /v1/objects/{id}/frame/{which}?format=ir  (the table document)

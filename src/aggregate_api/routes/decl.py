@@ -27,6 +27,68 @@ from ..completion import complete, lex
 router = APIRouter()
 
 
+def _every_statement_parses(decl: str) -> bool:
+    """Whether every statement in ``decl`` parses, which is what Reformat needs.
+
+    Parameters
+    ----------
+    decl : str
+        A DecL program, one statement or several.
+
+    Returns
+    -------
+    bool
+        True when the writer will canonicalize the whole program, False when
+        at least one statement will come back as source text instead.
+
+    Notes
+    -----
+    **This exists because ``format_program``'s fallback is not the no-op it
+    reads as, and a137 is where that cost the author a program.** The writer
+    renders statement by statement through ``_render_statement``, which catches
+    every exception and returns the statement instead of a render node. The
+    statement it returns is not the source, though: it is the source after
+    ``UnderwritingLexer.preprocess``, which is what splits the program at all,
+    and preprocessing folds every newline and every run of indentation into one
+    space. So a program the writer cannot read comes back **collapsed onto one
+    line**, the SPA sees text that differs from what it sent, writes it into the
+    editor, and the reader's carefully spread program is gone. Pressing the
+    button that formats a program is how you lose its formatting.
+
+    Three ways in, all reachable from an ordinary session: a statement using a
+    spelling a grammar change retired, a statement naming something the default
+    underwriter cannot resolve, and, the one that surprises, a second statement
+    referring to a name the **first** statement defines. The writer parses each
+    statement against ``aggregate.build`` alone, so ``sev MySev ...`` followed by
+    ``agg A ... sev.MySev ...`` renders the first and collapses the second.
+
+    Asking the same parser the same question first is what makes the route's
+    standing promise ("a malformed program reformats to itself") true. It parses
+    the program twice on the way to a canonical answer, which is the right
+    trade for a button a reader presses by hand: correctness for a few
+    milliseconds nobody can perceive.
+
+    ``UnderwritingLexer.preprocess`` and ``Underwriter.parser`` are both public
+    names, and they are the two the writer itself uses, so this predicts the
+    fallback rather than guessing at it. The remaining gap is a statement that
+    parses and then fails while rendering; that is a library defect when it
+    happens rather than a program the reader can fix, and it is raised upstream
+    rather than guarded here.
+    """
+    try:
+        from aggregate import build
+        from aggregate.parser import UnderwritingLexer
+        statements = UnderwritingLexer.preprocess(decl)
+    except Exception:  # noqa: BLE001 (a program that will not even split)
+        return False
+    for statement in statements:
+        try:
+            build.parser.parse(statement)
+        except Exception:  # noqa: BLE001 (parse error, or an unresolved name)
+            return False
+    return True
+
+
 def _format_decl(decl: str) -> str:
     """Canonicalize a DecL program, echoing the original on any failure.
 
@@ -37,6 +99,13 @@ def _format_decl(decl: str) -> str:
 
     Notes
     -----
+    **The gate in front of it, which is what a137 added.** The echo has to be
+    the text that came in, and until a137 it was not: the writer answers an
+    unreadable statement with its own preprocessed copy, which is the statement
+    with every line break folded into a space, and the SPA wrote that into the
+    editor. See :func:`_every_statement_parses` for the three ways a program
+    reaches that path and why the answer is to ask the parser first.
+
     **``trailer=True``, which is the whole of what a126 changed here.** The
     writer's signature is
     ``(spec_or_text, *, fmt='text', layout='spread', trailer=False)`` and it
@@ -58,6 +127,8 @@ def _format_decl(decl: str) -> str:
     ``[Unparser-Reference-Gaps]``; it is why the Examples menu serves
     ``Recipe.as_read`` instead of coming through here.
     """
+    if not _every_statement_parses(decl):
+        return decl
     try:
         from aggregate.decl_writer import format_program
         out = format_program(decl, fmt="text", trailer=True)
