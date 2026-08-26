@@ -89,6 +89,34 @@ const state = {
     rendered: {},
 };
 
+/**
+ * Which of the two stacks the `[m/n]` readout is describing.
+ *
+ * `'history'` or `'examples'`. One readout, two walks, and the rule for which is
+ * showing is the rule the reader already has in their head: **the counter
+ * describes whatever the last press walked.** Ctrl+Shift stepped the library, so
+ * the counter numbers the library; Ctrl+Up stepped the history, so it numbers
+ * the history. A build and an edit both put it back, because both mean the box
+ * has stopped showing a library row.
+ *
+ * The two **buttons** stay bound to history whatever this says, which is
+ * deliberate. They are the walk's only route on a touch device, since an iPad's
+ * on-screen keyboard has no arrow keys, and the example ring has no buttons of
+ * its own. So while this reads `'examples'` the counter and the arrows describe
+ * different stacks. The alternative, greying the arrows against whichever stack
+ * is live, makes the touch route vanish mid walk and is worse. If the two are
+ * ever to agree the answer is a second pair of buttons for the library.
+ *
+ * It is declared **here**, with the module state, and not beside
+ * `renderHistoryNav` where it reads. The landing `editor.setText` runs at module
+ * top level and fires the update listener synchronously into `onEdit`, which
+ * reaches `renderHistoryNav` whatever `fromApp` says, which reads this. Declared
+ * below that `setText` it is still in the temporal dead zone when the read
+ * lands, and through a134 every page load logged a `ReferenceError` from inside
+ * CodeMirror's listener guard and lost that first render.
+ */
+let walkMode = 'history';
+
 // ----------------------------------------------------------------------
 // Editor
 // ----------------------------------------------------------------------
@@ -145,26 +173,6 @@ function navigateHistory(dir) {
     }
     renderHistoryNav();
 }
-
-/**
- * Which of the two stacks the `[m/n]` readout is describing.
- *
- * `'history'` or `'examples'`. One readout, two walks, and the rule for which is
- * showing is the rule the reader already has in their head: **the counter
- * describes whatever the last press walked.** Ctrl+Shift stepped the library, so
- * the counter numbers the library; Ctrl+Up stepped the history, so it numbers
- * the history. A build and an edit both put it back, because both mean the box
- * has stopped showing a library row.
- *
- * The two **buttons** stay bound to history whatever this says, which is
- * deliberate. They are the walk's only route on a touch device, since an iPad's
- * on-screen keyboard has no arrow keys, and the example ring has no buttons of
- * its own. So while this reads `'examples'` the counter and the arrows describe
- * different stacks. The alternative, greying the arrows against whichever stack
- * is live, makes the touch route vanish mid walk and is worse. If the two are
- * ever to agree the answer is a second pair of buttons for the library.
- */
-let walkMode = 'history';
 
 /**
  * The whole history control: the `[m/n]` readout and the two step buttons.

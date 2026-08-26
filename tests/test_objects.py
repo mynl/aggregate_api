@@ -1213,6 +1213,49 @@ def test_chart_document_cache_serves_the_revalidation(client, monkeypatch):
     assert len(calls) == 1
 
 
+def test_exhibit_cache_serves_the_revalidation(client, monkeypatch):
+    """The same contract on the exhibit route, where the rebuild cost more.
+
+    Through a134 this route built the exhibit, serialized it, hashed it,
+    compared ``If-None-Match`` and on a match discarded the lot. That was 210 ms
+    on a three unit portfolio's ``tail`` to reply "nothing changed", against
+    7 ms for a chart answering off its cache.
+    """
+    from aggregate_api.routes import objects as objects_routes
+
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    url = f"/v1/objects/{oid}/exhibit/summary?perspective=insurer"
+
+    calls = []
+    real = objects_routes.agg_exhibits.build_exhibit
+
+    def counted(obj, name, perspective, **kwargs):
+        calls.append((name, perspective))
+        return real(obj, name, perspective, **kwargs)
+
+    monkeypatch.setattr(objects_routes.agg_exhibits, "build_exhibit", counted)
+    first = client.get(url)
+    assert first.status_code == 200 and len(calls) == 1
+    again = client.get(url)
+    assert again.content == first.content and len(calls) == 1
+    etag = first.headers["ETag"]
+    assert client.get(url, headers={"If-None-Match": etag}).status_code == 304
+    assert len(calls) == 1
+    # The perspective is part of the key, so the other reading is its own entry
+    # and its own build rather than the first one served back under a wrong hash.
+    other = client.get(f"/v1/objects/{oid}/exhibit/summary?perspective=raw")
+    assert other.status_code == 200 and len(calls) == 2
+    assert other.headers["ETag"] != etag
+
+
+def test_exhibit_cache_does_not_swallow_the_404(client):
+    """An unknown name is screened before the cache and still names the set."""
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/exhibit/no_such_exhibit")
+    assert r.status_code == 404
+    assert "available" in r.json()["detail"]
+
+
 def test_chart_parameters_change_the_bytes(client):
     """Two detail settings are two documents, two ETags, two cache entries.
 

@@ -332,18 +332,33 @@ def build_state() -> dict:
 # ----------------------------------------------------------------------
 # The chart-document cache
 # ----------------------------------------------------------------------
-def record_chart_cache(event: str) -> None:
-    """Count one chart-cache ``hit``, ``miss``, ``store`` or ``eviction``."""
+def record_cache(channel: str, event: str) -> None:
+    """Count one ``hit``, ``miss``, ``store`` or ``eviction`` on one cache.
+
+    Parameters
+    ----------
+    channel : str
+        Which cache is reporting, ``"chart"`` or ``"exhibit"``. It namespaces
+        the counter keys, so the two revalidation caches are counted apart
+        while sharing one implementation.
+    event : str
+        The event to count.
+
+    Notes
+    -----
+    ``_counts`` is a ``Counter``, so a channel needs no registration here: a
+    key that has never been written reads as zero.
+    """
     with _lock:
-        _counts[f"chart_{event}"] += 1
+        _counts[f"{channel}_{event}"] += 1
 
 
-def chart_cache_state(entries: int, max_entries: int) -> dict:
-    """The chart cache panel. Size is passed in, counters come from here."""
+def cache_state(channel: str, entries: int, max_entries: int) -> dict:
+    """One revalidation cache's panel. Size is passed in, counters come from here."""
     with _lock:
-        hits = _counts["chart_hit"]
-        misses = _counts["chart_miss"]
-        evictions = _counts["chart_eviction"]
+        hits = _counts[f"{channel}_hit"]
+        misses = _counts[f"{channel}_miss"]
+        evictions = _counts[f"{channel}_eviction"]
     looks = hits + misses
     return {
         "entries": entries,

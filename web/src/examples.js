@@ -30,6 +30,7 @@ import { api } from './api.js';
 import { el, empty } from './utils/dom.js';
 
 let cached = null;
+let loading = null;   // the fetch in flight, so concurrent callers share one
 let flat = null;      // every entry once, in the library's order
 let haystack = null;  // the strings uFuzzy searches, index-aligned with `flat`
 
@@ -151,10 +152,25 @@ function clearFilters() {
     notify();
 }
 
-/** Fetch (and memoize) the example payload. */
+/**
+ * Fetch (and memoize) the example payload.
+ *
+ * Two things are memoized, and it takes both. `cached` is the resolved payload,
+ * which has to stay a plain value because the palette reads it synchronously.
+ * `loading` is the fetch still in flight, and without it two callers arriving in
+ * the same tick both see `cached` null and both fire: the example ring and the
+ * dropdown mount do exactly that at startup, which cost a second `/v1/examples`
+ * on every page load through a134.
+ *
+ * `loading` is cleared when the request settles, so a failure is retried by the
+ * next caller rather than being remembered as a rejection for ever.
+ */
 export async function loadExamples() {
+    if (cached) return cached;
+    if (!loading) loading = api.examples().finally(() => { loading = null; });
+    const payload = await loading;
     if (!cached) {
-        cached = await api.examples();
+        cached = payload;
         buildIndex(cached);
     }
     return cached;

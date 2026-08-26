@@ -943,6 +943,7 @@ class StatusResponse(BaseModel):
     sessions: dict[str, Any]
     cache: dict[str, Any]
     chart_cache: dict[str, Any]
+    exhibit_cache: dict[str, Any]
     builds: dict[str, Any]
     key_scope: dict[str, Any]
     resources: dict[str, Any]

@@ -81,6 +81,9 @@ async function _json(method, path, body) {
     return data;
 }
 
+// Pricing previews in flight, keyed by the whole question. See `pricingPreview`.
+const _previewFlight = new Map();
+
 export const api = {
     // Builds + cache
     build:        (decl, opts = {}) => _json('POST', '/v1/objects', { decl, ...opts }),
@@ -195,8 +198,24 @@ export const api = {
      * of prose that updates as the reader types. It is also where the library's
      * unbounded anchor guard reaches them: a refusal is the preview text.
      */
-    pricingPreview: (id, body) =>
-        _json('POST', `/v1/objects/${id}/pricing/preview`, body),
+    pricingPreview: (id, body) => {
+        // Coalesced, not cached. Three of the four pricing forms mount with
+        // `preview: true` and identical defaults, so a build fired three
+        // byte-identical POSTs of `{p: 0.99, coc: 0.15}` through a134. The key
+        // is the whole question, and the entry is dropped the moment the
+        // request settles, so this only ever joins callers who are asking the
+        // same thing at the same time. It can never answer a later question
+        // with an earlier answer, which a cache here would, and the preview
+        // line is a live readout that must not go stale.
+        const key = `${id} ${JSON.stringify(body)}`;
+        let flight = _previewFlight.get(key);
+        if (!flight) {
+            flight = _json('POST', `/v1/objects/${id}/pricing/preview`, body)
+                .finally(() => { _previewFlight.delete(key); });
+            _previewFlight.set(key, flight);
+        }
+        return flight;
+    },
     /**
      * Fit the distortion set: the `pricing.calibrate` and `pricing.stand_alone`
      * envelopes, each under both perspectives.

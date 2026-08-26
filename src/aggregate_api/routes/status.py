@@ -417,8 +417,13 @@ def status(response: Response,
         "settings": _settings_block(settings),
         "sessions": session_block,
         "cache": _cache_block(cache),
-        "chart_cache": status_state.chart_cache_state(
+        "chart_cache": status_state.cache_state(
+            "chart",
             len(objects_routes._chart_cache), objects_routes._CHART_CACHE_MAX),
+        "exhibit_cache": status_state.cache_state(
+            "exhibit",
+            len(objects_routes._exhibit_cache),
+            objects_routes._EXHIBIT_CACHE_MAX),
         "builds": builds,
         "key_scope": status_state.key_scope_state(),
         "resources": resource_block.snapshot(settings.audit_db),

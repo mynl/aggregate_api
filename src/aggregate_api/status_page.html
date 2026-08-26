@@ -332,15 +332,25 @@ function cache(d) {
     ]);
 }
 
-function chartCache(d) {
-    const c = d.chart_cache;
-    return section('chart document cache', 'sits above the object cache and can never cause a build', [kv([
+function revalidationCache(title, c) {
+    return section(title, 'sits above the object cache and can never cause a build', [kv([
         ['entries', `${num(c.entries)} / ${num(c.max)}`],
         ['hits', num(c.hits)],
         ['misses', num(c.misses)],
         ['hit rate', rate(c.hit_rate)],
         ['evictions', num(c.evictions)],
     ])]);
+}
+
+function chartCache(d) {
+    return revalidationCache('chart document cache', d.chart_cache);
+}
+
+// Same machinery, its own counters. What it saves is larger per hit than the
+// chart cache's: an exhibit rebuild to answer 304 measured 210 ms on a three
+// unit portfolio's tail, against 7 ms for a chart served from cache.
+function exhibitCache(d) {
+    return revalidationCache('exhibit document cache', d.exhibit_cache);
 }
 
 function buildWindow(label, w) {
@@ -493,7 +503,7 @@ function render(d) {
     const main = document.getElementById('main');
     main.replaceChildren(
         identity(d), sessions(d), cache(d), keyScope(d),
-        builds(d), chartCache(d), resources(d), watch(d), gate(d), settings(d),
+        builds(d), chartCache(d), exhibitCache(d), resources(d), watch(d), gate(d), settings(d),
     );
 }
 

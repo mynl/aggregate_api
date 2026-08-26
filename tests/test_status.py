@@ -199,8 +199,8 @@ def test_the_payload_carries_every_panel(status_client):
     payload = status_client.get("/v1/status").json()
     assert set(payload) == {
         "generated_at", "generated_in_ms", "identity", "settings", "sessions",
-        "cache", "chart_cache", "builds", "key_scope", "resources", "gate",
-        "watch",
+        "cache", "chart_cache", "exhibit_cache", "builds", "key_scope",
+        "resources", "gate", "watch",
     }
 
 

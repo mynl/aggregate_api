@@ -4,6 +4,72 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a135
+
+**[Page-Load-Waste] the exhibit route stops rebuilding to say "nothing
+changed", and a page load stops asking three questions twice.**
+`dev/plan-page-load-waste.md`, from a network trace of the running app.
+
+The trace was opened on a suspicion that the 2D charts were refetching on every
+visit and that caching was broken. The opposite is true, and the measurement is
+worth recording: `Cache-Control: no-cache` means revalidate every time, so a row
+appears in the network panel on every visit even when no body is transferred,
+and that is what was being read as a reload. On a three unit portfolio,
+`chart/port` costs 200 and 2,417,700 bytes on the wire once, then 304 and 300
+bytes on every return.
+
+What the trace did find was four other things, none of them the suspected one.
+
+**`RevalidationCache`** replaces `_chart_cache` and its two module functions.
+The class is the same LRU with the same argument, now parameterized by capacity
+and by the telemetry channel it counts on, and it is instantiated twice: the
+chart cache at 8 entries, keyed `(oid, name, window, detail, encoding)` as
+before, and a new exhibit cache at 64, keyed `(oid, name, perspective)`.
+Exhibit envelopes run a few kB against a chart's few MB, so the larger count is
+the smaller worst case.
+
+The exhibit route needed it more than the chart route did. It built the exhibit,
+serialized it, computed the hash, compared `If-None-Match` and on a match threw
+all of it away: 210 ms on that portfolio's `tail` and 48 ms on `summary`, to
+reply that nothing had changed, against 7 ms for a chart answering off its
+cache. Both now answer in about 4 ms. Availability is still screened first, so
+an unknown name is a 404 before any cache is consulted.
+
+`status.record_chart_cache` and `chart_cache_state` become
+`status.record_cache(channel, event)` and `cache_state(channel, ...)`. The
+status payload gains an `exhibit_cache` panel beside `chart_cache`, and the
+operator's page renders both through one `revalidationCache` helper.
+
+**Three client fixes**, each a redundant request or an error on every load.
+`loadExamples` memoized the resolved payload but not the fetch in flight, so the
+example ring and the dropdown mount, which race at startup, both saw `cached`
+null and both fired. `pricingPreview` gains an in-flight map keyed on the whole
+question: three of the four pricing forms mount with `preview: true` and
+identical defaults, so a build posted `{p: 0.99, coc: 0.15}` three times. It
+coalesces rather than caches, and the entry is dropped the moment the request
+settles, so a live readout can never answer with a stale number.
+
+And `walkMode` moves up into the module state block. The landing
+`editor.setText` runs at module top level and fires CodeMirror's update listener
+synchronously into `onEdit`, which reaches `renderHistoryNav` whatever `fromApp`
+says, which reads `walkMode`; declared 35 lines below that `setText` it was
+still in the temporal dead zone, so every page load logged a `ReferenceError`
+from inside CodeMirror's listener guard and lost that first render.
+
+A page load is 10 `/v1/` requests before and 7 after, with a clean console.
+
+Not a finding, recorded because it was checked: compression has no bypass.
+`GZipMiddleware` is installed on the app itself, so it covers every `/v1/`
+route, the `.csv` download and the StaticFiles mount alike, and nothing sets
+`Content-Encoding` itself or returns a `StreamingResponse`. Density and the 3D
+surface both travel the ordinary JSON routes. The ratio is worth knowing for the
+separate question of chart document size: the `app.py` comment expects about
+10 to 1 on a density payload, and a chart document measured 2.5 to 1
+(6,105,738 raw to 2,417,700 on the wire), because it is full precision float
+text with high entropy.
+
+---
+
 ## 1.0.0a134
 
 **[Table-View-Cycle] Ctrl+Shift+U walks all three table readings.** Author
