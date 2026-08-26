@@ -29,7 +29,6 @@ import {
 } from './chartdoc-to-echarts.js';
 import { fileStem, meshToGlb, meshToObj, meshToStl, surfaceMesh } from './mesh-export.js';
 import { chartParamsFor, migrateChartView, windowsWith } from './request-params.js';
-import { feelControls, feelForNav } from './spacemouse-panel.js';
 import { createSurfaceNav } from './surface-nav.js';
 import { loadSurface, readCamera, surfaceOverrides } from './surface.js';
 import { stampTouchCoordinates } from './touch.js';
@@ -635,7 +634,7 @@ const MESH_FORMATS = [
 
 function renderControls(doc, hooks) {
     const { chart, onChange, onReset, onWindow, walking, onWalk, onExport,
-            canExport, onSpaceMouse, register, nav, camera, width } = hooks;
+            canExport, onSpaceMouse, register, width } = hooks;
     const offered = readings(doc);
     const row = el('div', { className: 'exhibit-controls' });
     // `panelLayout` stacks panels one per row below `WIDE_PX`, and the strip
@@ -710,10 +709,7 @@ function renderControls(doc, hooks) {
     // Everything below acts on the whole drawing rather than on one panel, so
     // the document group sits apart from the panel groups and takes only the
     // width it needs while they share what is left.
-    // The feel panel, when there is a puck to have one: a full width row under
-    // the buttons rather than a popover, so nothing floats over the chart and
-    // nothing has to be positioned.
-    let feelPanel = null;
+    //
     // The relief's own controls, between the readings and the realization:
     // they act on one drawing rather than on the document, and they exist only
     // while that drawing is the one on screen.
@@ -776,12 +772,10 @@ function renderControls(doc, hooks) {
         // Safari and the iPad, so the control still says the feature exists
         // and that this browser is not covered, per the never-hide rule.
         box.appendChild(spaceMouseButton(onSpaceMouse, register));
-        // Its feel, behind one more button: the gains, the reverses, the
-        // deadzone, the curve and a live readout are a page of controls, and
-        // they are set once and then left alone. The row keeps one line.
-        const feel = feelControls({ nav, camera, register });
-        box.appendChild(feel.button);
-        feelPanel = feel.panel;
+        // No `feel` button beside it. a89 put the gains, the reverses, the
+        // deadzone, the curve and a live readout behind one, and a136 took the
+        // page of controls away again: see `surface-nav.js` `NAV_DEFAULTS` for
+        // what the puck does now, which is one setting for everyone.
         // The window, last, and a number rather than a toggle: it is the one
         // control that is a new request rather than a new drawing.
         if (onWindow) box.appendChild(windowBox(chart, onWindow));
@@ -854,7 +848,6 @@ function renderControls(doc, hooks) {
     // reset always appended the box is never empty, and a line claiming a case
     // that cannot arise is worse than no line.
     row.appendChild(box);
-    if (feelPanel) row.appendChild(feelPanel);
     return row;
 }
 
@@ -1317,7 +1310,10 @@ function draw(container, tools, host, doc, spec = null) {
             if (!ready || !chart) return;
             chart.setOption({ grid3D: { viewControl: { projection, animation: false } } });
         },
-    }, feelForNav());
+    // No settings argument: the nav runs on `NAV_DEFAULTS`. a89 to a134 passed
+    // the reader's stored feel here, which is what let a browser carry a bad
+    // tuning forever, and a136 took that layer out.
+    });
     const navOff = spacemouse.subscribe((message) => nav.input(message));
 
     // Whether the page has already looked for a device it was granted. Once
@@ -1488,8 +1484,6 @@ function draw(container, tools, host, doc, spec = null) {
                 ? spacemouse.disconnect()
                 : spacemouse.connect()),
             register: (off) => stripOff.push(off),
-            nav,
-            camera: liveCamera,
             // Read at render time rather than captured: the strip is rebuilt on
             // resize, and the group layout turns on the same breakpoint the
             // panels do.
@@ -1632,8 +1626,8 @@ function draw(container, tools, host, doc, spec = null) {
         if (!ready) return;
         // The strip is rebuilt only when the breakpoint is actually crossed:
         // that is what changes whether the groups stack and carry their panel
-        // titles, and rebuilding it on every resize tick would throw away the
-        // feel panel and re-register the puck's watchers for nothing.
+        // titles, and rebuilding it on every resize tick would re-register the
+        // puck's watchers for nothing.
         if (crossed) renderTools();
         render();
     });

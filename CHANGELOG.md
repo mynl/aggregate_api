@@ -4,6 +4,45 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a136
+
+**[SpaceMouse-Feel-Retired] the feel panel goes, and the puck runs on one
+setting again.** Author request: the puck was responsive when phase 3 landed and
+is not now, and the `feel` button is a page of options the reader should never
+have been handed.
+
+`web/src/charts/spacemouse-panel.js` is deleted, with its button, its four gain
+sliders, the curve and deadzone sliders, the five reverse flags, the one-axis
+option, the live readout and its CSS. The nav is created with no settings
+argument, so `NAV_DEFAULTS` in `surface-nav.js` is what drives the camera:
+90 degrees a second at full twist, 55 at full tilt, 0.9 e-folds of distance a
+second, pan at 0.7 of the distance, expo 0.6, nothing reversed. The device's
+deadzone falls back to `TUNING.deadzone`, 0.05, since nothing calls `setTuning`
+any more. That is the a88 to a90 feel exactly, which is the one the author says
+worked.
+
+**Where the responsiveness went, as far as the code can say.** The arithmetic
+did not move: `surface-nav.js` and `spacemouse.js` are byte for byte what a90
+left, and nothing since has touched `readCamera`, the `viewControl` write or the
+loop. The one layer that arrived between the working version and now is a89's,
+and it is stateful in the worst way for a fault like this: `feelForNav()` seeded
+the integrator from `aggapi.spacemouse` in localStorage and `applyTuning()`
+pushed the stored deadzone into the device layer at import. A tuning session
+that ended with low gains, a hard curve or a wide deadzone was then the permanent
+setting of that browser, surviving every reload and every deploy, with nothing on
+screen to say so. Deleting the layer is also the cure: nothing reads the key now,
+so the stale value is inert.
+
+**What this cannot have fixed, stated so it is not assumed.** The puck writes a
+camera and the scene redraws, so its feel is bounded by how fast the surface
+redraws. If a drag with the mouse is equally heavy, the cost is in the drawing,
+not in the puck, and the answer is a smaller grid rather than anything here.
+
+`aggapi.spacemouse` is left in localStorage rather than cleared. Deleting a key
+the app no longer reads is a write for no reader.
+
+---
+
 ## 1.0.0a135
 
 **[Page-Load-Waste] the exhibit route stops rebuilding to say "nothing

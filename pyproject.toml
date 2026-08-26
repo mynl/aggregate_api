@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aggregate_api"
-version = "1.0.0a135"
+version = "1.0.0a136"
 description = "aggregate Loss Lab (aLL): FastAPI service and single-page web app for the aggregate actuarial library."
 readme = "README.md"
 authors = [

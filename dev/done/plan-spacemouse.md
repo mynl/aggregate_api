@@ -340,7 +340,17 @@ in, `rz` positive orbits right, `rx` positive raises the camera, and a slide
 moves the target against the hand so the surface follows it. Each is one
 `invert` flag away from its opposite, and phase 4 puts those flags in the UI.
 
-### Phase 4 `[SpaceMouse-Feel]` **landed a89**
+### Phase 4 `[SpaceMouse-Feel]` **landed a89, RETIRED a136**
+
+**Retired in full at a136, author's call.** The panel, the sticky
+`aggapi.spacemouse` settings and the live readout are deleted;
+`web/src/charts/spacemouse-panel.js` is gone and the nav runs on
+`NAV_DEFAULTS` for everyone. Two reasons, both the author's: a page of
+options is a page of ways to make the puck worse, and a stored tuning is a
+setting a reader cannot see, cannot remember making, and carries into every
+session on that browser. What is written below is the phase as it shipped,
+kept because the retirement is a reversal of a decision rather than a gap.
+
 
 The difference between working and wanting to use it:
 
