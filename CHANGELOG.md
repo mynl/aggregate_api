@@ -4,6 +4,68 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a139
+
+**[Examples-Search] the list stops drawing itself twice, and hits that score
+equal keep the library's order.** Two faults in `web/src/examples.js`, both
+reported from one search: typing `capstone` in the Examples dropdown answered
+"11 matches" and then drew the eleven rows twice, alphabetized.
+
+**Drawn twice: a render that published state from inside itself.**
+`renderList` emptied the container, then set the search needle and called
+`notify()` **before** appending anything. Every mounted surface subscribes to
+that fanout, the dropdown included, so the fanout re-entered the calling
+surface's own render, and that inner pass emptied the container and drew the
+complete list. The outer pass then resumed and appended the filter bar, the
+"n matches" header and every row a second time. The `notifying` guard was
+written for the other loop, the two search boxes trading the needle, and a
+surface redrawing itself into a container its caller is still filling is not a
+loop, so it went straight through. Publishing moves to `publishNeedle`, called
+from the boxes' own `input` handlers, and `renderList` is a pure draw: it reads
+state and paints, and changes nothing. The handlers do not draw, because each
+surface is one of the fanout's watchers and that is what repaints it. Nothing
+notifies when the trimmed text has not moved, so a trailing space costs a
+keystroke and no repaint. `mountPalette` now holds its `draw` at closure scope
+so `open` repaints through the same function the fanout uses, and publishes its
+cleared box rather than leaving the ring walking the last search.
+
+**Alphabetized: uFuzzy's tiebreak, on a query that ranks everything equal.**
+The payload was never the problem, `load_examples` serves `sort_values('seq')`
+and `buildIndex` keeps it. uFuzzy's default `sort` ends in a locale compare of
+the haystack string, which begins with the entry's name. Measured on the shipped
+payload of 195 entries, `capstone` returns eleven hits with **one** distinct
+score between them, every field equal and `start` 0 for all eleven, because each
+is named `Capstone.*` and the haystack opens with the name. So nothing in the
+ranking had an opinion and the alphabet decided the whole list, returning file
+positions 14, 19, 13, 22, 16, 21, 20, 15, 12, 17, 18 for what `library.agg`
+writes as a contiguous run, 12 through 22. `pnl` is the same wound on a family
+written as a graded sequence: a tie block of twelve, alphabetized to `PnLBook`
+first where the library teaches `PnLSimple` first and `PnLBook` last.
+
+`sortByRankThenFileOrder` is uFuzzy's own comparator chain with one line
+changed, `idx[a] - idx[b]` in place of that locale compare. `haystack` is index
+aligned with `flat` and `flat` arrives in reading order, so the haystack index
+is the position in `library.agg`. **Ranking is untouched**: every criterion
+above the tail is uFuzzy's, in uFuzzy's order, so a query that discriminates
+ranks exactly as it did. Only exact ties move, and they move from the alphabet
+to the order the file teaches them in. The header note that a ranked list
+keeping file order is not ranked still stands; a block of exact ties was never
+ranked, it was alphabetized.
+
+The Ctrl+Shift arrow ring inherits both, since it walks `visibleExamples()`,
+which is the search result while a needle is live. Typing `capstone` and
+walking now reads `[1/11]` `Capstone.Sev`, `[2/11]` `Capstone.Gross`, `[3/11]`
+`Capstone.ExposureRating`, which is the worked example in the order it is built,
+and the reason the author asked.
+
+`rankMatches` is split out of `search` and exported so the order can be asserted
+on the instance the app actually uses rather than on a second one a test builds
+with the options copied across. `web/test/example-search-order.test.js` covers
+it, six tests: an all-ties query holds file order, the alphabet does not get a
+say, ranking still overrules file order where it discriminates, terms in either
+order reach the same entry, a tie block inside a ranked result keeps its own
+order, and no match is an empty list. Server side unchanged.
+
 ## 1.0.0a138
 
 **[GUI-Round-7] four tweaks: the editor wraps, Economics becomes PnL, comments

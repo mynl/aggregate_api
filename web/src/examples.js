@@ -16,7 +16,9 @@
 // Both filter through uFuzzy over `name + kind + tags + note`, with the terms
 // in any order, so "cat xol", "reins tower" and "tower reins" all reach the
 // entry they describe. Search results are ranked rather than file-ordered,
-// because a ranked list that keeps file order is not ranked.
+// because a ranked list that keeps file order is not ranked. Entries that score
+// *equal* keep the library's order, which is a different thing and the common
+// case: see `sortByRankThenFileOrder`.
 //
 // **Every pill is a filter and every filter is a pill.** A row's pills are its
 // kind, its topics and its roles; clicking one narrows the list to entries
@@ -34,9 +36,72 @@ let loading = null;   // the fetch in flight, so concurrent callers share one
 let flat = null;      // every entry once, in the library's order
 let haystack = null;  // the strings uFuzzy searches, index-aligned with `flat`
 
+/**
+ * uFuzzy's own ranking chain with the library's order as the tiebreak.
+ *
+ * Copied comparator for comparator from uFuzzy's default `sort`, with one line
+ * changed: where it ends `compare(haystack[idx[a]], haystack[idx[b]])`, a locale
+ * string compare, this ends `idx[a] - idx[b]`. `haystack` is index-aligned with
+ * `flat` and `flat` arrives in the library's reading order, so the haystack
+ * index *is* the position in `library.agg` and the tail reads "and if they
+ * scored the same, the order the file puts them in".
+ *
+ * **Ranking is untouched.** Every criterion above the tail is uFuzzy's, in
+ * uFuzzy's order, so a query that discriminates ranks exactly as it did: "reins"
+ * and "tower" return what they returned. Only exact ties move.
+ *
+ * **Exact ties are the common case, and they were being alphabetized.** Measured
+ * on the shipped payload of 195 entries: "capstone" returns 11 hits with *one*
+ * distinct score signature between them, every field equal, `start` 0 for all
+ * eleven because each is named `Capstone.*` and the haystack opens with the
+ * name. So nothing in the ranking had an opinion and the alphabetic tail decided
+ * the whole list, handing back file positions 14, 19, 13, 22, 16, 21, 20, 15,
+ * 12, 17, 18 for what the file writes as a contiguous run, 12 through 22. "pnl"
+ * is the same wound on a family written as a graded sequence: positions 4
+ * through 15 of its result are one tie block of twelve, alphabetized to
+ * `PnLBook` first and `PnLSimple` eleventh, where the library teaches
+ * `PnLSimple` first and `PnLBook` last.
+ *
+ * The header note above, that a ranked list keeping file order is not ranked,
+ * still holds and is still the design. A block of exact ties was never ranked
+ * to begin with, it was alphabetized, and the library's order is the better
+ * answer: the entries inside a part build on one another, so a reader who typed
+ * a family name and walks the result with Ctrl+Shift+arrow walks the argument
+ * in the order it is made.
+ *
+ * @param {object} info uFuzzy's per-match fields for this pass.
+ * @returns {number[]} positions into `info.idx`, best first.
+ */
+function sortByRankThenFileOrder(info) {
+    const {
+        idx, chars, terms, interLft2, interLft1, start, intraIns, interIns, cases,
+    } = info;
+    return idx.map((v, i) => i).sort((a, b) => (
+        // most contiguous chars matched
+        chars[b] - chars[a] ||
+        // least intra-term fuzz
+        intraIns[a] - intraIns[b] ||
+        // most prefix bounds, boosted by whole-term matches
+        (
+            (terms[b] + interLft2[b] + 0.5 * interLft1[b]) -
+            (terms[a] + interLft2[a] + 0.5 * interLft1[a])
+        ) ||
+        // least inter-term fuzz
+        interIns[a] - interIns[b] ||
+        // earliest start of match
+        start[a] - start[b] ||
+        // case match
+        cases[b] - cases[a] ||
+        // and, scoring equal, the library's own order (uFuzzy sorts alphabetically here)
+        idx[a] - idx[b]
+    ));
+}
+
 // intraMode 1 allows single-character typos/transposition inside a term, which
 // is what makes "porfolio" and "distorton" still land.
-const uf = new uFuzzy({ intraMode: 1, interLft: 0, interRgt: 0 });
+const uf = new uFuzzy({
+    intraMode: 1, interLft: 0, interRgt: 0, sort: sortByRankThenFileOrder,
+});
 
 // How many terms uFuzzy may permute, its `outOfOrder` argument. Without it a
 // needle only matches where its terms appear in the order they were typed, so
@@ -66,10 +131,13 @@ const watchers = new Set();
  *
  * It is here for the same reason `active` is: both narrow the list on screen,
  * so both have to reach the Ctrl+Shift arrow ring, and one subscriber channel
- * should carry both rather than two carrying one each. Written by `renderList`
- * from the `q` it has already computed, so there is no second place that decides
- * what the reader typed. Deliberately not persisted: a filter is a standing
- * choice a reader makes once, a needle is what they are doing this second.
+ * should carry both rather than two carrying one each. Deliberately not
+ * persisted: a filter is a standing choice a reader makes once, a needle is
+ * what they are doing this second.
+ *
+ * Written only by `publishNeedle`, from the search boxes' own `input` handlers.
+ * `renderList` wrote it through a138, which read well (one place computed `q`,
+ * so one place recorded it) and drew every list twice. See `publishNeedle`.
  */
 let needle = '';
 
@@ -99,14 +167,16 @@ function writeFilters() {
 }
 
 /**
- * Whether a `notify()` fanout is in progress.
+ * Whether a `notify()` fanout is in progress, so nothing notifies from inside
+ * one.
  *
- * The guard against an obvious loop, and it is not hypothetical. `renderList`
- * notifies when the needle changes, and every mounted surface redraws through
- * `renderList` on a notify. The dropdown and the palette each have their own
- * search box, so a keystroke in one would set the needle, notify, redraw the
- * other from *its* empty box, change the needle back, notify again, and the two
- * would trade the needle for ever. Nothing notifies from inside a fanout.
+ * Written for a loop that no longer exists: `renderList` used to publish the
+ * needle, every surface redraws through `renderList` on a notify, and the two
+ * search boxes would therefore trade the needle for ever, each overwriting it
+ * from its own box. Publishing moved out of the render at a138 and took the
+ * loop with it. The guard stays because a watcher is arbitrary code, `main.js`
+ * already registers one, and one that touched a filter would recurse without
+ * it.
  */
 let notifying = false;
 
@@ -149,6 +219,37 @@ function clearFilters() {
     if (!active.size) return;
     active.clear();
     writeFilters();
+    notify();
+}
+
+/**
+ * Record what the reader typed and redraw every surface, this one included.
+ *
+ * The search boxes' `input` handlers call this and do not draw themselves: each
+ * surface is one of `notify`'s watchers, so the fanout is what repaints it. That
+ * is the whole of the a138 fix. `renderList` published the needle from inside
+ * itself, between emptying the container and filling it, so the fanout re-
+ * entered the *calling* surface's own render, that inner render emptied the
+ * container and drew the complete list, and then the outer render resumed and
+ * appended the filter bar, the "n matches" header and every row a second time.
+ * Two copies of the list on every keystroke, which is what a reader searching
+ * `capstone` saw. The `notifying` guard stopped the two boxes looping, but a
+ * surface redrawing itself into a container its caller was still filling is not
+ * a loop and slipped straight through.
+ *
+ * Publishing here also keeps the render a pure draw, which is worth having on
+ * its own: a function that paints a list should not be the one deciding what the
+ * list is.
+ *
+ * No fanout when the trimmed text has not moved, so a trailing space costs
+ * nothing and nothing is redrawn that would not change. `search` trims too.
+ *
+ * @param {string} text the search box's raw value.
+ */
+function publishNeedle(text) {
+    const q = text.trim();
+    if (q === needle) return;
+    needle = q;
     notify();
 }
 
@@ -272,18 +373,38 @@ export function visibleExamples() {
  * haystack and the survivors are kept, rather than rebuilding a haystack per
  * filter change: 151 rows makes the difference unmeasurable, and one index that
  * never moves is one fewer thing to keep aligned with `flat`.
+ *
+ * Entries that score equal come back in the library's order rather than the
+ * alphabet, which for a family query like "capstone" is every hit: see
+ * `sortByRankThenFileOrder`.
  */
 function search(needle) {
     const pool = filteredExamples();
     const q = needle.trim();
     if (!q) return pool;
-    const [idxs, info, order] = uf.search(haystack, q, SEARCH_PERMUTE_TERMS);
+    const allowed = new Set(pool);
+    return rankMatches(haystack, q).map((i) => flat[i])
+        .filter((item) => allowed.has(item));
+}
+
+/**
+ * Positions in `strings` matching `q`, best first, ties in `strings` order.
+ *
+ * The whole of what the app asks uFuzzy for, split out from `search` so the
+ * ordering can be asserted on the instance the app actually uses rather than on
+ * a second one a test builds with the options copied across. `search` adds the
+ * pill filter and the mapping back to entries; there is nothing else here.
+ *
+ * @param {string[]} strings the haystack, in the library's order.
+ * @param {string} q a trimmed, non-empty needle.
+ * @returns {number[]} indexes into `strings`.
+ */
+export function rankMatches(strings, q) {
+    const [idxs, info, order] = uf.search(strings, q, SEARCH_PERMUTE_TERMS);
     if (!idxs) return [];
     // `order` ranks by match quality when uFuzzy returns the extra passes;
     // fall back to the raw index order when it does not.
-    const ranked = (order && info) ? order.map((o) => info.idx[o]) : idxs;
-    const allowed = new Set(pool);
-    return ranked.map((i) => flat[i]).filter((item) => allowed.has(item));
+    return (order && info) ? order.map((o) => info.idx[o]) : idxs;
 }
 
 /**
@@ -386,25 +507,17 @@ function filterBar(payload) {
  * the app deciding what the library means. File order is what the file carries,
  * so file order is what this draws.
  *
- * **It also publishes the needle**, which is what lets the Ctrl+Shift ring walk
- * what is on screen. This is the one place that knows what the reader typed, and
- * it already has it, so recording it here beats a second listener on each box
- * that would have to be kept in step. `notify` is called only when the value
- * really moved, and never from inside a fanout: see `notifying`.
+ * **A pure draw.** It reads state and paints; it changes nothing. Through a138
+ * it published the needle as well, from between the `empty` and the first
+ * `appendChild`, which drew every list twice: see `publishNeedle`. The boxes'
+ * `input` handlers publish now, and this is only ever called from a fanout or a
+ * mount.
  *
  * @param {string} typed the search box's raw text.
  */
 function renderList(container, payload, typed, onPick) {
     empty(container);
     const q = typed.trim();
-    // Not while a fanout is running, and the guard covers the assignment and not
-    // just the `notify`. A redraw caused by a notify is the *other* surface
-    // being repainted from its own box, which is usually empty, and letting that
-    // write the needle would throw away what the reader just typed here.
-    if (!notifying && q !== needle) {
-        needle = q;
-        notify();
-    }
     const bar = filterBar(payload);
     if (bar) container.appendChild(el('li', {}, bar));
 
@@ -452,7 +565,9 @@ export async function mountExamples(menuEl, onPick) {
         autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: false,
     });
     const draw = () => renderList(list, payload, input.value, onPick);
-    input.addEventListener('input', draw);
+    // Publish, and let the fanout draw: this surface is one of its watchers. See
+    // `publishNeedle` for why the render must not be the thing that publishes.
+    input.addEventListener('input', () => publishNeedle(input.value));
     // Keystrokes inside a dropdown otherwise reach Bootstrap's own item
     // navigation, which steals the arrow keys and closes on Escape mid-word.
     input.addEventListener('keydown', (ev) => ev.stopPropagation());
@@ -480,6 +595,10 @@ export function mountPalette(onPick) {
     let root = null;
     let input = null;
     let list = null;
+    // Held at this scope so `open` can repaint through the same function the
+    // fanout uses, rather than calling `renderList` with its own arguments and
+    // being a second opinion about what the palette shows.
+    let draw = null;
 
     async function ensure() {
         if (root) return true;
@@ -497,8 +616,9 @@ export function mountPalette(onPick) {
             autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: false,
         });
         const pick = (item) => { close(); onPick?.(item); };
-        const draw = () => renderList(list, payload, input.value, pick);
-        input.addEventListener('input', draw);
+        draw = () => renderList(list, payload, input.value, pick);
+        // Publish, and let the fanout draw. See `publishNeedle`.
+        input.addEventListener('input', () => publishNeedle(input.value));
         // A pill clicked in the dropdown has to move this list too.
         onExamplesViewChange(draw);
         root = el('div', { className: 'palette-backdrop', role: 'dialog', 'aria-modal': 'true' },
@@ -518,7 +638,12 @@ export function mountPalette(onPick) {
         if (!(await ensure())) return;
         root.classList.add('open');
         input.value = '';
-        renderList(list, cached, '', (item) => { close(); onPick?.(item); });
+        // The box is empty, so the needle is: an emptied box that left the ring
+        // walking the last search was the same disagreement the render-side
+        // publish used to hide. Publishing may repaint through the fanout, and
+        // does not when the needle was already empty, so draw either way.
+        publishNeedle('');
+        draw();
         input.focus();
     }
 

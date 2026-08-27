@@ -232,6 +232,19 @@ and the standing REMINDER below about what is worth plotting.
 
 ## Near term (get it healthy)
 
+- [x] **[Examples-Search] the doubled list and the alphabetized ties**, from an
+      author report, **a139**. Searching `capstone` drew the eleven hits twice
+      and in alphabetical order. Two independent faults. `renderList` published
+      the search needle from between its `empty` and its first `appendChild`, so
+      the fanout re-entered the calling surface's own render and the outer pass
+      appended everything again; publishing moves to `publishNeedle` on the
+      boxes' `input` handlers and the render is a pure draw. And uFuzzy's
+      default sort ends in a locale compare, which decided the whole list for a
+      query that scored all eleven identically; the tiebreak is the haystack
+      index now, which is the position in `library.agg`. Ranking above the tail
+      is untouched. The Ctrl+Shift ring inherits both, so a family search walks
+      the worked example in the order it is built.
+
 - [x] **GUI round 7, August 27** (`dev/done/plan-ui-round-7.md`), four items at
       **a138**, from an author list of six. The editor wraps; the Economics tab
       becomes PnL (label only, the `economics` key stays); `collapse_program`
