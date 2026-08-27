@@ -263,6 +263,37 @@ class BuildResponse(BaseModel):
     capability: Capability = Field(default_factory=Capability)
 
 
+class ValueResponse(BaseModel):
+    """A program that means a number, from ``POST /v1/objects``.
+
+    DecL's top-level ``answer`` rule carries ``expr``, so ``(2+2)``, ``2/3``,
+    ``(2**10)`` and ``(exp(1))`` are programs like any other and ``build()``
+    answers each with a float. The api used to build them and then refuse the
+    result at the classify step, with "api supports 'agg', 'port', ... only; got
+    'float'". Serving it instead is the purist reading rather than an exception
+    to it: the library owns what a program means, including when it means a
+    number.
+
+    Notes
+    -----
+    Almost none of :class:`BuildResponse` applies. There is no object, so no
+    ``id`` to fetch panes against, no grid, no capability block and no cache
+    slot; a discriminated union on ``kind`` says that in the schema rather than
+    leaving a caller to read six null fields and infer it.
+
+    The float travels raw. The app formats it with the same helper that prints
+    ``mean`` and ``cv`` off a build, which arrive equally bare, so no format is
+    invented here for a number the library hands over without one.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    kind: Literal["value"] = "value"
+    value: float = Field(..., description="What the program evaluates to.")
+    decl: str = Field(..., description="The program, as the collapse left it.")
+    elapsed_ms: int
+
+
 class DerivedResponse(BuildResponse):
     """A derivation's result: the program that made it, and the object.
 

@@ -102,7 +102,7 @@
                                  translation (captions, row flags, drops,
                                  relabeling), so this is a passthrough on the
                                  exhibit route and reaches the leaves that take
-                                 it: Economics Ledger / Ratios / Waterfall, and
+                                 it: PnL Ledger / Ratios / Waterfall, and
                                  More Tail behavior / Dependency. -->
                             <li><h6 class="dropdown-header">Perspective</h6></li>
                             <li><button type="button" class="dropdown-item menu-check-item" data-perspective="insurer">
@@ -384,7 +384,7 @@
             <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#t-overview"    data-tab="overview"    data-label="Overview"    type="button">Overview</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-reinsurance" data-tab="reinsurance" data-label="Reinsurance" type="button">Reinsurance</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-pricing"     data-tab="pricing"     data-label="Pricing"     type="button">Pricing</button></li>
-            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-economics"   data-tab="economics"   data-label="Economics"   type="button">Economics</button></li>
+            <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-economics"   data-tab="economics"   data-label="PnL"         type="button">PnL</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-bounds"      data-tab="bounds"      data-label="Bounds"      type="button">Bounds</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-more"        data-tab="more"        data-label="More"        type="button">More</button></li>
         </ul>
@@ -398,7 +398,10 @@
                 <div id="pane-overview" class="pane"></div>
             </div>
 
-            <!-- Economics: a P&L's ledger, its ratios, and the margin walk. -->
+            <!-- PnL: a P&L's ledger, its ratios, and the margin walk. The pane
+                 id, the tab key and the leaf ids stay `economics`: they are in
+                 stored view state and in links already shared, and this was a
+                 label change. -->
             <div class="tab-pane fade" id="t-economics">
                 <div class="sub-tabs" id="sub-economics"></div>
                 <div id="pane-economics" class="pane"></div>
@@ -510,7 +513,7 @@
                  the panel reports the distortion in each family that values the
                  margin at zero. Its basis group names *which* premium is being
                  input, which is a narrower question than the gross versus net
-                 reading Economics answers. Its asset anchor is what closes the
+                 reading the PnL group answers. Its asset anchor is what closes the
                  round trip with a calibration struck at the same level; left
                  blank it is the library's unlimited reading, which reports four
                  families rather than five. Both boxes open on the pricing in
@@ -670,7 +673,7 @@
                 <li><span class="t">Pricing</span>: calibrate a distortion set to a target, price
                     the parts stand-alone, allocate one premium across them, read the kappa curves
                     behind the split, or evaluate a premium already set</li>
-                <li><span class="t">Economics</span>: a P&amp;L's ledger, its ratios, and the margin
+                <li><span class="t">PnL</span>: a P&amp;L's ledger, its ratios, and the margin
                     walk</li>
                 <li><span class="t">Bounds</span>: how much of a price the choice of distortion
                     decides, for the whole and for the parts</li>

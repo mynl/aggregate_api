@@ -79,6 +79,7 @@ import copy
 import json
 import logging
 import math
+import numbers
 import re
 import threading
 import time
@@ -88,12 +89,13 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import PurePath
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import pandas as pd
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
+from pydantic import Field
 
 from lark.exceptions import UnexpectedInput, VisitError
 
@@ -101,6 +103,7 @@ from aggregate import Distortion, Severity
 from aggregate import charts as agg_charts
 from aggregate import exhibits as agg_exhibits
 from aggregate.constants import FIRST_CLASS_CLASSES, NEAR_FIRST_CLASS
+from aggregate.parser import UnderwritingLexer
 from aggregate.parser_errors import ErrorReport, format_error
 from aggregate.underwriter import RecipeNotFound
 
@@ -1096,8 +1099,7 @@ def collapse_program(decl: str) -> str:
     Done up front on the build path so the hints scan, the cache key, the build
     and any parse-error caret all see the same source. This is a single-object
     playground (one program per build), so merging newline-separated programs is
-    not a regression, and ``#`` comments are not accepted in the input box, so
-    nothing gets swallowed.
+    not a regression.
 
     Shared rather than inlined because the derivation routes have to reach the
     **same cache key** an ordinary build of the same text would. The library
@@ -1112,15 +1114,56 @@ def collapse_program(decl: str) -> str:
     Returns
     -------
     str
+        One line, or ``''`` for a program that holds no statement.
+
+    Notes
+    -----
+    **Comments go through the library, not through a regex here.** Until
+    1.0.0a138 this was one ``re.sub`` over the raw text, on a documented
+    assumption that had stopped being true: "``#`` comments are not accepted in
+    the input box, so nothing gets swallowed". They are, and it did. Flattening
+    first puts a leading ``# a note`` in front of the program, so the whole
+    statement became one comment and the library preprocessed it to nothing,
+    which the reader saw as an unexplained parse failure. ``//`` failed the same
+    way. A trailing comment survived, but only because ``build()`` preprocesses
+    downstream; the rule was never working here.
+
+    :meth:`aggregate.parser.UnderwritingLexer.preprocess` is where the comment
+    rules live: full-line and inline, ``#`` and ``//``, with ``note{}`` /
+    ``tags{}`` / ``hints{}`` bodies lifted out first so a ``#`` in prose stays
+    prose. Reimplementing that here would be a second copy of a rule the library
+    owns, and it would drift. It is public and already imported by
+    ``routes.decl`` for the same reason, so the sanctioned import surface does
+    not move.
+
+    The statements come back as a list, and they are joined with a space rather
+    than answered as a list, because merging is what this function has always
+    done. The trailing ``re.sub`` stays for the same reason: it is what makes
+    the output **byte identical** to the old one on every program without a
+    comment, which is not tidiness but the cache key. Checked against nine, from
+    a multi-line ``port`` through the bivariate's nested ``dbvsev`` matrices to
+    a ``note{}`` body holding a ``#``.
     """
-    return re.sub(r"\s+", " ", decl.replace("\\", " ")).strip()
+    text = decl.replace("\\", " ")
+    statements = UnderwritingLexer.preprocess(text)
+    return re.sub(r"\s+", " ", " ".join(statements)).strip()
 
 
 # ----------------------------------------------------------------------
 # POST /v1/objects
 # ----------------------------------------------------------------------
 
-@router.post("/objects", response_model=models.BuildResponse)
+# Discriminated on ``kind``, which both members already declare as a ``Literal``:
+# the six object kinds on one side and ``'value'`` on the other. A union rather
+# than six null fields on ``BuildResponse``, because almost nothing a build
+# manifest carries applies to a number. See :class:`models.ValueResponse`.
+_BuildOrValue = Annotated[
+    models.BuildResponse | models.ValueResponse,
+    Field(discriminator="kind"),
+]
+
+
+@router.post("/objects", response_model=_BuildOrValue)
 def post_object(
     req: models.BuildRequest,
     request: Request,
@@ -1163,6 +1206,26 @@ def post_object(
     t0 = time.monotonic()
 
     req.decl = collapse_program(req.decl)
+
+    # A program that holds no statement, which since a138 is a real arrival
+    # rather than an impossible one: the collapse strips comments now, so a box
+    # holding nothing but ``# a note`` reaches here empty. Answered in its own
+    # words. The library's answer is "build() expects a single output, got 0;
+    # use build_many() for batched programs", which is about ``build_many`` and
+    # is addressed to a reader who wrote a comment.
+    #
+    # Screened here rather than in the SPA because the comment rules are the
+    # library's, and a client that could tell a comments-only program from an
+    # empty one would be holding a copy of them.
+    if not req.decl:
+        elapsed = int((time.monotonic() - t0) * 1000)
+        message = "this program holds no statement: it is empty, or all comments"
+        audit.record_build(
+            ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
+            status="build_error", error_msg=message,
+            elapsed_ms=elapsed, session_id=sid,
+        )
+        raise HTTPException(status_code=422, detail=message)
 
     # Cap check is cheap; do it before the cache lookup so an
     # over-cap request never reaches the build path. Enforce against the
@@ -1365,6 +1428,37 @@ def post_object(
     # ``plot`` but no frames at all. Every frame route answers a clean 400 for a
     # kind that does not carry it, so the SPA degrades rather than erroring.
     kind = _classify_object(obj)
+
+    # A program that means a number, which DecL has always allowed: the
+    # top-level ``answer`` rule carries ``expr``, so ``(2+2)`` and ``2/3`` are
+    # programs and ``build()`` answers each with a float. Through a137 the api
+    # built them and then refused the result two lines below, reporting the
+    # library's own answer as an unsupported kind.
+    #
+    # Nothing is cached and no recipe is registered: there is no object, so
+    # there is no slot to fill and nothing a later route could fetch against an
+    # id. The audit records it under its own status, so the operator's page does
+    # not read arithmetic as object builds.
+    #
+    # ``isinstance`` against ``numbers.Real`` rather than a kind-name test:
+    # ``(2+2)`` comes back a Python float and ``(exp(1))`` a ``numpy.float64``,
+    # and asking what a thing *is* beats keeping a list of the names it answers
+    # to. ``bool`` is excluded because it is a Real in Python and is not what
+    # any DecL expression means.
+    if isinstance(obj, numbers.Real) and not isinstance(obj, bool):
+        elapsed = int((time.monotonic() - t0) * 1000)
+        audit.record_build(
+            ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
+            status="value", elapsed_ms=elapsed,
+            session_id=sid, key_scope=key_scope,
+        )
+        return {
+            "kind": "value",
+            "value": float(obj),
+            "decl": req.decl,
+            "elapsed_ms": elapsed,
+        }
+
     if kind not in SUPPORTED_KINDS:
         elapsed = int((time.monotonic() - t0) * 1000)
         audit.record_build(

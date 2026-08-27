@@ -502,10 +502,13 @@ header .navbar { min-height: 56px; }
     display: flex; align-items: flex-end; flex-wrap: nowrap; gap: .25rem;
     width: 100%; margin: 0;
     border-bottom: 2px solid var(--line);
-    /* Must NOT clip: `overflow-x: auto` makes this a scroll container, which
-       swallows the tooltip hanging below a greyed group tab. Six group names
-       fit at every width that matters; scrolling comes back on a phone, where
-       the tooltip is the lesser loss. */
+    /* Did not clip, because `overflow-x: auto` makes this a scroll container
+       and that swallowed the tooltip hanging below a greyed group tab. The
+       footnote is a node on the body since a138, so nothing here can swallow it
+       and the constraint is lifted. The rule stays: six group names fit at every
+       width that matters, and a strip that scrolls when it does not need to is
+       a change nobody asked for. Scrolling still comes back on a phone, below,
+       and no longer costs anything. */
     overflow: visible;
     scrollbar-width: none;
 }
@@ -618,10 +621,16 @@ header .navbar { min-height: 56px; }
 
    No `not-allowed` cursor. It is the loudest thing on the strip for the mildest
    fact, and the tooltip is the explanation; the cursor was a second, cruder one
-   shouting over it. */
+   shouting over it.
+
+   `position: relative` stood here through a137 as the containing block for the
+   tooltip, which was an absolutely positioned `::after` on this element. The
+   box is a node on the body now and positions itself against the window, so
+   the declaration had no reader left; it is gone rather than kept, because a
+   dead positioning rule is exactly the thing a later edit reasons from. */
 .out-tabs .nav-link.nav-off, .sub-tabs .sub-link.nav-off {
     color: #b6bdc4 !important; cursor: default;
-    font-weight: 400 !important; position: relative;
+    font-weight: 400 !important;
 }
 /* Bootstrap's `.disabled` CLASS is a different animal from the attribute, and
    through a53 it silently broke half this protocol. `applyCapabilityGating`
@@ -646,24 +655,25 @@ header .navbar { min-height: 56px; }
    on the page's own surface. The old one announced itself: full-contrast ground
    and a 12px shadow is the styling of an alert, and this is a footnote saying
    which object would answer. It reads as a remark now, not a warning, which is
-   also why the arrow lost its fill and became a hairline. */
-.nav-off[data-why]:hover::after, .nav-off[data-why]:focus-visible::after {
-    content: attr(data-why);
-    /* An element has one `::after`, and the width ghost above claims it on
-       every tab. This rule outranks it on `content` and on the paint, but it
-       declares nothing about the three properties that make the ghost a
-       measuring stick rather than a thing on screen, so they would leak in here
-       and hide the tooltip. Undo them explicitly. */
-    height: auto; overflow: visible; visibility: visible;
-    /* `--tip-shift` is written on the anchor by `utils/tip.js` on hover and on
-       focus, and is the least shift that keeps a 230px box inside the window.
-       Unset it is 0px, so this is byte identical to the plain `-50%` it
-       replaces and the footnote still centers if the script never runs. The
-       arrow below is deliberately NOT shifted: it points at the control while
-       the box slides to stay readable. */
-    position: absolute; left: 50%;
-    transform: translateX(calc(-50% + var(--tip-shift, 0px)));
-    top: calc(100% + 7px); z-index: 60;
+   also why the arrow lost its fill and became a hairline.
+
+   ONE NODE ON THE BODY, since a138, placed by `utils/tip.js`. It was
+   `.nav-off[data-why]:hover::after` with the arrow on the matching `::before`,
+   and that box shared `::after` with the bold width ghost above. The tooltip
+   rule set `position: absolute`, absolute takes the pseudo-element out of flow,
+   its contribution to the tab's intrinsic width went with it, and every dark
+   tab got NARROWER for exactly as long as the pointer was on it. That was the
+   reported jitter, at both levels of the menu. An element has two
+   pseudo-elements, the ghost had one and the arrow had the other, so there was
+   no way to keep all three in CSS: the box moved out. `::after` above is the
+   ghost and only the ghost now, and nothing moves.
+
+   The look is unchanged, line for line. `position: fixed` rather than absolute
+   because the node is on the body, not inside the anchor; `left` and `top` are
+   written by the script, which is also what the clamp always did in its
+   `--tip-shift` form. */
+.tip {
+    position: fixed; z-index: 60;
     background: var(--soft); color: var(--ink-2);
     border: 1px solid var(--line);
     font-size: .7rem; font-weight: 400; line-height: 1.35;
@@ -672,9 +682,18 @@ header .navbar { min-height: 56px; }
     width: max-content; max-width: 230px; text-align: left;
     pointer-events: none;
 }
-.nav-off[data-why]:hover::before, .nav-off[data-why]:focus-visible::before {
-    content: ""; position: absolute; left: 50%; transform: translateX(-50%);
-    top: calc(100% + 2px); z-index: 60;
+/* Explicit, not left to the UA sheet: `display` is declared above the cascade's
+   default in enough stylesheets that relying on it is a bet. */
+.tip[hidden] { display: none; }
+/* The arrow, which the box can now afford out of its own `::after`. It sits in
+   the 7px gap the script leaves under the anchor, and at `--tip-arrow`, the
+   anchor's center measured from the box's left edge, so it keeps pointing at
+   the control while the box slides to stay readable. Unset it centers, which is
+   what the plain `left: 50%` it replaces did. */
+.tip::after {
+    content: ""; position: absolute;
+    left: var(--tip-arrow, 50%); transform: translateX(-50%);
+    bottom: 100%;
     border: 5px solid transparent; border-bottom-color: var(--line);
     width: 0; height: 0; pointer-events: none;
 }
@@ -682,8 +701,9 @@ header .navbar { min-height: 56px; }
 @media (max-width: 575.98px) {
     /* Phones: tighten the tabs, and let the strip scroll when six spelled-out
        group names do not fit. The tooltip used to be clipped here and that was
-       recorded as the trade; since a130 it clamps to the viewport instead, so
-       there is no trade left to record. */
+       recorded as the trade; since a130 it clamps to the viewport instead, and
+       since a138 it is not inside this scroll container at all, so there is no
+       trade left to record. */
     .out-tabs { gap: .15rem; overflow-x: auto; }
     .out-tabs .nav-link { padding: .28rem .55rem; font-size: var(--fs-ui); }
     .out-tabs .nav-link.active { padding-bottom: calc(.28rem + 2px); }

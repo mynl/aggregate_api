@@ -267,6 +267,13 @@ export function createEditor(host, callbacks = {}) {
             highlightSelectionMatches(),
             languageCompartment.of(declLanguage),
             syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+            // Wrap rather than scroll sideways. A `note{...}` body is one run
+            // of prose on a single line and is the part of a program a reader
+            // most wants to read, so answering it with a horizontal scrollbar
+            // hid the thing the example was loaded for. The right-hand
+            // reservation in the `.cm-content` padding below is what a wrapped
+            // line now stops at, which is what that lane was always for.
+            EditorView.lineWrapping,
             autocompletion({
                 override: [declCompletionSource],
                 // Manual trigger only (Ctrl-Space). Typing-triggered

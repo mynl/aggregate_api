@@ -232,6 +232,24 @@ and the standing REMINDER below about what is worth plotting.
 
 ## Near term (get it healthy)
 
+- [x] **GUI round 7, August 27** (`dev/done/plan-ui-round-7.md`), four items at
+      **a138**, from an author list of six. The editor wraps; the Economics tab
+      becomes PnL (label only, the `economics` key stays); `collapse_program`
+      runs the library's `preprocess` so a `#` or `//` comment stops swallowing
+      the program behind it, with an empty or comments-only program answered in
+      its own words; and the `data-why` footnote moves out of the width ghost's
+      `::after` onto a node of its own, so a dark tab no longer narrows on hover.
+      Arithmetic joined the first of those: DecL's `answer` rule has always
+      carried `expr`, so `(2+2)` is a program, and the api now serves the float
+      as `kind: 'value'` rather than building it and refusing it.
+      **Two of the six needed no code here.** The bivariate program the author
+      asked about is correct (no-frequency production, Poisson by default), but
+      checking it found that `format_program` drops `note{}` and `tags{}` on
+      every program, now an upstream ask below. On the SpaceMouse the settings
+      match the testbed exactly and the load does not: 65,536 vertices against
+      the lab's 9,216, plus a full `setOption` merge per frame. Two levers, both
+      in the plan's last section, neither pulled yet.
+
 - [x] **Punchups, August 24** (`dev/done/plan-punchups-aug-24-API.md`), all
       ten live items, **a125 to a133**. The author's eleven item list, item 2
       withdrawn the same day. One item per bump except 6 and 7, which are one
@@ -874,6 +892,20 @@ one version bump each.
       parser first (`routes/decl.py::_every_statement_parses`). Ask: keep the
       source slice and return that, or report which statements fell back so a
       caller can decline the answer. The guard retires the moment either lands.
+- [ ] **`format_program` drops `note{}` and `tags{}`, on every program.** Not a
+      fallback case and not confined to any kind: the writer renders no trailer
+      at all, so `agg A 5 claims sev lognorm 10 cv 1.2 poisson note{keep me}
+      tags{topic:x}` comes back as the four clauses and nothing else. The API
+      writes the answer back over the editor with `editor.setText`, so pressing
+      Reformat is how a reader loses the note they wrote. Found at a138 while
+      checking an author report about a bivariate program, which turned out to
+      be a `library.agg` entry after Reformat: correct in every respect except
+      that its `note{}` had gone. Ask: render the trailer, or say the answer is
+      partial so a caller can decline it. This is the a137 finding one layer
+      down, and the a137 guard does not cover it, because a program whose note is
+      dropped parses perfectly well. No workaround app side: writing back what
+      the library serves is the purist ruling, and the app holds no note of its
+      own to put back.
 - [ ] **`format_program` cannot read a program whose second statement names
       something the first defines.** It renders statement by statement against
       `aggregate.build` alone, so `sev MySev lognorm 50 cv 1.5` followed by

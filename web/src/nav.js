@@ -197,7 +197,14 @@ export const NAV_GROUPS = {
         },
     },
     economics: {
-        label: 'Economics',
+        // The label is `PnL` and the key is `economics`, deliberately. The
+        // button that creates the object is labeled `PnL`, the DecL keyword is
+        // `pnl` and the route is `/pnl`, so the tab a reader lands on should
+        // spell it the way the control that sent them there does. Prose keeps
+        // `P&L`, which is what the hints below and the Help panel write. The
+        // key stays because it is in `data-tab`, the pane ids, the stored view
+        // state and any link already shared.
+        label: 'PnL',
         leaves: {
             ledger: {
                 label: 'Ledger',

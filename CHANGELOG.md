@@ -4,6 +4,147 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a138
+
+**[GUI-Round-7] four tweaks: the editor wraps, Economics becomes PnL, comments
+stop swallowing programs, and the tabs stop moving.**
+`dev/done/plan-ui-round-7.md`, from an author report of six items. The other two
+needed no code here and are recorded at the foot of this entry.
+
+**The editor wraps.** `EditorView.lineWrapping` joins the extension list. A
+`note{...}` body is one run of prose on a single line, so a horizontal scrollbar
+hid the part of a loaded example most worth reading. The 54px right channel in
+the `.cm-content` padding is what a wrapped line now stops at, which is what
+that lane was always for; the six-line floor and the `40vh` cap are untouched.
+
+**Economics becomes PnL**, five user-visible strings in `index.html` and
+`nav.js`. The button that creates the object is labeled `PnL`, the DecL keyword
+is `pnl` and the route is `/pnl`, so the tab a reader lands on now spells it the
+way the control that sent them there does. Prose keeps `P&L`, which is what
+every hint and the Help panel already write. The key stays `economics`: it is in
+`data-tab`, the pane ids, the stored view state and any link already shared, and
+this was a label change. `data-label` moves with the label, since it is the
+width ghost's measuring stick.
+
+**A `#` comment no longer swallows the program behind it.** Author report: a
+program with a note comment answered "unexpected end of file". `collapse_program`
+folds the program onto one line before anything parses it, and it did that with
+a single `re.sub` over the raw text, on an assumption its own docstring stated
+and that had stopped being true: "`#` comments are not accepted in the input box,
+so nothing gets swallowed". They are. Flattening first puts a leading `# a note`
+in FRONT of the program, the whole statement becomes one comment, the library
+preprocesses it to nothing, and the reader gets a parse failure with no
+explanation. `//` failed the same way. A trailing comment survived, but only
+because `build()` preprocesses downstream: the rule was never working here.
+
+It runs `aggregate.parser.UnderwritingLexer.preprocess` now and joins the
+statements it returns. That is where the comment rules live, full line and
+inline, `#` and `//`, with `note{}` / `tags{}` / `hints{}` bodies lifted out
+first so a `#` in prose stays prose. Public, and already imported by
+`routes/decl.py` for a137, so the sanctioned import surface does not move. A
+regex here would have been a second copy of a rule the library owns.
+
+The trailing whitespace collapse stays, and that is not tidiness. It is what
+makes the output **byte identical** to the old one on every program without a
+comment, which matters because `collapse_program` computes the cache key: a key
+that moved would silently miss every stored object. Checked against nine
+programs, from a multi-line `port` through the bivariate's nested `dbvsev`
+matrices to a `note{}` body holding a `#`. A test asserts the commented and
+uncommented forms of one program are one id, not two.
+
+**A program that holds no statement says so.** The collapse can now return an
+empty string, from a box holding only comments, and the library's answer to that
+is "build() expects a single output, got 0; use build_many() for batched
+programs", which is about `build_many` and is addressed to a reader who wrote a
+comment. The route answers 422 with "this program holds no statement: it is
+empty, or all comments". Screened on the server because the comment rules are
+the library's, and a client that could tell a comments-only program from an
+empty one would be holding a copy of them.
+
+**Arithmetic gets an answer.** Author request: pressing Build on an empty box
+should say something, and a math expression should put its answer on the status
+strip. The second half needed no calculator, because DecL already is one:
+`decl.lark`'s top-level `answer` rule carries `expr`, so `(2+2)`, `2/3`,
+`(2**10)` and `(exp(1))` are programs and `build()` answers each with a float.
+The api built them and then **refused the library's own answer** at the classify
+step, with "api supports 'agg', 'port', ... only; got 'float'".
+
+`models.ValueResponse` serves it instead: `kind`, `value`, `decl`,
+`elapsed_ms`, and the route's `response_model` becomes a union discriminated on
+`kind`. A union rather than six null fields on `BuildResponse`, because almost
+nothing a build manifest carries applies to a number: no id, no grid, no
+capability block, no cache slot, no recipe registration. The audit records it
+under its own status, `value`, so the operator's page does not read arithmetic
+as object builds; the summary groups by that column, so a new status is a new
+row rather than a disturbed one. The float travels raw and the app formats it
+with the same helper that prints `mean` and `CV`, which arrive equally bare.
+
+Client side, `build()` gains two answers where it had one and a silence. An
+empty box writes a hint naming the other thing the box takes, since most readers
+do not know DecL evaluates arithmetic. A `value` writes `<program> = <answer>`
+to the strip and drops the object, which is the judgment call in this: a number
+is what the box holds now, and leaving six tabs answering for the program that
+used to be there would be a page showing two different things at once. The
+previous program is one history step away. Arithmetic is not itself recorded in
+history, whose ring is the trail of programs that built something and which
+`rebuildMissing` walks looking for declarations.
+
+**The tabs stop moving on hover.** Author report: a dark tab jitters when the
+tooltip appears, getting slightly narrower. Two rules were fighting over one
+pseudo-element. `site.css` reserves bold width with an `::after` ghost carrying
+`content: attr(data-label)`, so selecting a tab does not shove the strip along;
+the tooltip then reused **the same `::after`** and set `position: absolute`.
+Absolute takes it out of flow, its contribution to the element's intrinsic width
+goes with it, and the tab collapses to its unbold width for exactly as long as
+the pointer is on it. Both levels of the menu did it, since sub-links carry the
+same ghost.
+
+There is no escape in CSS alone: an element has two pseudo-elements, the ghost
+had one and the arrow had the other. So the box and the arrow move out to a
+single node on the body, owned by `utils/tip.js`, and `::after` goes back to
+being the ghost and only the ghost. `mountTipClamp` becomes `mountTips`; the box
+is `.tip` and the arrow is `.tip::after`, placed at `--tip-arrow`, the anchor's
+center measured from the box's own left edge, which preserves the rule the
+module has always stated: the box slides to stay readable, the arrow keeps
+pointing at the control. The look is unchanged, line for line.
+
+Three things fall out. `tipShift` keeps its arithmetic and every one of its
+tests, and gains an optional width, because a real node can be measured where a
+pseudo-element could not: a short footnote is no longer shifted further than it
+needs. The listeners become `pointerover` and `focusin`, which bubble, so one
+handler sees every anchor and, more to the point, a `pointerover` on something
+that is not an anchor is the signal to put the box away; that covers a row
+rebuilt while the box is open, whose detached anchor would never fire a
+`pointerleave`. And `.out-tabs` no longer has to forgo `overflow-x: auto` to
+avoid swallowing the box, a constraint now lifted rather than acted on: nobody
+asked for a scrolling strip on the desktop.
+
+Nothing changes for a screen reader. A dark control carries its reason in
+`aria-label`, set beside `data-why`, and never read the pseudo-element.
+
+**Two reports that needed no code here.** The author's bivariate program builds
+correctly: `decl.lark` has a no-frequency production for it, so `25 claims` sets
+the exposure and the frequency defaults to Poisson, as it does for an ordinary
+`agg`. It is `library.agg`'s `BivariateDiscreteSparse` after Reformat with
+`fixed` removed by hand, and Reformat handles that entry correctly, expanding
+the sparse triples to the dense matrix and keeping both the count and `fixed`.
+**But `format_program` drops `note{}` and `tags{}` on every program**, found
+while checking it, and the app writes the answer back over the editor, so
+pressing Reformat is how a reader loses the note they wrote. That is a137's bug
+one layer down and it is the library's; raised upstream rather than worked
+around here.
+
+On the SpaceMouse, the settings are right and match the testbed exactly
+(`damping: 0.85`, `zoomSensitivity: 1`); what differs is the load. The lab draws
+9,216 vertices and the real document comes back `nx 256, ny 256`, so 65,536,
+because the app has never sent `detail` and the library's own value stands. Every
+puck frame also goes through a full `chart.setOption` merge, where a mouse drag
+runs inside echarts-gl's `OrbitControl` and touches no option at all. Two levers
+if it comes back, both recorded in the plan: send `detail`, or drive
+`OrbitControl` directly.
+
+---
+
 ## 1.0.0a137
 
 **[Reformat-Keeps-The-Program] Reformat stops flattening a program it cannot

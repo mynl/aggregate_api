@@ -42,10 +42,10 @@ import {
     whyGroup,
 } from './nav.js';
 import * as history from './history.js';
-import { $, el, empty } from './utils/dom.js';
+import { $, el, empty, replaceChildren } from './utils/dom.js';
 import { debounce } from './utils/debounce.js';
 import { fmt } from './utils/format.js';
-import { mountTipClamp } from './utils/tip.js';
+import { mountTips } from './utils/tip.js';
 
 // ----------------------------------------------------------------------
 // CsvGrid option presets (see grid.js)
@@ -376,14 +376,87 @@ async function rebuildMissing(program) {
     await build();
 }
 
+/**
+ * Write one plain line to the strip's first row, with nothing under it.
+ *
+ * For the two answers that are neither an object nor a failure: an empty box,
+ * and a program that meant a number. Both leave the note and the timing lines
+ * blank, because there is no program to quote and nothing was calculated.
+ *
+ * @param {Node|string|Array} content the line, as a node, text, or a list of
+ *   either; `replaceChildren` flattens a list, which is why it is used rather
+ *   than `append`.
+ * @param {'ok'|'warn'|'bad'} [state] tints the whole strip; 'ok' leaves it plain
+ */
+function renderStripLine(content, state = 'ok') {
+    const inner = $('summary-inner');
+    replaceChildren(inner, content);
+    setStripState(state);
+    clearNote();
+    $('summary-timing').textContent = '';
+    syncSummaryMore();
+}
+
+/**
+ * The empty box, answered rather than ignored.
+ *
+ * `build()` returned silently on a blank program through a137, so pressing
+ * Build with nothing in the box did nothing at all and said nothing about it.
+ * The hint names the other thing the box takes, because most readers do not
+ * know DecL evaluates arithmetic.
+ */
+function renderNothingToBuild() {
+    const mod = modifierName();
+    renderStripLine(el('span', { className: 'text-muted' },
+        'Nothing to build. Type a DecL program, or an expression in '
+        + 'parentheses such as ',
+        el('span', { className: 'mono' }, '(2+2)'),
+        ', and press ',
+        el('span', { className: 'mono' }, `${mod}+Enter`),
+        '.'));
+}
+
+/**
+ * A program that meant a number.
+ *
+ * DecL's top-level `answer` rule carries `expr`, so `(2+2)`, `2/3` and
+ * `(exp(1))` are programs like any other and the library answers each with a
+ * float. The route serves that as `kind: 'value'`; here it is one line on the
+ * strip and nothing else.
+ *
+ * The object goes, which is the judgment call in this. A number is what the box
+ * holds now, and leaving six tabs answering for the program that used to be
+ * there would be a page showing two different things at once. The previous
+ * program is one history step away.
+ *
+ * Formatted with the app's own `fmt`, the same helper that prints `mean` and
+ * `CV` off a build response; those arrive equally bare. No format is invented
+ * for a number the library hands over without one.
+ */
+function renderValue(res) {
+    forgetBuild();
+    clearPanes();
+    renderActionRow();
+    renderStripLine([
+        el('span', { className: 'mono' }, res.decl),
+        el('span', { className: 'mono' }, ' = '),
+        el('span', { className: 'mono nm' }, fmt(res.value)),
+    ]);
+}
+
 async function build() {
     const decl = editor.getText().trim();
-    if (!decl) return;
+    if (!decl) { renderNothingToBuild(); return; }
 
     buildBtn.disabled = true;
     buildBtn.textContent = 'Building…';
     try {
         const res = await api.build(decl, {});
+        // A number is not an object: no id, no panes, and nothing for the
+        // action row to derive from. It is also not recorded in history, whose
+        // ring is the trail of programs that built something and which
+        // `rebuildMissing` walks looking for declarations.
+        if (res && res.kind === 'value') { renderValue(res); return; }
         adoptBuild(res);
         recordProgram(decl);
         renderActionRow();
@@ -3277,10 +3350,13 @@ function loadLanding() {
     build();
 }
 
-// The `data-why` footnote keeps itself on screen. Wired once, delegated on the
-// document, so the sub-tab rows and the group tabs can be rebuilt as often as
-// they like without anything having to re-bind. See `utils/tip.js`.
-mountTipClamp();
+// The `data-why` footnote: one node on the body, clamped to the window. Wired
+// once, delegated on the document, so the sub-tab rows and the group tabs can be
+// rebuilt as often as they like without anything having to re-bind. A node
+// rather than a `::after` because the pseudo-element was already spoken for by
+// the bold width ghost, and sharing it made every dark tab narrow on hover. See
+// `utils/tip.js`.
+mountTips();
 
 // Before anything is built there is no object, so every derivation is greyed.
 // Drawn once at startup rather than left to the first build, which would leave

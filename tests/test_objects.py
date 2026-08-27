@@ -263,6 +263,98 @@ def test_build_is_idempotent(client):
     assert r2.json()["cached"] is True
 
 
+# ----------------------------------------------------------------------
+# Comments, empty programs, and a program that means a number
+# ----------------------------------------------------------------------
+# ``collapse_program`` folds the program onto one line before anything parses
+# it, and through a137 it did that with a single ``re.sub`` over the raw text.
+# A leading comment therefore ended up in FRONT of the program, the whole
+# statement became one comment, and the reader saw an unexplained parse
+# failure. It runs the library's ``UnderwritingLexer.preprocess`` now, which is
+# where the comment rules live.
+
+@pytest.mark.parametrize("program", [
+    f"# a note\n{_DICE}",
+    f"// a note\n{_DICE}",
+    f"{_DICE}  # trailing",
+    f"{_DICE}  // trailing",
+    f"# above\n{_DICE}  # and beside",
+])
+def test_comments_are_transparent(client, program):
+    """A comment never changes what a program builds, wherever it sits."""
+    r = client.post("/v1/objects", json={"decl": program})
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "Dice"
+
+
+def test_a_comment_leaves_the_cache_key_alone(client):
+    """The commented and uncommented forms are one object, not two.
+
+    ``collapse_program`` computes the id, so this is the test that the comment
+    really came OUT rather than being tolerated somewhere downstream.
+    """
+    plain = client.post("/v1/objects", json={"decl": _DICE}).json()
+    noted = client.post("/v1/objects", json={"decl": f"# why\n{_DICE}"}).json()
+    assert noted["id"] == plain["id"]
+    assert noted["cached"] is True
+
+
+def test_a_hash_inside_a_note_is_prose(client):
+    """``note{}`` bodies are lifted before the comment strip, so a ``#`` survives.
+
+    The reason to run the library's preprocess rather than a regex here: the
+    rule is not "delete from ``#`` to end of line", it is that plus three
+    trailer bodies where the character is prose.
+    """
+    body = client.post("/v1/objects", json={
+        "decl": f"{_DICE} note{{a # hash, and a // slash, in prose}}",
+    }).json()
+    assert body["note"] == "a # hash, and a // slash, in prose"
+
+
+@pytest.mark.parametrize("program", ["# just a comment", "// just a comment",
+                                     "   ", "# one\n# two"])
+def test_a_program_with_no_statement_says_so(client, program):
+    """Empty, or all comments, answered in its own words.
+
+    The library's answer is about ``build_many``, which is not what a reader who
+    typed a comment needs to hear.
+    """
+    r = client.post("/v1/objects", json={"decl": program})
+    assert r.status_code == 422
+    assert "holds no statement" in r.json()["detail"]
+
+
+@pytest.mark.parametrize("program, value", [
+    ("(2+2)", 4.0),
+    ("2/3", 2 / 3),
+    ("(2**10)", 1024.0),
+    ("(1e6/7)", 1e6 / 7),
+])
+def test_a_program_that_means_a_number(client, program, value):
+    """DecL's ``answer`` rule carries ``expr``, so arithmetic is a program.
+
+    Built by the library and served, rather than built and then refused at the
+    classify step for being a ``float``, which is what happened through a137.
+    """
+    r = client.post("/v1/objects", json={"decl": program})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "value"
+    assert body["value"] == pytest.approx(value)
+    assert body["decl"] == program
+    # No object, so nothing a later route could fetch against an id, and no
+    # cache slot to hold it in.
+    assert "id" not in body
+
+
+def test_a_number_takes_no_cache_slot(client):
+    """Arithmetic leaves the object list where it found it."""
+    before = len(client.get("/v1/objects").json()["objects"])
+    assert client.post("/v1/objects", json={"decl": "(2+2)"}).status_code == 200
+    assert len(client.get("/v1/objects").json()["objects"]) == before
+
+
 def test_list_objects(client):
     client.post("/v1/objects", json={"decl": _DICE})
     r = client.get("/v1/objects")

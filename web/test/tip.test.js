@@ -1,9 +1,14 @@
 // The `data-why` footnote's viewport clamp, under `node --test`.
 //
 // Only `tipShift` is covered, which is the whole of what the module decides:
-// `mountTipClamp` is four `addEventListener` calls and a `style.setProperty`,
-// and testing those would be testing the DOM. The arithmetic is what has a right
+// `mountTips` creates a node, listens on the document and writes two lengths,
+// and testing that would be testing the DOM. The arithmetic is what has a right
 // and a wrong answer.
+//
+// Every case below calls `tipShift` with two arguments and therefore against the
+// 230px cap, which is what the CSS-only version could assume and all it could
+// assume. The mount measures the live box and passes its real width as a third,
+// covered by the two cases at the foot of the file.
 //
 // The rectangles below are the real cases. Reinsurance's Plot leaf is the first
 // button in its row, the row starts at the content's left edge, and the button
@@ -51,6 +56,16 @@ test('a window narrower than the box pins it to the left edge', () => {
     const shift = tipShift(rect(80, 40), 200);
     const boxLeft = (80 + 40 / 2) - 230 / 2 + shift;
     assert.equal(boxLeft, 8, 'pinned to the margin, not to the right edge');
+});
+
+test('a measured box narrower than the cap is shifted less, or not at all', () => {
+    // The same anchor as the reported case, but the footnote is short and the
+    // box really 90px wide rather than the 230 the cap allows. Centered at 38 it
+    // starts at -7, so it needs 15px, not the 85 the cap-only reading demanded.
+    // Overshooting was safe and is now unnecessary: a real node can be measured.
+    assert.equal(tipShift(rect(15, 46), 1200, 90), 15);
+    // Narrower still and it fits where it is, so nothing is written.
+    assert.equal(tipShift(rect(15, 46), 1200, 46), 0);
 });
 
 test('an anchor mid row is clear on a wide window and clips on a narrow one', () => {
