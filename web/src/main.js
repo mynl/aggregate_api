@@ -1267,6 +1267,7 @@ const LOADERS = {
     'pricing:standalone': () => showPricingLeaf('standalone'),
     'pricing:allocate': () => showPricingLeaf('allocate'),
     'pricing:plot': () => showPricingLeaf('plot'),
+    'pricing:ruin': () => showPricingLeaf('ruin'),
     'pricing:evaluate': () => showPricingLeaf('evaluate'),
 
     'bounds:bounds': () => showBoundsLeaf('bounds'),
@@ -2887,7 +2888,7 @@ const PRICING_LEAF = {
                'Allocate'],
     evaluate: ['pane-evaluate', 'pricing.evaluate', () => _evaluation,
                'Evaluate'],
-    ruin: ['pane-ruin-stats', 'ruin', () => _ruin, 'Sample'],
+    ruin: ['pane-ruin-stats', 'ruin', () => _ruin, 'Draw'],
 };
 
 /**
@@ -3093,10 +3094,12 @@ async function loadKappaPlot() {
 // `ruin` exhibit envelopes together; the app draws both and labels the boxes
 // from the document's `meta`, so nothing about ruin is computed here.
 //
-// The verb button is Sample, the one action typing cannot express: the server
-// rolls a fresh seed, reports it in `meta.seed`, and the seed is then held and
-// re-sent so the drawn skeleton survives subsequent edits. See
-// `dev/plan-pk-tab.md` and its API execution notes.
+// Two buttons, two actions, per the house rule that nothing changes meaning
+// with state. Draw is the go button: ask now, with the boxes as they stand,
+// without waiting out the debounce. Sample is the one action typing cannot
+// express: the server rolls a fresh seed, reports it in `meta.seed`, and the
+// seed is then held and re-sent so the drawn skeleton survives subsequent
+// edits. See `dev/done/plan-pk-tab.md` and its API execution notes.
 
 // The capital box: a probability, so it shares the anchor box's constraints
 // rather than the target box's.
@@ -3107,9 +3110,13 @@ const ruinPInput = el('input', {
 // Where the resolved reading prints: the surplus the probability bought, the
 // psi achieved at the grid point, and the seed the picture was drawn from.
 const ruinReadout = el('span', { className: 'text-muted ms-2 form-gloss' });
+const ruinSample = el('button', { className: 'btn btn-outline-secondary btn-sm' },
+    'Sample');
+ruinSample.title = 'fresh paths, same question';
 const ruinExtras = el('div', { className: 'tab-tools price-form' },
     el('span', { className: 'exhibit-group-label' }, 'Pr default'),
     el('label', { className: 'price-field' }, ruinPInput),
+    ruinSample,
     ruinReadout);
 
 /** Stale-answer guard: the boxes move while a request is in flight. */
@@ -3132,7 +3139,8 @@ async function requestRuin({ sample = false } = {}) {
     if (sample) body.sample = true;
     else if (_ruinSeed != null) body.seed = _ruinSeed;
     const mine = ++_ruinTicket;
-    if (sample) ruinForm.setBusy(true, 'Sampling…');
+    ruinForm.setBusy(true, sample ? 'Sampling…' : 'Drawing…');
+    ruinSample.disabled = true;
     try {
         const payload = await api.ruin(state.id, body);
         if (mine !== _ruinTicket) return;
@@ -3142,7 +3150,8 @@ async function requestRuin({ sample = false } = {}) {
     } catch (err) {
         if (mine === _ruinTicket) replacePane('pane-ruin', errorNode(err));
     } finally {
-        if (sample) ruinForm.setBusy(false);
+        ruinForm.setBusy(false);
+        ruinSample.disabled = false;
     }
 }
 
@@ -3175,14 +3184,14 @@ async function showRuinLeaf() {
 const requestRuinSoon = debounce(() => requestRuin(), 350);
 
 const ruinForm = createPricingForm($('ruin-form'), {
-    verb: 'Sample',
+    verb: 'Draw',
     preview: true,
     context: formContext,
     extras: ruinExtras,
     onChange: requestRuinSoon,
-    gloss: 'fresh paths, same question',
-    onSubmit: () => requestRuin({ sample: true }),
+    onSubmit: () => requestRuin(),
 });
+ruinSample.addEventListener('click', () => requestRuin({ sample: true }));
 ruinPInput.addEventListener('input', requestRuinSoon);
 
 // ----------------------------------------------------------------------

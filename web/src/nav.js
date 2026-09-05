@@ -158,8 +158,8 @@ export const NAV_GROUPS = {
             },
         },
     },
-    // Five leaves, and the row reads `Calibrate  Stand-alone  Allocate  Plot |
-    // Evaluate`. The first four are one story: Calibrate determines the
+    // Six leaves, and the row reads `Calibrate  Stand-alone  Allocate  Plot |
+    // Pr Ruin | Evaluate`. The first four are one story: Calibrate determines the
     // distortion parameters, Stand-alone applies those same families to each
     // part as a price in its own right, Allocate takes the one premium and
     // splits it across those parts so they foot to the whole, and Plot draws
@@ -197,20 +197,24 @@ export const NAV_GROUPS = {
                     why: 'needs a book of units or an occurrence cession',
                     hint: 'the kappa curves behind the allocation: what each '
                         + 'part expects, given the whole' },
+            // A chart leaf like Plot, so the pill lights from the library's
+            // own frequency predicate rather than from a flag this app would
+            // have to keep in step with it. Fenced by dividers on both sides:
+            // it is neither part of the calibration story to its left nor the
+            // evaluation to its right, and the fences keep the row's forms
+            // from shifting under a reader stepping between the last two.
+            ruin: { label: 'Pr Ruin', chart: 'ruin',
+                    dividerBefore: true,
+                    why: 'needs a Poisson or renewal (wait) frequency',
+                    hint: 'sample surplus paths and the probability of '
+                        + 'eventual default; Poisson or renewal frequency '
+                        + 'only' },
             evaluate: { label: 'Evaluate', flag: 'canEvaluate',
                         dividerBefore: true,
                         why: 'needs an object that can be priced',
                         hint: 'the stress a premium already held survives: the '
                             + 'distortion in each family that values the '
                             + 'margin at zero' },
-            // A chart leaf like Plot, so the pill lights from the library's
-            // own frequency predicate rather than from a flag this app would
-            // have to keep in step with it.
-            ruin: { label: 'Pr Ruin', chart: 'ruin',
-                    why: 'needs a Poisson or renewal (wait) frequency',
-                    hint: 'sample surplus paths and the probability of '
-                        + 'eventual default; Poisson or renewal frequency '
-                        + 'only' },
         },
     },
     economics: {

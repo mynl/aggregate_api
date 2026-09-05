@@ -35,7 +35,8 @@ const repo = path.resolve(here, '..', '..');
 // `pathToFileURL`, not the bare path: a Windows absolute path reads as a URL
 // scheme (`t:`) to the ESM loader, which is the same trap `smoke-charts.mjs`
 // already sidesteps.
-const { NAV_GROUPS, leafAvailable, groupAvailable, activeLeaf, capsFromResponse } =
+const { NAV_GROUPS, leafAvailable, groupAvailable, activeLeaf, capsFromResponse,
+        leafOf } =
     await import(pathToFileURL(path.join(repo, 'web', 'src', 'nav.js')).href);
 
 const fixture = path.join(repo, 'dev', 'fixtures', 'capability.json');
@@ -230,6 +231,23 @@ if (!strip) {
             + `           nav.js:     ${declared.join(' ')}`);
     } else {
         console.log(`Group order agrees in both files: ${declared.join(' ')}`);
+    }
+}
+
+// Every leaf is also written twice: as a NAV_GROUPS entry, which draws the
+// pill, and as a `'group:leaf'` row in main.js's LOADERS table, which is what
+// clicking it does. A leaf with no row is a pill that lights, greys and does
+// nothing, which is exactly how the Pr Ruin pane shipped dark at a142: every
+// gate here was green because gating was all this file checked. Same
+// text-level reading as the strip above, and for the same reason.
+const mainSrc = readFileSync(path.join(repo, 'web', 'src', 'main.js'), 'utf8');
+for (const [group, def] of Object.entries(NAV_GROUPS)) {
+    for (const key of Object.keys(def.leaves || {})) {
+        if (leafOf(group, key)?.soon) continue;
+        if (!mainSrc.includes(`'${group}:${key}':`)) {
+            findings.push(`${group}:${key} has no LOADERS row in main.js: the `
+                + 'pill would light and do nothing');
+        }
     }
 }
 

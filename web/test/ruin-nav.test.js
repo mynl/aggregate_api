@@ -16,13 +16,17 @@ import {
     NAV_GROUPS, capsFromResponse, leafAvailable, leafOf,
 } from '../src/nav.js';
 
-test('the pill is last in the Pricing row, after Evaluate', () => {
+test('the pill sits fenced between Plot and Evaluate', () => {
+    // `... Plot | Pr Ruin | Evaluate`: dividers both sides, so the reader
+    // stepping between the two form-bearing leaves sees the row hold still.
     const keys = Object.keys(NAV_GROUPS.pricing.leaves);
-    assert.equal(keys.at(-1), 'ruin');
-    assert.equal(keys.at(-2), 'evaluate');
+    assert.equal(keys.at(-1), 'evaluate');
+    assert.equal(keys.at(-2), 'ruin');
     const leaf = leafOf('pricing', 'ruin');
     assert.equal(leaf.label, 'Pr Ruin');
     assert.equal(leaf.chart, 'ruin');
+    assert.equal(leaf.dividerBefore, true);
+    assert.equal(leafOf('pricing', 'evaluate').dividerBefore, true);
     assert.ok(leaf.why.includes('frequency'));
 });
 

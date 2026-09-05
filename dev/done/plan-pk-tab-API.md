@@ -108,3 +108,21 @@ What wants a browser, since neither suite renders: the rug's tick marks
 and the marker point at their first real drawing, the muted sample paths
 against the ruin-time ramp, and the debounce feel of the live form. The
 author kicks these tires.
+
+## Tire kick, a143
+
+The a142 pill lit and greyed correctly and did nothing when clicked. The
+leaf activation runs through a `'group:leaf'` dispatch table in `main.js`
+(`LOADERS`), a registration point the review missed and no gate checked:
+`check-nav.mjs` proves the greying, the web suite proves the leaf
+declaration, and neither reads the table, so every gate was green over a
+pane that could not open. The row is added, and `check-nav.mjs` now
+asserts every declared leaf (not marked `soon`) has a `LOADERS` row, the
+guard that turns this class of miss into a red harness.
+
+Author rulings from the kick, both landed at a143: the pill moves between
+Plot and Evaluate with dividers both sides, so the two form-bearing
+leaves sit at the row's end and stepping between them does not shift the
+form; and the form's verb becomes Draw (a plain go button), with Sample
+its own labeled button beside the probability box, keeping ruling 2's
+re-roll as a separate action rather than the form's only verb.

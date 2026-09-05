@@ -4,6 +4,25 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a143
+
+**[Pk-Tab] the Pr Ruin pill actually opens, and the row stops shifting.** At
+a142 the pill lit, greyed correctly, and did nothing when clicked: the leaf
+was missing its row in `main.js`'s `LOADERS` dispatch table, the one
+registration point no gate checked, so the Calibrate wrapper stayed on screen
+and the plots never appeared. The row is added, and `check-nav.mjs` now
+asserts every declared leaf has a `LOADERS` row so the next pill cannot ship
+dark the same way.
+
+Two form changes from the author's first kick of the tires. The pill moves
+between Plot and Evaluate, fenced by dividers on both sides
+(`... Plot | Pr Ruin | Evaluate`), so stepping between the two form-bearing
+leaves does not shift the row. And the verb button becomes **Draw**, a plain
+go button asking with the boxes as they stand, with **Sample** its own
+explicitly labeled button beside the probability box, per the house rule that
+one control never changes meaning: Draw repeats the question, Sample re-rolls
+the seed.
+
 ## 1.0.0a142
 
 **[Pk-Tab] the Pr Ruin pill: probability of eventual default.** A new leaf in
