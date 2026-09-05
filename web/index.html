@@ -571,6 +571,18 @@
                     <div id="evaluate-form"></div>
                     <div id="pane-evaluate" class="pane"></div>
                 </div>
+
+                <!-- Pr Ruin: the probability of eventual default, a teaching
+                     pane. The premium half of the form is the shared pricing
+                     component, the capital half is one probability box, and
+                     the picture below tracks both through a debounced POST.
+                     The chart pane and the stats strip are separate hosts so
+                     the exhibit table redraws without touching the canvas. -->
+                <div id="leaf-ruin" class="d-none">
+                    <div id="ruin-form"></div>
+                    <div id="pane-ruin" class="pane"></div>
+                    <div id="pane-ruin-stats" class="pane"></div>
+                </div>
             </div>
 
             <!-- Bounds: three leaves against the three classes in bounds.py.

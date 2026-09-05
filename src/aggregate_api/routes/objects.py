@@ -122,7 +122,7 @@ from ..sessions import SESSION_HEADER, SessionRegistry, normalize_session_id
 from .. import status as status_state
 from ..pricing import (
     run_calibration, run_evaluation, run_natural_allocation,
-    run_pricing_preview,
+    run_pricing_preview, run_ruin,
 )
 from ..tables import MAX_ROWS, frame_document
 from ..serializers import (
@@ -3714,5 +3714,33 @@ def post_pricing_evaluate(
     try:
         return run_evaluation(entry.obj, premium=req.premium, basis=req.basis,
                               p=req.p, a=req.a)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/objects/{oid}/ruin", response_model=models.RuinResponse)
+def post_ruin(
+    oid: str,
+    req: models.RuinRequest,
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """The Pr Ruin pane: sample surplus paths and the probability of ruin.
+
+    One POST answers with both halves the pane draws, the two-panel ``ruin``
+    chart document and the ``ruin`` exhibit envelopes, because both move
+    together under the debounced form and neither can travel the generic
+    GETs: the chart needs options the chart route does not carry, and the
+    exhibit registers on the ``RuinResult`` the request builds rather than
+    on the cached object. A POST also never meets the chart cache, so the
+    Sample action (``sample: true``) re-rolls honestly instead of replaying
+    the first draw from under a seedless cache key.
+
+    See :func:`aggregate_api.pricing.run_ruin`, and ``dev/plan-pk-tab.md``.
+    """
+    try:
+        return run_ruin(entry.obj, p=req.p, a=req.a, coc=req.coc, lr=req.lr,
+                        premium=req.premium, ruin_p=req.ruin_p, u=req.u,
+                        seed=req.seed, sample=req.sample, n_plot=req.n_plot,
+                        detail=req.detail)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

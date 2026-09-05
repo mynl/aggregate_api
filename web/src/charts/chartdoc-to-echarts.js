@@ -955,9 +955,13 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
     const series = [];
     const legend = [];
     for (const { s, x, y, y2 } of drawn) {
+        // A `sample` series with no value is one of an interchangeable family
+        // (the ruin chart's surviving paths): all muted gray, so the palette
+        // is not spent on fifty names and the valued members, colored on the
+        // ramp, read as the exceptions they are.
         const color = s.value != null
             ? rampColor(VALUE_RAMP_FLOOR + (1 - VALUE_RAMP_FLOOR) * valueAt(s.value))
-            : seriesColor(ctx.colorOf(s.name));
+            : (s.role === 'sample' ? '#6c757d' : seriesColor(ctx.colorOf(s.name)));
         // A log axis cannot place a zero, and the tail of a discretized density
         // is full of exact zeros and of FFT dust below LOG_FLOOR. Both become
         // gaps rather than being clamped onto the axis floor, which would draw
@@ -977,6 +981,34 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
                 data: points, showSymbol: false, silent: true, z: 1,
                 lineStyle: { width: 1, type: 'dashed', color: '#6c757d' },
                 itemStyle: { color: '#6c757d' },
+                tooltip: { show: false },
+            });
+            continue;
+        }
+
+        if (s.role === 'marker') {
+            // A single resolved reading, drawn as a point: the ruin chart's
+            // `(u, psi(u))`. The generic ladder would give one atom a step
+            // line with no symbol, which is one invisible pixel.
+            series.push({
+                type: 'line', name: s.name, xAxisIndex: i, yAxisIndex: i,
+                data: points, showSymbol: true, symbolSize: 9,
+                lineStyle: { width: 0 }, itemStyle: { color }, z: 4,
+            });
+            legend.push(s.name);
+            continue;
+        }
+
+        if (s.role === 'rug') {
+            // A rug is a set of tick marks on a baseline, the ruin chart's
+            // simulated ruin times under zero: short rectangles rather than a
+            // line through the atoms, and never a legend row, since the marks
+            // annotate the panel rather than name a curve.
+            series.push({
+                type: 'line', name: s.name, xAxisIndex: i, yAxisIndex: i,
+                data: points, showSymbol: true, symbol: 'rect',
+                symbolSize: [1.5, 9], lineStyle: { width: 0 },
+                itemStyle: { color, opacity: 0.7 }, z: 3, silent: true,
                 tooltip: { show: false },
             });
             continue;
@@ -1119,8 +1151,8 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
             showSymbol: false,
             connectNulls: false,
             lineStyle: {
-                width: s.value != null ? 0.75 : lineWidth(),
-                opacity: s.value != null ? 0.55 : 1,
+                width: s.value != null || s.role === 'sample' ? 0.75 : lineWidth(),
+                opacity: s.value != null || s.role === 'sample' ? 0.55 : 1,
                 color,
             },
             itemStyle: { color },
@@ -1128,8 +1160,9 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
         });
         // One of a family labeled by a number rather than by a name stays out
         // of the legend: forty entries would be forty names nobody asked for,
-        // and the number is already encoded on the ramp.
-        if (s.value == null) legend.push(s.name);
+        // and the number is already encoded on the ramp. A `sample` family is
+        // the same case whether or not its members carry values.
+        if (s.value == null && s.role !== 'sample') legend.push(s.name);
     }
 
     // Marks last, on the panel's first series, so they draw once. A mark names

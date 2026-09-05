@@ -203,6 +203,14 @@ export const NAV_GROUPS = {
                         hint: 'the stress a premium already held survives: the '
                             + 'distortion in each family that values the '
                             + 'margin at zero' },
+            // A chart leaf like Plot, so the pill lights from the library's
+            // own frequency predicate rather than from a flag this app would
+            // have to keep in step with it.
+            ruin: { label: 'Pr Ruin', chart: 'ruin',
+                    why: 'needs a Poisson or renewal (wait) frequency',
+                    hint: 'sample surplus paths and the probability of '
+                        + 'eventual default; Poisson or renewal frequency '
+                        + 'only' },
         },
     },
     economics: {

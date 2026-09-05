@@ -1,10 +1,12 @@
 """The Pricing group: validate a form, call the method, serve the exhibits.
 
-Four runners, one shape each. ``run_pricing_preview`` completes the pentagon
+Five runners, one shape each. ``run_pricing_preview`` completes the pentagon
 and answers with scalars, because a preview line prints numbers.
 ``run_calibration``, ``run_natural_allocation`` and ``run_evaluation`` hand back
 library exhibit envelopes, because everything else on this pane is a table the
-library owns.
+library owns. ``run_ruin`` serves the Pr Ruin pill: the ``ruin`` chart document
+and the ``ruin`` exhibit envelopes from one press, both built by the library on
+the same seed (``dev/plan-pk-tab.md``).
 
 Two of them calibrate and differ only in what they then ask for.
 ``run_calibration`` serves the receipt and the parts priced on their own
@@ -529,6 +531,115 @@ def run_evaluation(
         exhibits = {"pricing.evaluate": _envelopes(result, "pricing.evaluate")}
     warns.extend(caught)
     return {"kind": _kind_of(obj), "exhibits": exhibits, "warnings": warns}
+
+
+def run_ruin(
+    obj: Any,
+    *,
+    p: float | None = None,
+    a: float | None = None,
+    coc: float | None = None,
+    lr: float | None = None,
+    premium: float | None = None,
+    ruin_p: float | None = None,
+    u: float | None = None,
+    seed: int | None = None,
+    sample: bool = False,
+    n_plot: int | None = None,
+    detail: int | None = None,
+) -> dict:
+    """The eventual-ruin reading: the two-panel chart and its stats strip.
+
+    Parameters
+    ----------
+    obj : Aggregate
+        The live object. Must serve the ``ruin`` chart, which the library's
+        own predicate limits to an updated aggregate with a Poisson or
+        renewal frequency.
+    p, a : float, optional
+        Exactly one capital anchor, the Calibrate form's.
+    coc, lr, premium : float, optional
+        Exactly one pricing target. The ruin engine takes a loss ratio, so
+        ``lr`` passes through and the other two are completed to one through
+        :meth:`price_pentagon`, the same bridge :func:`run_calibration` uses
+        for a premium target: the pentagon identity stays upstream.
+    ruin_p, u : float, optional
+        At most one capital level: a probability of eventual default the
+        library resolves through the ruin function's capital lookup, or the
+        initial surplus directly. With neither, the library's teaching
+        default applies.
+    seed : int, optional
+        rng seed for the simulated paths; omitted, the library's fixed
+        teaching seed keeps the document deterministic.
+    sample : bool
+        The Sample action. Draws one fresh integer seed here so the chart
+        and the exhibit describe the same draw; the chart's ``meta.seed``
+        reports it.
+    n_plot, detail : int, optional
+        Paths drawn, and the per-path display budget, passed only when set.
+
+    Returns
+    -------
+    dict
+        Matches :class:`aggregate_api.models.RuinResponse`: the ``ruin``
+        chart document parsed from its canonical JSON, and the ``ruin``
+        exhibit envelopes under both perspectives, built on the
+        :class:`~aggregate.results.RuinResult` the same inputs produce.
+
+    Notes
+    -----
+    One POST answers with both halves because both move together under the
+    debounced form, and because neither can travel the generic GETs: the
+    chart needs options those routes do not carry, and the exhibit registers
+    on the result object rather than on the cached ``obj``. The exhibit and
+    the chart run the same capped simulation twice, deliberately: sharing
+    one seed makes the strip describe the drawn paths, and lifting the
+    simulation out to share the arrays would be this service reaching past
+    the library's public surface.
+    """
+    from aggregate import charts as agg_charts
+
+    target = _one_target(coc, lr, premium)
+    if "lr" not in target:
+        anchor = _one_anchor(p, a)
+        if not hasattr(obj, "price_pentagon"):
+            raise ValueError("the ruin reading requires an Aggregate")
+        row = obj.price_pentagon(**anchor,
+                                 **_pentagon_target(target)).iloc[0]
+        target = {"lr": _scalar(row["LR"])}
+    if "ruin" not in agg_charts.available_charts(obj):
+        raise ValueError(
+            "no ruin reading for this object: it needs an updated aggregate "
+            "with a Poisson or renewal (wait) frequency")
+    if ruin_p is not None and u is not None:
+        raise ValueError("pass at most one of ruin_p (a default probability) "
+                         "or u (an initial surplus)")
+    if sample:
+        import numpy as np
+        seed = int(np.random.default_rng().integers(1, 2 ** 31 - 1))
+
+    options: dict = {"lr": target["lr"]}
+    if ruin_p is not None:
+        options["p"] = ruin_p
+    if u is not None:
+        options["u"] = u
+    if seed is not None:
+        options["seed"] = seed
+    warns: list[str] = []
+    with library_warnings() as caught:
+        chart_options = dict(options)
+        if n_plot is not None:
+            chart_options["n_plot"] = n_plot
+        if detail is not None:
+            chart_options["detail"] = detail
+        doc = agg_charts.build_chart_doc(obj, "ruin", **chart_options)
+        result = obj.eventual_ruin(**options)
+        exhibits = {"ruin": _envelopes(result, "ruin")}
+    warns.extend(caught)
+    import json
+    chart = json.loads(agg_charts.canonical_json(doc))
+    return {"kind": _kind_of(obj), "chart": chart, "exhibits": exhibits,
+            "warnings": warns}
 
 
 def _scalar(value):

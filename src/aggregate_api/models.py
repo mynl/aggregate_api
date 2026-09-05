@@ -719,6 +719,82 @@ class PricingExhibitsResponse(BaseModel):
     warnings: list[str] = []
 
 
+class RuinRequest(BaseModel):
+    """Body for ``POST /v1/objects/{id}/ruin``.
+
+    The premium half is the Calibrate shape exactly: one capital anchor
+    (``p`` or ``a``) and one pricing target (``coc``, ``lr`` or ``premium``),
+    from which the runner derives the loss ratio the ruin engine takes,
+    through :meth:`price_pentagon` where the target is not already a loss
+    ratio. There is no ``basis``: the ruin reading is of the object's own
+    law, and a margin struck on another view would price a different
+    distribution than the one being simulated.
+
+    ``ruin_p`` is the initial capital, entered as a probability of eventual
+    default and resolved to a surplus through the ruin function's capital
+    lookup; ``u`` states the surplus directly. At most one travels; with
+    neither, the library's teaching default applies. The name is not ``p``
+    because ``p`` is already the VaR anchor everywhere on this surface.
+
+    ``sample`` is the Sample action: the server draws one fresh integer
+    seed, uses it for both the chart and the exhibit so they describe the
+    same draw, and reports it in the chart document's ``meta``. It is a
+    flag rather than ``seed: null`` because a typed model cannot tell an
+    omitted field from an explicit null on the wire.
+    """
+
+    p: float | None = Field(
+        None, gt=0, le=1, description="VaR probability in (0, 1] fixing capital.")
+    a: float | None = Field(
+        None, gt=0, description="Asset level fixing capital; snapped to the grid.")
+    coc: float | None = Field(None, gt=0, description="Cost-of-capital (ROE) target.")
+    lr: float | None = Field(None, gt=0, description="Loss-ratio target.")
+    premium: float | None = Field(
+        None, gt=0, description="Premium target; the pentagon's ``P``.")
+    ruin_p: float | None = Field(
+        None, gt=0, lt=1,
+        description=("Probability of eventual default; resolved to an initial "
+                     "surplus through the ruin function's capital lookup."))
+    u: float | None = Field(
+        None, ge=0, description="Initial surplus directly. At most one of "
+                                "``ruin_p`` or ``u``.")
+    seed: int | None = Field(
+        None, ge=0,
+        description=("rng seed for the simulated paths. Omit for the "
+                     "library's fixed teaching seed; ignored when ``sample`` "
+                     "is set."))
+    sample: bool = Field(
+        False,
+        description=("Draw a fresh seed server side and report it in the "
+                     "chart document's ``meta.seed``."))
+    n_plot: int | None = Field(
+        None, ge=1, le=200, description="Sample paths drawn; the library "
+                                        "default is 50.")
+    detail: int | None = Field(
+        None, ge=16, description="Per-path point budget for the display "
+                                 "decimation.")
+
+
+class RuinResponse(BaseModel):
+    """Answer for ``POST /v1/objects/{id}/ruin``.
+
+    ``chart`` is the ``ruin`` chart document, byte for byte what the generic
+    chart route would serve, parsed so it rides inside a JSON response; its
+    ``meta`` carries the scalars the pane labels itself with (the resolved
+    ``u``, exact and simulated psi, the seed). ``exhibits`` maps ``ruin`` to
+    a perspective-to-envelope pair, the :class:`PricingExhibitsResponse`
+    shape, because the exhibit registers on the
+    :class:`~aggregate.results.RuinResult` the request builds rather than on
+    the cached object.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    kind: str
+    chart: dict[str, Any]
+    exhibits: dict[str, dict[str, Any]]
+    warnings: list[str] = []
+
 
 # ======================================================================
 # DecL helpers

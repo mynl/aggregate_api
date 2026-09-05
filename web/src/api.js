@@ -239,6 +239,14 @@ export const api = {
     /** The breakeven acceptability panel, as the `pricing.evaluate` envelope. */
     pricingEvaluate: (id, body) =>
         _json('POST', `/v1/objects/${id}/pricing/evaluate`, body),
+    /**
+     * The Pr Ruin pane's one request: the two-panel `ruin` chart document and
+     * the `ruin` exhibit envelopes together, since both move together under
+     * the debounced form. A POST rather than the generic chart GET because
+     * the exhibit registers on the `RuinResult` the request builds, and
+     * because `sample: true` must never be answered from a cache.
+     */
+    ruin: (id, body) => _json('POST', `/v1/objects/${id}/ruin`, body),
 
     //
     // `price`, `reinsPrice`, `evaluate` and `pricing_at` went at a85 with the

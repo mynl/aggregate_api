@@ -98,6 +98,12 @@ const BASES = [
  * opts.context : function
  *     Returns `{id, kind, bases, canPreview}` for the object now on screen. A
  *     function rather than a value because one form outlives many objects.
+ * opts.onChange : function, optional
+ *     Called whenever the form's answer may have moved: a keystroke in either
+ *     box, a switch of anchor, target or basis, or a programmatic `write`.
+ *     The Pr Ruin pane is the user: its picture tracks the form live, so it
+ *     re-requests off the same events that refresh the preview line. Debounce
+ *     is the caller's, since only the caller knows what a request costs.
  *
  * Returns
  * -------
@@ -110,7 +116,7 @@ export function createPricingForm(host, opts) {
     const {
         verb, onSubmit, basisLabel = null, targets = TARGETS.map((t) => t[0]),
         preview = false, allowBlank = false, gloss = null, extras = null,
-        basisOnly = null, basisWhy = null, context,
+        basisOnly = null, basisWhy = null, context, onChange = null,
     } = opts;
 
     empty(host);
@@ -359,10 +365,12 @@ export function createPricingForm(host, opts) {
     }
 
     const previewSoon = debounce(renderPreview, 350);
-    const refresh = () => { renderPreview(); };
+    // A switch changes the whole question, so both readers answer at once; a
+    // keystroke is absorbed by the debounce above and by the caller's own.
+    const refresh = () => { renderPreview(); onChange?.(); };
 
     for (const input of [anchorInput, targetInput]) {
-        input.addEventListener('input', previewSoon);
+        input.addEventListener('input', () => { previewSoon(); onChange?.(); });
     }
 
     button.addEventListener('click', () => {

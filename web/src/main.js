@@ -20,7 +20,7 @@ import './styles/cm6.css';
 
 // ---- App modules ----
 import { api, ApiError, errorMessage } from './api.js';
-import { createPricingForm } from './pricing-form.js';
+import { createPricingForm, money, percent } from './pricing-form.js';
 import { createEditor, emacsEnabledDefault, modifierName } from './editor.js';
 import {
     mountExamples, mountPalette, loadExamples, visibleExamples,
@@ -1134,7 +1134,7 @@ const PANE_OF = {
     bounds: 'pane-bounds', more: 'pane-more',
 };
 const ALL_PANES = [...Object.values(PANE_OF), 'pane-standalone', 'pane-allocate',
-                   'pane-kappa', 'pane-evaluate'];
+                   'pane-kappa', 'pane-evaluate', 'pane-ruin', 'pane-ruin-stats'];
 
 function clearPanes() {
     destroyAllGrids();
@@ -1147,6 +1147,7 @@ function clearPanes() {
     if (overviewChart) { overviewChart.dispose(); overviewChart = null; }
     if (boundsChart) { boundsChart.dispose(); boundsChart = null; }
     if (kappaChart) { kappaChart.dispose(); kappaChart = null; }
+    if (ruinChart) { ruinChart.dispose(); ruinChart = null; }
     if (moreChart) { moreChart.dispose(); moreChart = null; }
 }
 
@@ -1584,6 +1585,11 @@ let boundsChart = null;
 // than inside the pricing state: a kappa curve conditions on an outcome, not on
 // a distortion, so nothing a form does invalidates it.
 let kappaChart = null;
+// The Pricing group's Pr Ruin leaf: the two-panel surplus-path chart, drawn
+// from a document the form fetched. Tracked like the others so a pane
+// replacement disposes it rather than leaving a ResizeObserver on a detached
+// canvas.
+let ruinChart = null;
 // The More group's Approximation leaf, whose Plot half is the first chart to
 // appear under More. Every other leaf in that group is a table, so before this
 // the pane had no instance to track and `disposePaneChart` had no branch for
@@ -2147,6 +2153,8 @@ function disposePaneChart(paneId) {
         boundsChart.dispose(); boundsChart = null;
     } else if (paneId === 'pane-kappa' && kappaChart) {
         kappaChart.dispose(); kappaChart = null;
+    } else if (paneId === 'pane-ruin' && ruinChart) {
+        ruinChart.dispose(); ruinChart = null;
     } else if (paneId === 'pane-more' && moreChart) {
         moreChart.dispose(); moreChart = null;
     }
@@ -2789,6 +2797,11 @@ async function loadApproximation() {
 let _calibration = null;
 let _allocation = null;
 let _evaluation = null;
+// The Pr Ruin response, chart document and exhibit envelopes together, plus
+// the seed the last Sample rolled: held so typing after a Sample re-prices the
+// same drawn skeleton rather than silently swapping the picture underfoot.
+let _ruin = null;
+let _ruinSeed = null;
 
 /**
  * The pricing every pane is currently talking about.
@@ -2812,6 +2825,8 @@ function forgetPricing() {
     _calibration = null;
     _allocation = null;
     _evaluation = null;
+    _ruin = null;
+    _ruinSeed = null;
     // The pricing goes with them. It was struck on the previous object, and
     // left in the boxes it would be relabeled as this one's by the basis row
     // beside it, which is worse than an empty field.
@@ -2822,6 +2837,7 @@ function forgetPricing() {
 const PRICING_WRAPPER = {
     calibrate: 'leaf-price', standalone: 'leaf-price',
     allocate: 'leaf-allocate', plot: 'leaf-kappa', evaluate: 'leaf-evaluate',
+    ruin: 'leaf-ruin',
 };
 
 /**
@@ -2848,6 +2864,8 @@ async function showPricingLeaf(which) {
     if (which === 'evaluate') {
         syncEvaluateForm();
         drawPricingPane('evaluate');
+    } else if (which === 'ruin') {
+        await showRuinLeaf();
     } else if (which === 'plot') {
         await loadKappaPlot();
     } else if (which === 'allocate') {
@@ -2869,6 +2887,7 @@ const PRICING_LEAF = {
                'Allocate'],
     evaluate: ['pane-evaluate', 'pricing.evaluate', () => _evaluation,
                'Evaluate'],
+    ruin: ['pane-ruin-stats', 'ruin', () => _ruin, 'Sample'],
 };
 
 /**
@@ -3062,6 +3081,109 @@ async function loadKappaPlot() {
         pane.appendChild(failed ? fetchFailed() : notDrawable());
     }
 }
+
+// ----------------------------------------------------------------------
+// Pricing / Pr Ruin: the probability of eventual default
+// ----------------------------------------------------------------------
+// A teaching pane, not a pricing tool. The premium half of the form is the
+// shared pricing component, verbatim; the capital half is one box stating a
+// probability of eventual default, which the library resolves to an initial
+// surplus through the ruin function's capital lookup. Every change feeds one
+// debounced POST that answers with the two-panel chart document and the
+// `ruin` exhibit envelopes together; the app draws both and labels the boxes
+// from the document's `meta`, so nothing about ruin is computed here.
+//
+// The verb button is Sample, the one action typing cannot express: the server
+// rolls a fresh seed, reports it in `meta.seed`, and the seed is then held and
+// re-sent so the drawn skeleton survives subsequent edits. See
+// `dev/plan-pk-tab.md` and its API execution notes.
+
+// The capital box: a probability, so it shares the anchor box's constraints
+// rather than the target box's.
+const ruinPInput = el('input', {
+    type: 'number', step: '0.001', min: '0', max: '1',
+    value: '0.05', autocomplete: 'off',
+});
+// Where the resolved reading prints: the surplus the probability bought, the
+// psi achieved at the grid point, and the seed the picture was drawn from.
+const ruinReadout = el('span', { className: 'text-muted ms-2 form-gloss' });
+const ruinExtras = el('div', { className: 'tab-tools price-form' },
+    el('span', { className: 'exhibit-group-label' }, 'Pr default'),
+    el('label', { className: 'price-field' }, ruinPInput),
+    ruinReadout);
+
+/** Stale-answer guard: the boxes move while a request is in flight. */
+let _ruinTicket = 0;
+
+/**
+ * Ask for the ruin reading and draw both halves of the answer.
+ *
+ * `sample` is the Sample press; everything else is the debounced echo of the
+ * form. An incomplete form is silence, not an error, matching the preview
+ * line's reading of an empty box.
+ */
+async function requestRuin({ sample = false } = {}) {
+    if (!state.id || !state.caps?.charts?.has('ruin')) return;
+    const body = ruinForm.read();
+    if (!body) return;
+    const ruinP = parseFloat(ruinPInput.value);
+    if (Number.isFinite(ruinP) && ruinP > 0 && ruinP < 1) body.ruin_p = ruinP;
+    else return;
+    if (sample) body.sample = true;
+    else if (_ruinSeed != null) body.seed = _ruinSeed;
+    const mine = ++_ruinTicket;
+    if (sample) ruinForm.setBusy(true, 'Sampling…');
+    try {
+        const payload = await api.ruin(state.id, body);
+        if (mine !== _ruinTicket) return;
+        _ruin = payload;
+        _ruinSeed = payload.chart?.meta?.seed ?? _ruinSeed;
+        drawRuin();
+    } catch (err) {
+        if (mine === _ruinTicket) replacePane('pane-ruin', errorNode(err));
+    } finally {
+        if (sample) ruinForm.setBusy(false);
+    }
+}
+
+/** Draw the held response: the chart, the stats strip, and the readout. */
+function drawRuin() {
+    if (!_ruin) return;
+    const host = el('div');
+    replacePane('pane-ruin', host);
+    ruinChart = mountChartDoc(host, _ruin.chart);
+    if (!ruinChart) replacePane('pane-ruin', notDrawable());
+    drawPricingPane('ruin');
+    const meta = _ruin.chart?.meta || {};
+    ruinReadout.textContent =
+        `u ${money(meta.u)}, psi ${percent(meta.psi_exact)}, `
+        + `simulated ${percent(meta.psi_sim)}, seed ${meta.seed ?? ''}`;
+}
+
+/**
+ * Arrive at the leaf: draw what is held, or ask with the form as it stands.
+ *
+ * Unlike its button-driven neighbors this pane computes on activation, the
+ * Plot precedent: the picture tracks the form live, so a leaf that greeted
+ * its reader blank while being live to every keystroke would be odd.
+ */
+async function showRuinLeaf() {
+    if (_ruin) { drawRuin(); return; }
+    await requestRuin();
+}
+
+const requestRuinSoon = debounce(() => requestRuin(), 350);
+
+const ruinForm = createPricingForm($('ruin-form'), {
+    verb: 'Sample',
+    preview: true,
+    context: formContext,
+    extras: ruinExtras,
+    onChange: requestRuinSoon,
+    gloss: 'fresh paths, same question',
+    onSubmit: () => requestRuin({ sample: true }),
+});
+ruinPInput.addEventListener('input', requestRuinSoon);
 
 // ----------------------------------------------------------------------
 // Bounds: how much of the price the choice of distortion decides

@@ -4,6 +4,37 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a142
+
+**[Pk-Tab] the Pr Ruin pill: probability of eventual default.** A new leaf in
+the Pricing row, last, after Evaluate, serving `dev/plan-pk-tab.md`. The form
+is the shared pricing component plus one box, a probability of eventual
+default; below it the library's two-panel `ruin` chart, about fifty sample
+surplus paths with the expected trend, the LIL funnel and a rug of simulated
+ruin times, beside the exact `psi(u)` curve with the resolved point marked and
+a log reading offered. The `ruin` exhibit rides the same response as the
+pane's stats strip. Every form change re-requests through a 350 ms debounce;
+the Sample button re-rolls the seed server side and the rolled seed is then
+held, so a drawn skeleton survives subsequent edits. Consumes `aggregate`
+1.0.0a339 to a341.
+
+One new route, `POST /v1/objects/{id}/ruin`, in the pricing family: it
+derives the loss ratio through `price_pentagon` where the target is not one,
+builds the chart document and the `RuinResult` exhibit envelopes on one shared
+seed, and answers with both. A POST rather than the generic chart GET because
+the exhibit registers on the result object and because a Sample must never be
+answered from a cache. The pill itself gates on `available_charts` carrying
+`ruin` (Poisson or renewal frequency, an aggregate alone), the Plot leaf's
+mechanics, so there is no new capability flag.
+
+The chart adapter gains three generic role treatments the ruin document is
+first to use: `sample` families draw muted and stay out of the legend, `rug`
+series draw as tick marks, and a `marker` is a visible point. The pricing
+form component gains an `onChange` hook; the other five mounts are unchanged
+and the Calibrate subtab is untouched. Nine backend tests in
+`test_ruin_route.py`, three web tests in `ruin-nav.test.js`, and the
+`check-nav.mjs` expectations learn the new row.
+
 ## 1.0.0a141
 
 **[Approximation-Tab] the method-of-moments story reaches the page.** A new

@@ -93,6 +93,12 @@ const EXPECTED = {
     // that agreement is the assertion rather than a coincidence.
     'pricing:plot': ['agg_reins', 'port'],
     'pricing:evaluate': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl'],
+    // Pr Ruin is a chart leaf and lights from `ruin`, whose predicate is the
+    // library's frequency test: Poisson or renewal, on an aggregate alone.
+    // Both captured aggregates are Poisson books, so both light; a portfolio
+    // never does (plan-pk-tab ruling 5), and neither does anything without a
+    // claim-count process of its own.
+    'pricing:ruin': ['agg', 'agg_reins'],
     // Bounds takes an Aggregate or a Portfolio, which is the library's own
     // accepted set; allocation needs the per-unit conditional expectations only
     // a portfolio's density frame carries.

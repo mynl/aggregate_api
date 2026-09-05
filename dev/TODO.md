@@ -918,6 +918,20 @@ one version bump each.
       taken to the LIB side as a sizing question. Nothing app side is owed
       either way, since a smaller emission lands here with no change.
 
+- [x] **The Pr Ruin pill**: `dev/done/plan-pk-tab.md`, one bump at **a142**,
+      consuming LIB a339 to a341 (the engine lift, `eventual_ruin` with
+      `RuinResult` and the `ruin` exhibit, the `ruin` chart with its
+      downsampling), which landed concurrently from the same plan; the LIB
+      execution notes were read before any app code. Last pill in the Pricing
+      row, after Evaluate: the shared pricing form plus a probability of
+      default box, over the two-panel chart and the exhibit stats strip, live
+      to the form through one debounced POST. Divergences in
+      `dev/done/plan-pk-tab-API.md`, the load bearing ones being no
+      `can_ruin` flag (the pill gates on the chart, the Plot mechanics), the
+      new POST route the plan's "nothing new" line underestimated, and
+      `sample: true` as the wire spelling of the seed re-roll. Nothing owed
+      upstream.
+
 ## Raised with `aggregate` (not fixed here)
 
 - [ ] **`format_program`'s fallback answers with the preprocessed statement
