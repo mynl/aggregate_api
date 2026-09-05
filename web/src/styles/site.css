@@ -717,6 +717,21 @@ header .navbar { min-height: 56px; }
 /* ---- Tab tool rows ---- */
 .tab-tools { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .55rem; align-items: center; }
 .tab-tools .btn { --bs-btn-padding-y: .12rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .72rem; }
+/* A member of a segmented control the object cannot answer: the Approximation
+   pane's Plot pill on a portfolio. Greyed and left on the page, per the house
+   rule, and marked `aria-disabled` rather than `disabled` so it still emits the
+   pointer events the delegated `data-why` footnote needs. That is the same
+   trade the dark sub-tabs make; see `utils/tip.js`. The hover state is
+   neutralized too, or Bootstrap would fill it on the way past and read as
+   live. */
+.tab-tools .btn[aria-disabled="true"],
+.tab-tools .btn[aria-disabled="true"]:hover {
+    opacity: .55;
+    cursor: not-allowed;
+    background: transparent;
+    color: var(--mut);
+    border-color: var(--line);
+}
 /* The muted note beside a form control. It was three inline `font-size` rules
    at .7rem and .74rem, which are two more sizes than the scale has and neither
    of them a step on it. */

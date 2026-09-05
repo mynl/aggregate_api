@@ -4,6 +4,40 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a141
+
+**[Approximation-Tab] the method-of-moments story reaches the page.** A new
+Approximation leaf in the More row, between Tail behavior and Window, carrying
+both readings of one question behind a Plot / Summary switch inside the pane.
+Plot draws the library's `approximation` chart, the realized mass with the five
+fitted families over it and an exceedance panel adding the sub-exponential
+implied tail. Summary serves the `approximation` exhibit: the fitted DecL
+fragments and their parameters, the achieved moments with the Kolmogorov
+distance, and the quantiles on the return period ladder, every column read
+against `exact`.
+
+Consumes `aggregate` 1.0.0a331 to a333 and needed **no server change**. Both
+the chart and the exhibit are name addressed through the routes that already
+existed, and the generic chart adapter realized a thirteen-series, two-panel
+document with no per-chart override, so the whole change is four files of SPA.
+
+The two halves gate differently, and that is the library's decision rather than
+this app's. The leaf lights from the exhibit, which is registered for an updated
+aggregate or portfolio. The chart is registered for an aggregate alone, because
+the implied tail needs a single severity and a book has one per unit. So a
+portfolio opens on Summary with the Plot pill greyed and saying why, the same
+shape Reinsurance Plot has on a reinsured portfolio, and greyed rather than
+hidden per the house rule.
+
+**Changed: the Reinsurance tab is now `Re`.** The six-tab strip is the one row
+that has to survive a phone, and `Reinsurance` was the longest label by half
+again, pushing the strip into a horizontal scroll. `Re` is also what the app
+already calls the thing wherever a reader types it, in the Quick Re row and the
+Add re button, so the tab now agrees with its own controls. The group key stays
+`reinsurance`, so `data-tab`, the pane ids, the stored view state and any link
+already shared are unaffected; this is the split `PnL` made at a138. Prose keeps
+the full word, and the Help panel entry now opens with it.
+
 ## 1.0.0a140
 
 **[Library-Skew-a333] the app catches up to `aggregate` 1.0.0a333.** Six

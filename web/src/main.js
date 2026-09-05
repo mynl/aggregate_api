@@ -1147,6 +1147,7 @@ function clearPanes() {
     if (overviewChart) { overviewChart.dispose(); overviewChart = null; }
     if (boundsChart) { boundsChart.dispose(); boundsChart = null; }
     if (kappaChart) { kappaChart.dispose(); kappaChart = null; }
+    if (moreChart) { moreChart.dispose(); moreChart = null; }
 }
 
 function activeTabName() {
@@ -1302,6 +1303,10 @@ const LOADERS = {
     // historical reasons rather than good ones.
     'more:behavior': () => loadExhibitLeaf('pane-more', 'tail_behavior',
         ['more', 'behavior']),
+    // The one More leaf that is not a single table: a Plot / Summary switch
+    // inside the pane, the exhibit under one pill and the library's chart under
+    // the other. See the section above `loadApproximation`.
+    'more:approximation': () => loadApproximation(),
     'more:window': () => loadExhibitLeaf('pane-more', 'bs_window',
         ['more', 'window']),
     'more:dependency': () => loadExhibitLeaf('pane-more', 'dependency',
@@ -1579,6 +1584,12 @@ let boundsChart = null;
 // than inside the pricing state: a kappa curve conditions on an outcome, not on
 // a distortion, so nothing a form does invalidates it.
 let kappaChart = null;
+// The More group's Approximation leaf, whose Plot half is the first chart to
+// appear under More. Every other leaf in that group is a table, so before this
+// the pane had no instance to track and `disposePaneChart` had no branch for
+// it; stepping from the plot to any neighboring leaf would have left the
+// instance alive over a detached canvas with its ResizeObserver still running.
+let moreChart = null;
 
 // ----------------------------------------------------------------------
 // How tables render: one preference, page-wide
@@ -2068,8 +2079,14 @@ function ledeFor(group, key) {
  *   group: the layering analysis is Stats and the per-stage cession impact is
  *   Summary. One envelope answers both, so a reader stepping between them pays
  *   one fetch and the second is a 304.
+ * @param {function} [header] builds a node to sit above the lede, rebuilt on
+ *   every draw. For a pane carrying a control of its own: Approximation's Plot
+ *   / Summary switch is the only user. It has to be built inside `draw` rather
+ *   than inserted afterwards, because `draw` re-runs on a perspective or
+ *   static / interactive flip and would otherwise wipe the control that is
+ *   sitting above the table it just redrew.
  */
-async function loadExhibitLeaf(paneId, name, leaf, block = null) {
+async function loadExhibitLeaf(paneId, name, leaf, block = null, header = null) {
     const envelope = await api.exhibit(state.id, name, _perspective);
     const all = envelope.blocks || [];
     const blocks = block === null ? all : all.slice(block, block + 1);
@@ -2080,6 +2097,7 @@ async function loadExhibitLeaf(paneId, name, leaf, block = null) {
         // changed its mind about its columns half way down.
         const root = el('div', { className: 'overview-exhibits exhibit-blocks' });
         replacePane(paneId, root);
+        if (header) root.appendChild(header());
         const lede = leaf && ledeFor(leaf[0], leaf[1]);
         if (lede) root.appendChild(lede);
         if (!blocks.length) {
@@ -2129,6 +2147,8 @@ function disposePaneChart(paneId) {
         boundsChart.dispose(); boundsChart = null;
     } else if (paneId === 'pane-kappa' && kappaChart) {
         kappaChart.dispose(); kappaChart = null;
+    } else if (paneId === 'pane-more' && moreChart) {
+        moreChart.dispose(); moreChart = null;
     }
 }
 
@@ -2594,6 +2614,144 @@ async function loadReinsExhibit(block, leaf) {
 // as the `reins` exhibit's first block with its own caption, so all of that was
 // this repo's second opinion on a table it does not own. If the orientation is
 // wrong, it is wrong in the library.
+
+// ----------------------------------------------------------------------
+// More / Approximation: one story, two readings
+// ----------------------------------------------------------------------
+//
+// The method-of-moments story, as a picture and as a table. Both come from the
+// library under the one name `approximation`: the chart draws the realized mass
+// with the five fitted families over it and an exceedance panel carrying the
+// sub-exponential implied tail, and the exhibit serves `approximation_df`, the
+// fitted DecL fragments, their achieved moments with the Kolmogorov distance,
+// and the quantiles on the return period ladder, every column read against
+// `exact`.
+//
+// **Why the switch is inside the pane rather than two leaves in the More row.**
+// The navigation is two levels, groups and then each group's sub-tab row, and
+// `dev/scripts/check-nav.mjs` asserts that shape, so a third level has to live
+// in the pane. It is also the better reading: these are two views of one
+// question, so they keep one address, and the More row stays at seven pills
+// instead of growing an `Approx plot` and an `Approx summary` that would sort
+// apart from each other the moment another leaf lands between them.
+//
+// **Why the two halves gate differently.** The leaf lights from the exhibit,
+// which the library registers for an updated Aggregate or Portfolio. The chart
+// it registers for an Aggregate alone, because the implied tail `E[N] * S_X(x)`
+// needs a single severity and a book has one per unit. So a portfolio opens on
+// Summary with the Plot pill greyed and saying why, which is the same shape as
+// Reinsurance Plot on a reinsured portfolio, and greyed rather than hidden per
+// the house rule.
+
+/** The two readings, in the order they are always drawn. */
+const APPROXIMATION_HALVES = [['plot', 'Plot'], ['summary', 'Summary']];
+
+/** What the greyed Plot pill says on hover. */
+const APPROXIMATION_NO_PLOT =
+    'the implied tail needs a single severity, so an aggregate only';
+
+// Which half the reader last chose. Per session and not persisted, like the
+// perspective flip's in-pane state and unlike the chart readings: it is a
+// position within one pane, not a preference about how anything is drawn.
+let _approximationHalf = 'plot';
+
+/** Does the library publish the chart for the object in front of us? */
+function approximationCanPlot() {
+    return state.caps.charts.has('approximation');
+}
+
+/**
+ * The half to draw: the one chosen, unless it cannot answer for this object.
+ *
+ * Plot leads wherever it is live, which is the author's ruling and matches
+ * Overview and Reinsurance, where the picture is the first pill too. The
+ * fallback is what makes a portfolio open on Summary without the pill order
+ * changing under a reader stepping between objects.
+ */
+function approximationHalf() {
+    if (_approximationHalf === 'plot' && !approximationCanPlot()) return 'summary';
+    return _approximationHalf;
+}
+
+/**
+ * The Plot / Summary switch, as a segmented control.
+ *
+ * `aria-disabled` and `data-why` rather than `disabled` on the dead pill, which
+ * is the same choice `renderSubTabs` makes and for the same two reasons: a
+ * `disabled` button suppresses the tooltip in Chrome, and it emits no pointer
+ * events, so the delegated `data-why` footnote in `utils/tip.js` would never
+ * see it. The click is refused by simply not binding one.
+ *
+ * @returns {HTMLElement} the control row, rebuilt on every draw.
+ */
+function approximationStrip() {
+    const row = el('div', { className: 'tab-tools' });
+    const group = el('div', { className: 'btn-group btn-group-sm', role: 'group' });
+    group.setAttribute('aria-label', 'approximation reading');
+    const active = approximationHalf();
+    for (const [value, label] of APPROXIMATION_HALVES) {
+        const off = value === 'plot' && !approximationCanPlot();
+        const button = el('button', {
+            type: 'button',
+            className: 'btn btn-outline-secondary'
+                + (value === active ? ' active' : ''),
+        }, label);
+        button.setAttribute('aria-pressed', String(value === active));
+        if (off) {
+            button.setAttribute('aria-disabled', 'true');
+            button.setAttribute('data-why', APPROXIMATION_NO_PLOT);
+            button.setAttribute('aria-label', `${label}, ${APPROXIMATION_NO_PLOT}`);
+        } else {
+            button.addEventListener('click', () => {
+                if (value === approximationHalf()) return;
+                _approximationHalf = value;
+                loadApproximation();
+            });
+        }
+        group.appendChild(button);
+    }
+    row.appendChild(group);
+    return row;
+}
+
+/**
+ * More / Approximation: the switch, and whichever half it is set to.
+ *
+ * Summary is the ordinary exhibit path with the switch passed as its header, so
+ * the greater-tables walker, the library's caption, the perspective flip and
+ * the CSV export all arrive with nothing written here. `tables.FORMATS` stays
+ * empty: the frame carries its own readings and the family columns sit under a
+ * named column axis, which the library's format sweep already treats as data.
+ *
+ * Plot is the `loadReinsPlot` shape, with one difference. That one empties the
+ * whole pane when the chart cannot be drawn; this replaces the host only, so
+ * the switch survives and a reader who cannot have the picture can still reach
+ * the table from where they are standing.
+ */
+async function loadApproximation() {
+    if (approximationHalf() === 'summary') {
+        await loadExhibitLeaf('pane-more', 'approximation',
+                              ['more', 'approximation'], null, approximationStrip);
+        return;
+    }
+    const root = el('div');
+    root.appendChild(approximationStrip());
+    const lede = ledeFor('more', 'approximation');
+    if (lede) root.appendChild(lede);
+    const host = el('div', { className: 'overview-plot' });
+    root.appendChild(host);
+    // Before the mount, so `disposePaneChart` drops any instance the previous
+    // visit left rather than this assigning over it.
+    replacePane('pane-more', root);
+    let failed = false;
+    try {
+        moreChart = await mountChart(host, { id: state.id, chart: 'approximation' });
+    } catch { failed = true; }
+    if (!moreChart) {
+        empty(host);
+        host.appendChild(failed ? fetchFailed() : notDrawable());
+    }
+}
 
 // ----------------------------------------------------------------------
 // Pricing: Calibrate, Stand-alone, Allocate, Plot and Evaluate

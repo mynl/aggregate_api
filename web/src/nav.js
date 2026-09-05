@@ -105,7 +105,16 @@ export const NAV_GROUPS = {
         },
     },
     reinsurance: {
-        label: 'Reinsurance',
+        // `Re` since a141, and the key stays `reinsurance`, which is the same
+        // split PnL made at a138 and for the same two reasons. The strip is the
+        // one row that has to survive a phone: six tabs at `Reinsurance`'s width
+        // pushed it into a horizontal scroll, and the word is the longest of the
+        // six by half again. `Re` is also what the app already calls the thing
+        // everywhere a reader types it, in the Quick Re row and the Add re
+        // button, so the tab now agrees with its own controls. The key is in
+        // `data-tab`, the pane ids, the stored view state and any shared link,
+        // so it does not move; prose keeps the full word.
+        label: 'Re',
         // The one group that is live with every leaf dark. An aggregate with no
         // cession has nothing to tabulate or draw, and is exactly the object
         // you want to add cover to, so the entry box below the row is the
@@ -273,6 +282,28 @@ export const NAV_GROUPS = {
                 exhibit: 'tail_behavior',
                 why: 'needs a full loss distribution, so an aggregate or a portfolio',
                 hint: 'the decay class on each side, and whether the support is bounded',
+            },
+            // Between Tail behavior and Window on the author's ruling, and the
+            // three read as one run: what the tails do analytically, how well
+            // five closed forms reproduce the computed law, and what grid the
+            // computation wants. All three are diagnostics of the distribution
+            // rather than readings of the book.
+            //
+            // Gated on the exhibit alone, so it lights wherever the library
+            // serves the frame, an updated aggregate or portfolio, with no
+            // kind logic here. The pane's own Plot half is gated separately on
+            // the `approximation` chart, which the library registers for an
+            // Aggregate only: the implied tail needs a single severity. That is
+            // the same shape as Reinsurance Plot and is handled inside the
+            // pane rather than by a second leaf, so the two readings of one
+            // story keep one address.
+            approximation: {
+                label: 'Approximation',
+                exhibit: 'approximation',
+                why: 'needs a computed aggregate or portfolio',
+                hint: 'the five moment matched families against the exact law: '
+                    + 'parameters, achieved moments, Kolmogorov distance, and '
+                    + 'the implied tail',
             },
             window: {
                 label: 'Window',

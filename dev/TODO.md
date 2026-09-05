@@ -902,6 +902,22 @@ one version bump each.
       reading `detail` and the emitted mass against quantities the library
       never promised, and both now assert what `_joint_surface` documents.
 
+- [x] **The Approximation tab**: `dev/done/plan-approximation-tab.md`, one bump
+      at **a141**. The More row's new leaf, between Tail behavior and Window,
+      with a Plot / Summary switch inside the pane rather than two sibling
+      pills: the navigation is two levels and `check-nav.mjs` guards that shape,
+      and the two are readings of one question so they keep one address. Consumes
+      LIB a331 to a333 and needed no server change at all. Eight divergences in
+      the plan's execution notes, the load bearing ones being a `header` hook on
+      `loadExhibitLeaf` (the switch has to be rebuilt inside `draw`, which
+      re-runs on both table flips) and the first chart instance `pane-more` has
+      ever held, which `disposePaneChart` and `clearPanes` had no branch for.
+      The `Re` rename rode in the same commit on the author's request.
+      **Open, upstream and not blocking**: the chart payload is 16.3 MB against
+      the `agg` chart's 2.3 MB, thirteen series over the full 65,536 point grid,
+      taken to the LIB side as a sizing question. Nothing app side is owed
+      either way, since a smaller emission lands here with no change.
+
 ## Raised with `aggregate` (not fixed here)
 
 - [ ] **`format_program`'s fallback answers with the preprocessed statement

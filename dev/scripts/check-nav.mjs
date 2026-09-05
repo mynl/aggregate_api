@@ -104,6 +104,14 @@ const EXPECTED = {
     // distribution. They answer different questions about it, which is why they
     // are two leaves rather than two blocks in one pane.
     'more:behavior': ['agg', 'agg_reins', 'port'],
+    // The leaf lights from the `approximation` exhibit, which the library
+    // registers for an updated Aggregate or Portfolio, so this row equals the
+    // two around it. The pane's Plot half gates separately on the
+    // `approximation` **chart**, which is an Aggregate alone, and that split is
+    // inside the pane rather than in the navigation: `agg` and `agg_reins` get
+    // both pills, `port` gets Summary with Plot greyed. This grid is leaves, so
+    // it cannot say that; `main.js::approximationCanPlot` is where it lives.
+    'more:approximation': ['agg', 'agg_reins', 'port'],
     'more:window': ['agg', 'agg_reins', 'port', 'bvagg'],
     'more:dependency': ['bvagg'],
     // Dark for every kind here, and that is the assertion, not an omission.
