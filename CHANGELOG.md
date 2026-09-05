@@ -4,6 +4,46 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a140
+
+**[Library-Skew-a333] the app catches up to `aggregate` 1.0.0a333.** Six
+upstream bumps between a327 and a333 moved surfaces this repo reads, and nine
+backend tests were failing against them. One was a real defect and the rest were
+expectations describing a library that has since restated itself. Both suites
+are green again, 386 backend and 121 web.
+
+**Fixed: a bivariate's moments came back empty, so its status strip said
+nothing.** `_component_fields` read a pair's mean and CV out of `stats_df` at
+`("theoretical", stat)`. Library a330 gave the bivariate the Portfolio layout,
+indexed `(component, measure)` over `meta` / `freq` / `sev` / `agg` blocks, so
+neither that key nor its `empirical` fallback exists any more and both moments
+resolved to `None`. Every pair built since printed `mean (?, ?) . CV (?, ?)`,
+which is the a57 bug arriving by a new route. It reads `("agg", stat)` now, the
+analytic aggregate moment, which is what `theoretical` meant.
+
+**Changed, upstream, and visible without any edit here.** The return period
+ladder is two sided: `tail_df` is indexed `P` rather than `p` and runs 0.001 to
+0.999 in 19 rungs rather than 10, so the Tail tables are longer and the library
+flags the 1-in-200 and 1-in-250 capital anchors at **both** ends, four rows per
+unit instead of two. The joint surface reports its coordinates at the bucket
+midpoint (`edge` is `mid`, was `left`) and carries the whole placed mass rather
+than the fraction inside the display window. The SPA already decoded both
+spellings of `edge`, so no plot moved.
+
+**Corrected: two joint surface tests were asserting quantities the library never
+promised**, and passed only while those quantities happened to agree with the
+ones it does. `detail` counts cells across the **window**, not across the
+emitted axis, and the window "does not crop what is served", so `nx` is the
+whole lattice over the block factor and legitimately exceeds `detail`. Likewise
+the served grid carries the whole placed mass, not the window's fraction of it.
+Both now assert what `_joint_surface` documents, the window ceiling read off
+the document's own `window` block. Nothing is owed upstream.
+
+**Removed:** one examples test that asserted `library.agg` carries a tag value
+repeating across two namespaces. The library dropped the namespace, so the test
+had no subject; the app rule it guarded, that pills are never deduped, is
+asserted by the test above it.
+
 ## 1.0.0a139
 
 **[Examples-Search] the list stops drawing itself twice, and hits that score

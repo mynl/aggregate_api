@@ -896,10 +896,20 @@ def _component_fields(obj: Any) -> list[dict]:
     ``units`` path is kept ahead of it for a kind that does carry components,
     and costs nothing when there are none.
 
-    ``theoretical`` before ``empirical``, matching the scalar path's preference
-    for the analytic moment with the realized one as the fallback. On a
-    bivariate the two agree to about 1e-11 anyway, so the order is a convention
-    rather than a choice with consequences.
+    **The row key is ``("agg", stat)``, and it moved at library a330.** Until
+    then a bivariate's ``stats_df`` was indexed by basis, so this read
+    ``("theoretical", stat)`` and fell back to ``("empirical", stat)``.
+    ``[Bivariate-Punchup]`` gave the pair the Portfolio layout: the index is now
+    ``(component, measure)`` over ``meta`` / ``freq`` / ``sev`` / ``agg``
+    blocks, and the columns are the unit names plus ``independent`` and
+    ``total``. Neither old key exists, so both moments resolved to ``None``
+    again and the strip went back to printing ``mean (?, ?) . CV (?, ?)``,
+    which is the a57 bug arriving by a new route.
+
+    ``agg`` is the analytic aggregate moment, which is what ``theoretical``
+    meant, so the preference this docstring used to record is kept rather than
+    dropped. There is no second basis to fall back to any more, and a key that
+    is not there already resolves to ``None`` through the ``except`` below.
     """
     axis_xs = getattr(obj, "axis_xs", None)
     names = getattr(obj, "unit_names", None)
@@ -924,14 +934,11 @@ def _component_fields(obj: Any) -> list[dict]:
         """One statistic for one axis, by name, out of the pair's stats frame."""
         if stats is None or column not in getattr(stats, "columns", ()):
             return None
-        for basis in ("theoretical", "empirical"):
-            try:
-                value = float(stats.loc[(basis, stat), column])
-            except (KeyError, IndexError, TypeError, ValueError):
-                continue
-            if math.isfinite(value):
-                return value
-        return None
+        try:
+            value = float(stats.loc[("agg", stat), column])
+        except (KeyError, IndexError, TypeError, ValueError):
+            return None
+        return value if math.isfinite(value) else None
 
     out: list[dict] = []
     for i, name in enumerate(names):

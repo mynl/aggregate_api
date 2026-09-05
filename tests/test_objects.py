@@ -11,6 +11,7 @@ default ``uv run pytest`` path.
 
 from __future__ import annotations
 
+import math
 import re
 
 import pytest
@@ -420,10 +421,11 @@ def test_tail_df_endpoint(client):
     r = client.get(f"/v1/objects/{oid}/tail_df")
     assert r.status_code == 200
     body = r.json()
-    # tail_df is a method on Aggregate; the route must call it. Index =
-    # return period T; the VaR / TVaR / xsVaR / VaR/Mean columns survive.
+    # tail_df is a method on Aggregate; the route must call it. Index = the
+    # probability P; the T / VaR / TVaR / xsVaR / VaR/Mean columns survive.
+    # The index spelled itself ``p`` until the ladder went two sided upstream.
     assert "T" in body["columns"]
-    for col in ("p", "VaR", "TVaR", "xsVaR", "VaR/Mean"):
+    for col in ("P", "VaR", "TVaR", "xsVaR", "VaR/Mean"):
         assert col in body["columns"]
     assert len(body["rows"]) > 0
 
@@ -785,9 +787,14 @@ def test_the_library_formats_its_own_numbers(client):
     # Formatted, not a bare float: the point is that somebody decided, and that
     # somebody is upstream. The raw value rides alongside for the grid.
     assert var["text"] != str(var["raw"]), var
-    # The probability column still separates 0.99 from 0.995 from 0.999.
-    p = cells[head.index("p")]
-    assert len(p["text"].split(".")[1]) >= 4, p["text"]
+    # The probability column still separates 0.99 from 0.995 from 0.999. It is
+    # the stub now rather than a body column, because the two sided ladder
+    # upstream made the probability the frame's index and named it ``P``, and a
+    # stub cell serializes as its text alone with no raw value beside it. Read
+    # as a string for that reason, not as a `{raw, text}` pair.
+    probability = cells[head.index("P")]
+    assert isinstance(probability, str), probability
+    assert len(probability.split(".")[1]) >= 4, probability
 
 
 def test_density_df_is_full_resolution_by_default(client):
@@ -1128,18 +1135,18 @@ def test_bivariate_chart_document(client):
     surf = doc["series"][0]["surface"]
     assert len(surf["z"]) == len(surf["y"])
     assert len(surf["z"][0]) == len(surf["x"])
-    # The reduction preserves mass, and the window keeps the fraction it says
-    # it keeps. Through a256 this read "the display cells sum to 1", which was
-    # right while the emitted grid was the whole joint and became wrong the
-    # moment the window arrived: what the grid holds now is `kept`, and
-    # asserting the sum against the document's own claim is the check that
-    # survives the next change of depth.
+    # The reduction preserves mass. Through a256 this read "the display cells
+    # sum to 1", which was right while the emitted grid was the whole joint and
+    # became wrong the moment the window arrived, so it became `kept * (1 -
+    # deficit)`. Wrong again since the emitter went back to serving the whole
+    # placed mass: the grid holds everything the construction placed, and
+    # `window.kept` is a separate report on how much of it the display window
+    # frames. So the two are asserted separately rather than multiplied.
     total = sum(v for row in surf["z"] for v in row)
-    # `kept` is a fraction of the joint's own mass, and that mass is short of 1
-    # by the construction deficit, so the two are reconciled rather than
-    # compared: the grid holds `kept * (1 - deficit)`.
+    # The joint's own mass is short of 1 by the construction deficit, and that
+    # is the whole of what the grid may lose.
     placed = 1.0 - surf.get("deficit", 0.0)
-    assert abs(total - surf["window"]["kept"] * placed) < 1e-9
+    assert abs(total - placed) < 1e-9
     assert 0.999 < surf["window"]["kept"] <= 1.0
     # The lattice, as an origin, a step and a count, and what a coordinate
     # names. Both are what the app's decode reads in preference to the arrays
@@ -1148,7 +1155,13 @@ def test_bivariate_chart_document(client):
     assert surf["nx"] == len(surf["x"]) and surf["ny"] == len(surf["y"])
     assert abs(surf["x0"] - surf["x"][0]) < 1e-9
     assert abs((surf["x"][1] - surf["x"][0]) - surf["dx"]) < 1e-9
-    assert surf["edge"] == "left"
+    # `edge` read `left` up to a139 and reads `mid` since library a333 centered
+    # the mass on the bucket. Asserted as "a value the SPA decodes" rather than
+    # as a literal, because the literal is not the risk: `surface-grid.js`
+    # normalizes anything that is not `left` to `mid`, so a third spelling would
+    # be read as `mid` and would shift every coordinate half a bucket with
+    # nothing failing. Both spellings below are ones that file handles.
+    assert surf["edge"] in ("left", "mid"), surf["edge"]
     # Phase one emits both forms: the arrays an old reader walks and the
     # encoded block a new one prefers (plan 2.4.1).
     assert surf["z_block"]["dtype"] == "f32b64"
@@ -1370,10 +1383,30 @@ def test_chart_parameters_change_the_bytes(client):
     assert client.get(url, params={"detail": 32},
                       headers={"If-None-Match": fine.headers["ETag"]}
                       ).status_code == 200
-    # The realized grid is what the document reports, never what was asked
-    # for: `detail` is a target and the reduction blocks by powers of two.
-    surface = coarse.json()["series"][0]["surface"]
-    assert surface.get("nx", len(surface.get("x", []))) <= 32
+    # The realized grid is what the document reports, never what was asked for:
+    # `detail` is a target and the reduction blocks by powers of two.
+    #
+    # **`detail` counts cells across the window, not across the emitted axis.**
+    # This read `nx <= detail` through a139 and that was always the wrong
+    # quantity; it passed while the two happened to agree. `_joint_surface`
+    # says it plainly: the window "selects the block factor and says which part
+    # of the grid is the subject; it does not crop what is served", and "the
+    # emitted axis runs the whole lattice at that step and so is longer, by the
+    # ratio of the lattice to the window". So `nx` is the lattice over the
+    # block factor and exceeds `detail` by exactly that ratio, which on this
+    # fixture is four on x and two on y.
+    #
+    # Asserted against the window the document itself reports, which is the
+    # ceiling that is actually promised, plus the ordering between the two
+    # depths so a `detail` that stopped biting at all would still fail.
+    coarse_surface = coarse.json()["series"][0]["surface"]
+    fine_surface = fine.json()["series"][0]["surface"]
+    for axis, step, bound in (("x", "dx", 32), ("y", "dy", 32)):
+        lo, hi = coarse_surface["window"][axis]
+        cells = math.ceil((hi - lo) / coarse_surface[step])
+        assert cells <= bound, (axis, cells)
+    for axis in ("nx", "ny"):
+        assert coarse_surface[axis] < fine_surface[axis], axis
 
 
 def test_chart_document_unavailable_kind(client):
@@ -1935,7 +1968,9 @@ def test_frame_ir_sparsifies_the_row_index(client):
     stubs = [row["cells"][0] for row in doc["body"]]
     named = [c for c in stubs if isinstance(c, dict) and c.get("text") == "A"]
     assert len(named) == 1, "unit name repeated: the index was not sparsified"
-    assert named[0]["rowspan"] == 10
+    # 19 rungs per unit. The ladder ran 0.001 to 0.999 in 10 rungs up to a139
+    # and is two sided upstream now, so this counted 10 before a140.
+    assert named[0]["rowspan"] == 19
 
 
 def test_the_library_flags_the_capital_anchors(client):
@@ -1960,9 +1995,12 @@ def test_the_library_flags_the_capital_anchors(client):
 
     block = client.get(f"{url}?perspective=insurer").json()["blocks"][0]
     flags = [row.get("flags") or [] for row in block["body"]]
-    # Two anchors per unit, and PF has A, B and total.
-    assert sum("emphasis" in f for f in flags) == 6
-    assert sum("total" in f for f in flags) == 10     # every row of the total unit
+    # Four anchors per unit, and PF has A, B and total. Two until a139: the
+    # ladder was one sided then, so only the 0.995 and 0.996 rungs were
+    # anchors. It runs 0.001 to 0.999 now and the library flags the 1-in-200
+    # and 1-in-250 lines at each end, which is the same rule on a longer frame.
+    assert sum("emphasis" in f for f in flags) == 12
+    assert sum("total" in f for f in flags) == 19     # every row of the total unit
 
     raw = client.get(f"{url}?perspective=raw").json()["blocks"][0]
     assert not any(r.get("flags") for r in raw["body"]), \

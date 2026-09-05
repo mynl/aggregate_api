@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aggregate_api"
-version = "1.0.0a139"
+version = "1.0.0a140"
 description = "aggregate Loss Lab (aLL): FastAPI service and single-page web app for the aggregate actuarial library."
 readme = "README.md"
 authors = [
@@ -110,7 +110,7 @@ aggregate-api = "aggregate_api.__main__:main"
 # work in between, and it is what this repo uses anyway.
 # ---------------------------------------------------------------------------
 [tool.uv.sources]
-aggregate = { path = "../aggregate_REFACTOR", editable = true }
+aggregate = { path = "../../worktrees/aggregate_REFACTOR", editable = true }
 
 [tool.setuptools]
 include-package-data = true

@@ -58,22 +58,14 @@ def test_pills_are_kind_then_topics_then_roles(client):
             assert f"{pill['ns']}:{pill['value']}" in item["tags"]
 
 
-def test_a_value_repeating_across_namespaces_keeps_both_pills(client):
-    """``topic:pnl`` sits on the ``pnl`` entries, and both pills are drawn.
-
-    The library owns its vocabulary, so the app serves what is there rather than
-    deciding one of the two is redundant (author ruling, 2026-08-24: ship it,
-    and the tags come out of ``library.agg`` upstream). Suppressing one here
-    would leave a topic filter selecting rows showing no matching topic pill.
-    """
-    items = {i["name"]: i for i in client.get("/v1/examples").json()["items"]}
-    doubled = [
-        i for i in items.values()
-        if sum(p["value"] == i["kind"] for p in i["pills"]) > 1
-    ]
-    assert doubled, "library.agg still carries topic:pnl / topic:distortion"
-    for item in doubled:
-        assert item["kind"] in ("pnl", "distortion"), item["name"]
+# A third test stood here through a139, asserting that ``topic:pnl`` sits on the
+# ``pnl`` entries and that the app draws both pills rather than deciding one of
+# the two is redundant (author ruling, 2026-08-24: ship it, and the tags come out
+# of ``library.agg`` upstream). The library has since dropped that namespace, so
+# no doubled entry is left to find and the test failed on its own premise rather
+# than on anything the app does. The rule it guarded is not lost: the test above
+# asserts ``len(pills) == 1 + len(item["tags"])`` for every item, which is the
+# no-dedupe rule stated without needing a duplicate to exist.
 
 
 def test_facets_count_the_pills_in_order_of_first_appearance(client):
@@ -167,9 +159,11 @@ def test_example_decl_arrives_without_its_filing_clauses(client):
     """
     # The words a DecL program can open with. Not the recipe ``kind``, which is
     # a different vocabulary: a ``bvagg`` is declared ``bivariate``, or by one of
-    # the view keywords when it is a gross / ceded / net reading.
+    # the view keywords when it is a gross / ceded / net reading. ``clash`` is
+    # the fourth of those views and joined this set at a140, with the
+    # ``BivariateClash`` entry the a327 examples brought in.
     heads = {"agg", "port", "sev", "distortion", "dist", "pnl", "xpnl",
-             "bivariate", "grossceded", "grossnet", "netceded"}
+             "bivariate", "clash", "grossceded", "grossnet", "netceded"}
     hinted = 0
     for item in client.get("/v1/examples").json()["items"]:
         decl = item["decl"]

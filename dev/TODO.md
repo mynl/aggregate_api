@@ -890,6 +890,18 @@ one version bump each.
       the same word twice; the author is removing the two tags from
       `library.agg`, and nothing app side changes when they go.
 
+- [x] **Catch the app up to `aggregate` 1.0.0a333**:
+      `dev/done/plan-library-skew-a333.md`, one bump at **a140**. Turned up by
+      the `[Sync]` step of the approximation tab plan, which is why it exists as
+      its own bump: nine backend tests were failing on library skew and none of
+      them belonged to that feature. One real defect, a bivariate's moments
+      coming back empty since library a330 restructured `stats_df`, and eight
+      test expectations describing surfaces the library has restated (the two
+      sided return period ladder, the joint surface's centered coordinates and
+      whole placed mass). Nothing owed upstream: two of those tests were
+      reading `detail` and the emitted mass against quantities the library
+      never promised, and both now assert what `_joint_surface` documents.
+
 ## Raised with `aggregate` (not fixed here)
 
 - [ ] **`format_program`'s fallback answers with the preprocessed statement
