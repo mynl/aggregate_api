@@ -4,6 +4,20 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a145
+
+**[Scroll-Rule] one scroll rule across the site, two anchors.** Clicking a
+tab, a sub-tab pill, or an in-pane pill (the Approximation Plot / Plot tail /
+Summary switch) now scrolls the tab strip to the top of the page: the reader
+has chosen what to look at, so the answer sits directly under the strip.
+Pressing Build, Reformat, Sharpen, Hints, PnL or GCN, choosing an example
+(menu, palette, or the Ctrl+Shift ring), or building with Ctrl+Enter scrolls
+the editor box to the top instead: those gestures are about the program. Both
+anchors sit just below the sticky header, which stays put, and the scroll is
+smooth. Before this, replacing a pane collapsed the page height and the
+browser clamped the scroll to the top of the page, which is what made a Plot
+click on the Approximation pane jump to nowhere in particular.
+
 ## 1.0.0a144
 
 **[Approximation-Tab] a Plot tail pill, and both plots at half width.** The

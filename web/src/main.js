@@ -448,6 +448,10 @@ async function build() {
     const decl = editor.getText().trim();
     if (!decl) { renderNothingToBuild(); return; }
 
+    // The scroll rule: a build is about the program, so the editor leads.
+    // Inside the function rather than on the button, so Ctrl+Enter and the
+    // example ring's auto-build anchor the same way a press does.
+    scrollEditorTop();
     buildBtn.disabled = true;
     buildBtn.textContent = 'Building…';
     try {
@@ -544,6 +548,7 @@ function renderActionRow() {
  */
 async function runDerivation(btn, busy, call, land) {
     if (!state.id || btn.hasAttribute('disabled')) return;
+    scrollEditorTop();               // the scroll rule: a button under the box
     const label = btn.textContent;
     btn.disabled = true;
     btn.textContent = busy;
@@ -702,6 +707,7 @@ pnlBtn?.addEventListener('click', () => (
 reformatBtn?.addEventListener('click', async () => {
     const before = editor.getText();
     if (!before.trim() || reformatBtn.hasAttribute('disabled')) return;
+    scrollEditorTop();               // the scroll rule: a button under the box
     reformatBtn.disabled = true;
     try {
         const { decl } = await api.formatDecl(before);
@@ -749,6 +755,7 @@ async function applyViews(kw) {
     if (!can('canViews') || gcnBtn.hasAttribute('disabled')) return;
     const base = editor.getText().trim();
     if (!base) return;
+    scrollEditorTop();               // the scroll rule: a button under the box
     // Close the menu **before** anything is disabled, and never the other way
     // round. Bootstrap finds open dropdowns with
     // `[data-bs-toggle="dropdown"]:not(.disabled):not(:disabled).show`, so a
@@ -1151,6 +1158,39 @@ function clearPanes() {
     if (moreChart) { moreChart.dispose(); moreChart = null; }
 }
 
+// ----------------------------------------------------------------------
+// The scroll rule (author, 2026-09-06)
+// ----------------------------------------------------------------------
+// Two anchors, applied everywhere so the page repositions the same way for the
+// same kind of gesture. Clicking a tab, sub-tab or in-pane pill scrolls the
+// tab strip to the top of the page: at that point the reader has chosen what
+// to look at and the answer belongs directly under the strip. Pressing Build
+// or any button in the row under the editor scrolls the editor box to the top
+// instead: those gestures are about the program, so the program leads. Both
+// anchors sit below the sticky header, which stays. Before this rule the pane
+// swap emptied the content, the page height collapsed, and the browser
+// clamped the scroll to wherever it could, which usually meant the top of the
+// page for no reason a reader could see.
+
+/** Scroll so `el`'s top sits just under the sticky header. */
+function scrollAnchor(el) {
+    if (!el) return;
+    const header = document.querySelector('header.sticky-top');
+    const top = el.getBoundingClientRect().top + window.scrollY
+        - (header ? header.offsetHeight : 0) - 6;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+}
+
+/** The navigation anchor: the group tab strip. */
+function scrollTabsTop() {
+    scrollAnchor(document.querySelector('.out-tabs'));
+}
+
+/** The program anchor: the editor box. */
+function scrollEditorTop() {
+    scrollAnchor($('editor-box'));
+}
+
 function activeTabName() {
     const link = document.querySelector('.out-tabs [data-tab].active');
     return link ? link.dataset.tab : 'overview';
@@ -1392,11 +1432,12 @@ function renderSubTabs(group) {
     }
 }
 
-/** Move a group to one of its leaves and load it. */
+/** Move a group to one of its leaves, load it, and anchor the strip. */
 function selectLeaf(group, key) {
     state.leaf[group] = key;
     renderSubTabs(group);
     loadLeaf(group);
+    scrollTabsTop();
 }
 
 /**
@@ -1499,6 +1540,12 @@ document.querySelectorAll('.out-tabs [data-tab]').forEach((btn) => {
             e.preventDefault(); e.stopPropagation();
         }
     }, true);
+    // The scroll rule: a live group click anchors the strip, whether or not
+    // the tab actually changed, since re-clicking the active tab is the same
+    // "show me the results" gesture.
+    btn.addEventListener('click', () => {
+        if (!btn.classList.contains('nav-off')) scrollTabsTop();
+    });
 });
 
 // ----------------------------------------------------------------------
@@ -2728,6 +2775,8 @@ function approximationStrip() {
                 if (value === approximationHalf()) return;
                 _approximationHalf = value;
                 loadApproximation();
+                // The scroll rule: an in-pane pill is a pill.
+                scrollTabsTop();
             });
         }
         group.appendChild(button);
@@ -3549,6 +3598,9 @@ function loadExample(decl, formatted = true) {
     // A different program, so the cession draft written for the last one goes.
     clearCessionDraft();
     editor.focus();
+    // The scroll rule: choosing an example is an editor gesture, from the
+    // Examples menu, the palette, or the Ctrl+Shift ring alike.
+    scrollEditorTop();
     if (formatted) return;
     const at = exampleRing.cursor;
     api.formatDecl(decl).then((res) => {
