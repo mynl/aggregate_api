@@ -121,7 +121,7 @@ let walkMode = 'history';
 // Editor
 // ----------------------------------------------------------------------
 const editor = createEditor($('editor-host'), {
-    onBuild:       () => build(),
+    onBuild:       () => anchorEditor(build()),
     onHistoryPrev: () => navigateHistory('prev'),
     onHistoryNext: () => navigateHistory('next'),
     onExamplePrev: () => exampleStep('prev'),
@@ -151,11 +151,16 @@ const editor = createEditor($('editor-host'), {
 });
 
 // The program the page lands on, in `format_program`'s own spread layout so it
-// needs no round trip to look right. It mirrors `DiceOfDice` in the library's
+// needs no round trip to look right. It mirrors `BasicBook` in the library's
 // `library.agg`, which is where the note and the tags live; this is a copy of
-// three lines of DecL rather than a fetch, because the whole point of it is
+// five lines of DecL rather than a fetch, because the whole point of it is
 // that the first paint owes nothing to the network. See `loadLanding`.
-const LANDING_DECL = 'agg DiceOfDice\n  dfreq [1 2 3 4 5 6]\n  dsev [1 2 3 4 5 6]\n';
+// BasicBook displaced DiceOfDice on 2026-09-06: the dice are the better
+// hand-checkable first example, but the landing should speak actuary, and a
+// Poisson book with a lognormal severity under an occurrence limit is the
+// workhorse a practitioner recognizes on sight.
+const LANDING_DECL = 'agg BasicBook\n  250 claims\n  1000 xs 0\n'
+    + '  sev lognorm 100 cv 1.5\n  poisson\n';
 
 editor.setText(LANDING_DECL);
 editor.focus();
@@ -448,10 +453,10 @@ async function build() {
     const decl = editor.getText().trim();
     if (!decl) { renderNothingToBuild(); return; }
 
-    // The scroll rule: a build is about the program, so the editor leads.
-    // Inside the function rather than on the button, so Ctrl+Enter and the
-    // example ring's auto-build anchor the same way a press does.
-    scrollEditorTop();
+    // No scroll here, deliberately: `loadLanding` builds on page load and the
+    // first paint must not move. The gesture sites (the button, Ctrl+Enter,
+    // an example pick, the ring) each wrap this in `anchorEditor`, which is
+    // also what survives the pane-clear clamp a bare scroll here did not.
     buildBtn.disabled = true;
     buildBtn.textContent = 'Building…';
     try {
@@ -568,6 +573,9 @@ async function runDerivation(btn, busy, call, land) {
         btn.disabled = false;
         btn.textContent = label;
         renderActionRow();
+        // The settle pass: adopting the object cleared and refilled the
+        // panes, which can clamp the smooth scroll above mid-flight.
+        scrollEditorTop();
     }
 }
 
@@ -800,6 +808,9 @@ async function applyViews(kw) {
         gcnCaret.disabled = false;
         gcnBtn.textContent = label;
         renderActionRow();
+        // The settle pass, as in `runDerivation`: the build behind this
+        // cleared the panes, which can clamp the scroll above mid-flight.
+        scrollEditorTop();
     }
 }
 
@@ -828,7 +839,7 @@ function can(flag) {
     return Boolean(state.caps.flags[flag]);
 }
 
-buildBtn.addEventListener('click', build);
+buildBtn.addEventListener('click', () => anchorEditor(build()));
 
 // ----------------------------------------------------------------------
 // Build summary line
@@ -1191,6 +1202,27 @@ function scrollEditorTop() {
     scrollAnchor($('editor-box'));
 }
 
+/**
+ * Anchor the strip now, and again once `loading` settles.
+ *
+ * The second pass is the fix for the clamp: swapping a pane can shrink the
+ * page below the scroll target for a moment (Bootstrap hides the old pane
+ * before the new content lands), and a browser clamps a scroll it cannot
+ * reach rather than holding the request open. Measured at a145: a group tab
+ * click ended at scrollY 0 with the strip 400 px down. Re-asserting after the
+ * load is a no-op when the first scroll already landed.
+ */
+function anchorTabs(loading) {
+    scrollTabsTop();
+    Promise.resolve(loading).finally(scrollTabsTop);
+}
+
+/** The same two-pass anchor for the editor: a build's pane clear clamps too. */
+function anchorEditor(loading) {
+    scrollEditorTop();
+    Promise.resolve(loading).finally(scrollEditorTop);
+}
+
 function activeTabName() {
     const link = document.querySelector('.out-tabs [data-tab].active');
     return link ? link.dataset.tab : 'overview';
@@ -1436,8 +1468,7 @@ function renderSubTabs(group) {
 function selectLeaf(group, key) {
     state.leaf[group] = key;
     renderSubTabs(group);
-    loadLeaf(group);
-    scrollTabsTop();
+    anchorTabs(loadLeaf(group));
 }
 
 /**
@@ -1531,20 +1562,41 @@ function applyCapabilityGating() {
 function loadActiveTab() { loadTab(activeTabName()); }
 
 // Bootstrap fires shown.bs.tab on the tab trigger when a pill activates.
+//
+// **Order of events, measured, because it is not the obvious one.** Bootstrap's
+// delegated data-api hands its selector string to `addEventListener` as the
+// third argument, and a truthy third argument means `capture: true`. So a
+// click on a pill activates the tab and fires `shown` during the CAPTURE phase
+// at `document`, before any listener on the button itself gets the click. A
+// flag set in a button click listener and read in the shown handler is
+// therefore always read first and set second; that shipped as the a145 scroll
+// rule silently not applying to group tabs. The design below works with the
+// real order: `shown` only records the load it started, and the click
+// listener, which provably runs after the activation, anchors around it. A
+// programmatic activation (the initial page, `applyCapabilityGating` falling
+// back to Overview) records a load and clicks nothing, so it never scrolls.
+let _tabLoading = null;
 document.querySelectorAll('.out-tabs [data-tab]').forEach((btn) => {
-    btn.addEventListener('shown.bs.tab', () => loadTab(btn.dataset.tab));
+    btn.addEventListener('shown.bs.tab', () => {
+        _tabLoading = loadTab(btn.dataset.tab);
+    });
     // A dark group keeps its pointer events so the tooltip fires, so the click
-    // has to be refused here. Capture phase, ahead of Bootstrap's own handler.
+    // has to be refused here. Capture phase on the button, which still runs
+    // after Bootstrap's capture at document; the class check inside
+    // Bootstrap's own handler is what actually refuses the activation, and
+    // this stops the bubble for everything else.
     btn.addEventListener('click', (e) => {
         if (btn.classList.contains('nav-off')) {
             e.preventDefault(); e.stopPropagation();
         }
     }, true);
-    // The scroll rule: a live group click anchors the strip, whether or not
-    // the tab actually changed, since re-clicking the active tab is the same
-    // "show me the results" gesture.
+    // A live group click anchors the strip whether or not the tab changed:
+    // re-clicking the active tab is the same "show me the results" gesture.
+    // By the time this runs the shown handler above has already recorded the
+    // fresh load; on a re-click there is no shown and the held promise is the
+    // old, settled one, which anchors immediately and once.
     btn.addEventListener('click', () => {
-        if (!btn.classList.contains('nav-off')) scrollTabsTop();
+        if (!btn.classList.contains('nav-off')) anchorTabs(_tabLoading);
     });
 });
 
@@ -2774,9 +2826,8 @@ function approximationStrip() {
             button.addEventListener('click', () => {
                 if (value === approximationHalf()) return;
                 _approximationHalf = value;
-                loadApproximation();
                 // The scroll rule: an in-pane pill is a pill.
-                scrollTabsTop();
+                anchorTabs(loadApproximation());
             });
         }
         group.appendChild(button);
@@ -3643,6 +3694,11 @@ function pickExample(item) {
     // and so fires nothing, and that is exactly the press whose number the
     // reader is looking for.
     renderHistoryNav();
+    // Choosing an example is asking to see it (author, 2026-09-06): the menu
+    // and the palette build at once. The ring steps through `exampleStep`,
+    // which debounces the same call instead, since a reader flicking along
+    // the shelf has not settled on a book yet.
+    anchorEditor(build());
 }
 
 mountExamples($('examples-menu'), pickExample);
@@ -3694,11 +3750,12 @@ onExamplesViewChange(() => {
 // retry-and-report the old path carried went with it, having nothing left to
 // fail at.
 //
-// **Dice of dice** rather than any other example, and it is a good landing for
-// the same reason it is a good first example: a die for the claim count and a
-// die for each claim is a compound distribution you can work out by hand, so
-// the page opens on something the reader can check rather than on something
-// they have to trust. It builds in milliseconds at the default log2 too.
+// **BasicBook** rather than any other example, the author's ruling of
+// 2026-09-06 superseding the round 7 dice ruling: the landing should speak
+// actuary directly, and the workhorse compound (Poisson count, lognormal
+// severity, an occurrence limit) is what a practitioner recognizes on sight.
+// The dice remain the first entry a reader finds in the Examples menu when
+// they want something checkable by hand.
 //
 // The heroes endpoint stays on the server. The card gallery a37 took away is to
 // come back inside the Examples dropdown, and that is what will want it.
@@ -3737,6 +3794,11 @@ loadLanding();
 // `-1` would have to mean "at 0" for one direction and "at n" for the other.
 // `pickExample` can also leave the cursor unset, when the row picked is not one
 // of the ring's own, so this is not only the opening press.
+// The settling build behind the Ctrl+Shift ring: 450 ms after the last step,
+// long enough to flick past entries without firing a request per press, short
+// enough that stopping on one feels answered.
+const buildSoon = debounce(() => anchorEditor(build()), 450);
+
 function exampleStep(dir) {
     const items = visibleExamples();
     const n = items.length;
@@ -3750,6 +3812,11 @@ function exampleStep(dir) {
     captionExample(item);
     loadExample(item.decl);
     renderHistoryNav();
+    // The ring builds too, once the flicking settles: each step resets the
+    // clock, so holding the arrows walks text only and releasing them builds
+    // what is on screen. The debounce is the build's, not the step's, so the
+    // caption and program still move under every press.
+    buildSoon();
 }
 
 // ----------------------------------------------------------------------

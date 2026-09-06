@@ -4,6 +4,29 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a146
+
+**[Scroll-Rule] the a145 rule now actually holds, verified in a real browser.**
+Two defects, both found by driving the page headlessly and tracing every
+scroll. Group tabs never anchored: Bootstrap's delegated data-api registers
+with `capture: true` (its selector string lands in `addEventListener`'s third
+argument), so the tab activates and `shown` fires before any button-level
+click listener, and the a145 flag was read before it was set. And any scroll
+racing a pane swap could be clamped mid-flight when the page momentarily
+shrank below the target. Both anchors are now two-pass (`anchorTabs`,
+`anchorEditor`): scroll on the gesture, scroll again when the load settles,
+the second pass a no-op when the first landed. Measured after the fix: tab,
+sub-tab pill, in-pane pill, and example pick all settle exactly at the anchor.
+
+**[Landing-Basic-Book] the page lands on `BasicBook`, and examples build
+themselves.** The landing program is now the workhorse compound (Poisson
+count, lognormal severity, an occurrence limit), superseding the dice ruling:
+the landing should speak actuary on sight, and the dice stay first in the
+Examples menu. Choosing an example from the menu or the Ctrl+K palette builds
+immediately; stepping the Ctrl+Shift ring builds 450 ms after the last step,
+so flicking along the shelf walks text only and stopping on an entry answers.
+The landing build itself never scrolls: the first paint does not move.
+
 ## 1.0.0a145
 
 **[Scroll-Rule] one scroll rule across the site, two anchors.** Clicking a
