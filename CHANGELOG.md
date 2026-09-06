@@ -4,6 +4,22 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a144
+
+**[Approximation-Tab] a Plot tail pill, and both plots at half width.** The
+Approximation pane's switch grows a third reading:
+`Plot | Plot tail | Summary`. Plot tail draws the library's new
+`approximation_tails` chart (LIB a344), the exceedance picture the
+`approximation` chart dropped at a337: the exact tail, one survival curve per
+admissible family, and the sub-exponential implied tail, with the cdf, return
+period and Lee readings declared in the document. The two documents are one
+split picture, separated for payload size, so both plot halves now render in
+a `plot-half` host capped at half the pane: each panel draws at the geometry
+it had when the two traveled together, and a phone still gets full width.
+Both pills grey together for a portfolio with the existing single-severity
+why. No server change: the chart is name-addressed through the generic route,
+and the gate is `available_charts` as ever.
+
 ## 1.0.0a143
 
 **[Pk-Tab] the Pr Ruin pill actually opens, and the row stops shifting.** At

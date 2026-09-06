@@ -1114,6 +1114,11 @@ header .navbar { min-height: 56px; }
    layout (side by side, stacked, or square), so no fixed height here. The cap
    is wider than the old single-panel chart because two panels need the room. */
 .overview-plot { width: 100%; max-width: 1000px; margin: .2rem 0 1rem; }
+/* Half the pane, for a one-panel chart that is one half of a split picture
+   (the approximation body and tail travel as two documents for payload size).
+   Capping the host makes the adapter's layout draw the panel at the width one
+   panel of a two-panel document gets; on a phone the viewport is the cap. */
+.overview-plot.plot-half { max-width: 520px; }
 .exhibit-canvas { width: 100%; }
 
 /* ---- Exhibit skeleton ----

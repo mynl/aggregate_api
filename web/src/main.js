@@ -2628,13 +2628,14 @@ async function loadReinsExhibit(block, leaf) {
 // More / Approximation: one story, two readings
 // ----------------------------------------------------------------------
 //
-// The method-of-moments story, as a picture and as a table. Both come from the
-// library under the one name `approximation`: the chart draws the realized mass
-// with the five fitted families over it and an exceedance panel carrying the
-// sub-exponential implied tail, and the exhibit serves `approximation_df`, the
-// fitted DecL fragments, their achieved moments with the Kolmogorov distance,
-// and the quantiles on the return period ladder, every column read against
-// `exact`.
+// The method-of-moments story, as two pictures and a table. The `approximation`
+// chart draws the realized mass with the five fitted families over it; the
+// `approximation_tails` chart (library a344) is the exceedance picture the
+// first chart dropped at a337, the per-family survival curves with the
+// sub-exponential implied tail, split off purely for payload size; and the
+// exhibit serves `approximation_df`, the fitted DecL fragments, their achieved
+// moments with the Kolmogorov distance, and the quantiles on the return period
+// ladder, every column read against `exact`.
 //
 // **Why the switch is inside the pane rather than two leaves in the More row.**
 // The navigation is two levels, groups and then each group's sub-tab row, and
@@ -2644,18 +2645,27 @@ async function loadReinsExhibit(block, leaf) {
 // instead of growing an `Approx plot` and an `Approx summary` that would sort
 // apart from each other the moment another leaf lands between them.
 //
-// **Why the two halves gate differently.** The leaf lights from the exhibit,
-// which the library registers for an updated Aggregate or Portfolio. The chart
-// it registers for an Aggregate alone, because the implied tail `E[N] * S_X(x)`
-// needs a single severity and a book has one per unit. So a portfolio opens on
-// Summary with the Plot pill greyed and saying why, which is the same shape as
-// Reinsurance Plot on a reinsured portfolio, and greyed rather than hidden per
-// the house rule.
+// **Why the halves gate differently.** The leaf lights from the exhibit,
+// which the library registers for an updated Aggregate or Portfolio. Both
+// charts it registers for an Aggregate alone, because the implied tail
+// `E[N] * S_X(x)` needs a single severity and a book has one per unit. So a
+// portfolio opens on Summary with both plot pills greyed and saying why,
+// which is the same shape as Reinsurance Plot on a reinsured portfolio, and
+// greyed rather than hidden per the house rule.
 
-/** The two readings, in the order they are always drawn. */
-const APPROXIMATION_HALVES = [['plot', 'Plot'], ['summary', 'Summary']];
+/** The three readings, in the order they are always drawn. */
+const APPROXIMATION_HALVES = [
+    ['plot', 'Plot'], ['tails', 'Plot tail'], ['summary', 'Summary']];
 
-/** What the greyed Plot pill says on hover. */
+/**
+ * Which chart each plot reading draws. Two documents rather than one panel
+ * pair since library a337/a344, purely for payload size: the body and the
+ * exceedance picture each travel alone. That may fold back later; nothing
+ * here would change except this map losing a row.
+ */
+const APPROXIMATION_CHART = { plot: 'approximation', tails: 'approximation_tails' };
+
+/** What a greyed plot pill says on hover; both charts share the predicate. */
 const APPROXIMATION_NO_PLOT =
     'the implied tail needs a single severity, so an aggregate only';
 
@@ -2664,9 +2674,10 @@ const APPROXIMATION_NO_PLOT =
 // position within one pane, not a preference about how anything is drawn.
 let _approximationHalf = 'plot';
 
-/** Does the library publish the chart for the object in front of us? */
-function approximationCanPlot() {
-    return state.caps.charts.has('approximation');
+/** Does the library publish this half's chart for the object in front of us? */
+function approximationCanPlot(half) {
+    const chart = APPROXIMATION_CHART[half];
+    return Boolean(chart) && state.caps.charts.has(chart);
 }
 
 /**
@@ -2678,7 +2689,8 @@ function approximationCanPlot() {
  * changing under a reader stepping between objects.
  */
 function approximationHalf() {
-    if (_approximationHalf === 'plot' && !approximationCanPlot()) return 'summary';
+    if (APPROXIMATION_CHART[_approximationHalf]
+        && !approximationCanPlot(_approximationHalf)) return 'summary';
     return _approximationHalf;
 }
 
@@ -2699,7 +2711,8 @@ function approximationStrip() {
     group.setAttribute('aria-label', 'approximation reading');
     const active = approximationHalf();
     for (const [value, label] of APPROXIMATION_HALVES) {
-        const off = value === 'plot' && !approximationCanPlot();
+        const off = Boolean(APPROXIMATION_CHART[value])
+            && !approximationCanPlot(value);
         const button = el('button', {
             type: 'button',
             className: 'btn btn-outline-secondary'
@@ -2738,7 +2751,8 @@ function approximationStrip() {
  * the table from where they are standing.
  */
 async function loadApproximation() {
-    if (approximationHalf() === 'summary') {
+    const half = approximationHalf();
+    if (half === 'summary') {
         await loadExhibitLeaf('pane-more', 'approximation',
                               ['more', 'approximation'], null, approximationStrip);
         return;
@@ -2747,14 +2761,19 @@ async function loadApproximation() {
     root.appendChild(approximationStrip());
     const lede = ledeFor('more', 'approximation');
     if (lede) root.appendChild(lede);
-    const host = el('div', { className: 'overview-plot' });
+    // `plot-half` caps the host at half the pane, so a one-panel document
+    // draws at the geometry one panel of the two-panel density chart gets:
+    // these two documents are one split picture, and each half should read
+    // at the size it had when they traveled together.
+    const host = el('div', { className: 'overview-plot plot-half' });
     root.appendChild(host);
     // Before the mount, so `disposePaneChart` drops any instance the previous
     // visit left rather than this assigning over it.
     replacePane('pane-more', root);
     let failed = false;
     try {
-        moreChart = await mountChart(host, { id: state.id, chart: 'approximation' });
+        moreChart = await mountChart(host,
+                                     { id: state.id, chart: APPROXIMATION_CHART[half] });
     } catch { failed = true; }
     if (!moreChart) {
         empty(host);
