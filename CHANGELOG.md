@@ -4,6 +4,30 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a147
+
+**[Scroll-Policy] one scroll per gesture, down only for navigation, and the
+two-pass mechanism retires.** The policy lives in a new `web/src/scroll.js` as
+two primitives. A program gesture (Build, Ctrl+Enter, Reformat, the derive
+buttons, picking an example) anchors the editor box under the header, in both
+directions. A navigation gesture (group tab, sub-tab, in-pane view pill)
+anchors the tab strip, but only when the reader is above it: a reader who has
+scrolled into content stays put, the yank the a145/a146 rule never prevented.
+Forms inside panes (pricing, the ruin Draw and Sample buttons, bounds) never
+scroll, and no scroll ever fires after the gesture that asked for it.
+
+**[Scroll-Floor] the keystone: `.tab-content` keeps a viewport of height
+under the strip.** Measured at a146, the two-pass wiring worked exactly as
+designed and the geometry defeated it: on a desktop window the document was
+often exactly viewport height, so the maximum scroll was zero and no anchor
+could move the page, while a tall-to-short pane swap collapsed the document
+mid-scroll and hurled the reader to the top. `min-height: calc(100vh -
+var(--anchor-band))` on `.tab-content`, with `overflow-anchor: none`, keeps
+both anchor targets reachable at every moment, including mid-swap, so a
+single scroll at gesture time suffices. Deleted with the settle pass:
+`scrollAnchor`, `scrollTabsTop`, `scrollEditorTop`, `anchorTabs`, the
+`anchorEditor` wrapper, and the `_tabLoading` plumbing.
+
 ## 1.0.0a146
 
 **[Scroll-Rule] the a145 rule now actually holds, verified in a real browser.**

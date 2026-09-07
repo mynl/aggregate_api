@@ -740,6 +740,28 @@ header .navbar { min-height: 56px; }
 
 .pane { min-height: 1rem; }
 
+/* ---- The scroll floor (a147) ----
+   The swap region can never be shorter than a full viewport below the tab
+   strip. Without this, a pane swap momentarily empties the content, the
+   document collapses below the scroll anchors' targets, and the browser
+   clamps any scroll in flight (measured at a146: a tall-to-short swap threw
+   the reader from scrollY 278 to 0). The floor makes both anchor targets in
+   scroll.js reachable at every moment, including mid-swap, which is what lets
+   a single scroll at gesture time suffice with no settle pass.
+
+   --anchor-band names the space above the swap region once the strip is
+   anchored: sticky header (about 57px), group strip (about 34px), sub-tab
+   band (about 46px), tuned in the browser rather than derived, because the
+   three heights come from three different rules.
+
+   overflow-anchor: none keeps the browser's own scroll anchoring from
+   fighting the explicit policy while grids and charts lay out. */
+.tab-content {
+    --anchor-band: 140px;
+    min-height: calc(100vh - var(--anchor-band));
+    overflow-anchor: none;
+}
+
 /* ---- CsvGrid host ---- */
 /* Tables are rendered by CsvGrid (self-contained styles from csv-grid.css).
    The host just bounds width so wide frames scroll inside the pane rather than

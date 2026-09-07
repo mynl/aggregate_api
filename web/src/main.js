@@ -42,6 +42,7 @@ import {
     whyGroup,
 } from './nav.js';
 import * as history from './history.js';
+import { anchorEditor, anchorNav } from './scroll.js';
 import { $, el, empty, replaceChildren } from './utils/dom.js';
 import { debounce } from './utils/debounce.js';
 import { fmt } from './utils/format.js';
@@ -121,7 +122,7 @@ let walkMode = 'history';
 // Editor
 // ----------------------------------------------------------------------
 const editor = createEditor($('editor-host'), {
-    onBuild:       () => anchorEditor(build()),
+    onBuild:       () => { anchorEditor(); build(); },
     onHistoryPrev: () => navigateHistory('prev'),
     onHistoryNext: () => navigateHistory('next'),
     onExamplePrev: () => exampleStep('prev'),
@@ -455,8 +456,8 @@ async function build() {
 
     // No scroll here, deliberately: `loadLanding` builds on page load and the
     // first paint must not move. The gesture sites (the button, Ctrl+Enter,
-    // an example pick, the ring) each wrap this in `anchorEditor`, which is
-    // also what survives the pane-clear clamp a bare scroll here did not.
+    // an example pick, the ring) each call `anchorEditor()` beside this, so
+    // the scroll belongs to the gesture and never to the build itself.
     buildBtn.disabled = true;
     buildBtn.textContent = 'Building…';
     try {
@@ -553,7 +554,7 @@ function renderActionRow() {
  */
 async function runDerivation(btn, busy, call, land) {
     if (!state.id || btn.hasAttribute('disabled')) return;
-    scrollEditorTop();               // the scroll rule: a button under the box
+    anchorEditor();                  // the scroll rule: a button under the box
     const label = btn.textContent;
     btn.disabled = true;
     btn.textContent = busy;
@@ -573,9 +574,6 @@ async function runDerivation(btn, busy, call, land) {
         btn.disabled = false;
         btn.textContent = label;
         renderActionRow();
-        // The settle pass: adopting the object cleared and refilled the
-        // panes, which can clamp the smooth scroll above mid-flight.
-        scrollEditorTop();
     }
 }
 
@@ -715,7 +713,7 @@ pnlBtn?.addEventListener('click', () => (
 reformatBtn?.addEventListener('click', async () => {
     const before = editor.getText();
     if (!before.trim() || reformatBtn.hasAttribute('disabled')) return;
-    scrollEditorTop();               // the scroll rule: a button under the box
+    anchorEditor();                  // the scroll rule: a button under the box
     reformatBtn.disabled = true;
     try {
         const { decl } = await api.formatDecl(before);
@@ -763,7 +761,7 @@ async function applyViews(kw) {
     if (!can('canViews') || gcnBtn.hasAttribute('disabled')) return;
     const base = editor.getText().trim();
     if (!base) return;
-    scrollEditorTop();               // the scroll rule: a button under the box
+    anchorEditor();                  // the scroll rule: a button under the box
     // Close the menu **before** anything is disabled, and never the other way
     // round. Bootstrap finds open dropdowns with
     // `[data-bs-toggle="dropdown"]:not(.disabled):not(:disabled).show`, so a
@@ -808,9 +806,6 @@ async function applyViews(kw) {
         gcnCaret.disabled = false;
         gcnBtn.textContent = label;
         renderActionRow();
-        // The settle pass, as in `runDerivation`: the build behind this
-        // cleared the panes, which can clamp the scroll above mid-flight.
-        scrollEditorTop();
     }
 }
 
@@ -839,7 +834,7 @@ function can(flag) {
     return Boolean(state.caps.flags[flag]);
 }
 
-buildBtn.addEventListener('click', () => anchorEditor(build()));
+buildBtn.addEventListener('click', () => { anchorEditor(); build(); });
 
 // ----------------------------------------------------------------------
 // Build summary line
@@ -1169,59 +1164,9 @@ function clearPanes() {
     if (moreChart) { moreChart.dispose(); moreChart = null; }
 }
 
-// ----------------------------------------------------------------------
-// The scroll rule (author, 2026-09-06)
-// ----------------------------------------------------------------------
-// Two anchors, applied everywhere so the page repositions the same way for the
-// same kind of gesture. Clicking a tab, sub-tab or in-pane pill scrolls the
-// tab strip to the top of the page: at that point the reader has chosen what
-// to look at and the answer belongs directly under the strip. Pressing Build
-// or any button in the row under the editor scrolls the editor box to the top
-// instead: those gestures are about the program, so the program leads. Both
-// anchors sit below the sticky header, which stays. Before this rule the pane
-// swap emptied the content, the page height collapsed, and the browser
-// clamped the scroll to wherever it could, which usually meant the top of the
-// page for no reason a reader could see.
-
-/** Scroll so `el`'s top sits just under the sticky header. */
-function scrollAnchor(el) {
-    if (!el) return;
-    const header = document.querySelector('header.sticky-top');
-    const top = el.getBoundingClientRect().top + window.scrollY
-        - (header ? header.offsetHeight : 0) - 6;
-    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
-}
-
-/** The navigation anchor: the group tab strip. */
-function scrollTabsTop() {
-    scrollAnchor(document.querySelector('.out-tabs'));
-}
-
-/** The program anchor: the editor box. */
-function scrollEditorTop() {
-    scrollAnchor($('editor-box'));
-}
-
-/**
- * Anchor the strip now, and again once `loading` settles.
- *
- * The second pass is the fix for the clamp: swapping a pane can shrink the
- * page below the scroll target for a moment (Bootstrap hides the old pane
- * before the new content lands), and a browser clamps a scroll it cannot
- * reach rather than holding the request open. Measured at a145: a group tab
- * click ended at scrollY 0 with the strip 400 px down. Re-asserting after the
- * load is a no-op when the first scroll already landed.
- */
-function anchorTabs(loading) {
-    scrollTabsTop();
-    Promise.resolve(loading).finally(scrollTabsTop);
-}
-
-/** The same two-pass anchor for the editor: a build's pane clear clamps too. */
-function anchorEditor(loading) {
-    scrollEditorTop();
-    Promise.resolve(loading).finally(scrollEditorTop);
-}
+// The scroll policy (the anchors, the down-only rule, the closed set of
+// gestures) lives in scroll.js, with the `.tab-content` floor in site.css
+// that makes one scroll at gesture time sufficient.
 
 function activeTabName() {
     const link = document.querySelector('.out-tabs [data-tab].active');
@@ -1468,7 +1413,8 @@ function renderSubTabs(group) {
 function selectLeaf(group, key) {
     state.leaf[group] = key;
     renderSubTabs(group);
-    anchorTabs(loadLeaf(group));
+    anchorNav();
+    loadLeaf(group);
 }
 
 /**
@@ -1561,24 +1507,17 @@ function applyCapabilityGating() {
 
 function loadActiveTab() { loadTab(activeTabName()); }
 
-// Bootstrap fires shown.bs.tab on the tab trigger when a pill activates.
-//
-// **Order of events, measured, because it is not the obvious one.** Bootstrap's
-// delegated data-api hands its selector string to `addEventListener` as the
-// third argument, and a truthy third argument means `capture: true`. So a
-// click on a pill activates the tab and fires `shown` during the CAPTURE phase
-// at `document`, before any listener on the button itself gets the click. A
-// flag set in a button click listener and read in the shown handler is
-// therefore always read first and set second; that shipped as the a145 scroll
-// rule silently not applying to group tabs. The design below works with the
-// real order: `shown` only records the load it started, and the click
-// listener, which provably runs after the activation, anchors around it. A
-// programmatic activation (the initial page, `applyCapabilityGating` falling
-// back to Overview) records a load and clicks nothing, so it never scrolls.
-let _tabLoading = null;
+// Bootstrap fires shown.bs.tab on the tab trigger when a pill activates, and
+// it fires during the capture phase at `document` (the data-api passes its
+// selector as `addEventListener`'s third argument, which reads as
+// `capture: true`), so the load below provably starts before the click
+// listeners on the button run. The anchor rides the click, not the shown
+// event, so a programmatic activation (the initial page,
+// `applyCapabilityGating` falling back to Overview) loads its tab and never
+// scrolls.
 document.querySelectorAll('.out-tabs [data-tab]').forEach((btn) => {
     btn.addEventListener('shown.bs.tab', () => {
-        _tabLoading = loadTab(btn.dataset.tab);
+        loadTab(btn.dataset.tab);
     });
     // A dark group keeps its pointer events so the tooltip fires, so the click
     // has to be refused here. Capture phase on the button, which still runs
@@ -1592,11 +1531,8 @@ document.querySelectorAll('.out-tabs [data-tab]').forEach((btn) => {
     }, true);
     // A live group click anchors the strip whether or not the tab changed:
     // re-clicking the active tab is the same "show me the results" gesture.
-    // By the time this runs the shown handler above has already recorded the
-    // fresh load; on a re-click there is no shown and the held promise is the
-    // old, settled one, which anchors immediately and once.
     btn.addEventListener('click', () => {
-        if (!btn.classList.contains('nav-off')) anchorTabs(_tabLoading);
+        if (!btn.classList.contains('nav-off')) anchorNav();
     });
 });
 
@@ -2826,8 +2762,9 @@ function approximationStrip() {
             button.addEventListener('click', () => {
                 if (value === approximationHalf()) return;
                 _approximationHalf = value;
-                // The scroll rule: an in-pane pill is a pill.
-                anchorTabs(loadApproximation());
+                // The scroll rule: an in-pane view pill is navigation.
+                anchorNav();
+                loadApproximation();
             });
         }
         group.appendChild(button);
@@ -3650,8 +3587,10 @@ function loadExample(decl, formatted = true) {
     clearCessionDraft();
     editor.focus();
     // The scroll rule: choosing an example is an editor gesture, from the
-    // Examples menu, the palette, or the Ctrl+Shift ring alike.
-    scrollEditorTop();
+    // Examples menu, the palette, or the Ctrl+Shift ring alike. After the
+    // focus on purpose: the focus scroll is instant, so the smooth anchor
+    // here is the one that lands.
+    anchorEditor();
     if (formatted) return;
     const at = exampleRing.cursor;
     api.formatDecl(decl).then((res) => {
@@ -3698,7 +3637,8 @@ function pickExample(item) {
     // and the palette build at once. The ring steps through `exampleStep`,
     // which debounces the same call instead, since a reader flicking along
     // the shelf has not settled on a book yet.
-    anchorEditor(build());
+    anchorEditor();
+    build();
 }
 
 mountExamples($('examples-menu'), pickExample);
@@ -3797,7 +3737,7 @@ loadLanding();
 // The settling build behind the Ctrl+Shift ring: 450 ms after the last step,
 // long enough to flick past entries without firing a request per press, short
 // enough that stopping on one feels answered.
-const buildSoon = debounce(() => anchorEditor(build()), 450);
+const buildSoon = debounce(() => { anchorEditor(); build(); }, 450);
 
 function exampleStep(dir) {
     const items = visibleExamples();
