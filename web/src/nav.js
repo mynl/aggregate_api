@@ -313,7 +313,7 @@ export const NAV_GROUPS = {
                 label: 'Approximation',
                 exhibit: 'approximation',
                 why: 'needs a computed aggregate or portfolio',
-                hint: 'the five moment matched families against the exact law: '
+                hint: 'the five moment-matched families against the exact law: '
                     + 'parameters, achieved moments, Kolmogorov distance, and '
                     + 'the implied tail',
             },

@@ -3,7 +3,8 @@ name: version-bump
 description: Bump the aggregate_api 1.0.0a version and commit it as one batch:
   both test suites run (pytest and the web JS suite), pyproject.toml, uv.lock,
   the CHANGELOG section, dev/TODO.md, the plan doc moved to dev/done/, a
-  one-line commit, and the re-sync that stops /v1/meta reporting a stale
+  one-line commit, the SPA rebuild that stops the page being older than the
+  version it reports, and the re-sync that stops /v1/meta reporting a stale
   version. Use when a plan-based change is finished, when asked to bump, ship,
   cut a version or commit a version, and to decide whether a change bumps at
   all.
@@ -28,8 +29,8 @@ asked.
 ## 2. Read git state, never assert it from memory
 
 ```
-git -C T:/worktrees/aggregate_api status
-git -C T:/worktrees/aggregate_api log --oneline -5
+git -C V:/dev/aggregate-api status
+git -C V:/dev/aggregate-api log --oneline -5
 ```
 
 The author commits frequently without announcing it. Read the log rather than
@@ -82,8 +83,10 @@ One commit carrying the whole batch:
 - The plan doc, moved from `dev/` to `dev/done/`.
 
 **Never in the commit:** the built SPA under `src/aggregate_api/static/`. It is
-gitignored and rebuilt at deploy. The web build (`.\scripts\build-web.ps1`) is a
-deploy step, not a commit step.
+gitignored, and `.\scripts\build-web.ps1` is not a commit step: nothing it
+writes is ever staged. It **is** a bump step, at section 7, because a bump that
+moves the version without moving the page is worse than one that does neither.
+The two rules are not in tension: build the artifact, never stage it.
 
 Watch for symlinked plans. `dev/done/plan-3d-plot.md` and
 `dev/done/plan-pricing-natural-allocation.md` are canonical **here**, with
@@ -127,7 +130,42 @@ Here the bracket holds the version alone.
 Stage deliberately, by path. Do not `git add -A` over a tree holding the
 author's uncommitted work.
 
-## 7. Re-sync, or `/v1/meta` lies
+## 7. Rebuild the SPA, or the page is older than the version it reports
+
+If the bump touched anything under `web/`, run:
+
+```
+.\scripts\build-web.ps1
+```
+
+Vite writes the bundle into `src/aggregate_api/static/`, which the FastAPI
+`StaticFiles` mount serves at `/`. Nothing else writes it. The suites and the
+harnesses all read `web/src/` directly, so an SPA-only bump can be committed,
+green on `npm test`, `check-nav.mjs` and `smoke-charts.mjs`, and be completely
+invisible in the running app. Not one of those checks can catch this.
+
+**It is worse than an ordinary stale page**, which is why the step is here
+rather than left to deploy. Section 8's re-sync makes `/v1/meta` report the new
+version at once, so the number and the interface end up describing different
+builds: the About panel says `a141` while the page it is sitting on predates
+`a139`. Reported at a141 as "where is the Re change, I am only seeing 141 with
+Reinsurance"; the bundle on disk was six weeks old. The version is exactly what
+the author reads to know which build they are running, so a bump that moves the
+number without moving the page is actively misleading.
+
+Three seconds, and no side effects outside a gitignored directory. Run it
+whenever `web/` moved, and do not run it otherwise.
+
+**The output still never enters the commit.** `src/aggregate_api/static/` is
+gitignored and section 4 is unchanged: this builds the artifact, it does not
+stage it. Building before or after the commit makes no difference to what is
+staged, so it sits here, beside the re-sync, where the two "make the running
+thing match what was just committed" steps belong together.
+
+Then tell the author to hard refresh. Vite hashes the bundle filename, so a
+cached `index.html` is the one thing that can still hide a correct build.
+
+## 8. Re-sync, or `/v1/meta` lies
 
 ```
 uv sync --extra dev
@@ -143,13 +181,15 @@ bump too, not only after one here.
 This step is easy to skip because nothing fails. It just reports a stale number
 until someone notices.
 
-## 8. Never
+## 9. Never
 
 - **Never push.** That is the author's, on explicit request only.
 - **Never commit the author's unrelated or in-progress work** with the bump.
 - **Never batch two bumps** into one commit.
 
-## 9. Report
+## 10. Report
 
 State the new version, both suite results, what went into the commit, whether
-the re-sync ran, and anything left uncommitted for the author.
+the SPA was rebuilt (and say plainly that it was not, when `web/` did not move,
+rather than leaving it unmentioned), whether the re-sync ran, and anything left
+uncommitted for the author.

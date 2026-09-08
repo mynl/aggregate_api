@@ -205,7 +205,14 @@ mirrors the main `aggregate` project.
   message. The matching `CHANGELOG.md` section is the commit's detailed
   description, so the subject shouldn't restate it. Match the git-log convention:
   `[aNN] <terse summary>`. The built SPA under `src/aggregate_api/static/` is
-  gitignored (rebuilt at deploy), so it is never part of the commit.
+  gitignored, so it is never part of the commit.
+- **Rebuild the SPA at the bump when `web/` moved.** `.\scripts\build-web.ps1`,
+  after the commit and beside the re-sync below. Every gate and harness reads
+  `web/src/` directly, so an SPA-only bump can be green everywhere and be
+  invisible in the running app, while the re-sync makes `/v1/meta` report the
+  new version anyway: the About panel then says `a141` over a page that predates
+  `a139`. The version is what you read to know which build you are on, so that
+  pairing is worse than a plain stale page. Build the artifact, never stage it.
 - **One plan doc per step.** Work proceeds from a `dev/plan-NNNN-*.md`. When it
   lands, move it to `dev/done/` and tick the matching `dev/TODO.md` entry.
 - **Re-sync after a version bump, or `/v1/meta` lies.** `version` is read with

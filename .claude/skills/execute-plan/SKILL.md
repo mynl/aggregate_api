@@ -44,7 +44,7 @@ Then read everything the plan is attached to, because a plan is rarely alone:
 
 - **Does LIB link to it?** Several plans are canonical **here** with symlinks
   pointing at them from LIB `dev/`, which is the `plan-3d-plot` arrangement.
-  Check `ls -l T:/worktrees/aggregate_REFACTOR/dev/<file>`. If a link exists,
+  Check `ls -l V:/worktrees/aggregate_REFACTOR/dev/<file>`. If a link exists,
   retiring this plan dangles it, so section 7 applies.
 - **Is there a paired half?** Two arrangements are in use. The symlink, one file
   seen from both repos. And the reflection, a copy in each repo stating its own
@@ -64,10 +64,10 @@ Then read everything the plan is attached to, because a plan is rarely alone:
 ## 2. Read the ground truth, never assert it from memory
 
 ```
-git -C T:/worktrees/aggregate_api status
-git -C T:/worktrees/aggregate_api log --oneline -8
+git -C V:/dev/aggregate-api status
+git -C V:/dev/aggregate-api log --oneline -8
 grep -n '^version' pyproject.toml
-grep -n '^version' T:/worktrees/aggregate_REFACTOR/pyproject.toml
+grep -n '^version' V:/worktrees/aggregate_REFACTOR/pyproject.toml
 ```
 
 The last line matters more here than anywhere else. This repo depends on LIB as
@@ -176,7 +176,11 @@ Two things worth repeating because they are the ones that get missed:
 - **Both suites are the gate**, even when the change looks confined to one side.
   Green on both or no bump.
 - **The built SPA under `src/aggregate_api/static/` is never in the commit.** It
-  is gitignored and rebuilt at deploy.
+  is gitignored. It is still **rebuilt at the bump** whenever `web/` moved, per
+  `version-bump` section 7: every gate and harness reads `web/src/` directly, so
+  an SPA-only phase can pass all of them and be invisible in the running app,
+  while the re-sync makes `/v1/meta` report the new version regardless. Build
+  the artifact, never stage it.
 
 And two this skill adds:
 
