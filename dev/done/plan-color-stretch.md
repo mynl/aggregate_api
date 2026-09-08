@@ -1,9 +1,9 @@
 # plan-color-stretch: gamma and log color stretch for 2-D density panels
 
-Status: **executing, 2026-09-08.** Handed over for execution via
-`/execute-plan`; the rulings below are treated as dispositioned. Written
-2026-09-08 from a design discussion in the `aggregate` (LIB) repo; this is the
-app-side plan. Execution log at the bottom.
+Status: **executed 2026-09-08, landed as a148 and a149.** Handed over for
+execution via `/execute-plan`; the rulings below were treated as
+dispositioned. Written 2026-09-08 from a design discussion in the `aggregate`
+(LIB) repo; this is the app-side plan. Execution log at the bottom.
 
 ## Goal
 
@@ -197,6 +197,13 @@ wire hint) at a149. Divergences, recorded as made:
 - **Smoke fixtures.** `dev/fixtures/charts.json` holds input documents, not
   serialized options, so the acceptance item about re-capturing fixtures is
   moot; `smoke-charts.mjs` replays clean unchanged.
+- **Control placement and label.** The color control renders in the grid
+  panel's own control group, beside `log y`, stored per panel id like the
+  other readings so a choice carries across documents; it is gated on the
+  document panel's kind rather than added to `readings()`, because it is a
+  renderer offer, not a document declaration. Its label shows the *effective*
+  mode (`color: gamma` on an untouched relief, `color: linear` flat), which
+  keeps the button honest under the log-z ruling above.
 - **Trackers.** `dev/TODO.md` has no entry for this plan and the control list
   `dev-files.md` was not found on `T:` or `V:` (no `T:\worktrees` exists on
   this machine today), so neither was updated.

@@ -24,9 +24,10 @@ import { api } from '../api.js';
 import * as spacemouse from '../spacemouse.js';
 import { el, empty } from '../utils/dom.js';
 import {
-    PANEL_DEFAULTS, WIDE_PX, chartdocToEcharts, panelLayout, readings, rungAt,
-    surfaceCuts,
+    PANEL_DEFAULTS, WIDE_PX, chartdocToEcharts, panelLayout, panelStretch,
+    readings, rungAt, surfaceCuts,
 } from './chartdoc-to-echarts.js';
+import { stretchMode } from './color-stretch.js';
 import { fileStem, meshToGlb, meshToObj, meshToStl, surfaceMesh } from './mesh-export.js';
 import { chartParamsFor, migrateChartView, windowsWith } from './request-params.js';
 import { createSurfaceNav } from './surface-nav.js';
@@ -680,6 +681,38 @@ function renderControls(doc, hooks) {
                 },
             }, spec.label);
             group.appendChild(btn);
+        }
+        // The color control, on a grid panel only: how value maps to color,
+        // cycling linear, gamma, log the way the cut control cycles its four.
+        // Per panel like the readings above it, so gamma chosen on the density
+        // grid carries from one document to the next; unlike them it is a
+        // renderer offer rather than a document declaration, so it is gated on
+        // the panel's kind rather than on `readings`. The label shows the
+        // *effective* mode: with nothing held, the relief resolves to gamma
+        // and the flat reading to linear, per `dev/plan-color-stretch.md`.
+        const docPanel = ((doc && doc.panels) || []).find((p) => p.id === panel.id);
+        if (docPanel && (docPanel.kind === 'surface' || docPanel.kind === 'heatmap')) {
+            const mode = () => stretchMode(panelStretch(
+                doc, docPanel, panelView(panel.id),
+                (view.kind || defaultKind(doc)) === 'surface'));
+            const colorBtn = el('button', {
+                type: 'button',
+                className: `exhibit-toggle${mode() !== 'linear' ? ' active' : ''}`,
+                title: 'How value maps to color on this panel. Gamma lifts the '
+                    + 'faint structure a linear ramp buries under the peak; log '
+                    + 'resolves the deep decades. The values, the tooltips and '
+                    + 'the colorbar\'s numbers never change, only where the '
+                    + 'colors sit along the bar',
+                onClick: () => {
+                    const order = ['linear', 'gamma', 'log'];
+                    const next = order[(order.indexOf(mode()) + 1) % order.length];
+                    setPanelView(panel.id, { stretch: next });
+                    colorBtn.textContent = `color: ${next}`;
+                    colorBtn.classList.toggle('active', next !== 'linear');
+                    onChange();
+                },
+            }, `color: ${mode()}`);
+            group.appendChild(colorBtn);
         }
         // A panel declaring nothing gets no group at all rather than an empty
         // one, which would draw a rule with nothing beside it.

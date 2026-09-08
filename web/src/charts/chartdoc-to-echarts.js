@@ -120,6 +120,11 @@ export const WIDE_PX = 720;
 export const PANEL_DEFAULTS = {
     logX: false, logY: false, fullRange: false,
     reflect: false, returnPeriod: false, invert: false, refLines: true,
+    // The color stretch is the second odd one out: not a boolean but a mode,
+    // `'linear'`, `'gamma'` or `'log'`, and null means the reader has not
+    // chosen, so the panel takes the document's hint or the realization's
+    // default (gamma in relief, linear flat). See `color-stretch.js`.
+    stretch: null,
 };
 
 // Bounds on the square plot area an equal-aspect panel is drawn at.
@@ -1337,6 +1342,36 @@ function zoomExtent(zoom, window) {
 }
 
 /**
+ * The color stretch a grid panel draws with, one resolution for every caller.
+ *
+ * Parameters
+ * ----------
+ * doc : object
+ *     The chart document, for the panel's z axis declaration.
+ * panel : object
+ *     The document panel, carrying the optional `stretch` hint (the forward
+ *     hook of `dev/plan-color-stretch.md`: LIB may start emitting it when its
+ *     matplotlib exhibits grow the matching kwarg).
+ * view : object
+ *     The panel's resolved view: `stretch` is the reader's held choice and
+ *     `logY` decides whether the drawn z is already on log.
+ * relief : bool
+ *     Whether the panel is realized as the 3-D surface, whose default is
+ *     gamma rather than linear.
+ *
+ * Returns
+ * -------
+ * null, float, or 'log'
+ *     What `stretchedRamp` and `contourLevels` take.
+ */
+export function panelStretch(doc, panel, view, relief) {
+    const zAxis = ((doc && doc.axes) || []).find((a) => a.id === panel.z_axis) || {};
+    const useLog = axisScale(zAxis, view.logY) === 'log';
+    return effectiveStretch({ held: view.stretch, hint: panel.stretch,
+                              relief, logZ: useLog });
+}
+
+/**
  * Realize one grid panel flat: the z grid as a heatmap.
  *
  * ECharts draws a heatmap over category axes, so the grid's coordinates are
@@ -1361,6 +1396,11 @@ function heatmapPanel(doc, panel, i, axes, view, box) {
     // reading, and a density ordinate is a y axis on the panel next door, so
     // the z axis rides `logY` rather than asking for a button of its own.
     const useLog = axisScale(zAxis, view.logY) === 'log';
+    // Linear by default here, unlike the relief: a flat panel's z is not
+    // always a density (kappa and quantile surfaces flow through the same
+    // panel kind) and a silent nonlinear default would mislead. The control
+    // and the document's hint are one click and one field away.
+    const stretch = panelStretch(doc, panel, view, false);
     const floor = decadeFloor([g.z]) || LOG_FLOOR;
 
     let max = -Infinity;
@@ -1400,8 +1440,9 @@ function heatmapPanel(doc, panel, i, axes, view, box) {
         };
         const top = Number.isFinite(max) ? max : min + 1;
         const paths = [];
-        for (let level = 1; level <= SURFACE_CONTOUR_LEVELS; level++) {
-            const at = min + ((top - min) * level) / (SURFACE_CONTOUR_LEVELS + 1);
+        // The ladder follows the active stretch, as in relief, so the rings
+        // sit where the stretched colors resolve structure.
+        for (const at of contourLevels(min, top, SURFACE_CONTOUR_LEVELS, stretch)) {
             for (const path of contourPaths(g, at, heightAt)) {
                 if (paths.length >= SURFACE_CONTOUR_CAP) break;
                 // Into cell indices, which is what the pixel mapping below is
@@ -1477,8 +1518,9 @@ function heatmapPanel(doc, panel, i, axes, view, box) {
             textStyle: { fontSize: 10, color: '#6c757d' },
             // The same ramp the relief uses, because these are two drawings of
             // one grid and a reader flipping between them is entitled to see
-            // one color mean one height.
-            inRange: { color: VIRIDIS },
+            // one color mean one height, warped by the active stretch and by
+            // nothing else: the min, max and labels never move.
+            inRange: { color: stretchedRamp(stretch) },
             // The bar is labeled in the units it colors, not in the exponent it
             // is held in. `1e${Math.round(v)}` rounded the height to a whole
             // decade, so a bar running from 10^-8.2 to 10^-8.0 printed `1e-8`
@@ -2268,8 +2310,7 @@ function surfaceOption(doc, opts, documentView) {
     // The relief defaults to gamma because the joint is a density and its
     // linear coloring spends the whole ramp on the peak; the log reading keeps
     // its linear ramp, being a stretch already. See `color-stretch.js`.
-    const stretch = effectiveStretch({ held: view.stretch, hint: panel.stretch,
-                                       relief: true, logZ: useLog });
+    const stretch = panelStretch(doc, panel, view, true);
     const { max, min } = zExtent(g, LOG_FLOOR);
     const zMax = useLog ? Math.ceil(Math.log10(max)) : max;
     const zMin = useLog

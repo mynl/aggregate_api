@@ -4,6 +4,21 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a149
+
+**[Color-Stretch-Heatmap-Controls] the flat panels join, and the reader gets
+the dial.** A `color` control sits in the grid panel's group beside `log y`,
+cycling linear, gamma and log; the choice is held per panel id, so gamma
+picked on the density grid carries across documents, and switching away and
+back is lossless. Flat heatmap panels default to linear, because their z is
+not always a density, and take the same stretched ramp and matched contour
+ladder as the relief when asked. The chartdoc reader honors an optional
+per-panel `stretch` field as that panel's default (the forward hook for LIB's
+matplotlib-side `[Bivariate-Color-Stretch]`, tracked in that repo). The label
+shows the effective mode, so an untouched relief reads `color: gamma` and its
+log-z reading `color: linear`. Plan retired to
+`dev/done/plan-color-stretch.md`.
+
 ## 1.0.0a148
 
 **[Color-Stretch-Surface] the joint surface reveals its tail: gamma color
