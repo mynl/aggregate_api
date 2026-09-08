@@ -1248,10 +1248,13 @@ function draw(container, tools, host, doc, spec = null) {
             return;
         }
         const stem = fileStem(source.name);
-        // The ramp is the chart's, passed in rather than restated, so the file
-        // and the colorbar cannot disagree about what a height looks like.
+        // The ramp is the drawn option's, stretch baked in, passed in rather
+        // than restated, so the file and the colorbar cannot disagree about
+        // what a height looks like.
         const writers = {
-            glb: [() => meshToGlb(mesh, stem, { ramp: VIRIDIS, colorRange: source.colorRange }),
+            glb: [() => meshToGlb(mesh, stem,
+                                  { ramp: source.ramp || VIRIDIS,
+                                    colorRange: source.colorRange }),
                   'model/gltf-binary'],
             obj: [() => meshToObj(mesh, stem), 'text/plain'],
             stl: [() => meshToStl(mesh, stem), 'model/stl'],

@@ -19,7 +19,8 @@
 // renderer chunk and `surfaceOverrides`, the per-chart chrome dict: colors,
 // tooltip dressing, lighting, and the camera.
 
-import { echarts, houseStyle, fade, VIRIDIS } from './theme.js';
+import { echarts, houseStyle, fade } from './theme.js';
+import { stretchedRamp } from './color-stretch.js';
 import { makeCellReader } from './cell-reading.js';
 import { fmt } from '../utils/format.js';
 
@@ -66,7 +67,8 @@ export function loadSurface() {
  * ctx : object
  *     The adapter context `{xName, yName, zName, logZ, zMin, zMax}` plus
  *     `side`, the square plot side in CSS pixels (drives the colorbar
- *     height).
+ *     height), and `stretch`, the color stretch the adapter resolved
+ *     (see `color-stretch.js`), which warps the ramp and nothing else.
  *
  * Returns
  * -------
@@ -145,7 +147,7 @@ function tick(v) {
 export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
                                    quantized = false, side = 420,
                                    hostHeight = 480, camera = null,
-                                   lights = true } = {}) {
+                                   lights = true, stretch = null } = {}) {
     const s = houseStyle();
     // `digits` and `quantized` are passed straight through to the cell reader,
     // which is where the precision argument now lives: read the height to the
@@ -172,7 +174,10 @@ export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
         // Two maps: the surface's, which draws the colorbar, and the floor
         // image's, which reads the same scale through the fourth column and
         // shows no bar of its own. Merged element-wise onto the pair the
-        // adapter builds, so the order here is the order there.
+        // adapter builds, so the order here is the order there. Both take the
+        // stretched ramp, so the drape and the floor stay two drawings of one
+        // grid; the value range and the bar's labels never move, only where
+        // the colors sit along it.
         visualMap: [
             {
                 calculable: true,
@@ -180,12 +185,12 @@ export function surfaceOverrides({ xName, yName, logZ, zMin, digits = 7,
                 // picture reads as the second half of a two-panel chart.
                 right: 4, top: 20, itemHeight: Math.max(80, Math.round(hostHeight * 0.5)),
                 textStyle: { fontSize: 10, color: '#6c757d' },
-                inRange: { color: VIRIDIS },
+                inRange: { color: stretchedRamp(stretch) },
                 formatter: (v) => (logZ ? `1e${Math.round(v)}` : tick(v)),
             },
             {
                 show: false,
-                inRange: { color: VIRIDIS },
+                inRange: { color: stretchedRamp(stretch) },
             },
         ],
         xAxis3D: {

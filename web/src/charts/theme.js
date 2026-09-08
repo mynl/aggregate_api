@@ -68,17 +68,11 @@ const FALLBACK = {
  */
 export const LOG_FLOOR = 1e-15;
 
-/**
- * Viridis, the ramp both readings of a z grid are drawn in.
- *
- * Here rather than in `surface.js`, because the relief and the flat image are
- * two drawings of one grid and a reader who flips between them is entitled to
- * see the same color mean the same height. It is not the house ramp: that one
- * runs white to a single hue, and under a shaded surface the lit and unlit
- * faces of one height then read as two different values. Perceptually uniform
- * and colorblind safe are the usual arguments and they hold here too.
- */
-export const VIRIDIS = ['#440154', '#414487', '#2a788e', '#22a884', '#7ad151', '#fde725'];
+// Viridis, the ramp both readings of a z grid are drawn in. Defined in
+// `color-stretch.js` since the stretch arrived, because the stretch resamples
+// it and that module is a leaf the node test runner can reach; re-exported
+// here so the chart modules keep one import site for the theme.
+export { VIRIDIS } from './color-stretch.js';
 
 let style = FALLBACK;
 let pending = null;

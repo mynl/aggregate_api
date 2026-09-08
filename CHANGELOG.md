@@ -4,6 +4,23 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a148
+
+**[Color-Stretch-Surface] the joint surface reveals its tail: gamma color
+stretch by default on the relief.** A joint density spans many decades, and a
+linear ramp spends itself on the peak, so the body rendered as one dark field.
+The relief's drape and floor image now default to a gamma 0.35 stretch of the
+shared viridis ramp: the color lookup takes the normalized height to the power
+gamma, realized as a dense 33-stop ramp precomputed in the new leaf module
+`web/src/charts/color-stretch.js`, so the values, the tooltips and the
+colorbar's value axis never move, only where the colors sit along the bar. The
+contour ladder follows the active stretch (equally spaced in stretched space),
+so the rings sit where the colors resolve structure, and the exported GLB mesh
+bakes the on-screen ramp via `meshSource.ramp`, so the file matches the
+picture. The log z reading keeps its linear ramp, being a stretch already, and
+is pixel-unchanged. Flat heatmap panels stay linear at this version; their
+control arrives with the next. Per `dev/plan-color-stretch.md`.
+
 ## 1.0.0a147
 
 **[Scroll-Policy] one scroll per gesture, down only for navigation, and the

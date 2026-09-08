@@ -27,6 +27,7 @@ import {
     wallScale, weightedMean,
 } from './surface-geometry.js';
 import { readingMap } from './reading-map.js';
+import { contourLevels, effectiveStretch, stretchedRamp } from './color-stretch.js';
 import {
     LOG_FLOOR, VIRIDIS, axisStyle, baseOption, fade, houseStyle, lineWidth,
     seriesColor,
@@ -2262,6 +2263,13 @@ function surfaceOption(doc, opts, documentView) {
     // reading and the control does not apply. It rides `logY` because the
     // height in relief and the ramp of the same quantity flat are one reading.
     const useLog = axisScale(axes[panel.z_axis] || {}, view.logY) === 'log';
+    // The color stretch, resolved once for everything that colors by height:
+    // the drape and floor ramps, the contour ladder, and the exported mesh.
+    // The relief defaults to gamma because the joint is a density and its
+    // linear coloring spends the whole ramp on the peak; the log reading keeps
+    // its linear ramp, being a stretch already. See `color-stretch.js`.
+    const stretch = effectiveStretch({ held: view.stretch, hint: panel.stretch,
+                                       relief: true, logZ: useLog });
     const { max, min } = zExtent(g, LOG_FLOOR);
     const zMax = useLog ? Math.ceil(Math.log10(max)) : max;
     const zMin = useLog
@@ -2436,12 +2444,15 @@ function surfaceOption(doc, opts, documentView) {
     // levels, which is what makes the two read as one drawing. A contour at
     // level L lies on the surface at height L by construction, so "on the
     // surface" needs no projection, only a hair of lift to keep it off the skin
-    // it is lying on.
+    // it is lying on. The ladder follows the active stretch, equally spaced in
+    // stretched space, or the contours and the colors would disagree about
+    // where the visual structure is: eight rings bunched at the peak while the
+    // ramp resolves the tail.
     if (view.contours) {
         const heightAt = (i, j) => height(g.z[j * g.nx + i]);
         let emitted = 0;
-        for (let i = 1; i <= SURFACE_CONTOUR_LEVELS && emitted < SURFACE_CONTOUR_CAP; i++) {
-            const level = zMin + (range * i) / (SURFACE_CONTOUR_LEVELS + 1);
+        for (const level of contourLevels(zMin, zMax, SURFACE_CONTOUR_LEVELS, stretch)) {
+            if (emitted >= SURFACE_CONTOUR_CAP) break;
             for (const path of contourPaths(g, level, heightAt)) {
                 if (emitted >= SURFACE_CONTOUR_CAP) break;
                 for (const at of [level, floorH]) {
@@ -2504,7 +2515,7 @@ function surfaceOption(doc, opts, documentView) {
                                 Math.round(box.hostHeight * SURFACE_HOST_SCALE));
     const ctx = { doc, view, box, xName, yName, zName, logZ: useLog, zMin, zMax,
                   grid: g, digits: g.digits, quantized: g.quantized,
-                  camera: opts.camera || null,
+                  camera: opts.camera || null, stretch,
                   hostHeight, side: box.panelW };
     const option = merge(base, resolveOverrides(opts.overrides, ctx));
     option.hostHeight = hostHeight;
@@ -2538,6 +2549,9 @@ function surfaceOption(doc, opts, documentView) {
         // a mesh colored against it would carry a ramp shifted off the one on
         // screen. These are the two numbers the visualMap is given.
         colorRange: [zMin, zMax],
+        // The stops actually on screen, stretch baked in, so the exported
+        // mesh cannot disagree with the picture about what a color means.
+        ramp: stretchedRamp(stretch),
         box: {
             width: drawnBox.boxWidth || 100,
             depth: drawnBox.boxDepth || 100,
