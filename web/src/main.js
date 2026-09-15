@@ -42,7 +42,7 @@ import {
     whyGroup,
 } from './nav.js';
 import * as history from './history.js';
-import { anchorEditor, anchorNav } from './scroll.js';
+import { anchorEditor, anchorNav, anchorNavSettled } from './scroll.js';
 import { $, el, empty, replaceChildren } from './utils/dom.js';
 import { debounce } from './utils/debounce.js';
 import { fmt } from './utils/format.js';
@@ -1409,12 +1409,14 @@ function renderSubTabs(group) {
     }
 }
 
-/** Move a group to one of its leaves, load it, and anchor the strip. */
+/** The group's `.tab-pane` element (`#t-<group>`), the clamp for `anchorNav`. */
+function paneOf(group) { return document.getElementById(`t-${group}`); }
+
+/** Move a group to one of its leaves, load it, and anchor once it settles. */
 function selectLeaf(group, key) {
     state.leaf[group] = key;
     renderSubTabs(group);
-    anchorNav();
-    loadLeaf(group);
+    anchorNavSettled(paneOf(group), loadLeaf(group));
 }
 
 /**
@@ -1510,14 +1512,32 @@ function loadActiveTab() { loadTab(activeTabName()); }
 // Bootstrap fires shown.bs.tab on the tab trigger when a pill activates, and
 // it fires during the capture phase at `document` (the data-api passes its
 // selector as `addEventListener`'s third argument, which reads as
-// `capture: true`), so the load below provably starts before the click
-// listeners on the button run. The anchor rides the click, not the shown
-// event, so a programmatic activation (the initial page,
-// `applyCapabilityGating` falling back to Overview) loads its tab and never
-// scrolls.
+// `capture: true`). It fires synchronously there: Tab's completion callback
+// defers only when the element it queued on carries .fade, and that element
+// is the trigger button, which never does. So within one click the order is
+// pinned: shown starts the load, the click listeners below run, and the load
+// completes at least a microtask later, after the whole click bubble. The
+// anchor still rides the click, not the shown event, so a programmatic
+// activation (the initial page, `applyCapabilityGating` falling back to
+// Overview, the arrow keys) loads its tab and never scrolls. The click
+// records a pending-gesture token; the load's completion consumes it if the
+// group still matches and fires the settled anchor, so of two gestures
+// racing the latest wins and the stale one moves nothing (plan a150).
+let pendingNav = null;   // { group, scrollY } recorded by the live click
+let navShown = null;     // group whose shown event fired in the current task
 document.querySelectorAll('.out-tabs [data-tab]').forEach((btn) => {
     btn.addEventListener('shown.bs.tab', () => {
-        loadTab(btn.dataset.tab);
+        const group = btn.dataset.tab;
+        navShown = group;
+        queueMicrotask(() => { navShown = null; });
+        const loading = loadTab(group);
+        loading.catch(() => {}).then(() => {
+            if (pendingNav && pendingNav.group === group) {
+                const { scrollY } = pendingNav;
+                pendingNav = null;
+                anchorNavSettled(paneOf(group), loading, scrollY);
+            }
+        });
     });
     // A dark group keeps its pointer events so the tooltip fires, so the click
     // has to be refused here. Capture phase on the button, which still runs
@@ -1529,10 +1549,19 @@ document.querySelectorAll('.out-tabs [data-tab]').forEach((btn) => {
             e.preventDefault(); e.stopPropagation();
         }
     }, true);
-    // A live group click anchors the strip whether or not the tab changed:
-    // re-clicking the active tab is the same "show me the results" gesture.
+    // A live group click is the navigation gesture whether or not the tab
+    // changed. A fresh activation (its shown event just fired, above) hands
+    // the anchor to the load through the token; re-clicking the active tab
+    // fires no shown, so it anchors directly, content already rendered and
+    // geometry already known.
     btn.addEventListener('click', () => {
-        if (!btn.classList.contains('nav-off')) anchorNav();
+        if (btn.classList.contains('nav-off')) return;
+        const group = btn.dataset.tab;
+        if (navShown === group) {
+            pendingNav = { group, scrollY: window.scrollY };
+        } else {
+            anchorNav(paneOf(group));
+        }
     });
 });
 
@@ -2763,8 +2792,7 @@ function approximationStrip() {
                 if (value === approximationHalf()) return;
                 _approximationHalf = value;
                 // The scroll rule: an in-pane view pill is navigation.
-                anchorNav();
-                loadApproximation();
+                anchorNavSettled(paneOf('more'), loadApproximation());
             });
         }
         group.appendChild(button);

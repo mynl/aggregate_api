@@ -4,6 +4,23 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a150
+
+**[Nav-Scroll-Clamp] a navigation gesture scrolls only as far as there is
+something to see.** The strip-at-top target of a147 is now clamped by the
+bottom of the active pane coming into view, so a short exhibit stops
+mid-viewport the moment its table is fully visible, a tall one still gets the
+full strip-at-top anchor, and a bottom already on screen moves nothing. Down
+only, as before. The anchor fires once the gesture's content is in place
+rather than at gesture time: `anchorNavSettled` waits for the leaf's loader
+plus two animation frames, skips the scroll if the reader moved meanwhile
+(they took control), and anchors the error pane too. Group tabs meet their
+load through a pending-gesture token recorded on the click, so a programmatic
+activation still never scrolls and of two racing gestures the latest wins.
+Program gestures (Build, examples, derive) keep the a147 editor anchor
+untouched, and forms inside panes still never scroll. Plan retired to
+`dev/done/plan-a150-nav-scroll-clamp.md`.
+
 ## 1.0.0a149
 
 **[Color-Stretch-Heatmap-Controls] the flat panels join, and the reader gets
