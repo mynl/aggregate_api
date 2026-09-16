@@ -1268,14 +1268,17 @@ const LOADERS = {
     'economics:waterfall': () => loadExhibitLeaf('pane-economics', 'economic_waterfall',
         ['economics', 'waterfall']),
 
-    // The `reins` exhibit's second block, which is `reins_summary_df` with the
-    // library's caption and, on a portfolio, its row flags. Byte-identical
-    // otherwise, so this moved at a70 with nothing to weigh.
-    'reinsurance:summary': () => loadReinsExhibit(1, ['reinsurance', 'summary']),
     // The `reins` exhibit's first block, the layering analysis, in the
-    // library's own orientation. The api transposed it and split it in two
-    // from round 3 to a71.
-    'reinsurance:stats': () => loadReinsExhibit(0, ['reinsurance', 'stats']),
+    // library's own orientation. Under Summary since a151: it is the leaf's
+    // own hint ("the program layer by layer"), and the daily read of a
+    // program. The api transposed it and split it in two from round 3 to a71.
+    'reinsurance:summary': () => loadReinsExhibit(0, ['reinsurance', 'summary']),
+    // The `reins` exhibit's second block, which is `reins_summary_df` with
+    // the library's caption and, on a portfolio, its row flags: the moment
+    // table in the eight column validation layout, which is what Stats
+    // promises ("gross, ceded and net moments"). The two leaves showed each
+    // other's block from a70 to a150.
+    'reinsurance:stats': () => loadReinsExhibit(1, ['reinsurance', 'stats']),
     'reinsurance:density': () => loadReinsFrame('reins_density_df',
         ['reinsurance', 'density']),
     'reinsurance:plot': () => loadReinsPlot(),

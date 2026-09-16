@@ -4,6 +4,19 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a151
+
+**[Reins-Leaves-Swap] the Reinsurance Summary and Stats leaves swap
+exhibits.** Summary now shows the `reins` exhibit's first block, the layering
+analysis, and Stats its second, the stage summary in the eight column
+validation layout. The leaf order and labels do not move; the two leaves had
+been showing each other's block since a70, which is why each hint described
+the other leaf's table. Paired sibling change in `aggregate`: the insurer
+format sheet gains `Sk` and `Est Sk` at `.3f`, so the stage summary's skew
+columns read in fixed decimals under the insurer perspective instead of
+falling through to the raw `.3g` reading (that change and its regenerated
+exhibit snapshots land in the library's repo, not here).
+
 ## 1.0.0a150
 
 **[Nav-Scroll-Clamp] a navigation gesture scrolls only as far as there is
