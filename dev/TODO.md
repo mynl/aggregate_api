@@ -932,6 +932,16 @@ one version bump each.
       `sample: true` as the wire spelling of the seed re-roll. Nothing owed
       upstream.
 
+- [ ] **The reinsurance structure diagram**: `dev/plan-structure-chart.md`,
+      three bumps, consuming LIB a349 to a351 (the `'tower'` panel kind and
+      `TowerBlock` on the chart IR, the `structure` emitter, the matplotlib
+      renderer). The library half landed first and deliberately left the SPA
+      drawing nothing at all, since it pinned `CHART_IR_VERSION = 2` and
+      refuses anything later. **a152 [Tower-Panel]** closes that window and
+      draws a tower. Still to come: the Diagram leaf at the head of the Re
+      row, and the `lee` parameter on the chart route, without which the Lee
+      curves beside each tower cannot be asked for at all.
+
 ## Raised with `aggregate` (not fixed here)
 
 - [ ] **`format_program`'s fallback answers with the preprocessed statement

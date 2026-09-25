@@ -139,8 +139,11 @@ function checkLabels(label, doc, option) {
     const known = new Set([
         doc.title, ...doc.panels.map((p) => p.title),
         ...doc.panels.map((p) => p.inverse_title),
-        ...doc.axes.map((a) => a.label), ...doc.series.map((s) => s.name),
+        ...doc.axes.map((a) => a.label), ...(doc.series || []).map((s) => s.name),
         ...(doc.marks || []).map((m) => m.label),
+        // A tower's human strings live in its blocks, which is the whole of
+        // what a panel drawn from `doc.blocks` has to say.
+        ...(doc.blocks || []).flatMap((b) => [b.label, ...(b.label_lines || [])]),
     ].filter(Boolean));
     for (const t of option.title || []) {
         // An inverted panel with no name of its own says so rather than
@@ -381,7 +384,7 @@ function checkReadout(label, doc, option) {
  */
 function checkBands(label, doc, option) {
     if (option.is3d) return;
-    for (const band of doc.series.filter((s) => s.y2)) {
+    for (const band of (doc.series || []).filter((s) => s.y2)) {
         const at = doc.panels.findIndex((p) => p.id === band.panel_id);
         const mine = option.series.filter((s) => s.name === band.name && s.xAxisIndex === at);
         const lines = mine.filter((s) => s.type === 'line');
@@ -422,7 +425,7 @@ for (const [name, entry] of Object.entries(cases)) {
     for (const [chart, doc] of Object.entries(entry.charts || {})) {
         const label = `${name}/${chart}`;
         if (!doc) { fail(label, 'no document captured'); continue; }
-        if (doc.ir_version !== 2) fail(label, `ir_version ${doc.ir_version}`);
+        if (doc.ir_version !== 3) fail(label, `ir_version ${doc.ir_version}`);
         const option = chartdocToEcharts(doc, { width: 980 });
         if (!checkDrawable(label, doc, option)) continue;
         checkLabels(label, doc, option);
@@ -454,15 +457,31 @@ for (const [name, entry] of Object.entries(cases)) {
 
 // Every mark in every document reaches the chart, which is the check that would
 // have caught a mark placed on a panel id nothing draws.
+//
+// Two realizations, because a mark means two different things by panel. On a
+// curve it is a reference line, drawn as a markLine entry. On a tower it is a
+// boundary, and a tower is read at its breaks, so the panel's marks become the
+// ticks of its quantity axis, which is what `_chartdoc._render_tower_panel`
+// does. Distinct positions there: a tower marking one boundary twice labels it
+// once, and counting the document's marks would then demand a duplicate tick.
 for (const [name, entry] of Object.entries(cases)) {
     for (const [chart, doc] of Object.entries(entry.charts || {})) {
         if (!doc || !(doc.marks || []).length) continue;
         const option = chartdocToEcharts(doc, { width: 980 });
         if (!option) continue;
+        const towers = new Set((doc.panels || [])
+            .filter((p) => p.kind === 'tower').map((p) => p.id));
+        const wantLines = doc.marks.filter((m) => !towers.has(m.panel_id)).length;
+        const wantTicks = new Set(doc.marks.filter((m) => towers.has(m.panel_id))
+            .map((m) => `${m.panel_id}:${m.at}`)).size;
         const drawn = (option.series || [])
             .flatMap((s) => (s.markLine ? s.markLine.data : [])).length;
-        if (drawn !== doc.marks.length) {
-            fail(`${name}/${chart}`, `${doc.marks.length} marks, ${drawn} drawn`);
+        const ticked = (option.yAxis || []).reduce(
+            (n, ax) => n + ((ax.axisLabel && ax.axisLabel.customValues) || []).length, 0);
+        if (drawn !== wantLines || ticked !== wantTicks) {
+            fail(`${name}/${chart}`,
+                 `${wantLines} reference lines and ${wantTicks} boundary ticks `
+                 + `wanted, ${drawn} and ${ticked} drawn`);
         }
     }
 }

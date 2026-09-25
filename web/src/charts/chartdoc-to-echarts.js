@@ -40,9 +40,12 @@ import {
  * when a reader ignoring what it does not know would draw something *wrong*,
  * so a document from a later version is refused by name instead of drawn
  * plausibly and incorrectly. Version 2 is the lattice payload: an older reader
- * sees a series with no coordinates and draws an empty panel.
+ * sees a series with no coordinates and draws an empty panel. Version 3
+ * (`aggregate 1.0.0a349`) is the tower: a panel whose content is
+ * `ChartDoc.blocks` rather than series, which a reader that does not know the
+ * field draws as an empty panel beside the ones it does know.
  */
-export const CHART_IR_VERSION = 2;
+export const CHART_IR_VERSION = 3;
 
 // ---- the drawing ladder ------------------------------------------------
 //
@@ -133,6 +136,65 @@ const SQUARE_MAX = 420;
 
 // Extra right margin on a grid panel, for its colorbar.
 const COLORBAR_W = 78;
+
+// ---- the tower panel ---------------------------------------------------
+//
+// Relative width of a tower against a curve panel beside it,
+// `_chartdoc.TOWER_WIDTH` and `CURVE_WIDTH`. A tower is a strip, not a plot:
+// its abscissa carries one unit of share and no reading, so width past what
+// the labels need is width taken from the curve that does have a reading. 1:2
+// is the prior art's ratio.
+const TOWER_WIDTH = 1;
+const CURVE_WIDTH = 2;
+
+// Clamps on a tower row's plot-area height. A tower is read up the page and
+// every row of height is a row of label, so the house landscape cell is the
+// wrong shape for it, and `_chartdoc.TOWER_HEIGHT` says the same thing as 1.8
+// figure heights.
+//
+// There is deliberately **no floor on the width**. A floor that the row cannot
+// afford is not a floor, it is an overflow: five panels in a 980 pixel pane
+// hit one at 96 and ran 68 pixels off the right edge. The fit binds, the
+// panels get thin, and `blockLabel` drops the lines that no longer fit, which
+// is the degradation the label arithmetic is there for.
+const TOWER_MIN_H = 260;
+const TOWER_MAX_H = 420;
+
+// One ratio unit's width as a fraction of the row's height, which is what
+// keeps a tower a tower rather than a squat box. Matplotlib sizes the figure
+// instead of the panel, at `0.5 * FIG_W` per ratio unit by `TOWER_HEIGHT *
+// FIG_H` tall: 1.75 by 4.41 inches, so one unit is 0.397 of the height. Here
+// the height is settled first, by the host, and this turns it into a width.
+const TOWER_ASPECT = 1.75 / 4.41;
+
+// Point size of a block's label, and the two crude metrics the fits or does
+// not fit arithmetic below needs. `CHAR_WIDTH` is an average over a
+// proportional face, `ROW_PITCH` a line's height as a multiple of the size;
+// both are `_chartdoc`'s, and both only have to be good enough to decide
+// whether a line would run out of its own rectangle.
+const BLOCK_LABEL_PX = 10;
+const CHAR_WIDTH = 0.55;
+const ROW_PITCH = 1.3;
+
+// Ink per block role. The placed layers take the house primary, everything the
+// cedent is left holding takes the grey, and a gap is drawn as an absence:
+// no fill and a dashed edge, because an uncovered band must not read as a
+// thing that was bought. Alternating alpha down the tower separates one layer
+// from the next without a rainbow, which is how a market slide draws it.
+// `color` indexes the house cycle, so these are `_chartdoc.BLOCK_FILL`'s C0,
+// C7 and C1 said in the app's own palette.
+//
+// Matplotlib hatches the two roles that are not solid things; a custom series
+// renders through zrender, which has no hatch, and drawing one as a fan of
+// clipped diagonals is a lot of geometry for a texture. The dashed edge and
+// the tooltip's role line carry it instead.
+const BLOCK_INK = {
+    layer: { color: 0, alpha: [0.80, 0.55] },
+    co_participation: { color: 7, alpha: [0.16], dashed: true },
+    retention: { color: 7, alpha: [0.30] },
+    gap: { color: null, alpha: [0], dashed: true },
+    gross: { color: 1, alpha: [0.40] },
+};
 
 /**
  * Merge an override dict over a base option, one nested level deep.
@@ -310,6 +372,20 @@ function squareWindow(xWindow, yWindow, allX, allY) {
 const scaled = (a) => Boolean(a) && (a.scales || []).length > 1;
 
 /**
+ * Whether the zoom out has anything to open on this axis.
+ *
+ * Declaring `full_range` is not the same as having room in it. A tower's
+ * quantity axis is sized to the program it bands and declares the same pair
+ * twice, so a button offered off the field's presence alone appears, is
+ * pressed, and changes nothing. The honest gate is the one every other control
+ * keeps: offer it when there is something for it to act on.
+ */
+const opens = (a) => Boolean(a) && Array.isArray(a.full_range)
+    && (!Array.isArray(a.suggested_range)
+        || a.full_range[0] < a.suggested_range[0]
+        || a.full_range[1] > a.suggested_range[1]);
+
+/**
  * Every axis a panel can put in a given position, which is what it offers on.
  *
  * Three substitutions can happen below a panel before anything is drawn, and
@@ -379,7 +455,15 @@ export function readings(doc) {
     const marked = new Set(((doc && doc.marks) || []).map((m) => m.panel_id));
     const kinds = new Set();
     for (const p of panels) {
-        for (const k of p.kinds || [p.kind]) kinds.add(k);
+        // **A choice one panel declares, not the set of kinds the document
+        // happens to hold.** The realization control redraws the whole
+        // document, so it is only a control where some panel offers more than
+        // one way to be drawn. Collecting across panels made a structure
+        // document with its Lee curves answer `tower, xy`, which is two
+        // panels each with one kind and no choice anywhere, and offered a
+        // button that swapped nothing and had no word for itself.
+        const ks = p.kinds || [p.kind];
+        if (ks.length > 1) for (const k of ks) kinds.add(k);
         // A surface can also be read flat, because those are two drawings of
         // one grid and this renderer has both. That is renderer capability
         // rather than a claim about the document, which is why it is added
@@ -387,8 +471,11 @@ export function readings(doc) {
         // request for either, and without this the control strip offers no way
         // to make one. Not the converse: a panel declared 'heatmap' gets no
         // 3-D button, because `realization` would decline the request and a
-        // control that does nothing is worse than no control.
-        if (p.kind === 'surface') kinds.add('heatmap');
+        // control that does nothing is worse than no control. Both names, not
+        // just the flat one: the pair is the choice, and adding only what the
+        // panel does not already declare would leave a set of one wherever the
+        // panel declares a single kind.
+        if (p.kind === 'surface') { kinds.add('surface'); kinds.add('heatmap'); }
     }
     return {
         panels: panels.map((p) => {
@@ -410,7 +497,7 @@ export function readings(doc) {
                 // door, so the z axis rides `logY` rather than asking for a
                 // third button.
                 logY: [...y, ...z].some(scaled),
-                fullRange: [...x, ...y].some((a) => Array.isArray(a.full_range)),
+                fullRange: [...x, ...y].some(opens),
                 reflect: paired('complement_of'),
                 returnPeriod: paired('reciprocal_of'),
                 invert: Boolean(p.invertible),
@@ -477,38 +564,70 @@ function realization(panel, requested) {
  *     default rather than collapsing the panel.
  * rightPad : number
  *     Extra right margin, for a grid panel's colorbar.
+ * plan : object or null
+ *     A document that will not take the default arrangement says so here:
+ *     `ratios`, one relative width per panel, drawn in a single row, and
+ *     `tall`, which takes the tower's height clamps instead of the house
+ *     aspect. Honored only above the breakpoint, because under it every
+ *     layout stacks one per row and a plan that insisted otherwise would be
+ *     a horizontal scrollbar on a phone. See `documentLayout`, which is the
+ *     only thing that builds one.
  *
  * Returns
  * -------
  * {grids, wide, panelW, panelH, footprint, hostHeight}
  */
-export function panelLayout(count, square, width, rightPad = 0) {
+export function panelLayout(count, square, width, rightPad = 0, plan = null) {
     const n = Math.max(1, count || 1);
     const w = width || 900;
     const wide = w >= WIDE_PX;
-    const perRow = wide ? Math.min(2, n) : 1;
-    const rows = Math.ceil(n / perRow);
+    const laid = (wide && plan && plan.ratios && plan.ratios.length === n)
+        ? plan : null;
+    const perRow = laid ? n : (wide ? Math.min(2, n) : 1);
     const pad = PAD_RIGHT + rightPad;
-    const panelW = Math.max(wide ? 160 : 200,
-        (w - AXIS_LEFT - (perRow - 1) * GAP_X - pad) / perRow);
+    // The width left for plot areas in a row of `k` panels.
+    const free = (k) => w - AXIS_LEFT - (k - 1) * GAP_X - pad;
     // Vertical chrome belonging to one panel, inside its footprint.
     const chrome = PAD_TOP + AXIS_BOTTOM;
-    const panelH = square
-        ? Math.max(SQUARE_MIN, Math.min(SQUARE_MAX, panelW))
-        : Math.max(PANEL_MIN_H, Math.min(PANEL_MAX_H, panelW / PANEL_ASPECT - chrome));
+    const uniformW = Math.max(wide ? 160 : 200, free(perRow) / perRow);
+    const panelH = laid && laid.tall
+        // Off the **host** width, not the panel's: a tower row's height is a
+        // property of the picture rather than of how many panels share it, and
+        // driving it from the panel width would make the tower shorter exactly
+        // when another panel joined the row and it had least room already.
+        ? Math.max(TOWER_MIN_H, Math.min(TOWER_MAX_H, w / PANEL_ASPECT - chrome))
+        : (square
+            ? Math.max(SQUARE_MIN, Math.min(SQUARE_MAX, uniformW))
+            : Math.max(PANEL_MIN_H,
+                Math.min(PANEL_MAX_H, uniformW / PANEL_ASPECT - chrome)));
     // A square is as wide as it is tall, so a clamped height narrows the box.
-    const boxW = square ? panelH : panelW;
+    const boxW = square && !laid ? panelH : uniformW;
+    // **A ratio unit is as wide as the aspect says, or as wide as there is
+    // room for.** Dividing the free width among the ratios alone would spend
+    // every spare pixel on the strips: three towers in a 980 pixel pane came
+    // out 401 wide and 260 tall each, which is not a tower, it is a squat box
+    // with a rectangle in it. The preferred width comes off the height and the
+    // fit is the ceiling, so a wide pane leaves white space to the right and a
+    // narrow one closes up.
+    const units = laid ? laid.ratios.reduce((a, b) => a + b, 0) : 0;
+    const unit = laid
+        ? Math.min(panelH * TOWER_ASPECT, free(n) / units)
+        : 0;
+    const widthOf = (k) => (laid ? unit * laid.ratios[k] : boxW);
 
     const grids = [];
+    let left = AXIS_LEFT;
     for (let i = 0; i < n; i++) {
         const r = Math.floor(i / perRow);
-        const c = i % perRow;
+        if (i % perRow === 0) left = AXIS_LEFT;
+        const width_ = widthOf(i);
         grids.push({
-            left: AXIS_LEFT + c * (boxW + GAP_X),
+            left,
             top: PAD_TOP + r * (panelH + AXIS_BOTTOM + GAP_Y),
-            width: boxW,
+            width: width_,
             height: panelH,
         });
+        left += width_ + GAP_X;
     }
     const bottom = Math.max(...grids.map((g) => g.top + g.height));
     return {
@@ -526,12 +645,27 @@ export function panelLayout(count, square, width, rightPad = 0) {
  *
  * A thin read of the document over `panelLayout`: panel count, whether every
  * panel is equal aspect, and whether any is a grid panel needing a colorbar.
+ *
+ * **A document holding a tower is drawn in one row, split by ratio**, which is
+ * the one arrangement the default two-up grid cannot express. Two facts make
+ * it necessary. The panels are a program read left to right, gross then each
+ * cession stage, and a tower with its Lee curve beside it is one reading, so a
+ * row break falls in the middle of a sentence. And a tower is a strip while a
+ * curve wants room, so the row is split by what each panel has to show rather
+ * than evenly. The matplotlib renderer does the same and widens the figure to
+ * suit; here the width is given and the panels take their share of it.
  */
 export function documentLayout(doc, width) {
     const panels = (doc && doc.panels) || [];
     const square = panels.length > 0 && panels.every((p) => p.aspect === 'equal');
-    const grid = panels.some((p) => p.kind !== 'xy');
-    return panelLayout(panels.length, square, width, grid ? COLORBAR_W : 0);
+    const grid = panels.some((p) => p.kind === 'heatmap' || p.kind === 'surface');
+    const plan = panels.some((p) => p.kind === 'tower')
+        ? {
+            ratios: panels.map((p) => (p.kind === 'tower' ? TOWER_WIDTH : CURVE_WIDTH)),
+            tall: true,
+        }
+        : null;
+    return panelLayout(panels.length, square, width, grid ? COLORBAR_W : 0, plan);
 }
 
 // ---- the 2-D path ------------------------------------------------------
@@ -1249,6 +1383,236 @@ function panelTitle(doc, panel, inverted) {
 }
 
 /**
+ * How many rows of label a rectangle `px` pixels tall has room for.
+ *
+ * `_chartdoc._rows_that_fit`, in CSS pixels rather than points, so the same
+ * arithmetic decides what is drawn as decides whether it fits.
+ */
+function rowsThatFit(px) {
+    return Math.floor(px / (ROW_PITCH * BLOCK_LABEL_PX));
+}
+
+/**
+ * As much of a block's label stack as its rectangle has room for.
+ *
+ * The headline comes first and the annotation lines follow in document order,
+ * which is the emitter's canonical order, so a block cut short loses its least
+ * important line rather than an arbitrary one.
+ *
+ * Both dimensions are tested and a line that does not fit is **dropped rather
+ * than spilled**, which is `_chartdoc._label_block`'s rule and its reasoning:
+ * on a tower the rectangle is the reading, so a line lying across a neighbour
+ * asserts a term that block does not carry. A narrow layer therefore keeps its
+ * name and loses its terms, which the reader can still get from the tooltip.
+ *
+ * @param {object} block a TowerBlock.
+ * @param {number} w the rectangle's width in pixels.
+ * @param {number} h its height in pixels.
+ * @returns {Array<string>} the lines to draw, possibly none.
+ */
+function blockLabel(block, w, h) {
+    const rows = rowsThatFit(h);
+    if (rows < 1) return [];
+    const room = Math.floor(w / (CHAR_WIDTH * BLOCK_LABEL_PX));
+    const headline = block.label || '';
+    // The headline names the block. An annotation floating in an unnamed
+    // rectangle is worse than a blank one, so if the name will not fit,
+    // nothing does.
+    if (headline && headline.length > room) return [];
+    const lines = (headline ? [headline] : []).concat(
+        (block.label_lines || []).filter((line) => line.length <= room));
+    return lines.slice(0, rows);
+}
+
+/**
+ * Realize one 'tower' panel: its blocks as rectangles over a quantity axis.
+ *
+ * A port of `_chartdoc._render_tower_panel`, and the semantic decisions are
+ * its: width is share and the placement axis therefore carries no ticks, since
+ * a "0.6" tick beside a rectangle whose own label says "60% po" is the same
+ * fact twice and invites the axis to be read as a quantity; and the quantity
+ * axis is ticked at the panel's own marks, because a tower is read at its
+ * breaks rather than on a continuous scale. That is the prior art's move and
+ * it is what makes the attachments legible without a label per block repeating
+ * them.
+ *
+ * Realization differs freely, and twice. The blocks are one ECharts `custom`
+ * series rather than a stack of `fill_betweenx` calls, which is what lets the
+ * whole tower carry one item tooltip. And the tooltip holds the **full** label
+ * stack whatever the rectangle had room for, which is this renderer's
+ * advantage over a static figure: nothing a narrow layer dropped is lost, it
+ * is one hover away.
+ *
+ * Parameters
+ * ----------
+ * doc, panel, axes, view
+ *     As `xyPanel`.
+ * i : number
+ *     The panel's index, which is its grid, axis and series index.
+ *
+ * Returns
+ * -------
+ * object or null
+ *     The realized panel, or null when the document put no block on it.
+ */
+function towerPanel(doc, panel, i, axes, view) {
+    const blocks = (doc.blocks || []).filter((b) => b.panel_id === panel.id);
+    if (!blocks.length) return null;
+    const xAxis = axes[panel.x_axis] || {};
+    const yAxis = axes[panel.y_axis] || {};
+    const yScale = axisScale(yAxis, view.logY);
+    const spanned = [
+        Math.min(...blocks.map((b) => b.y0)),
+        Math.max(...blocks.map((b) => b.y1)),
+    ];
+    const yWindow = axisWindow(yAxis, { full: view.fullRange, uncapped: false })
+        || spanned;
+    const xWindow = (Array.isArray(xAxis.suggested_range) ? xAxis.suggested_range
+        : [0, 1]);
+
+    // Alternating shade is counted over the blocks of one role rather than
+    // over all of them, so consecutive layers alternate and a retention
+    // between two of them does not break the alternation.
+    const seen = {};
+    const fills = blocks.map((b) => {
+        const ink = BLOCK_INK[b.role] || { color: 7, alpha: [0.3] };
+        const shade = seen[b.role] || 0;
+        seen[b.role] = shade + 1;
+        return {
+            fill: ink.color == null ? 'none'
+                : fade(seriesColor(ink.color), ink.alpha[shade % ink.alpha.length]),
+            dashed: Boolean(ink.dashed),
+        };
+    });
+
+    const edge = houseStyle().grid_color || '#dee2e6';
+    const series = [{
+        type: 'custom',
+        name: panel.title || panel.id,
+        xAxisIndex: i,
+        yAxisIndex: i,
+        // One datum per block, as the rectangle's two corners. `checkDrawable`
+        // reads `data[k][1]`, so the corners are also what says this series
+        // drew something.
+        data: blocks.map((b) => [b.x0, b.y0, b.x1, b.y1]),
+        tooltip: {
+            trigger: 'item',
+            formatter: (p) => {
+                const b = blocks[p.dataIndex] || {};
+                const head = b.label ? `<b>${b.label}</b>` : b.role;
+                return [head, ...(b.label_lines || [])].join('<br>');
+            },
+        },
+        renderItem: (params, apiRef) => {
+            const k = params.dataIndex || 0;
+            const b = blocks[k];
+            if (!b) return null;
+            const lo = apiRef.coord([b.x0, b.y0]);
+            const hi = apiRef.coord([b.x1, b.y1]);
+            const x = Math.min(lo[0], hi[0]);
+            const y = Math.min(lo[1], hi[1]);
+            const w = Math.abs(hi[0] - lo[0]);
+            const h = Math.abs(hi[1] - lo[1]);
+            const { fill, dashed } = fills[k];
+            // The three edges a block is always entitled to, walked from the
+            // top left down, across the bottom and back up to the top right.
+            // An `open_top` block stops there: the band continues past the
+            // frame and a closed rectangle would assert a limit the contract
+            // has not got. Closing the ring is what draws the top.
+            const ring = [[x, y], [x, y + h], [x + w, y + h], [x + w, y]];
+            if (!b.open_top) ring.push([x, y]);
+            const children = [{
+                type: 'rect',
+                shape: { x, y, width: w, height: h },
+                style: { fill, lineWidth: 0 },
+                silent: true,
+            }, {
+                type: 'polyline',
+                shape: { points: ring },
+                style: {
+                    stroke: edge,
+                    lineWidth: 0.8,
+                    lineDash: dashed ? [4, 3] : null,
+                    fill: null,
+                },
+                silent: true,
+            }];
+            const lines = blockLabel(b, w, h);
+            if (lines.length) {
+                children.push({
+                    type: 'text',
+                    style: {
+                        text: lines.join('\n'),
+                        x: x + w / 2,
+                        y: y + h / 2,
+                        textAlign: 'center',
+                        textVerticalAlign: 'middle',
+                        fontSize: BLOCK_LABEL_PX,
+                        lineHeight: ROW_PITCH * BLOCK_LABEL_PX,
+                        fill: houseStyle().text_color || '#212529',
+                    },
+                    silent: true,
+                });
+            }
+            return { type: 'group', children };
+        },
+    }];
+
+    // The panel's marks, as the quantity axis' ticks. Distinct positions, so a
+    // document that marks one boundary twice labels it once.
+    const mine = (view.refLines === false ? [] : doc.marks || [])
+        .filter((m) => m.panel_id === panel.id);
+    const ticks = [...new Set(mine.map((m) => m.at))].sort((a, b) => a - b);
+    const named = new Map(mine.filter((m) => m.label).map((m) => [m.at, m.label]));
+
+    const y = axisOption(yAxis, i, {
+        scale: yScale,
+        window: yWindow,
+        floor: decadeFloor([blocks.map((b) => b.y0), blocks.map((b) => b.y1)]),
+        formatter: labelFormatter(yAxis, yScale),
+        nameGap: 46,
+    });
+    if (ticks.length) {
+        // `interval` and an explicit tick list are two answers to one question,
+        // and ECharts takes the interval when both are set.
+        delete y.interval;
+        y.axisLabel = {
+            ...y.axisLabel,
+            customValues: ticks,
+            formatter: (v) => named.get(v) ?? fmt(v),
+        };
+    }
+
+    return {
+        series,
+        legend: [],
+        // The placement axis is drawn as a bare frame: no name, no ticks, no
+        // grid. See the note above on why a share gets no scale.
+        xAxis: axisStyle({
+            type: 'value',
+            gridIndex: i,
+            name: '',
+            min: xWindow[0],
+            max: xWindow[1],
+            axisLabel: { show: false },
+            splitLine: { show: false },
+        }),
+        yAxis: y,
+        readAxis: panel.read_axis || 'y',
+        title: panelTitle(doc, panel, false),
+        // A tower declares no loss window and takes no zoom: it bands a program
+        // rather than drawing a distribution, so there is no gesture along it
+        // and nothing for the document's shared window to be taken from.
+        xWindow: null,
+        zoom: {},
+        xUnit: xAxis.unit,
+        yUnit: yAxis.unit,
+        xName: xAxis.label,
+        yName: yAxis.label,
+    };
+}
+
+/**
  * One mark as a markLine entry.
  *
  * The label side is the renderer's: the document says where a mark sits and
@@ -1621,11 +1985,12 @@ function xyOption(doc, opts, view, realized) {
     };
     const ctx = { colorOf };
 
-    const realizedPanels = panels.map((panel, i) => (
-        realized[i] === 'xy'
-            ? xyPanel(doc, panel, i, axes, view.forPanel(panel.id), opts.zoom, ctx)
-            : heatmapPanel(doc, panel, i, axes, view.forPanel(panel.id), box.grids[i])
-    )).filter(Boolean);
+    const realizedPanels = panels.map((panel, i) => {
+        const pv = view.forPanel(panel.id);
+        if (realized[i] === 'xy') return xyPanel(doc, panel, i, axes, pv, opts.zoom, ctx);
+        if (realized[i] === 'tower') return towerPanel(doc, panel, i, axes, pv);
+        return heatmapPanel(doc, panel, i, axes, pv, box.grids[i]);
+    }).filter(Boolean);
     if (!realizedPanels.length) return null;
 
     // The flat series list, plus which panel each entry came from. The tooltip
@@ -1691,7 +2056,14 @@ function xyOption(doc, opts, view, realized) {
         grid: box.grids.map((g, i) => ({
             ...g,
             containLabel: false,
-            tooltip: { axisPointer: { axis: (realizedPanels[i] || {}).readAxis || 'x' } },
+            // A tower is interrogated per block rather than along an axis: the
+            // answer is the layer under the cursor and its terms, not a
+            // coordinate the whole panel shares. The trigger is set on the
+            // grid because it is a property of the panel, and the series
+            // carries the formatter that says what a block reads.
+            tooltip: realized[i] === 'tower'
+                ? { trigger: 'item' }
+                : { axisPointer: { axis: (realizedPanels[i] || {}).readAxis || 'x' } },
         })),
         title: realizedPanels.map((p, i) => ({
             text: p.title, left: box.grids[i].left, top: box.grids[i].top - 24,

@@ -4,6 +4,47 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a152
+
+**[Tower-Panel] the chart adapter learns the tower, and the SPA draws charts
+again.** `aggregate` a349 bumped `CHART_IR_VERSION` from 2 to 3 for the new
+`ChartDoc.blocks` and the `'tower'` panel kind, and this app pinned 2 and
+refused *every* document from a later version, so from a349 until this bump it
+drew no charts at all. That window was declared in the library plan and is now
+closed. The pin moves to 3 in `chartdoc-to-echarts.js`, in the smoke harness
+and in the `ir_version` canary in `tests/test_objects.py`.
+
+Added with it, the realization of a tower panel: a reinsurance program as a
+band of labeled rectangles over a quantity axis, filled by block role (a placed
+layer in the house primary with alternating shade, retention and
+co-participation in grey, a gap as an absence with no fill and a dashed edge),
+an unlimited layer drawn without a top edge, and the placement axis left bare
+because width is share and carries no reading. A block shows as much of its
+label stack as its rectangle has room for and drops the rest rather than
+spilling it across a neighbour; the tooltip carries the whole stack, which is
+this renderer's advantage over the static figure. A tower is read at its breaks,
+so the panel's marks become the ticks of its quantity axis, as the matplotlib
+renderer does; the reference-lines button takes them off.
+
+Three changes around it, each visible on charts that have nothing to do with
+towers:
+
+- A document holding a tower lays out in **one row** split by ratio, a tower
+  against a curve beside it at 1:2, the row taller than the house landscape
+  cell and each strip as wide as that height allows. `panelLayout` takes an
+  optional plan for this; every other document lays out exactly as before.
+- The **zoom out** is offered only where an axis' full extent actually reaches
+  past the window it is drawn in. Declaring `full_range` is not the same as
+  having room in it, and a tower's quantity axis declares the same pair twice.
+- The **realization choice** (curves / flat / 3D) is offered only where a
+  *panel* declares more than one kind, instead of on the set of kinds the
+  document happens to hold. A structure document with its Lee curves was
+  offering to redraw itself as "tower" or "xy", which is two panels with one
+  kind each and no choice anywhere.
+
+No behavior change for any existing chart: the captured fixtures are
+regenerated and every reading, window, ladder and mark count is unmoved.
+
 ## 1.0.0a151
 
 **[Reins-Leaves-Swap] the Reinsurance Summary and Stats leaves swap

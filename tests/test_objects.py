@@ -1107,13 +1107,13 @@ def test_bivariate_chart_document(client):
     doc = r1.json()
     # A deliberate canary on a literal, not a read of the library's own
     # constant, which would make the assertion tautological. It has now fired
-    # twice and been right both times, so it earns its keep: version 2
-    # (aggregate 1.0.0a238) lets a series carry a coordinate as a lattice,
-    # `(start, step, count)`, which a reader that does not know the field
-    # cannot draw at all. When this fails, read the CHART_IR_VERSION note
-    # upstream and decide what the adapter owes the new version before
-    # changing the number.
-    assert doc["ir_version"] == 2
+    # three times and been right every time, so it earns its keep: version 3
+    # (aggregate 1.0.0a349) adds ``ChartDoc.blocks`` and the 'tower' panel
+    # kind, whose content is blocks rather than series, so a reader that does
+    # not know the field draws an empty panel. When this fails, read the
+    # CHART_IR_VERSION note upstream and decide what the adapter owes the new
+    # version before changing the number.
+    assert doc["ir_version"] == 3
     assert doc["name"] == "joint_surface"
     assert [p["kind"] for p in doc["panels"]] == ["surface"]
     # Whether the height may be read on a log scale is declared by the z AXIS,
