@@ -2587,6 +2587,8 @@ def _chart_options(
     window: float | None,
     detail: int | None,
     encoding: str | None,
+    lee: bool | None,
+    annotate: str | None,
     settings: Settings,
 ) -> dict:
     """The chart parameters the caller actually set, as emitter options.
@@ -2600,6 +2602,12 @@ def _chart_options(
         Target cells per axis after the display reduction.
     encoding : str or None
         One of :data:`ChartEncoding`.
+    lee : bool or None
+        Draw the quantile curve beside each tower of the structure chart.
+    annotate : str or None
+        Comma-separated annotation fields for the structure chart's layer
+        labels. The empty string is a real request, for bare rectangles, and
+        is not the same as the parameter being absent.
     settings : Settings
         Live config, read for ``max_chart_detail``.
 
@@ -2633,6 +2641,11 @@ def _chart_options(
     ``window`` is on a half-step lattice because that is what the SPA's spinner
     walks, and because a continuum of depths would make the chart cache and the
     ETag answer for a parameter nobody can reproduce by hand.
+
+    ``annotate`` is **not** validated here. The emitter owns the vocabulary and
+    raises ``ValueError`` naming the whole of it for a word it does not know,
+    which the route already turns into a 422; a copy of the list here would be
+    a second place to keep it, and the first one to go stale.
     """
     options: dict = {}
     if window is not None:
@@ -2655,6 +2668,15 @@ def _chart_options(
         options["detail"] = detail
     if encoding is not None:
         options["encoding"] = encoding
+    if lee is not None:
+        options["lee"] = lee
+    if annotate is not None:
+        # ``annotate=`` is bare rectangles, a real request and not an absent
+        # one, so the split is guarded rather than the string being falsy
+        # checked: `"".split(",")` is `['']`, one field named nothing.
+        options["annotate"] = tuple(
+            field.strip() for field in annotate.split(",") if field.strip()
+        )
     return options
 
 
@@ -2684,6 +2706,28 @@ def get_chart_document(
         description=(
             "Wire encoding of the grid block: f32b64 (default upstream), "
             "f64b64, u16log12b64, or json. Grid charts only."
+        ),
+    ),
+    lee: bool | None = Query(
+        None,
+        description=(
+            "Draw the quantile curve of the distribution each tower is read "
+            "against beside it, sharing its loss axis, so every boundary "
+            "reads off as a return period. Structure chart only, and it "
+            "needs a built object: asked of one that has not been updated it "
+            "is a 422 rather than a silently plainer chart."
+        ),
+    ),
+    annotate: str | None = Query(
+        None,
+        description=(
+            "Comma-separated annotation fields beside each layer, any subset "
+            "of geometry, premium, el, lr, rol, lol, sd, pr_attach, "
+            "pr_detach, reinstatements, cede, rendered in that order whatever "
+            "order they are given. Empty for bare rectangles. A field whose "
+            "source is absent is omitted, so one selection serves an "
+            "un-updated object, a built one and a priced one. Structure "
+            "chart only."
         ),
     ),
     request: Request = None,
@@ -2721,19 +2765,26 @@ def get_chart_document(
     ``available_charts`` check below. That check stays, because it is what
     turns an unavailable name into a 404 that names what *is* available.
 
-    The three query parameters (``dev/plan-3d-plot.md`` section 3) are the
-    knob, and only the knob: which grid a caller gets is the library's
-    decision, taken before the reduction, and this route neither crops nor
-    re-reduces what it is handed. Cropping downstream cannot recover
+    ``window``, ``detail`` and ``encoding`` (``dev/plan-3d-plot.md`` section 3)
+    are the grid knob, and only the knob: which grid a caller gets is the
+    library's decision, taken before the reduction, and this route neither
+    crops nor re-reduces what it is handed. Cropping downstream cannot recover
     resolution that was already averaged away, which is the whole argument for
     plumbing the parameters upstream instead of doing the work here: on one
     test surface the same quantile window applied to the fine lattice leaves
     232 cells, and applied to the emitted display grid leaves 8, starting in
     the wrong place.
 
-    They go in the URL rather than a header because they change the bytes, so
-    they belong in the thing the ETag answers for, and a URL that names its own
-    resolution is shareable and shows up in a log.
+    ``lee`` and ``annotate`` are the structure chart's, added at a154. They
+    are content options in the sense the library's ``charts/__init__``
+    docstring allows, which is the only kind this route carries: what the
+    document *says*, never how it is drawn. Without them the Lee curves the
+    emitter offers could not be asked for at all, and every structure document
+    would arrive at the library's default label selection.
+
+    They all go in the URL rather than a header because they change the bytes,
+    so they belong in the thing the ETag answers for, and a URL that names its
+    own resolution is shareable and shows up in a log.
 
     A chart whose emitter takes none of them says so with a 422 naming what was
     sent. Silently dropping an option the caller asked for would return a grid
@@ -2746,8 +2797,8 @@ def get_chart_document(
             status_code=404,
             detail=f"no chart {name!r} for this object; available: {available}",
         )
-    options = _chart_options(window, detail, encoding, settings)
-    key = (oid, name, window, detail, encoding)
+    options = _chart_options(window, detail, encoding, lee, annotate, settings)
+    key = (oid, name, window, detail, encoding, lee, annotate)
     hit = _chart_cache.get(key)
     if hit is not None:
         etag, body = hit
@@ -2766,8 +2817,10 @@ def get_chart_document(
                 status_code=422,
                 detail=(
                     f"chart {name!r} takes none of "
-                    f"{', '.join(sorted(options))}: those apply to the grid "
-                    "charts, whose display lattice is chosen at emission"
+                    f"{', '.join(sorted(options))}: window, detail and "
+                    "encoding apply to the grid charts, whose display "
+                    "lattice is chosen at emission, and lee and annotate to "
+                    "the structure chart"
                 ),
             ) from exc
         except ValueError as exc:

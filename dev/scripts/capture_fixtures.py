@@ -46,6 +46,13 @@ CASES = {
               "occurrence net of 500 xs 500 poisson"),
 }
 
+# One more document for a chart that takes a content option, filed under a
+# label of its own so the smoke test replays both readings. `lee` is the only
+# one today, and it is the only way a **mixed** document, tower panels beside
+# xy ones, reaches that harness at all: every other capture is one panel kind
+# throughout. Each entry is (case, chart, label, params).
+VARIANTS = [("reins", "structure", "structure+lee", {"lee": "true"})]
+
 # The bounds envelope is not on an object's chart list: it is a document about a
 # `Bounds`, reached through the bounds route with a premium. Captured under this
 # case so the band, the equal-aspect square and the value-carrying cloud are all
@@ -60,12 +67,14 @@ def main() -> None:
     from aggregate_api.app import create_app
 
     out: dict[str, dict] = {}
+    oids: dict[str, str] = {}
     with TestClient(create_app()) as client:
         for case, decl in CASES.items():
             built = client.post("/v1/objects", json={"decl": decl})
             built.raise_for_status()
             body = built.json()
             oid = body["id"]
+            oids[case] = oid
             names = (body.get("capability") or {}).get("charts") or []
             entry = {"build": body, "charts": {}}
             for name in names:
@@ -73,6 +82,14 @@ def main() -> None:
                 entry["charts"][name] = r.json() if r.status_code == 200 else None
             out[case] = entry
             print(f"{case:11s} kind={body['kind']:<11s} charts={names}")
+
+        for case, name, label, params in VARIANTS:
+            if case not in oids or name not in out[case]["charts"]:
+                print(f"{label:11s} skipped: {case} publishes no {name!r}")
+                continue
+            r = client.get(f"/v1/objects/{oids[case]}/chart/{name}", params=params)
+            out[case]["charts"][label] = r.json() if r.status_code == 200 else None
+            print(f"{label:11s} {case}/{name} {params} status={r.status_code}")
 
         built = out[ENVELOPE["case"]]["build"]
         premium = round(ENVELOPE["load"] * float(built["mean"]))

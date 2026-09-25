@@ -1271,12 +1271,78 @@ def test_chart_parameters_refused_by_a_chart_that_takes_none(client):
     assert client.get(f"/v1/objects/{oid}/chart/agg").status_code == 200
 
 
+_STRUCTURE = ("agg CH.Struct 5 claims 100 xs 0 sev lognorm 10 cv .75 "
+              "occurrence net of 15 xs 5 poisson aggregate net of 20 xs 0")
+
+
+def test_the_structure_chart_takes_lee_and_annotate(client):
+    """The two content options the tower emitter offers reach it.
+
+    ``lee`` is the one that has to be a request parameter rather than a
+    reading: the quantile curves are *panels*, and the document does not carry
+    them until the emitter is asked for them, so no amount of client-side work
+    on the plain document could produce them.
+    """
+    oid = client.post("/v1/objects", json={"decl": _STRUCTURE}).json()["id"]
+    url = f"/v1/objects/{oid}/chart/structure"
+
+    plain = client.get(url).json()
+    assert [p["kind"] for p in plain["panels"]] == ["tower", "tower", "tower"]
+
+    lee = client.get(url, params={"lee": True}).json()
+    # One curve beside each cession stage, sharing that tower's loss axis, and
+    # the gross slab keeps its own company.
+    assert [p["kind"] for p in lee["panels"]] == [
+        "tower", "tower", "xy", "tower", "xy"]
+    for tower, curve in (("occ", "occ_lee"), ("agg", "agg_lee")):
+        panels = {p["id"]: p for p in lee["panels"]}
+        assert panels[tower]["y_axis"] == panels[curve]["y_axis"]
+    # A different document, so a different hash: the parameter changes the
+    # bytes, which is why it belongs in the URL the ETag answers for.
+    assert lee["hash"] != plain["hash"]
+
+    # `annotate` selects each layer's label stack, and the empty selection is a
+    # real request for bare rectangles rather than an absent parameter. Layers
+    # only: a retention and the gross slab describe themselves whatever is
+    # selected, and the canonical form omits an empty tuple entirely.
+    def layer_lines(params):
+        blocks = client.get(url, params=params).json()["blocks"]
+        return [b.get("label_lines") for b in blocks if b["role"] == "layer"]
+
+    assert all(lines for lines in layer_lines({"annotate": "el"}))
+    assert not any(lines for lines in layer_lines({"annotate": ""}))
+
+
+def test_an_unknown_annotate_field_is_a_422_naming_the_vocabulary(client):
+    """The emitter owns the vocabulary, so the route does not copy it."""
+    oid = client.post("/v1/objects", json={"decl": _STRUCTURE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/chart/structure",
+                   params={"annotate": "geometry,profit"})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert "profit" in detail and "pr_attach" in detail
+
+
+def test_the_grid_charts_do_not_take_the_tower_options(client):
+    """And the refusal names which parameters belong to which charts."""
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    refused = client.get(f"/v1/objects/{oid}/chart/agg", params={"lee": True})
+    assert refused.status_code == 422
+    assert "lee" in refused.json()["detail"]
+    # And the converse, which is what the widened message is for.
+    struct = client.post("/v1/objects", json={"decl": _STRUCTURE}).json()["id"]
+    other = client.get(f"/v1/objects/{struct}/chart/structure",
+                       params={"detail": 64})
+    assert other.status_code == 422
+    assert "detail" in other.json()["detail"]
+
+
 def test_chart_parameters_reach_the_openapi_schema(client):
     """The knob is discoverable, with its bounds, from /openapi.json."""
     schema = client.get("/openapi.json").json()
     params = schema["paths"]["/v1/objects/{oid}/chart/{name}"]["get"]["parameters"]
     by_name = {p["name"]: p for p in params}
-    assert {"window", "detail", "encoding"} <= set(by_name)
+    assert {"window", "detail", "encoding", "lee", "annotate"} <= set(by_name)
     window = by_name["window"]["schema"]
     # anyOf, because the parameter is optional: the bounds sit on the numeric
     # branch and the other branch is null.

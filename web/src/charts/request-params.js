@@ -38,23 +38,32 @@
  * Returns
  * -------
  * object
- *     `{window}` when this chart holds a finite depth, `{}` otherwise.
+ *     `{window}` when this chart holds a finite depth and `{lee}` when the
+ *     reader has asked for the quantile curves, either, both or neither.
  *
  * Notes
  * -----
- * Only when the reader has moved the box off the library's own default.
+ * Only when the reader has moved a control off the library's own default.
  * Sending a parameter to say "do what you would have done" would put the app's
  * idea of the default into the URL, the cache key and the ETag, and the first
  * time the library changed its mind the app would be overriding it without
- * anybody deciding to.
+ * anybody deciding to. So `lee` travels only when it is on: `lee=false` is the
+ * emitter's own default said back to it.
  *
- * Zero is a depth like any other (it keeps the whole grid), so the test is
+ * Zero is a depth like any other (it keeps the whole grid), so that test is
  * finiteness rather than truthiness.
+ *
+ * Both are keyed by chart name for the reason the module header gives: a
+ * parameter held flat is attached to every fetch, and every emitter that does
+ * not take it answers 422. That cost every 2-D chart on every object at a91.
  */
 export function chartParamsFor(view, chartName) {
-    const windows = (view && view.windows) || {};
-    const depth = windows[chartName];
-    return Number.isFinite(depth) ? { window: depth } : {};
+    const depth = ((view && view.windows) || {})[chartName];
+    const lee = ((view && view.lee) || {})[chartName];
+    return {
+        ...(Number.isFinite(depth) ? { window: depth } : {}),
+        ...(lee ? { lee: true } : {}),
+    };
 }
 
 /**
@@ -83,6 +92,33 @@ export function chartParamsFor(view, chartName) {
 export function windowsWith(windows, chartName, depth) {
     const next = { ...(windows || {}) };
     if (Number.isFinite(depth)) next[chartName] = depth;
+    else delete next[chartName];
+    return next;
+}
+
+/**
+ * The Lee map with one chart's curves asked for, or dropped.
+ *
+ * `windowsWith`'s sibling, and off for the same reason auto is: what is on
+ * disk is exactly the set of charts a reader has an opinion about.
+ *
+ * Parameters
+ * ----------
+ * lee : object
+ *     The map as held. Not mutated.
+ * chartName : str
+ *     Which chart the reader pressed the button on.
+ * on : bool
+ *     Whether the quantile curves are wanted.
+ *
+ * Returns
+ * -------
+ * object
+ *     A new map.
+ */
+export function leeWith(lee, chartName, on) {
+    const next = { ...(lee || {}) };
+    if (on) next[chartName] = true;
     else delete next[chartName];
     return next;
 }

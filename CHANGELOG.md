@@ -4,6 +4,48 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a154
+
+**[Structure-Lee] the chart route carries the structure chart's own two
+options, and a `quantiles` button on the Diagram pane presses one of them.**
+`GET /v1/objects/{id}/chart/{name}` gains `lee` and `annotate` beside the grid
+charts' `window`, `detail` and `encoding`. Both are content options, which is
+the only kind this route carries: what the document *says*, never how it is
+drawn.
+
+`lee` draws the quantile curve each tower is read against beside it, on the
+same loss axis, so every attachment and exhaustion point reads off as a return
+period. It had to be a request parameter rather than a reading: the curves are
+**panels**, and the emitter does not put them in the document until it is
+asked, so no amount of client-side work on the plain document could produce
+them. `annotate` selects which fields label each layer, any subset of
+`geometry, premium, el, lr, rol, lol, sd, pr_attach, pr_detach,
+reinstatements, cede`, rendered in that order whatever order they are given,
+with the empty selection a real request for bare rectangles. Unknown fields are
+a 422 naming the whole vocabulary, which is the emitter's message, not a copy
+of the list kept here to go stale.
+
+In the SPA the `quantiles` button sits beside the grid window box and for the
+same reason: both ask for a different document rather than reading the one on
+screen. It is held per chart, like the window, so it cannot ride along on a
+fetch for an emitter that does not take it, which is what darkened every 2-D
+chart at a91. The control strip is rebuilt on a refetch only when the panel set
+actually moved, so pressing this redraws the row of controls and typing in the
+window box does not have focus torn out of it.
+
+Two things fixed along the way, both found by replaying the new mixed document
+(tower panels beside curve panels, which nothing in the fixture set had
+before):
+
+- The offline chart harness asked the wrong reading about the zoom out. A Lee
+  panel beside a tower shares that tower's loss axis, which is sized exactly to
+  the program and has nothing to open, while the return period paired with its
+  probability axis runs from a ladder of 10^4 out to the 10^9 cap. The check
+  now composes the panel's other readings, as the log check already did.
+- `capture_fixtures.py` captures a second document for a chart that takes a
+  content option, under a label of its own. Without it the harness only ever
+  sees documents that are one panel kind throughout.
+
 ## 1.0.0a153
 
 **[Diagram-Leaf] Diagram takes the head of the Re row.** The group now reads

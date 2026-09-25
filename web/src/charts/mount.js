@@ -29,7 +29,7 @@ import {
 } from './chartdoc-to-echarts.js';
 import { stretchMode } from './color-stretch.js';
 import { fileStem, meshToGlb, meshToObj, meshToStl, surfaceMesh } from './mesh-export.js';
-import { chartParamsFor, migrateChartView, windowsWith } from './request-params.js';
+import { chartParamsFor, leeWith, migrateChartView, windowsWith } from './request-params.js';
 import { createSurfaceNav } from './surface-nav.js';
 import { loadSurface, readCamera, surfaceOverrides } from './surface.js';
 import { stampTouchCoordinates } from './touch.js';
@@ -437,7 +437,7 @@ function walkPositions(box, u) {
  * document. Sharing one number across charts is what stopped every 2-D chart
  * on every object at a91, `dev/plan-plot-2d-fix.md`.
  */
-function windowBox(chart, onWindow) {
+function windowBox(chart, onRefetch) {
     const wrap = el('label', { className: 'exhibit-window' }, 'window ');
     const input = el('input', {
         type: 'number', min: '0', max: '12', step: '0.5',
@@ -458,11 +458,45 @@ function windowBox(chart, onWindow) {
             const next = raw === '' ? null : Number(raw);
             if (raw !== '' && !(next >= 0 && next <= 12)) return;
             setView({ windows: windowsWith(view.windows, chart, next) });
-            onWindow();
+            onRefetch();
         }, 90);
     });
     wrap.appendChild(input);
     return wrap;
+}
+
+/**
+ * The Lee toggle: quantile curves beside each tower, which is a new request.
+ *
+ * A **request** and not a reading, which is why it sits beside the window box
+ * rather than in a panel's group. The curves are panels the document does not
+ * carry until the emitter is asked for them, so pressing this refetches; every
+ * other button on the strip reads a document already in hand.
+ *
+ * Held per chart, the same as the window, and for the same reason: a flat flag
+ * would ride along on every fetch and 422 every emitter that does not take it.
+ *
+ * @param {string} chart the registry name the flag is held against.
+ * @param {Function} onRefetch the strip's refetch hook.
+ */
+function leeToggle(chart, onRefetch) {
+    const on = Boolean((view.lee || {})[chart]);
+    const btn = el('button', {
+        type: 'button',
+        className: `exhibit-toggle${on ? ' active' : ''}`,
+        title: 'Draw the quantile curve each tower is read against beside it, '
+            + 'on the same loss axis, so every attachment and exhaustion point '
+            + 'reads off as a return period',
+        onClick: () => {
+            setView({ lee: leeWith(view.lee, chart, !on) });
+            // Straight away, not on the document coming back: the fetch is a
+            // round trip and a button that stays unpressed until it lands
+            // reads as one that did not take the press.
+            btn.classList.toggle('active', !on);
+            onRefetch();
+        },
+    }, 'quantiles');
+    return btn;
 }
 
 /**
@@ -474,10 +508,11 @@ function windowBox(chart, onWindow) {
  *     The chart document, read for which controls it declares.
  * hooks : object
  *     `onChange`, `onReset`, `walking` and `onWalk` are the strip's own
- *     actions; `onWindow` is null on a document nobody can refetch (the
- *     bounds envelope, drawn from a premium the reader typed), and `chart` is
- *     the registry name its number is held against, null alongside it;
- *     `onExport` and
+ *     actions; `onRefetch` is what the two controls that ask for a *different*
+ *     document call (the grid window and the tower's quantile curves), null on
+ *     a document nobody can refetch (the bounds envelope, drawn from a premium
+ *     the reader typed), and `chart` is the registry name both are held
+ *     against, null alongside it; `onExport` and
  *     `canExport` are the mesh writers, which act on the drawing rather than
  *     on the document and so are greyed rather than absent while there is no
  *     drawing to write.
@@ -634,7 +669,7 @@ const MESH_FORMATS = [
 ];
 
 function renderControls(doc, hooks) {
-    const { chart, onChange, onReset, onWindow, walking, onWalk, onExport,
+    const { chart, onChange, onReset, onRefetch, walking, onWalk, onExport,
             canExport, onSpaceMouse, register, width } = hooks;
     const offered = readings(doc);
     const row = el('div', { className: 'exhibit-controls' });
@@ -810,8 +845,17 @@ function renderControls(doc, hooks) {
         // page of controls away again: see `surface-nav.js` `NAV_DEFAULTS` for
         // what the puck does now, which is one setting for everyone.
         // The window, last, and a number rather than a toggle: it is the one
-        // control that is a new request rather than a new drawing.
-        if (onWindow) box.appendChild(windowBox(chart, onWindow));
+        // control on a relief that is a new request rather than a new drawing.
+        if (onRefetch) box.appendChild(windowBox(chart, onRefetch));
+    }
+
+    // The tower's own request, beside the grid's for the same reason: it does
+    // not read the document on screen, it asks for a different one. Offered on
+    // a document that holds a tower, which is the `windowBox` rule said of
+    // another panel kind: the button appears where the parameter applies, and
+    // the module needs no list of which charts take which knob.
+    if ((doc.panels || []).some((p) => p.kind === 'tower') && onRefetch) {
+        box.appendChild(leeToggle(chart, onRefetch));
     }
 
     // The realization control, last, per the house order: axis readings before
@@ -1506,7 +1550,7 @@ function draw(container, tools, host, doc, spec = null) {
             chart: spec ? spec.chart : null,
             onChange: () => { if (ready) onToggle(); },
             onReset: () => { if (ready) resetView(); },
-            onWindow: spec ? () => { if (ready) refetch(); } : null,
+            onRefetch: spec ? () => { if (ready) refetch(); } : null,
             walking: () => walking,
             onWalk: () => setWalk(!walking),
             // One entry point for every format the Download menu offers. The
@@ -1577,12 +1621,21 @@ function draw(container, tools, host, doc, spec = null) {
     }
 
     /**
-     * Fetch the document again, because the window is a request parameter.
+     * Fetch the document again, because two of the controls are request
+     * parameters rather than readings.
      *
-     * Not a client-side crop, and the difference is the point of the parameter:
-     * the library chooses the reduction from the window *before* it reduces, so
-     * a deeper window comes back finer rather than cropped. Cropping here could
-     * only throw away resolution that had already been averaged out.
+     * The grid window is not a client-side crop, and the difference is the
+     * point of the parameter: the library chooses the reduction from the window
+     * *before* it reduces, so a deeper window comes back finer rather than
+     * cropped. Cropping here could only throw away resolution that had already
+     * been averaged out. The tower's quantile curves are panels the emitter
+     * does not put in the document until it is asked, so there is nothing to
+     * crop or reveal client side at all.
+     *
+     * The strip is rebuilt only when the panel set actually moved. It always
+     * does under the Lee toggle, which adds a panel per cession stage, and it
+     * never does under the window box, where an unconditional rebuild would
+     * tear focus out of the number the reader is still typing in.
      */
     async function refetch() {
         if (!spec) return;
@@ -1593,8 +1646,10 @@ function draw(container, tools, host, doc, spec = null) {
             return;                     // the old document stays on screen
         }
         if (!ready || !next) return;
+        const moved = ((doc && doc.panels) || []).length !== (next.panels || []).length;
         doc = next;
         if (renderer) { renderer.dispose(); renderer = null; }
+        if (moved) renderTools();
         render();
     }
 

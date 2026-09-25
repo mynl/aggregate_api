@@ -241,9 +241,24 @@ function checkReadings(label, doc, base) {
             const wider = (a, b) => (Number.isFinite(a.max) && Number.isFinite(b.max)
                                      && a.max > b.max)
                 || (Number.isFinite(a.min) && Number.isFinite(b.min) && a.min < b.min);
-            if (o && !o.is3d
-                && !wider(o.xAxis[i], base.xAxis[i]) && !wider(o.yAxis[i], base.yAxis[i])) {
-                fail(P, 'full range is offered but neither window widened');
+            // Composed, for the reason `reaches` is: the button is offered on
+            // everything that can reach the position, so the claim is "some
+            // reading this panel offers takes it". The case that made this
+            // necessary is the Lee panel beside a tower, whose loss axis is
+            // sized exactly to the program it bands and so has nothing to
+            // open, while the return period paired with its probability axis
+            // runs from a ladder of 10^4 out to the 10^9 cap. Asking only the
+            // plain reading would demand the strip hide the button until
+            // another button was pressed.
+            const widens = composed.some((extra) => {
+                const open = only(panel.id, { ...extra, fullRange: true });
+                const shut = only(panel.id, extra);
+                return open && shut && !open.is3d && !shut.is3d
+                    && (wider(open.xAxis[i], shut.xAxis[i])
+                        || wider(open.yAxis[i], shut.yAxis[i]));
+            });
+            if (o && !o.is3d && !widens) {
+                fail(P, 'full range is offered but no reading widened a window');
             }
         }
         if (panel.reflect) {

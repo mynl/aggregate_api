@@ -932,16 +932,24 @@ one version bump each.
       `sample: true` as the wire spelling of the seed re-roll. Nothing owed
       upstream.
 
-- [ ] **The reinsurance structure diagram**: `dev/plan-structure-chart.md`,
+- [x] **The reinsurance structure diagram**: `dev/done/plan-structure-chart.md`,
       three bumps, consuming LIB a349 to a351 (the `'tower'` panel kind and
       `TowerBlock` on the chart IR, the `structure` emitter, the matplotlib
       renderer). The library half landed first and deliberately left the SPA
       drawing nothing at all, since it pinned `CHART_IR_VERSION = 2` and
       refuses anything later. **a152 [Tower-Panel]** closes that window and
-      draws a tower; **a153 [Diagram-Leaf]** puts it at the head of the Re row
-      and lights that group for a reinsured P&L. Still to come: the `lee`
-      parameter on the chart route, without which the Lee curves beside each
-      tower cannot be asked for at all.
+      draws a tower, with the one row ratio layout `panelLayout` had no notion
+      of; **a153 [Diagram-Leaf]** puts it at the head of the Re row and lights
+      that group for a reinsured P&L, which is the first time that group has
+      been live for one; **a154 [Structure-Lee]** carries `lee` and `annotate`
+      on the chart route, without which the Lee curves could not be asked for
+      at all. Three rulings and nine divergences in the plan's execution log,
+      the load bearing ones being the route parameters (the plan called the app
+      side "the translator plus one nav leaf" and there was no way to reach
+      half of what it described) and the layout, which is in the adapter and
+      not in `mount.js` where the plan looked for it. Nothing owed upstream.
+      **Not eyeballed**: every gate is green and the chart has not been looked
+      at in a browser.
 
 ## Raised with `aggregate` (not fixed here)
 

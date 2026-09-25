@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-    chartParamsFor, migrateChartView, windowsWith,
+    chartParamsFor, leeWith, migrateChartView, windowsWith,
 } from '../src/charts/request-params.js';
 
 test('a view holding no windows asks for nothing', () => {
@@ -56,6 +56,32 @@ test('setting a depth leaves the other charts alone', () => {
 test('auto deletes the key rather than storing a null', () => {
     assert.deepEqual(windowsWith({ joint_surface: 8 }, 'joint_surface', null), {});
     assert.deepEqual(windowsWith(null, 'joint_surface', null), {});
+});
+
+test('the quantile curves ride only on the chart they were asked for', () => {
+    // The `structure` emitter takes `lee`; nothing else does, and every other
+    // emitter answers 422 to a word it does not know. Same rule as the window,
+    // and the same bug it is guarding against.
+    const view = { lee: { structure: true } };
+    assert.deepEqual(chartParamsFor(view, 'structure'), { lee: true });
+    for (const chart of ['agg', 'port', 'reins', 'joint_surface']) {
+        assert.deepEqual(chartParamsFor(view, chart), {});
+    }
+});
+
+test('off is the emitter default said back to it, so it does not travel', () => {
+    assert.deepEqual(chartParamsFor({ lee: { structure: false } }, 'structure'), {});
+    assert.deepEqual(chartParamsFor({}, 'structure'), {});
+    assert.deepEqual(leeWith({ structure: true }, 'structure', false), {});
+    assert.deepEqual(leeWith(null, 'structure', true), { structure: true });
+    const held = { structure: true };
+    assert.deepEqual(leeWith(held, 'other', true), { structure: true, other: true });
+    assert.deepEqual(held, { structure: true });        // not mutated
+});
+
+test('a chart can hold a window and the curves at once', () => {
+    const view = { windows: { structure: 6 }, lee: { structure: true } };
+    assert.deepEqual(chartParamsFor(view, 'structure'), { window: 6, lee: true });
 });
 
 test('the migration drops the flat window and keeps what is still read', () => {

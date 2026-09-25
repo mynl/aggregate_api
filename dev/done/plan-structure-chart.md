@@ -193,3 +193,39 @@ landed library. The author ruled on each before any file was touched.
   reinsured P&L, and `test_the_structure_chart_tracks_a_cession`.
   `loadReinsPlot` became `loadReinsChart(chart)` rather than being copied: the
   two chart leaves in that group differ only in the name they mount.
+- a154 `[Structure-Lee]`: `lee` and `annotate` on the chart route, in the
+  option builder, the 422 message and the chart cache key; `leeWith` and the
+  `lee` branch of `chartParamsFor` in `request-params.js`; the `quantiles`
+  button in the control strip, beside the grid window box and on the same
+  refetch hook, which is renamed `onRefetch` since it now serves two controls.
+
+Three further divergences, all found while replaying the mixed document:
+
+- **The refetch did not rebuild the control strip.** Harmless for the window
+  box, whose panel set never moves, and wrong for the Lee toggle, which adds a
+  panel per cession stage. Rebuilt when the panel count moved, and only then:
+  an unconditional rebuild tears focus out of the number box the reader is
+  still typing in.
+- **The smoke harness asked the wrong reading about the zoom out.** A Lee panel
+  beside a tower shares the tower's loss axis, which has nothing to open, while
+  its paired return period runs from 10^4 to the 10^9 cap, so the button is
+  legitimately offered and the plain reading is the one place it does nothing.
+  The check now composes the panel's other readings, which is what the log
+  check beside it already did and for the same stated reason.
+- **`capture_fixtures.py` captures a `lee` variant.** Nothing in the fixture
+  set was a document of more than one panel kind, so the harness had no way to
+  see a tower and a curve in one picture. The two-stage case, two towers and
+  two curves, is covered by the hand-written document in
+  `web/test/tower-panel.test.js` rather than by another 46 MB of capture.
+
+### Left for the author
+
+The chart has not been eyeballed. Every gate is green, both suites and both
+harnesses, and the smoke test's own header says what that is worth: it proves
+the document reached the renderer in a drawable shape, not that the picture
+looks right. The three things most likely to want a tweak are the tower width
+(one ratio unit is `1.75 / 4.41` of the row height, `_chartdoc`'s figure
+arithmetic, capped by what the row can afford), the label point size at 10 CSS
+pixels with the fits or does not fit arithmetic hanging off it, and whether the
+boundary ticks want to be axis ticks as they are now or labeled rules on the
+plot.
