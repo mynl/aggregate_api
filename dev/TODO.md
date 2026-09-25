@@ -938,9 +938,10 @@ one version bump each.
       renderer). The library half landed first and deliberately left the SPA
       drawing nothing at all, since it pinned `CHART_IR_VERSION = 2` and
       refuses anything later. **a152 [Tower-Panel]** closes that window and
-      draws a tower. Still to come: the Diagram leaf at the head of the Re
-      row, and the `lee` parameter on the chart route, without which the Lee
-      curves beside each tower cannot be asked for at all.
+      draws a tower; **a153 [Diagram-Leaf]** puts it at the head of the Re row
+      and lights that group for a reinsured P&L. Still to come: the `lee`
+      parameter on the chart route, without which the Lee curves beside each
+      tower cannot be asked for at all.
 
 ## Raised with `aggregate` (not fixed here)
 

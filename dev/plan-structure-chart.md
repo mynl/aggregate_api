@@ -188,3 +188,8 @@ landed library. The author ruled on each before any file was touched.
 - a152 `[Tower-Panel]`: `CHART_IR_VERSION` 3, `towerPanel` in
   `chartdoc-to-echarts.js`, the one row ratio layout, the two `readings` gates,
   the harness literals, `web/test/tower-panel.test.js`, fixtures regenerated.
+- a153 `[Diagram-Leaf]`: the leaf at the head of the Re group in `nav.js`, its
+  LOADERS row in `main.js`, the `check-nav.mjs` expectations including the
+  reinsured P&L, and `test_the_structure_chart_tracks_a_cession`.
+  `loadReinsPlot` became `loadReinsChart(chart)` rather than being copied: the
+  two chart leaves in that group differ only in the name they mount.

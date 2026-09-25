@@ -4,6 +4,27 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a153
+
+**[Diagram-Leaf] Diagram takes the head of the Re row.** The group now reads
+Diagram | Plot | Summary | Stats | Density, and a reinsured aggregate opens on
+Diagram rather than on Plot. It leads because it answers what the program *is*
+before Plot answers what it does, and because the Re group's whole point is the
+cession entry box below the row: the tower is the most legible confirmation
+that a just-typed clause means what was intended. The a55 rule the change
+displaces (a picture first, then the tables that quantify it) survives it,
+since Diagram is a picture too.
+
+**A reinsured P&L reaches the Re group for the first time.** The leaf lights
+from the `structure` chart, and `chart_structure` is registered for `PnL` as
+well as `Aggregate`, unlike `chart_reins` and the `reins` exhibit. So an
+`xpnl` that cedes now shows the Re tab with Diagram live and the other four
+leaves dark, over a cession entry box that greys itself with "a cession applies
+to an aggregate". Deliberate: the program's shape is the most useful thing that
+object can say there. `check-nav.mjs` asserts both halves, since a leaf gated
+on `can_reins` instead of on its chart would have left the group live with
+every leaf dark.
+
 ## 1.0.0a152
 
 **[Tower-Panel] the chart adapter learns the tower, and the SPA draws charts

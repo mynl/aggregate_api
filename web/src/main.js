@@ -1272,6 +1272,9 @@ const LOADERS = {
     // library's own orientation. Under Summary since a151: it is the leaf's
     // own hint ("the program layer by layer"), and the daily read of a
     // program. The api transposed it and split it in two from round 3 to a71.
+    // First in the row since a153: the tower answers what the program *is*,
+    // before Plot answers what it does. See `nav.js` for the order's reasoning.
+    'reinsurance:diagram': () => loadReinsChart('structure'),
     'reinsurance:summary': () => loadReinsExhibit(0, ['reinsurance', 'summary']),
     // The `reins` exhibit's second block, which is `reins_summary_df` with
     // the library's caption and, on a portfolio, its row flags: the moment
@@ -1281,7 +1284,7 @@ const LOADERS = {
     'reinsurance:stats': () => loadReinsExhibit(1, ['reinsurance', 'stats']),
     'reinsurance:density': () => loadReinsFrame('reins_density_df',
         ['reinsurance', 'density']),
-    'reinsurance:plot': () => loadReinsPlot(),
+    'reinsurance:plot': () => loadReinsChart('reins'),
 
     'pricing:calibrate': () => showPricingLeaf('calibrate'),
     'pricing:standalone': () => showPricingLeaf('standalone'),
@@ -2321,18 +2324,28 @@ async function loadReinsDescription() {
 }
 
 /**
- * Reinsurance / Plot: the occurrence program, per claim and in total.
+ * The Re group's two chart leaves, which differ only in which chart they ask
+ * for.
  *
- * The document's own two panels, and they answer two different questions:
- * what the treaty does to a single claim, and what that does to the year. They
- * share no axis, because a per-claim loss and an annual aggregate are not the
- * same quantity and one window over both would say they were.
+ * `structure` under **Diagram** is the program's shape: a tower of layer
+ * rectangles per cession stage, with the gross slab beside them. It answers
+ * "what is the program", which is why it leads the row.
  *
- * A chart leaf, so the pill lights from `available_charts`, behind the
- * library's own cession predicate. Dark on a reinsured *portfolio* on purpose:
- * `chart_reins` is registered for `Aggregate` alone (see `nav.js`).
+ * `reins` under **Plot** is what the program does, on the document's own two
+ * panels, and they answer two different questions: what the treaty does to a
+ * single claim, and what that does to the year. They share no axis, because a
+ * per-claim loss and an annual aggregate are not the same quantity and one
+ * window over both would say they were.
+ *
+ * Both are chart leaves, so each pill lights from `available_charts` behind
+ * the library's own predicate, and the two predicates are not the same.
+ * `chart_reins` is registered for `Aggregate` alone, so Plot is dark on a
+ * reinsured portfolio and on a P&L; `chart_structure` takes a `PnL` too, so
+ * Diagram is the one leaf a reinsured P&L lights. See `nav.js`.
+ *
+ * @param {string} chart the chart name to mount.
  */
-async function loadReinsPlot() {
+async function loadReinsChart(chart) {
     if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
     const pane = $('pane-reinsurance');
     clearGrids('pane-reinsurance');
@@ -2343,7 +2356,7 @@ async function loadReinsPlot() {
     // fetch that failed says so in its own words.
     let failed = false;
     try {
-        reinsChart = await mountChart(host, { id: state.id, chart: 'reins' });
+        reinsChart = await mountChart(host, { id: state.id, chart });
     } catch { failed = true; }
     if (!reinsChart) {
         empty(pane);

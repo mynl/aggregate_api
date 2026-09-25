@@ -122,16 +122,37 @@ export const NAV_GROUPS = {
         // says so declaratively rather than special-casing the group name in
         // `groupAvailable`.
         alsoLive: 'canReins',
-        // Plot first since a55, so the row parallels Overview: the picture, then
-        // the tables that quantify it. Key order is row order, and `activeLeaf`
-        // lands on the first *live* leaf, so a reinsured aggregate now opens on
-        // Plot. A reinsured portfolio still opens on Summary, because
-        // `chart_reins` is registered for `Aggregate` alone. That was logged as
-        // the `replot` item; library a244 settled it the other way, as the
-        // author's decision for 1.0: a book's units cede on different stages,
-        // so a portfolio-level gross / ceded / net triple would have to pretend
-        // they cede on the same one. So the leaf is dark there on purpose.
+        // A picture first since a55, so the row parallels Overview: the
+        // picture, then the tables that quantify it. Key order is row order and
+        // `activeLeaf` lands on the first *live* leaf, so that is also what a
+        // reinsured aggregate opens on.
+        //
+        // **Diagram took the head of the row at a153**, ahead of Plot, and the
+        // a55 reasoning survives the change because Diagram is a picture too.
+        // It leads because it answers "what is the program" before Plot answers
+        // "what does it do", and because the Re group's whole point is the
+        // entry box below the row: the tower is the most legible confirmation
+        // that a just-typed cession means what was intended.
+        //
+        // The two chart leaves have different predicates, and the difference is
+        // deliberate on both sides. `chart_reins` is registered for `Aggregate`
+        // alone, so Plot is dark on a reinsured portfolio: that was logged as
+        // the `replot` item and library a244 settled it the other way, as the
+        // author's decision for 1.0, since a book's units cede on different
+        // stages and a portfolio-level gross / ceded / net triple would have to
+        // pretend they cede on the same one. `chart_structure` takes a `PnL`
+        // as well as an `Aggregate`, so a reinsured P&L lights Diagram and
+        // nothing else here, which is the first time this group has been live
+        // for a P&L at all. Kept, on the author's ruling of 2026-09-25: the
+        // program's shape is the most useful thing that object can say, and the
+        // entry box below already greys itself with its own reason.
         leaves: {
+            diagram: {
+                label: 'Diagram',
+                chart: 'structure',
+                why: 'needs a cession; add one below',
+                hint: 'the program as a tower: layers, shares, retention',
+            },
             plot: {
                 label: 'Plot',
                 chart: 'reins',

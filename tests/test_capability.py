@@ -180,6 +180,24 @@ def test_every_listed_chart_serves(client, label):
         assert r.status_code == 200, f"{label}/{name}"
 
 
+def test_the_structure_chart_tracks_a_cession(client):
+    """``structure`` is offered exactly where there is a program to draw.
+
+    The Re group's Diagram leaf gates on this name, so the two things that go
+    wrong quietly are both asserted. An object with no cession must not list
+    it, or the leaf lights and the route 404s. And a P&L that cedes must,
+    because ``chart_structure`` is registered for ``PnL`` as well as
+    ``Aggregate``, unlike every other leaf in that group: the diagram is the
+    one thing a reinsured P&L can show there.
+    """
+    lists = {label: _build(client, label)[1]["capability"]["charts"]
+             for label in DECLS}
+    assert "structure" in lists["agg_reins"]
+    assert "structure" in lists["xpnl"]
+    for label in ("agg", "port", "sev", "distortion", "bvagg", "pnl"):
+        assert "structure" not in lists[label], label
+
+
 def test_capability_reproduces_the_retired_tables(client):
     """The derived answer agrees with the hand tables the app used to carry.
 

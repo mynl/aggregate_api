@@ -73,6 +73,13 @@ const EXPECTED = {
     'economics:ledger': ['pnl', 'xpnl'],
     'economics:ratios': ['pnl', 'xpnl'],
     'economics:waterfall': ['xpnl'],
+    // The one leaf in this group with a wider gate than the rest, and the row
+    // that says so. `chart_structure` is registered for `PnL` as well as
+    // `Aggregate`, so a reinsured P&L lights Diagram; `chart_reins` and the
+    // `reins` exhibit are an aggregate's alone, so it lights nothing else
+    // here. That makes the Re group live for a P&L for the first time, which
+    // is checked below rather than being left to the grid.
+    'reinsurance:diagram': ['agg_reins', 'xpnl'],
     'reinsurance:summary': ['agg_reins'],
     'reinsurance:stats': ['agg_reins'],
     'reinsurance:density': ['agg_reins'],
@@ -181,7 +188,7 @@ for (const k of kinds) {
 // so it gets its own check rather than riding on the grid above.
 const GROSS_AGG = 'agg';
 if (caps[GROSS_AGG]) {
-    const anyLeaf = ['summary', 'stats', 'density', 'plot']
+    const anyLeaf = Object.keys(NAV_GROUPS.reinsurance.leaves)
         .some((key) => leafAvailable(caps[GROSS_AGG], 'reinsurance', key));
     if (anyLeaf) findings.push('reinsurance: a gross aggregate should have no leaves');
     if (!groupAvailable(caps[GROSS_AGG], 'reinsurance')) {
@@ -191,6 +198,25 @@ if (caps[GROSS_AGG]) {
 for (const k of ['port', 'pnl', 'sev', 'distortion', 'bvagg']) {
     if (caps[k] && groupAvailable(caps[k], 'reinsurance')) {
         findings.push(`reinsurance: ${k} cannot cede, so the group should be dark`);
+    }
+}
+// A reinsured P&L is the exception to the line above, and it arrived with the
+// Diagram leaf at a153: `chart_structure` takes a `PnL`, so the group is live
+// there with Diagram its only lit leaf. Worth asserting both halves. The one
+// that would go wrong quietly is the second: gating Diagram on `canReins`
+// instead of on its chart would leave the group live and every leaf dark, an
+// empty pane over an entry box that greys itself.
+if (caps.xpnl) {
+    if (!groupAvailable(caps.xpnl, 'reinsurance')) {
+        findings.push('reinsurance: a reinsured P&L should reach its Diagram');
+    }
+    if (activeLeaf(caps.xpnl, null, 'reinsurance') !== 'diagram') {
+        findings.push('reinsurance: a reinsured P&L should land on Diagram');
+    }
+    for (const key of ['plot', 'summary', 'stats', 'density']) {
+        if (leafAvailable(caps.xpnl, 'reinsurance', key)) {
+            findings.push(`reinsurance: ${key} is an aggregate's, not a P&L's`);
+        }
     }
 }
 
