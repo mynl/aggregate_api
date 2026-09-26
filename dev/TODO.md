@@ -948,8 +948,17 @@ one version bump each.
       side "the translator plus one nav leaf" and there was no way to reach
       half of what it described) and the layout, which is in the adapter and
       not in `mount.js` where the plan looked for it. Nothing owed upstream.
-      **Not eyeballed**: every gate is green and the chart has not been looked
-      at in a browser.
+      Eyeballed at a154 and three defects came back, all of them the library's
+      loss window; they were specified in `aggregate`'s
+      `dev/done/plan-tower-window.md`, landed there at a352 and a353, and
+      consumed here at **a155 [Tower-Log]** along with the app's own half of
+      the log reading: one decade floor per quantity axis rather than per
+      panel, the floor strictly under the smallest value drawn, bands and
+      boundary ticks that cope with zero, `log y` offered once per axis and
+      acting on every panel naming it, and a torn top edge on an unlimited
+      block.
+      **Still not eyeballed on log**: every gate is green and the log reading
+      has not been looked at in a browser.
 
 ## Raised with `aggregate` (not fixed here)
 

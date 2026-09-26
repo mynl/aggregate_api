@@ -4,6 +4,53 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a155
+
+**[Tower-Log] the SPA draws a tower on log, and the tower's loss axis stops
+lying.** Consumes `aggregate` a352 and a353. Three defects the author found on
+first use of the Diagram pane were the library's and are fixed there: the loss
+axis no longer starts below zero (it was padded twice, below a quantity that
+cannot be negative), the gross and per-occurrence towers now reach the known
+limit instead of the 99.9th percentile of the law, so a `100 xs 0` policy draws
+as a closed slab to 100 rather than cropped and open at 65.6, and the loss axis
+declares a log reading. Those arrive with no change here beyond the re-sync.
+
+What this bump does is make the app draw the log reading correctly:
+
+- **One decade floor per quantity axis**, pooled over the blocks, where it used
+  to be one per panel. The gross slab, the tower carving it up and the quantile
+  curve beside it name one loss axis and are one picture, so computed per panel
+  the three disagreed and a slab floated a decade above the tower next to it.
+  Pooled over blocks and not over everything drawn, because a Lee curve runs
+  three decades under the program and a floor taken from it would squeeze the
+  bands back into the slivers log is there to cure. The library hit the same
+  thing at a353 and this is the port of its fix.
+- **The floor is the decade strictly under the smallest value drawn.** A gross
+  panel holding one slab from 0 to 100 has exactly one positive coordinate, and
+  a floor *at* 100 collapsed the window to `[100, 100]` and the slab with it.
+  Unchanged wherever the smallest value is not an exact power of ten, which is
+  every continuous series.
+- **A band running from zero starts at the floor**, rather than being sent to
+  minus infinity, and one wholly under the floor draws nothing.
+- **A boundary at zero is dropped from a log axis** instead of placed. An
+  aggregate cover written `20 xs 0` marks its own attachment there.
+- **The quantity reading belongs to the axis, not to the panel.** On a tower
+  document `log y` is offered once per loss axis, on the stage tower, and acts
+  on every panel naming it. Pressed on one panel alone it drew the same loss at
+  two heights. The companion panels beside it, the gross slab and the Lee
+  curves, now offer no readings at all, which is also the author's ruling on
+  the Lee controls: the curve switches on and off with the `quantiles` button
+  and needs nothing else.
+- **An unlimited block gets a torn top edge** rather than merely a missing one,
+  so it says "continues" instead of declining to say anything. Worth having
+  only since the library's a352: before it the window cropped nearly every
+  gross slab, so nearly every block was open and the tear would have meant
+  nothing.
+
+The offline chart harness learned the one place the a121 isolation rule does
+not hold. A reading must not move a panel drawn against a *different* axis;
+moving the panels that share one is what a tower document is for.
+
 ## 1.0.0a154
 
 **[Structure-Lee] the chart route carries the structure chart's own two

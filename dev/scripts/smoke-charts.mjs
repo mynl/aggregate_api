@@ -182,9 +182,21 @@ function checkReadings(label, doc, base) {
     const at = (view) => chartdocToEcharts(doc, { view, width: 980 });
     const only = (id, patch) => at({ panels: { [id]: patch } });
 
-    /** Every other panel's axes, as the string that must not move. */
-    const others = (o, i) => JSON.stringify(
-        o.xAxis.filter((_, k) => k !== i).concat(o.yAxis.filter((_, k) => k !== i)));
+    // **Which panels a reading is allowed to move.** The a121 rule is that
+    // pressing a button in one group leaves every other panel completely
+    // still, and it holds wherever a panel owns its axes alone. A tower
+    // document is the one place that is not true by construction: the gross
+    // slab, the tower carving it up and the quantile curve beside them name one
+    // quantity axis and are one picture, so a log reading taken on one of them
+    // and not the others would draw the same loss at two heights. The honest
+    // form of the assertion is therefore that a reading must not move a panel
+    // drawn against a *different* axis, which still catches a reading leaking
+    // to an unrelated panel and permits the coupling the document declares.
+    const share = (a, b) => (a.y_axis && a.y_axis === b.y_axis)
+        || (a.x_axis && a.x_axis === b.x_axis);
+    const elsewhere = (o, i) => JSON.stringify((doc.panels || [])
+        .map((p, k) => ((k === i || share(doc.panels[i], p))
+            ? null : [o.xAxis[k], o.yAxis[k]])));
 
     offered.panels.forEach((panel, i) => {
         const P = `${label} [${panel.id}]`;
@@ -192,8 +204,8 @@ function checkReadings(label, doc, base) {
         const solo = (key, tag) => {
             const o = only(panel.id, { [key]: true });
             if (!checkDrawable(`${P} [${tag}]`, doc, o)) return null;
-            if (!o.is3d && others(o, i) !== others(base, i)) {
-                fail(P, `${tag} on this panel moved another panel's axes`);
+            if (!o.is3d && elsewhere(o, i) !== elsewhere(base, i)) {
+                fail(P, `${tag} on this panel moved a panel on another axis`);
             }
             return o;
         };

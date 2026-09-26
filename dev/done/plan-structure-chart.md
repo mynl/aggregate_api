@@ -218,6 +218,39 @@ Three further divergences, all found while replaying the mixed document:
   two curves, is covered by the hand-written document in
   `web/test/tower-panel.test.js` rather than by another 46 MB of capture.
 
+### a155, after the author eyeballed it
+
+Three defects came back from first use, all of them the library's loss window,
+and all three were specified in `aggregate`'s `dev/done/plan-tower-window.md`
+and landed there at a352 and a353. This side consumed them at a155 along with
+its own half of the log reading. Four divergences from what that plan's
+companion section anticipated, each found by a gate rather than by reading:
+
+- **`decadeFloor` had the same exact-decade defect the library's
+  `_decade_floor` did**, and the smoke harness caught it on the first run after
+  the re-sync: a gross panel holding one slab from 0 to 1000 has exactly one
+  positive coordinate, so the floor came back as 1000 and the window collapsed
+  to `[1000, 1000]`. Now the decade strictly under, which is what the
+  docstring already claimed.
+- **The floor is threaded through `ctx`, so `xyPanel` takes it too.** The plan's
+  companion note said the SPA needed a per-axis floor; it did not say the Lee
+  panel is the panel that most needs it, since its own series would floor three
+  decades lower than the tower it sits beside.
+- **`log y` had to become an axis reading rather than a panel reading**, which
+  the library has no analogue of because matplotlib takes one `log` for the
+  whole figure. Pressed on one panel of a shared axis it drew the same loss at
+  two heights. Offered once per axis now, on the stage tower, which also
+  disposes of the duplicate button two towers on one axis would otherwise
+  show.
+- **The smoke harness's per-panel isolation rule needed the same exception.**
+  a121's rule is that a reading moves nothing but its own panel; a tower
+  document shares a quantity axis by construction, so the assertion is now that
+  a reading must not move a panel on a *different* axis.
+
+The torn top edge landed here too, held back from a152 deliberately: until the
+library's a352 the window cropped nearly every gross slab, so nearly every
+block was open and a tear would have meant nothing.
+
 ### Left for the author
 
 The chart has not been eyeballed. Every gate is green, both suites and both

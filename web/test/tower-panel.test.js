@@ -43,14 +43,19 @@ const DOC = {
     title: 'T: reinsurance structure',
     meta: { return_period_map: 'complement', stages: ['occ', 'agg'] },
     axes: [
+        // Both scales since the library's a352: a balanced program is layered
+        // in a roughly geometric progression and reads as equal bands on log,
+        // which is the answer to a layer drawn as an unreadable sliver.
         { id: 'occ_loss', label: 'Loss per claim', unit: 'currency',
-          scales: ['linear'], suggested_range: [0, 100], full_range: [0, 100] },
+          scales: ['linear', 'log'],
+          suggested_range: [0, 100], full_range: [0, 100] },
         { id: 'occ_place', label: 'Placement', unit: 'ratio',
           scales: ['linear'], suggested_range: [0, 1], full_range: [0, 1] },
         { id: 'occ_p', label: 'Non-exceeding probability', unit: 'probability',
           scales: ['linear'], suggested_range: [0, 1] },
         { id: 'agg_loss', label: 'Aggregate loss', unit: 'currency',
-          scales: ['linear'], suggested_range: [0, 400], full_range: [0, 800] },
+          scales: ['linear', 'log'],
+          suggested_range: [0, 400], full_range: [0, 800] },
         { id: 'agg_place', label: 'Placement', unit: 'ratio',
           scales: ['linear'], suggested_range: [0, 1], full_range: [0, 1] },
     ],
@@ -63,8 +68,13 @@ const DOC = {
           read_axis: 'y', x_axis: 'agg_place', y_axis: 'agg_loss' },
     ],
     series: [
+        // The curve runs three decades under the program's own breaks, which
+        // is what a quantile curve on a loss axis does and what makes the
+        // pooled floor worth asserting: taken on its own this panel would
+        // floor at 0.01 and open two empty decades under the tower beside it.
         { name: 'Gross claim', panel_id: 'occ_lee', role: 'gross',
-          support: 'continuous', x: [0, 0.5, 0.9, 0.99], y: [0, 10, 40, 90] },
+          support: 'continuous', x: [0, 0.3, 0.5, 0.9, 0.99],
+          y: [0, 0.05, 10, 40, 90] },
     ],
     blocks: [
         { panel_id: 'occ', role: 'retention', x0: 0, x1: 1, y0: 0, y1: 10,
@@ -85,6 +95,10 @@ const DOC = {
         { panel_id: 'occ', orient: 'h', at: 30, label: '30' },
         { panel_id: 'occ', orient: 'h', at: 40, label: '40' },
         { panel_id: 'occ_lee', orient: 'h', at: 10, label: '10', faint: true },
+        // An aggregate cover written `400 xs 0` attaches at zero, which has no
+        // position on a log axis.
+        { panel_id: 'agg', orient: 'h', at: 0, label: '0' },
+        { panel_id: 'agg', orient: 'h', at: 400, label: '400' },
     ],
     tex: {},
 };
@@ -138,12 +152,23 @@ test('a block draws as a filled rectangle at its own coordinates', () => {
               'a placed layer is filled');
 });
 
-test('an open-top block is drawn without its top edge', () => {
+test('an open-top block is torn across the top, not closed', () => {
     const occ = towerSeries(built(), 0);
     // The ring walks top left, down, across the bottom and back up to the top
-    // right. A closed block returns to where it started; an open one stops.
-    assert.equal(drawBlock(occ, 4).children[1].shape.points.length, 4);
-    assert.equal(drawBlock(occ, 0).children[1].shape.points.length, 5);
+    // right. A closed block joins straight back to where it started.
+    const shut = drawBlock(occ, 0).children[1].shape.points;
+    assert.equal(shut.length, 5);
+    assert.deepEqual(shut[4], shut[0]);
+    // An unlimited one walks a sawtooth back instead: it ends in the same
+    // place, so the band still reads as a band, but the edge says the contract
+    // continues past the frame rather than asserting a ceiling.
+    const open = drawBlock(occ, 4).children[1].shape.points;
+    assert.ok(open.length > shut.length, 'the torn edge adds vertices');
+    assert.deepEqual(open[open.length - 1], open[0]);
+    const top = open[0][1];
+    const tear = open.slice(4).map((p) => p[1]);
+    assert.ok(tear.some((v) => v !== top), 'the teeth leave the top line');
+    assert.ok(tear.some((v) => v === top), 'and return to it');
 });
 
 test('a gap is an absence: no fill, a dashed edge', () => {
@@ -231,10 +256,57 @@ test('the zoom out is offered where it opens something and not otherwise', () =>
     assert.equal(offered[0].fullRange, false);
     // The aggregate loss axis declares twice the suggested top, so it does.
     assert.equal(offered[2].fullRange, true);
-    // Marks per panel, as ever, and no realization choice: every panel here
-    // declares exactly one kind.
-    assert.deepEqual(offered.map((p) => p.marks), [true, true, false]);
+    // The companion beside the tower offers nothing at all, so its `marks` is
+    // false however many marks it carries. See the shared-axis test below.
+    assert.deepEqual(offered.map((p) => p.marks), [true, false, true]);
     assert.deepEqual(readings(DOC).kinds, []);
+});
+
+test('the quantity reading belongs to the axis, not to the panel', () => {
+    // The tower, the slab and the curve beside them name one loss axis and are
+    // one picture, so the switch is offered once and acts on all of them. Two
+    // switches, or one acting on its own panel, would draw the same loss at two
+    // heights, which is the whole reason the boundary rules carry across.
+    const offered = readings(DOC).panels;
+    assert.deepEqual(offered.map((p) => p.logY), [true, false, true]);
+    assert.deepEqual(offered.map((p) => p.id), ['occ', 'occ_lee', 'agg']);
+
+    const on = built(DOC, { panels: { occ: { logY: true } } });
+    assert.equal(on.yAxis[0].type, 'log', 'the tower it was pressed on');
+    assert.equal(on.yAxis[1].type, 'log', 'the curve sharing its axis');
+    // And no further: the aggregate stage is a different quantity on a
+    // different axis and stays where it was.
+    assert.equal(on.yAxis[2].type, 'value');
+});
+
+test('one decade floor per axis, taken from the blocks', () => {
+    const on = built(DOC, { panels: { occ: { logY: true } } });
+    // The occurrence blocks' smallest positive coordinate is 10, so the floor
+    // is the decade strictly under it. Strictly, or a gross slab whose only
+    // positive coordinate is a round decade collapses to the top of the frame.
+    assert.equal(on.yAxis[0].min, 1);
+    // The curve reaches 0.05 and would floor at 0.01 left to itself, which
+    // would open two empty decades under the tower and squeeze the bands back
+    // into the slivers the log reading exists to cure. It takes the tower's.
+    assert.equal(on.yAxis[1].min, 1);
+});
+
+test('a boundary at zero is dropped from a log axis, not placed', () => {
+    const ticks = (view) => built(DOC, view).yAxis[2].axisLabel.customValues;
+    assert.deepEqual(ticks(), [0, 400]);
+    assert.deepEqual(ticks({ panels: { agg: { logY: true } } }), [400]);
+});
+
+test('a band running from zero starts at the floor on a log axis', () => {
+    const on = built(DOC, { panels: { occ: { logY: true } } });
+    const occ = towerSeries(on, 0);
+    // The retention runs 0 to 10. Drawn from zero it would be sent to minus
+    // infinity, so it starts on the floor the axis ends at instead.
+    const seen = [];
+    occ.renderItem({ dataIndex: 0 }, { coord: ([, y]) => { seen.push(y); return [0, y]; } });
+    assert.deepEqual(seen, [1, 10]);
+    // And the block is still drawn, rather than skipped as wholly submerged.
+    assert.ok(occ.renderItem({ dataIndex: 0 }, { coord: (p) => p }));
 });
 
 test('an ir_version 3 document with no blocks still translates', () => {

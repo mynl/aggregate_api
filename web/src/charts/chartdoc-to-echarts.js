@@ -249,13 +249,22 @@ function coords(series, key) {
 }
 
 /**
- * The decade at or under the smallest value worth drawing, or null.
+ * The decade strictly under the smallest value worth drawing, or null.
  *
  * A log view of a window whose declared low end is zero needs a bottom, and
  * the honest one is a round decade under the smallest thing actually drawn:
  * gridlines land on powers of ten, which is how a log axis is read, and
  * nothing real is cropped. Values at or under `LOG_FLOOR` are arithmetic noise
  * rather than a tail. `_chartdoc._decade_floor`.
+ *
+ * **Strictly under, which matters when the smallest value is itself a round
+ * decade.** A tower panel holding one gross slab from 0 to 100 has exactly one
+ * positive coordinate, and a floor *at* 100 leaves the panel nothing to draw
+ * in: the window collapses to `[100, 100]` and the slab disappears. Rounding
+ * the exponent up and stepping one decade down gives 10 there, and is
+ * unchanged wherever the smallest value is not an exact power of ten, which is
+ * every continuous series. The library made the same correction at a353 for
+ * the same panel.
  */
 function decadeFloor(series) {
     let min = Infinity;
@@ -264,7 +273,46 @@ function decadeFloor(series) {
             if (v != null && Number.isFinite(v) && v > LOG_FLOOR && v < min) min = v;
         }
     }
-    return Number.isFinite(min) ? 10 ** Math.floor(Math.log10(min)) : null;
+    return Number.isFinite(min) ? 10 ** (Math.ceil(Math.log10(min)) - 1) : null;
+}
+
+/**
+ * `{axisId: floor}` for every quantity axis carrying a tower, or empty.
+ *
+ * **The floor is a property of the axis, not of the panel.** A structure
+ * document puts the gross slab, the tower carving it up and the quantile curve
+ * beside it on one loss axis, and they are one reading: a boundary is meant to
+ * carry across, which is what the faint rules on the curve are for. Computed
+ * per panel the three disagree, since each sees only its own content, and the
+ * panels are then drawn with different bottoms, so a slab floats a decade
+ * above the tower beside it. The library hit exactly this at a353 and
+ * `_chartdoc._tower_floors` is the port.
+ *
+ * **Pooled over the blocks, not over everything drawn against the axis.** A
+ * Lee curve on a loss axis runs down to its first positive grid point, three
+ * or four decades under the program, and a floor taken from that would open
+ * those decades under every tower and squeeze the bands back into the slivers
+ * the log reading exists to cure. The tower's breaks are the scale the picture
+ * is read at; the curve beside it runs off the bottom of the frame, as a curve
+ * on a log loss axis always does.
+ *
+ * @param {object} doc a ChartDoc canonical dict.
+ * @param {Array<string>} realized the kind each panel is drawn as.
+ */
+function towerFloors(doc, realized) {
+    const panels = (doc && doc.panels) || [];
+    const towers = new Set(panels.filter((p, i) => realized[i] === 'tower')
+        .map((p) => p.y_axis).filter(Boolean));
+    if (!towers.size) return {};
+    const byId = Object.fromEntries(panels.map((p) => [p.id, p]));
+    const seen = {};
+    for (const b of (doc && doc.blocks) || []) {
+        const panel = byId[b.panel_id];
+        if (!panel || !towers.has(panel.y_axis)) continue;
+        (seen[panel.y_axis] || (seen[panel.y_axis] = [])).push(b.y0, b.y1);
+    }
+    return Object.fromEntries(
+        Object.entries(seen).map(([id, vs]) => [id, decadeFloor([vs])]));
 }
 
 /** The finite extent of a set of coordinate arrays, or null. */
@@ -477,44 +525,120 @@ export function readings(doc) {
         // panel declares a single kind.
         if (p.kind === 'surface') { kinds.add('surface'); kinds.add('heatmap'); }
     }
+    // **On a tower document the quantity reading belongs to the axis.** The
+    // gross slab, the tower carving it up and the quantile curve beside them
+    // name one loss axis and are one picture, so a log reading taken on one of
+    // them and not the others draws the same number at two heights, which is
+    // the disagreement `towerFloors` fixes a level down. Offering the switch on
+    // each of them would also put two identical buttons side by side, since the
+    // strip labels a group only when it is stacked.
+    //
+    // So the offer is made **once per axis**, on the last tower naming it,
+    // which is the stage tower rather than the gross slab: the slab is the
+    // subject a program carves rather than a program, and the stage tower is
+    // where the boundary marks are, so the axis reading and the marks land in
+    // one group. Every companion beside it offers nothing, which is also the
+    // author's ruling of 2026-09-25 on the Lee curves ("the options on the Lee
+    // plot don't really make sense; the plot should just switch on/off", and
+    // the on/off is the `quantiles` button on the strip).
+    const owner = towerAxisOwners(panels);
     return {
-        panels: panels.map((p) => {
-            const x = positionAxes(doc, p, 'x');
-            const y = positionAxes(doc, p, 'y');
-            const z = p.z_axis ? [axes.find((a) => a.id === p.z_axis)] : [];
-            // The pairings are read off the axis rather than off what is
-            // drawn, because a paired axis is named by no panel by
-            // construction. Naming the panel's own axes as the subject is what
-            // makes it a per-panel offer rather than a document-wide one.
-            const paired = (attr) => [p.x_axis, p.y_axis].some(
-                (id) => id && axes.some((a) => a[attr] === id));
-            return {
-                id: p.id,
-                title: p.title || '',
-                logX: x.some(scaled),
-                // A surface's height is the same quantity the flat reading
-                // ramps, and a density ordinate is a y axis on the panel next
-                // door, so the z axis rides `logY` rather than asking for a
-                // third button.
-                logY: [...y, ...z].some(scaled),
-                fullRange: [...x, ...y].some(opens),
-                reflect: paired('complement_of'),
-                returnPeriod: paired('reciprocal_of'),
-                invert: Boolean(p.invertible),
-                // Not a *reading* in the sense the others are: the document
-                // does not declare that its marks can be turned off, they are
-                // simply data it publishes. It rides here anyway because this
-                // is what the control strip is built from, and the honest gate
-                // is the same shape as the others, offer the button when there
-                // is something for it to act on. Per panel because marks carry
-                // `panel_id` and `xyPanel` already filters on it, so the button
-                // belongs to the panel whose marks it suppresses. The strip
-                // lost this control entirely in the a62 rewrite, which is the
-                // whole of punch item G3's "we've lost the annotations option".
-                marks: marked.has(p.id),
-            };
-        }),
+        panels: panels.map((p) => (
+            (owner.has(p.y_axis) && owner.get(p.y_axis) !== p.id)
+                ? noReadings(p)
+                : panelReadings(doc, axes, marked, p))),
         kinds: kinds.size > 1 ? [...kinds] : [],
+    };
+}
+
+/**
+ * `{axisId: panelId}`, which tower panel carries each quantity axis' readings.
+ *
+ * Empty for a document holding no tower, which is what leaves every other
+ * chart's per-panel offers exactly as they were.
+ */
+function towerAxisOwners(panels) {
+    const owner = new Map();
+    // Last wins, deliberately: the gross slab is emitted first and the stage
+    // tower after it, and the stage tower is the right home. It is the program
+    // rather than the subject the program carves, and it is where the boundary
+    // marks are, so the axis reading and the marks land in one group instead of
+    // being split across two.
+    for (const p of panels) {
+        if (p.kind === 'tower' && p.y_axis) owner.set(p.y_axis, p.id);
+    }
+    return owner;
+}
+
+// The torn top edge of an unbounded block: tooth width and height in pixels.
+// A tooth wide enough to read as deliberate and short enough not to eat the
+// band's own label.
+const TEAR_W = 9;
+const TEAR_H = 4;
+
+/**
+ * A sawtooth from the top right of a block back to its top left.
+ *
+ * Walked right to left because the ring it closes runs up the block's right
+ * edge, so this is the return leg. The count is whole teeth, at least one, so a
+ * narrow band still reads as torn rather than flat.
+ *
+ * @param {number} x the block's left edge in pixels.
+ * @param {number} y its top.
+ * @param {number} w its width.
+ */
+function tornEdge(x, y, w) {
+    const teeth = Math.max(1, Math.round(w / TEAR_W));
+    const out = [];
+    for (let k = teeth - 1; k >= 0; k--) {
+        out.push([x + (w * (k + 0.5)) / teeth, y + TEAR_H], [x + (w * k) / teeth, y]);
+    }
+    return out;
+}
+
+/** Nothing offered: a companion panel, read with the one beside it. */
+function noReadings(p) {
+    return {
+        id: p.id, title: p.title || '', logX: false, logY: false,
+        fullRange: false, reflect: false, returnPeriod: false, invert: false,
+        marks: false,
+    };
+}
+
+/** One panel's offers, read off the axes it can put in either position. */
+function panelReadings(doc, axes, marked, p) {
+    const x = positionAxes(doc, p, 'x');
+    const y = positionAxes(doc, p, 'y');
+    const z = p.z_axis ? [axes.find((a) => a.id === p.z_axis)] : [];
+    // The pairings are read off the axis rather than off what is drawn,
+    // because a paired axis is named by no panel by construction. Naming the
+    // panel's own axes as the subject is what makes it a per-panel offer
+    // rather than a document-wide one.
+    const paired = (attr) => [p.x_axis, p.y_axis].some(
+        (id) => id && axes.some((a) => a[attr] === id));
+    return {
+        id: p.id,
+        title: p.title || '',
+        logX: x.some(scaled),
+        // A surface's height is the same quantity the flat reading ramps, and
+        // a density ordinate is a y axis on the panel next door, so the z axis
+        // rides `logY` rather than asking for a third button.
+        logY: [...y, ...z].some(scaled),
+        fullRange: [...x, ...y].some(opens),
+        reflect: paired('complement_of'),
+        returnPeriod: paired('reciprocal_of'),
+        invert: Boolean(p.invertible),
+        // Not a *reading* in the sense the others are: the document does not
+        // declare that its marks can be turned off, they are simply data it
+        // publishes. It rides here anyway because this is what the control
+        // strip is built from, and the honest gate is the same shape as the
+        // others, offer the button when there is something for it to act on.
+        // Per panel because marks carry `panel_id` and `xyPanel` already
+        // filters on it, so the button belongs to the panel whose marks it
+        // suppresses. The strip lost this control entirely in the a62 rewrite,
+        // which is the whole of punch item G3's "we've lost the annotations
+        // option".
+        marks: marked.has(p.id),
     };
 }
 
@@ -1089,8 +1213,14 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
     // Computed once and shared: the axis option puts it under a log window
     // whose declared low end is zero, and a stem has to start on the same line
     // or it runs off the bottom of the panel it is drawn in.
-    const xFloor = decadeFloor(allX);
-    const yFloor = decadeFloor(allY);
+    //
+    // A quantity axis that also carries a tower takes **that** floor instead of
+    // its own. This panel is then the Lee curve beside the program, and the two
+    // are one reading, so a floor of its own would put the same boundary at two
+    // different heights. See `towerFloors`.
+    const floors = (ctx && ctx.floors) || {};
+    const xFloor = floors[xAxis.id] ?? decadeFloor(allX);
+    const yFloor = floors[yAxis.id] ?? decadeFloor(allY);
 
     const series = [];
     const legend = [];
@@ -1455,12 +1585,13 @@ function blockLabel(block, w, h) {
  * object or null
  *     The realized panel, or null when the document put no block on it.
  */
-function towerPanel(doc, panel, i, axes, view) {
+function towerPanel(doc, panel, i, axes, view, ctx) {
     const blocks = (doc.blocks || []).filter((b) => b.panel_id === panel.id);
     if (!blocks.length) return null;
     const xAxis = axes[panel.x_axis] || {};
     const yAxis = axes[panel.y_axis] || {};
     const yScale = axisScale(yAxis, view.logY);
+    const logY = yScale === 'log';
     const spanned = [
         Math.min(...blocks.map((b) => b.y0)),
         Math.max(...blocks.map((b) => b.y1)),
@@ -1469,6 +1600,16 @@ function towerPanel(doc, panel, i, axes, view) {
         || spanned;
     const xWindow = (Array.isArray(xAxis.suggested_range) ? xAxis.suggested_range
         : [0, 1]);
+    // Pooled across every panel on this axis, never this panel's own blocks:
+    // the gross slab, the tower and the curve beside them have to sit on one
+    // bottom. See `towerFloors`.
+    const floor = ((ctx && ctx.floors) || {})[panel.y_axis]
+        ?? decadeFloor([blocks.map((b) => b.y0), blocks.map((b) => b.y1)]);
+    // A band running from zero has no bottom on a log axis, so it starts at the
+    // floor instead. Reading the band's own foot off the frame is not a thing a
+    // log axis offers anyway, and the alternative is a rectangle sent to minus
+    // infinity.
+    const footed = (v) => (logY ? Math.max(v, floor ?? LOG_FLOOR) : v);
 
     // Alternating shade is counted over the blocks of one role rather than
     // over all of them, so consecutive layers alternate and a retention
@@ -1507,8 +1648,11 @@ function towerPanel(doc, panel, i, axes, view) {
             const k = params.dataIndex || 0;
             const b = blocks[k];
             if (!b) return null;
-            const lo = apiRef.coord([b.x0, b.y0]);
-            const hi = apiRef.coord([b.x1, b.y1]);
+            // Wholly under the floor on a log reading: nothing to draw, rather
+            // than a rectangle of zero height sitting on the frame.
+            if (logY && floor != null && b.y1 <= floor) return null;
+            const lo = apiRef.coord([b.x0, footed(b.y0)]);
+            const hi = apiRef.coord([b.x1, footed(b.y1)]);
             const x = Math.min(lo[0], hi[0]);
             const y = Math.min(lo[1], hi[1]);
             const w = Math.abs(hi[0] - lo[0]);
@@ -1516,11 +1660,17 @@ function towerPanel(doc, panel, i, axes, view) {
             const { fill, dashed } = fills[k];
             // The three edges a block is always entitled to, walked from the
             // top left down, across the bottom and back up to the top right.
-            // An `open_top` block stops there: the band continues past the
-            // frame and a closed rectangle would assert a limit the contract
-            // has not got. Closing the ring is what draws the top.
+            // An `open_top` block does not close: the band continues past the
+            // frame and a straight top edge would assert a limit the contract
+            // has not got. It gets a torn edge back across instead, which says
+            // "continues" rather than merely omitting the statement, and is the
+            // author's ask of 2026-09-25. Worth having only since the library's
+            // a352: before it the drawn window cropped almost every gross slab,
+            // so nearly every block was open and the zigzag would have meant
+            // nothing.
             const ring = [[x, y], [x, y + h], [x + w, y + h], [x + w, y]];
-            if (!b.open_top) ring.push([x, y]);
+            if (b.open_top) ring.push(...tornEdge(x, y, w));
+            else ring.push([x, y]);
             const children = [{
                 type: 'rect',
                 shape: { x, y, width: w, height: h },
@@ -1559,16 +1709,19 @@ function towerPanel(doc, panel, i, axes, view) {
     }];
 
     // The panel's marks, as the quantity axis' ticks. Distinct positions, so a
-    // document that marks one boundary twice labels it once.
+    // document that marks one boundary twice labels it once. A non-positive
+    // boundary has no position on a log axis and is dropped rather than placed:
+    // an aggregate program written `20 xs 0` marks its own attachment at zero.
     const mine = (view.refLines === false ? [] : doc.marks || [])
-        .filter((m) => m.panel_id === panel.id);
+        .filter((m) => m.panel_id === panel.id)
+        .filter((m) => !logY || m.at > 0);
     const ticks = [...new Set(mine.map((m) => m.at))].sort((a, b) => a - b);
     const named = new Map(mine.filter((m) => m.label).map((m) => [m.at, m.label]));
 
     const y = axisOption(yAxis, i, {
         scale: yScale,
         window: yWindow,
-        floor: decadeFloor([blocks.map((b) => b.y0), blocks.map((b) => b.y1)]),
+        floor,
         formatter: labelFormatter(yAxis, yScale),
         nameGap: 46,
     });
@@ -1954,8 +2107,27 @@ export function chartdocToEcharts(doc, opts = {}) {
     // preferences and the cut reach every panel; `PANEL_DEFAULTS` then resets
     // the seven readings, which is what makes the six flat keys a pre-a121
     // blob still carries inert rather than sticky.
-    view.forPanel = (id) => ({ ...view, ...PANEL_DEFAULTS,
-                               ...((view.panels || {})[id] || {}) });
+    //
+    // One exception, and it is the only reading resolved anywhere but here per
+    // panel: on a tower document the quantity axis is one reading across every
+    // panel that names it, so a log request made on the tower that owns the
+    // axis reaches the gross slab and the quantile curve beside it. Without it
+    // the same loss draws at two heights on one axis, which is the disagreement
+    // `towerFloors` fixes a level down, and `readings` only ever offers the
+    // switch on one of them so nothing else can set it.
+    const owner = towerAxisOwners(panels);
+    const byId = Object.fromEntries(panels.map((p) => [p.id, p]));
+    const logged = new Set();
+    for (const [axisId, panelId] of owner) {
+        if (((view.panels || {})[panelId] || {}).logY) logged.add(axisId);
+    }
+    view.forPanel = (id) => {
+        const resolved = { ...view, ...PANEL_DEFAULTS,
+                           ...((view.panels || {})[id] || {}) };
+        const own = byId[id];
+        if (own && logged.has(own.y_axis)) resolved.logY = true;
+        return resolved;
+    };
     const realized = panels.map((p) => realization(p, view.kind));
     // The bifurcation, split by RENDERER CAPABILITY rather than by panel kind.
     // A heatmap is a 2-D drawing of the same grid a surface draws in relief, so
@@ -1983,12 +2155,14 @@ function xyOption(doc, opts, view, realized) {
         if (at < 0) { at = order.length; order.push(name); }
         return at;
     };
-    const ctx = { colorOf };
+    // One decade floor per quantity axis carrying a tower, resolved before any
+    // panel is realized because it is pooled across them.
+    const ctx = { colorOf, floors: towerFloors(doc, realized) };
 
     const realizedPanels = panels.map((panel, i) => {
         const pv = view.forPanel(panel.id);
         if (realized[i] === 'xy') return xyPanel(doc, panel, i, axes, pv, opts.zoom, ctx);
-        if (realized[i] === 'tower') return towerPanel(doc, panel, i, axes, pv);
+        if (realized[i] === 'tower') return towerPanel(doc, panel, i, axes, pv, ctx);
         return heatmapPanel(doc, panel, i, axes, pv, box.grids[i]);
     }).filter(Boolean);
     if (!realizedPanels.length) return null;
