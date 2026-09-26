@@ -279,6 +279,34 @@ test('the quantity reading belongs to the axis, not to the panel', () => {
     assert.equal(on.yAxis[2].type, 'value');
 });
 
+test('a reading stored on a companion panel is dropped, not honored', () => {
+    // A companion offers no controls, so a value a browser kept from a build
+    // that did offer them has nothing to clear it. The a154 bundle ran against
+    // a352 documents for a while and every panel offered `log y` in that
+    // window, which left a Lee panel stuck on log while the tower beside it
+    // stayed linear: pressing the tower's button then looked inert, because
+    // the companion was already where the button would have put it.
+    const stale = { panels: { occ_lee: { logY: true } } };
+    const held = built(DOC, stale);
+    assert.equal(held.yAxis[1].type, 'value', 'the stale value does not apply');
+    assert.equal(held.yAxis[0].type, 'value', 'nor leaks to the tower');
+    // And the tower's own button still drives it, which is the report this
+    // came from: the panel must move when the axis does, and only then.
+    const on = built(DOC, { panels: { ...stale.panels, occ: { logY: true } } });
+    assert.equal(on.yAxis[0].type, 'log');
+    assert.equal(on.yAxis[1].type, 'log');
+});
+
+test('the group that acts on an axis is titled by the axis', () => {
+    // Two stages means two otherwise identical pairs of buttons, and the strip
+    // labels a group only when it is stacked, so side by side there was
+    // nothing to say which loss axis each one drove.
+    const titled = readings(DOC).panels
+        .filter((p) => p.logY || p.marks)
+        .map((p) => p.title);
+    assert.deepEqual(titled, ['Loss per claim', 'Aggregate loss']);
+});
+
 test('one decade floor per axis, taken from the blocks', () => {
     const on = built(DOC, { panels: { occ: { logY: true } } });
     // The occurrence blocks' smallest positive coordinate is 10, so the floor

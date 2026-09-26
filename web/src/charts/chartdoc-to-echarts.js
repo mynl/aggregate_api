@@ -542,11 +542,22 @@ export function readings(doc) {
     // plot don't really make sense; the plot should just switch on/off", and
     // the on/off is the `quantiles` button on the strip).
     const owner = towerAxisOwners(panels);
+    const byId = Object.fromEntries(axes.map((a) => [a.id, a]));
     return {
-        panels: panels.map((p) => (
-            (owner.has(p.y_axis) && owner.get(p.y_axis) !== p.id)
-                ? noReadings(p)
-                : panelReadings(doc, axes, marked, p))),
+        panels: panels.map((p) => {
+            if (!owner.has(p.y_axis)) return panelReadings(doc, axes, marked, p);
+            if (owner.get(p.y_axis) !== p.id) return noReadings(p);
+            // **Titled by the axis, because that is what the group acts on.**
+            // A tower document shows two of these, one per stage, and the
+            // strip labels a group only when it is stacked, so on a wide host
+            // they were two identical unlabeled pairs of buttons with nothing
+            // to say which stage each drove. Naming the quantity is also more
+            // use than naming the panel: "Loss per claim" and "Aggregate loss"
+            // are what the reader is choosing a scale for.
+            const own = byId[p.y_axis];
+            return { ...panelReadings(doc, axes, marked, p),
+                     title: (own && own.label) || p.title || '' };
+        }),
         kinds: kinds.size > 1 ? [...kinds] : [],
     };
 }
@@ -2121,11 +2132,25 @@ export function chartdocToEcharts(doc, opts = {}) {
     for (const [axisId, panelId] of owner) {
         if (((view.panels || {})[panelId] || {}).logY) logged.add(axisId);
     }
+    //
+    // **A companion panel's own stored blob is dropped, not merged.** It
+    // offers no controls, so a value left in a browser from a build that did
+    // offer them has nothing to clear it and sticks forever. That is not
+    // hypothetical: the a154 bundle ran against a352 documents for a while,
+    // in which window every panel declared a log reading and offered the
+    // switch, and a reader who pressed it on a Lee panel then had that panel
+    // stuck on log at a155 while the tower beside it stayed linear. Pressing
+    // the tower's own button then looked like it did nothing, because the
+    // companion was already where the button would have put it. Resolving the
+    // reading from the axis and nowhere else is what heals it, with no
+    // storage migration and no note telling anyone to clear anything.
     view.forPanel = (id) => {
-        const resolved = { ...view, ...PANEL_DEFAULTS,
-                           ...((view.panels || {})[id] || {}) };
         const own = byId[id];
-        if (own && logged.has(own.y_axis)) resolved.logY = true;
+        const owned = Boolean(own) && owner.has(own.y_axis);
+        const companion = owned && owner.get(own.y_axis) !== id;
+        const resolved = { ...view, ...PANEL_DEFAULTS,
+                           ...(companion ? {} : ((view.panels || {})[id] || {})) };
+        if (owned) resolved.logY = logged.has(own.y_axis);
         return resolved;
     };
     const realized = panels.map((p) => realization(p, view.kind));

@@ -692,9 +692,16 @@ function renderControls(doc, hooks) {
     // one and there has to be somewhere to fold them into.
     const box = el('div', { className: 'exhibit-group' });
     const panelGroups = [];
+    // A tower document's groups are labeled whether or not the strip is
+    // stacked. Side by side they are one pair of buttons per cession stage,
+    // identical in every respect but which loss axis they drive, so without
+    // the label there is nothing at all to tell them apart and pressing one
+    // while watching the other half of the chart reads as a control that does
+    // not work. `readings` titles them by the axis for the same reason.
+    const towered = ((doc && doc.panels) || []).some((p) => p.kind === 'tower');
     for (const panel of offered.panels) {
         const group = el('div', { className: 'exhibit-group exhibit-group-panel' });
-        if (stacked && offered.panels.length > 1 && panel.title) {
+        if ((stacked || towered) && offered.panels.length > 1 && panel.title) {
             group.appendChild(el('span', { className: 'exhibit-group-label' },
                                   panel.title));
         }

@@ -4,6 +4,37 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a156
+
+**[Stale-Companion-Reading] the log switch drives the quantile curve beside
+every tower, not just some of them.** Reported against `Capstone.PnL`: the
+button worked on the aggregate stage and appeared to do nothing on the
+occurrence one.
+
+The coupling added at a155 was working. What was wrong is that **a panel
+offering no controls was still honoring a reading stored against it.** Between
+the library's a352 and this app's a155 the shipped bundle offered `log y` on
+every panel of a structure document, because the loss axis had just begun
+declaring the scale, and readings are held per browser. A reader who pressed
+it on a Lee panel in that window was left with that panel stuck on log while
+the tower beside it stayed linear, and with no control on it any more there
+was nothing to clear the value. Pressing the tower's own button then looked
+inert: the companion was already where the button would have put it. The other
+stage, never pressed, behaved correctly, which is exactly the asymmetry
+reported.
+
+A companion panel's stored blob is now dropped rather than merged, so the
+reading comes from the axis and nowhere else. No storage migration and nothing
+for anyone to clear: an affected browser heals on its next load.
+
+**The two control groups are labeled side by side, and named by the axis.** A
+tower document shows one group per cession stage, identical but for which loss
+axis they drive, and the strip labeled a group only when it was stacked. Wide,
+they were two unlabeled pairs of buttons with nothing to tell them apart,
+which is its own half of the confusion above: press one, watch the other half
+of the chart, conclude the control is broken. They now read `Loss per claim`
+and `Aggregate loss`, which is what the reader is choosing a scale for.
+
 ## 1.0.0a155
 
 **[Tower-Log] the SPA draws a tower on log, and the tower's loss axis stops

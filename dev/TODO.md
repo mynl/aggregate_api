@@ -957,8 +957,13 @@ one version bump each.
       boundary ticks that cope with zero, `log y` offered once per axis and
       acting on every panel naming it, and a torn top edge on an unlimited
       block.
-      **Still not eyeballed on log**: every gate is green and the log reading
-      has not been looked at in a browser.
+      Eyeballed on log and approved, with one defect: the switch appeared to
+      drive one stage's quantile curve and not the other's, which turned out
+      to be a reading stored against a panel that no longer offers one, from
+      the window where a154 ran against a352 documents. Fixed at
+      **a156 [Stale-Companion-Reading]**, along with labeling the two control
+      groups by their axis, since side by side they were identical and
+      unlabeled.
 
 ## Raised with `aggregate` (not fixed here)
 

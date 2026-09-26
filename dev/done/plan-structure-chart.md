@@ -251,14 +251,64 @@ The torn top edge landed here too, held back from a152 deliberately: until the
 library's a352 the window cropped nearly every gross slab, so nearly every
 block was open and a tear would have meant nothing.
 
+### The Lee curve's default reading: closed, 2026-09-26
+
+Raised at a154 and again at a155, and **ruled: the curve stays on the
+non-exceeding probability.** The proposal was to have the emitter name the
+return-period axis as the panel's own, on the reading that the lib plan's
+stated point of the curve is that "every attachment reads off as a return
+period". The author's answer is that the Re pane is geared around setting limit
+and attachment **by probability** rather than by return period, and that the
+reciprocal is arithmetic most readers do in their heads, so the probability is
+the coordinate the rest of the tab already works in.
+
+This closes the item with **nothing owed upstream**: probability is what
+`_emit_structure` already names as the Lee panel's `x_axis`, so the shipped
+default is the ruled one. The return-period axis stays declared and paired, and
+a reader who wants it can still reach it from any other Lee panel in the app;
+it is only the structure chart's companion that offers no switch, per the a155
+rule that a companion panel carries no readings of its own.
+
+### a156, the log switch on `Capstone.PnL`
+
+Reported as "the log button drives the Lee chart on agg but not occ", and the
+a155 coupling was not the fault. **A companion panel offers no controls, and
+was still honoring a reading stored against it.** Between library a352 and app
+a155 the shipped bundle offered `log y` on every panel of a structure document,
+since the loss axis had just begun declaring the scale; readings are held per
+browser, so pressing it on a Lee panel in that window left that panel stuck on
+log with nothing able to clear it. The tower's own button then appeared inert
+because the companion was already where it would have put it, and the untouched
+stage behaved correctly, which is the whole of the reported asymmetry.
+
+Reproduced before changing anything, by resolving the document with
+`{panels: {occ_lee: {logY: true}}}` held: `occ_lee=log` with `occ=value`
+beside it. The fix is to drop a companion's stored blob rather than merge it,
+so the reading resolves from the axis and nowhere else, which also heals a
+browser already holding one.
+
+The second half is presentational and was the other reason it read as broken:
+a tower document shows one control group per cession stage, and the strip
+labeled a group only when stacked, so side by side they were two identical
+unlabeled pairs of buttons. Titled by the **axis** now, since that is what the
+group acts on.
+
 ### Left for the author
 
-The chart has not been eyeballed. Every gate is green, both suites and both
-harnesses, and the smoke test's own header says what that is worth: it proves
-the document reached the renderer in a drawable shape, not that the picture
-looks right. The three things most likely to want a tweak are the tower width
-(one ratio unit is `1.75 / 4.41` of the row height, `_chartdoc`'s figure
-arithmetic, capped by what the row can afford), the label point size at 10 CSS
-pixels with the fits or does not fit arithmetic hanging off it, and whether the
-boundary ticks want to be axis ticks as they are now or labeled rules on the
-plot.
+The chart has not been eyeballed, on either scale. Every gate is green, both
+suites and both harnesses, and the smoke test's own header says what that is
+worth: it proves the document reached the renderer in a drawable shape, not
+that the picture looks right. The things most likely to want a tweak:
+
+- **The tower width.** One ratio unit is `1.75 / 4.41` of the row height,
+  `_chartdoc`'s figure arithmetic, capped by what the row can afford.
+- **The label point size**, 10 CSS pixels, with the fits or does not fit
+  arithmetic hanging off it.
+- **The boundary ticks**, axis ticks as they are now, or labeled rules on the
+  plot.
+- **The torn top edge**, new at a155: `TEAR_W` 9 pixels by `TEAR_H` 4 in
+  `chartdoc-to-echarts.js`.
+- **The log reading itself**, which is the one nobody has looked at and the one
+  the a352 and a353 work was for. Press `log y` on a balanced program, the
+  `250 xs 250`, `500 xs 500`, `1000 xs 1000` shape, which is the case where the
+  bands should come out close to equal height.
