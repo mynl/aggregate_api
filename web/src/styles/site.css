@@ -118,6 +118,22 @@
     --gutter:  1.15rem;
     --measure: 46rem;
     --tabpad:  1.05rem;
+
+    /* Going down a group you meet three bands doing three different jobs:
+       the leaf row navigates, the control band asks, the pane answers. All
+       three sit on --tabpad, so alignment is already spent as a grouping cue
+       and only spacing is left to carry it. These three tokens are that
+       spacing, and the ratio between them is the whole point: through a156
+       Pricing ran .7rem above the form and .8rem below it, a ratio of 1.14 to
+       1 across three bands, which groups nothing.
+
+       Re read better and did so by accident, on `.reins-preview`'s own 1.4rem
+       bottom margin, set on one hint paragraph in one group. That is the idea
+       worth promoting to a token rather than leaving as a local margin nobody
+       remembers is load bearing. */
+    --gap-tight: .3rem;    /* leaf row to the control band it steers   */
+    --gap-unit:  1.75rem;  /* control band to the output it produced   */
+    --gap-major: 2rem;     /* the input region to the output region    */
 }
 
 /* ---- The accent, in Bootstrap's own vocabulary ----
@@ -395,7 +411,11 @@ header .navbar { min-height: 56px; }
     background: var(--soft); border: 1px solid var(--line-2);
     border-left: 3px solid var(--state, var(--ok));
     border-radius: .5rem; padding: .5rem .8rem;
-    margin: 0 0 calc(var(--gutter) * 1.3);
+    /* The one gap in the page that separates two REGIONS rather than two bands:
+       the input region above (lede, editor, action row, this strip) from the
+       output region below (tabs and panes). It is the only user of
+       --gap-major, and the gaps inside the input region are left alone. */
+    margin: 0 0 var(--gap-major);
     overflow-wrap: anywhere;
 }
 /* One token drives the rule, the verdict word and the tint together, so the
@@ -568,14 +588,31 @@ header .navbar { min-height: 56px; }
    Indented by --tabpad, along with the content, so both align with the first
    tab's LABEL rather than with its box edge. */
 .out-tabs + .sub-tabs, .sub-tabs { padding-left: var(--tabpad); }
-/* The two numbers are equal on purpose: the row sits in its own band of space,
-   the same above as below, so it reads as a level of the menu rather than as
-   something attached to the tabs or to the content. Both were a touch tight on
-   a tablet, where the strip is the thing a thumb aims at. */
+/* The space above holds the row off the tabs; the space below says what the row
+   belongs to. Through a156 the two were equal, so the row read as a level of
+   the menu everywhere, which is right where output follows it and wrong where a
+   form does: there the row and the form it steers are one unit.
+   `padding-top` was a touch tight on a tablet, where the strip is the thing a
+   thumb aims at, and stays where it was. */
 .sub-tabs {
     display: flex; flex-wrap: wrap; align-items: center; gap: .2rem;
-    padding-top: .7rem; margin-bottom: .7rem;
+    padding-top: .7rem; margin-bottom: var(--gap-unit);
 }
+/* The leaf row closes up on the ask it steers, wherever that ask sits. Three
+   selectors because the six groups nest their forms three different ways: as
+   the row's next sibling (Bounds), behind the Re program lede, and inside the
+   `#leaf-*` wrapper the Pricing group switches its leaves with. The plain
+   `:has(+ .control-band)` the mockup used reaches only Bounds.
+
+   Pricing's adjacent sibling is `#leaf-price` whatever leaf is showing, since
+   the others are hidden with `d-none` rather than removed, so no sibling rule
+   can tell Plot (which carries no form) from Calibrate. Plot therefore takes
+   the tight gap too. That is the one place the rhythm is wrong, and it is wrong
+   by .3rem against 1.75rem in one leaf of one group; the alternative is a class
+   toggled from the leaf switch, which is JavaScript for a gap. */
+.sub-tabs:has(+ .control-band),
+.sub-tabs:has(+ .reins-desc),
+.sub-tabs:has(+ * .control-band) { margin-bottom: var(--gap-tight); }
 .sub-tabs:empty { display: none; }
 .sub-tabs > * { flex: 0 0 auto; }
 .sub-tabs .sub-link {
@@ -600,6 +637,70 @@ header .navbar { min-height: 56px; }
    label rather than at the page edge. */
 .pane, .reins-desc, .tab-tools, .exhibit-controls, .price-preview {
     padding-left: var(--tabpad);
+}
+
+/* ---- The control band: the one enclosure in a group ----
+   It earns the box on function rather than on decoration. The band holds a
+   button that changes what appears below it, so it is a self contained ask
+   whose answer is underneath, and the page already uses a box to mean "you
+   provide something here", which is `.editor-box`. This is that idiom
+   generalized, not a new one.
+
+   Six users, one component: Quick Re, the four Pricing forms, and Bounds. It is
+   a WRAPPER in `index.html` rather than a class on each form host, for two
+   reasons. `createPricingForm` calls `empty(host)`, so Bounds' hint span cannot
+   live inside the host it has to be drawn under. And Re's host is
+   `.tab-tools.reins-entry`, which already carries `padding-left: var(--tabpad)`;
+   the class on that element would indent the row twice.
+
+   Ground and a hairline, not a heavy border: it sits inside a tab body that
+   already has the folder tab's own rule above it.
+
+   The indent is a MARGIN and not the `padding-left` the bare rows carry, so the
+   box's left EDGE lands where the pane's text starts rather than a box width
+   further out. */
+.control-band {
+    background: var(--soft);
+    border: 1px solid var(--line-2);
+    border-radius: .5rem;
+    margin: 0 0 var(--gap-unit) var(--tabpad);
+    padding: .55rem .75rem;
+}
+/* The row inside the box takes its indent from the box, so the --tabpad padding
+   it carries when bare has to come back off. */
+.control-band .tab-tools { padding-left: 0; margin-bottom: 0; }
+/* The line that explains the control, gathered in. Through a156 `#qr-preview`
+   and `#bounds-hint` were the last thing before the output, so the sentence
+   about the ask was a free floating grey line in the no man's land between the
+   ask and the answer. Inside the box it is part of the ask. */
+.control-band .price-preview,
+.control-band .reins-preview { padding-left: 0; margin: .4rem 0 0; }
+.control-band .reins-entry-hint { margin-bottom: 0; }
+/* Bounds says what its selected leaf computes in a `.sub-hint` span, which had
+   no rule anywhere in this file through a156 and so drew at body weight, flush
+   left, between the form and the pane. It is the same kind of sentence as a
+   preview line and now reads like one. Not `.price-preview`, which is mono
+   because it is prose made almost entirely of digits; this is ordinary prose. */
+.control-band .sub-hint {
+    display: block; font-size: var(--fs-meta); color: var(--mut);
+    line-height: 1.45; margin: .4rem 0 0;
+}
+
+/* The band's name, and the answer to an anonymous row of small buttons sitting
+   where the reader expects a label, at exactly the point they are being asked
+   to decide something. Same letterspaced small caps as `derive` on the action
+   row and as `.reins-lede`, which is the idiom this generalizes. Inline and
+   first in the row, so it costs no height.
+
+   It names the QUESTION, never the leaf. Drawing the Pricing band with
+   `Calibrate` on it put that word on screen three times inside 40 pixels: the
+   selected leaf in accent red, the band label, and the button at the end of the
+   row. Once the band is a box the box says "these are controls", so the label's
+   remaining job is the one the leaf name does not do. */
+.band-label {
+    font-size: .68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .1em; color: var(--mut); margin-right: .35rem;
+    flex: 0 0 auto;
 }
 
 /* Keyboard navigation is only as good as its focus ring, and the browser
@@ -874,11 +975,14 @@ header .navbar { min-height: 56px; }
 
    Holds its line height when empty so the pane below does not move as it fills,
    and dims rather than blanks while a request is in flight, so the last good
-   reading stays on screen and says it is not current. */
+   reading stays on screen and says it is not current.
+
+   No bottom margin since a157: the line is inside the control band now, and the
+   band owns the gap below it. */
 .price-preview {
     font-family: var(--mono); font-size: var(--fs-meta); color: var(--mut);
     line-height: 1.45; min-height: 1.2em;
-    margin: .4rem 0 .8rem; transition: opacity .12s;
+    margin: .4rem 0 0; transition: opacity .12s;
 }
 .price-preview.is-pending { opacity: .35; }
 
@@ -979,12 +1083,16 @@ header .navbar { min-height: 56px; }
 .tooltip-inner { text-align: left; }
 .reins-entry-hint {
     font-size: var(--fs-meta); color: var(--mut); line-height: 1.45;
-    max-width: var(--measure); margin: .4rem 0 1.6rem;
+    max-width: var(--measure); margin: .4rem 0 0;
 }
 /* The clause the row will write, in the code face because that is what it is.
-   Holds its line height when empty so the row above does not move as it fills. */
+   Holds its line height when empty so the row above does not move as it fills.
+
+   Its 1.4rem bottom margin is gone as of a157. That margin was the whole of the
+   page's band rhythm, set on one hint paragraph in one group, and it is
+   --gap-unit on the control band now. */
 .reins-preview {
-    font-family: var(--mono); min-height: 1.2em; margin-bottom: 1.4rem;
+    font-family: var(--mono); min-height: 1.2em;
     transition: opacity .12s;
 }
 /* Waiting on a quantile the object has not been asked for yet. The last good

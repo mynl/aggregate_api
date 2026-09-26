@@ -4,6 +4,49 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a157
+
+Phase 1 of `dev/plan-ui-round-8.md`, from an author report: the design is good
+but a lot "floats about", because on the Re, Pricing and Bounds groups you meet
+a leaf row, then a form, then output, with nothing saying where one ends and the
+next begins. All three sit on the same `--tabpad` indent, so alignment was
+already spent as a grouping cue and the spacing was not taking it up.
+
+**Three spacing tokens, and a rhythm that says what belongs to what.**
+`--gap-tight` (.3rem) holds a leaf row against the form it steers, `--gap-unit`
+(1.75rem) stands a form off the output it produced, and `--gap-major` (2rem)
+separates the input region from the output region at the status strip. Pricing
+and Bounds ran .7rem above the form and .8rem below it, a ratio that grouped
+nothing. Re already read at about 2 to 1, on `.reins-preview`'s own bottom
+margin, and that margin is now a token rather than a local rule nobody
+remembered was load bearing.
+
+**One enclosure per group, the control band.** The form row, and the line that
+explains it, get a ground and a hairline; the output below stays plain. It earns
+the box on function: the band holds a button that changes what appears beneath
+it, and the page already uses a box to mean "you provide something here", which
+is the editor. Six users, one component: Quick Re, the four Pricing forms and
+Bounds. Its left edge lands on `--tabpad`, where the pane's text starts.
+
+**The line under a control is inside the band with it.** Through a156
+`#qr-preview` and `#bounds-hint` were the last thing before the output, so the
+sentence about the ask was loose in the no man's land between the ask and the
+answer. `#bounds-hint` was also unstyled, drawing at body weight and flush left;
+it now reads like the preview lines it sits beside.
+
+**The Pricing and Bounds bands are named.** A letterspaced small caps word,
+first in the row, where an anonymous row of small buttons used to sit at exactly
+the point the reader is being asked to decide something. It names the question
+and never the leaf: `anchor and target` on Calibrate, Allocate and Bounds,
+`premium and anchor` on Evaluate, `premium and capital` on Pr Ruin. Re keeps
+`Quick Re`, which is a feature name rather than a leaf name.
+
+**Evaluate gains the preview line the other Pricing leaves have**, saying what
+the premium in the box implies at the anchor beside it. It goes quiet rather
+than printing the route's refusal when either box is cleared: an unstated anchor
+is that leaf's deliberate request for the library's unlimited reading, and a
+deliberate choice must not come back looking like a mistake.
+
 ## 1.0.0a156
 
 **[Stale-Companion-Reading] the log switch drives the quantile curve beside

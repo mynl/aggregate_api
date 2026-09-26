@@ -63,6 +63,15 @@ const BASES = [
  *     pair, a spacer, the target pair, the verb, then whatever `extras` adds.
  * opts.verb : string
  *     The button's word, and its stem while busy ('Calibrate' / 'Calibrating').
+ * opts.bandLabel : string or null
+ *     The control band's name, drawn first in the row in letterspaced small
+ *     caps, or null to draw none. It names the QUESTION the row asks and must
+ *     not repeat the leaf name: the leaf is already on screen in accent red a
+ *     few pixels above, and the verb is on the button at the end of the row, so
+ *     a third copy inside 40 pixels is the "Summary said twice" failure that
+ *     retired the Overview header block. 'anchor and target' is this file's own
+ *     vocabulary (`anchorInput`, `targetInput`) and names the two halves the
+ *     `◦` spacer already divides the row into.
  * opts.onSubmit : function
  *     Called with the body the form reads, `{p|a, coc|lr|premium, basis}`.
  * opts.basisLabel : string or null
@@ -114,13 +123,17 @@ const BASES = [
  */
 export function createPricingForm(host, opts) {
     const {
-        verb, onSubmit, basisLabel = null, targets = TARGETS.map((t) => t[0]),
+        verb, onSubmit, basisLabel = null, bandLabel = null,
+        targets = TARGETS.map((t) => t[0]),
         preview = false, allowBlank = false, gloss = null, extras = null,
         basisOnly = null, basisWhy = null, context, onChange = null,
     } = opts;
 
     empty(host);
     const row = el('div', { className: 'tab-tools price-form' });
+    if (bandLabel) {
+        row.appendChild(el('span', { className: 'band-label' }, bandLabel));
+    }
     const basisHost = el('span', { className: 'price-basis' });
     if (basisLabel) row.appendChild(basisHost);
 
@@ -338,6 +351,16 @@ export function createPricingForm(host, opts) {
         if (!id || !canPreview) return blank();
         const body = read();
         if (!body) return blank();
+        // Under `allowBlank` an empty box says "unstated", and `price_pentagon`
+        // needs exactly one capital anchor and exactly one target, so an
+        // unstated one leaves nothing to preview. The route's refusal ("pass
+        // exactly one of p or a") is a real sentence but it is not one this
+        // state has earned: the Evaluate leaf clears its anchor on purpose, to
+        // ask for the library's unlimited reading, and a deliberate choice must
+        // not come back looking like a mistake.
+        if (allowBlank && (body[anchor] == null || body[target] == null)) {
+            return blank();
+        }
 
         const mine = ++ticket;
         const pending = setTimeout(() => {

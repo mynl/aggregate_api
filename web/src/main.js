@@ -3090,6 +3090,9 @@ const calibratedLeaf = () => (
 const priceForm = createPricingForm($('price-form'), {
     verb: 'Calibrate',
     basisLabel: 'calibrate on',
+    // Names the question, not the leaf: `Calibrate` is already the selected leaf
+    // above the band and the word on the button below it.
+    bandLabel: 'anchor and target',
     preview: true,
     context: formContext,
     onSubmit: async (body) => {
@@ -3129,6 +3132,7 @@ const allocateBases = (bases, kind) => (
 const allocateForm = createPricingForm($('allocate-form'), {
     verb: 'Allocate',
     basisLabel: 'allocate on',
+    bandLabel: 'anchor and target',
     preview: true,
     basisOnly: allocateBases,
     basisWhy: 'net and ceded are this tab’s outputs, not its inputs',
@@ -3285,6 +3289,9 @@ const requestRuinSoon = debounce(() => requestRuin(), 350);
 
 const ruinForm = createPricingForm($('ruin-form'), {
     verb: 'Draw',
+    // The shared pricing row plus `ruinExtras`, which is the one capital
+    // probability box, so the band asks for both halves.
+    bandLabel: 'premium and capital',
     preview: true,
     context: formContext,
     extras: ruinExtras,
@@ -3401,6 +3408,11 @@ const boundsForm = createPricingForm($('bounds-form'), {
     // would be one the request cannot carry. `adoptPricing` is where that gap
     // becomes a sentence rather than a silent mislabel.
     basisLabel: null,
+    // The same anchor and target row Calibrate draws, so it takes the same name.
+    // The plan proposed `premium`, which under-describes a row whose target
+    // switches between a premium, a cost of capital and a loss ratio; author's
+    // ruling on 2026-09-26 was to keep the two labels identical.
+    bandLabel: 'anchor and target',
     // The pane said nothing at all until a press, and the press is fifty
     // resamples. One pentagon solve says what is about to be swept, and it puts
     // the refusals in front of the button: Bounds rejects a premium below the
@@ -3503,10 +3515,19 @@ const evaluateForm = createPricingForm($('evaluate-form'), {
     // distribution. The fuller gross versus net story overlaps Economics and
     // stays there.
     basisLabel: 'premium is',
+    // The premium box and the asset anchor beside it, which is what closes the
+    // round trip with a calibration struck at the same level.
+    bandLabel: 'premium and anchor',
     // One question, so nothing to switch. The premium is the input and the
     // stress it survives is the answer.
     targets: ['premium'],
     allowBlank: true,
+    // A line in the band since a157, so the one Pricing leaf that had none is no
+    // longer the exception. It says what the premium in the box implies at the
+    // anchor beside it, which is the round trip the leaf exists to close. Goes
+    // quiet rather than printing the route's refusal when either box is cleared;
+    // see `renderPreview` in pricing-form.js.
+    preview: true,
     gloss: 'breakeven acceptability: the distortion that values the margin at zero',
     context: formContext,
     onSubmit: async (fields) => {

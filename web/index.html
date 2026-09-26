@@ -452,6 +452,13 @@
                      token. Do not "fix" this back into sync with the clause.
 
                      See `composeCession` in main.js. -->
+                <!-- The control band, one enclosure per group: the ask gets a
+                     ground and a hairline and the answer sits plain underneath.
+                     A wrapper rather than a class on `#reins-entry`, which
+                     already carries `.tab-tools`'s --tabpad padding and would
+                     otherwise be indented twice. See `.control-band` in
+                     site.css. -->
+                <div class="control-band">
                 <div class="tab-tools reins-entry" id="reins-entry">
                     <div class="reins-row">
                         <span class="reins-lede">Quick Re</span>
@@ -493,6 +500,9 @@
                          so the row says what it does without being used. -->
                     <p class="reins-entry-hint reins-preview" id="qr-preview"></p>
                 </div>
+                </div><!-- /.control-band. Left at the wrapper's own indent
+                     rather than reindenting the forty lines above it, which
+                     would bury the real change in whitespace. -->
                 <div id="pane-reinsurance" class="pane"></div>
             </div>
 
@@ -540,13 +550,13 @@
                      asks the object rather than a form, so it carries no form
                      at all. -->
                 <div id="leaf-price">
-                    <div id="price-form"></div>
+                    <div class="control-band"><div id="price-form"></div></div>
                     <div id="pane-calibrate" class="pane"></div>
                     <div id="pane-standalone" class="pane d-none"></div>
                 </div>
 
                 <div id="leaf-allocate" class="d-none">
-                    <div id="allocate-form"></div>
+                    <div class="control-band"><div id="allocate-form"></div></div>
                     <!-- The massive placeholder. A control that cannot be
                          operated, said out loud rather than hidden, per the
                          house rule that nothing coming is invisible. The
@@ -568,7 +578,7 @@
                 </div>
 
                 <div id="leaf-evaluate" class="d-none">
-                    <div id="evaluate-form"></div>
+                    <div class="control-band"><div id="evaluate-form"></div></div>
                     <div id="pane-evaluate" class="pane"></div>
                 </div>
 
@@ -579,7 +589,7 @@
                      The chart pane and the stats strip are separate hosts so
                      the exhibit table redraws without touching the canvas. -->
                 <div id="leaf-ruin" class="d-none">
-                    <div id="ruin-form"></div>
+                    <div class="control-band"><div id="ruin-form"></div></div>
                     <div id="pane-ruin" class="pane"></div>
                     <div id="pane-ruin-stats" class="pane"></div>
                 </div>
@@ -596,8 +606,13 @@
                  would spend it every time you passed through. -->
             <div class="tab-pane fade" id="t-bounds">
                 <div class="sub-tabs" id="sub-bounds"></div>
-                <div id="bounds-form"></div>
-                <span class="sub-hint" id="bounds-hint"></span>
+                <!-- The hint is inside the band because it is a hint about the
+                     control, and it cannot go inside `#bounds-form` itself:
+                     `createPricingForm` empties its host. -->
+                <div class="control-band">
+                    <div id="bounds-form"></div>
+                    <span class="sub-hint" id="bounds-hint"></span>
+                </div>
                 <div id="pane-bounds" class="pane"></div>
             </div>
 
