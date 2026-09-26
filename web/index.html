@@ -319,21 +319,37 @@
             </span>
         </div>
 
-        <!-- Status strip: what is built, and whether it is OK. Three lines in
-             one container, so the instrumentation reads as one thing:
+        <!-- Status strip: what is built, and whether it is OK. One line, and a
+             second that folds:
 
-               1. the object    name · kind · bs · log2 · mean · CV · validation
-               2. the note      the program's own tags{} as chips and its note{}
-                                running on after them, then what a derivation did
-                                and what the library warned about
-               3. the timing    Calculated in 0.000 seconds
+               1. the object    BasicBook   Portfolio   bs 4 log2 18 loss
+                                mean 106,477 CV 0.2114            0.41s
+               2. the note      library warnings, then what a derivation did,
+                                then the program's own tags{} as chips with its
+                                note{} running on after them
 
-             The note is its own line as of a49. Sharpen's verdict used to be
-             written onto the timing line, which the next render then overwrote.
-             The declared note{} joined it at a118 and the tags{} at a120, when
-             the Overview header block that had carried both was retired: a
-             program's own account of itself belongs next to its numbers, and
-             that block was drawn under one group where this is drawn under six.
+             **Line one is clusters, not a run of dots.** Through a157 it was one
+             mono run at one size joined by seven `·`, so eight facts read as
+             sixteen tokens of equal weight. Labels are in the UI face and grey,
+             values in mono and dark, and three different gaps bind a label to
+             its value more tightly than to the pair beside it.
+
+             **The verdict is said only when it is not clean, and said second.**
+             The left bar and the ground already state it twice, so a third copy
+             in words on a clean build is what the reader learns to skip. On warn
+             and fail the word appears right after the name, where its position
+             does not wander with the wrap.
+
+             **The clock is four characters in the corner.** Through a157 it was
+             a line and a sentence of its own, "Calculated in 0.412 seconds",
+             for a number nobody reads.
+
+             **The note folds behind the chevron**, which carries the count so a
+             closed strip still announces a warning without spending a line on
+             its text. It folds only when there is a built object: a program
+             picked out of the Examples menu puts its note{} and tags{} here
+             before anything is built, and hiding that would be a regression in
+             the examples flow. See `syncSummaryMore` in main.js.
 
              main.js sets `is-warn` / `is-fail` on the wrapper from the build's
              own verdict, which tints the whole strip: hue alone is too weak for
@@ -344,11 +360,12 @@
                     <span class="text-muted">Type DecL above and press
                         <span class="mono">Ctrl+Enter</span> to build.</span>
                 </div>
-                <button class="summary-more" id="summary-more" title="show full summary">
-                    <i class="bi bi-chevron-down"></i></button>
+                <button class="summary-more" id="summary-more" aria-expanded="false"
+                        title="what this build said about itself"><span
+                        id="summary-more-text"></span><i class="bi bi-chevron-down"></i></button>
+                <span class="summary-clock" id="summary-clock"></span>
             </div>
             <div class="summary-note" id="summary-note"></div>
-            <div class="summary-timing" id="summary-timing"></div>
         </div>
 
         <!-- An identity block stood here through a119, carrying the object's

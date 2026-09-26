@@ -386,8 +386,13 @@ async function rebuildMissing(program) {
  * Write one plain line to the strip's first row, with nothing under it.
  *
  * For the two answers that are neither an object nor a failure: an empty box,
- * and a program that meant a number. Both leave the note and the timing lines
+ * and a program that meant a number. Both leave the note slot and the clock
  * blank, because there is no program to quote and nothing was calculated.
+ *
+ * Not `clustered` and not `foldable`: this line is prose rather than a set of
+ * readings, and with no object there is nothing whose note could fold. That
+ * second point is what keeps a picked example's caption on screen, since the
+ * caption is set before anything is built.
  *
  * @param {Node|string|Array} content the line, as a node, text, or a list of
  *   either; `replaceChildren` flattens a list, which is why it is used rather
@@ -397,10 +402,11 @@ async function rebuildMissing(program) {
 function renderStripLine(content, state = 'ok') {
     const inner = $('summary-inner');
     replaceChildren(inner, content);
+    inner.classList.remove('clustered');
+    $('status-strip').classList.remove('foldable');
     setStripState(state);
     clearNote();
-    $('summary-timing').textContent = '';
-    syncSummaryMore();
+    $('summary-clock').textContent = '';
 }
 
 /**
@@ -623,11 +629,18 @@ function noteDerivation(text) {
  * says about itself rather than a reading off it, and a strip line each for
  * three things usually empty would cost the layout more than it returns.
  *
- * The declaration's own line leads. It is the only one the object carries on its
- * own account, so it reads as a caption on the facts line right above it, and the
- * other two are then remarks about the build that just ran, in the order they
- * happened. The note is printed with no label: a sentence of prose under a line
- * of instrument readings does not need to be told apart from one.
+ * **The library's warnings lead and the declaration comes last**, as of a158.
+ * What the library says went wrong outranks what the program says about itself.
+ *
+ * Through a157 this ran the other way, and the argument for it was that the
+ * declaration is the only line the object carries on its own account, so it read
+ * as a caption on the facts line directly above it. That argument was sound while
+ * the note slot was always open and sat under those facts. It does not survive
+ * the fold: nothing is adjacent to anything any more, the reader has pressed a
+ * chevron to get here, and the first line they read should simply be the most
+ * important one. The note is still printed with no label, because a sentence of
+ * prose under a line of instrument readings does not need to be told apart from
+ * one.
  *
  * This line is where the Overview header block used to be, and it absorbed that
  * block at a120 rather than copying it. The header was drawn for one group and
@@ -647,6 +660,10 @@ function renderNote() {
     const caption = _note.caption || {};
     const tags = _note.tags.length ? _note.tags : (caption.tags || []);
     const declared = _note.declared || caption.note || '';
+    for (const w of _note.warnings) {
+        line.appendChild(el('span', { className: 'note-warn' }, w));
+    }
+    if (_note.derivation) line.appendChild(el('span', {}, _note.derivation));
     if (tags.length || declared) {
         // One block, so the chips and the sentence wrap as one paragraph rather
         // than the note starting a line of its own under a short row of tags.
@@ -657,10 +674,11 @@ function renderNote() {
         if (declared) own.appendChild(el('span', {}, declared));
         line.appendChild(own);
     }
-    if (_note.derivation) line.appendChild(el('span', {}, _note.derivation));
-    for (const w of _note.warnings) {
-        line.appendChild(el('span', { className: 'note-warn' }, w));
-    }
+    // The chevron describes this slot, so it is refreshed wherever the slot is
+    // drawn. That includes `onEdit`, which clears a picked example's caption
+    // without touching anything else: without this the chevron would go on
+    // offering a note the slot no longer holds.
+    syncSummaryMore();
 }
 
 /**
@@ -858,6 +876,21 @@ const WHOLE_DENSITY_KINDS = new Set(['distortion', 'bvagg', 'sev']);
 
 function sep() { return el('span', { className: 'sep' }, '·'); }
 
+/* ---- The facts line's three parts ----
+   A cluster is a run that holds together: the kind, the grid, the moments. It
+   moves to the next line whole rather than breaking in the middle of a reading.
+   Inside it a label is grey and in the UI face and a value is dark and in mono,
+   which is the whole of why eight facts stopped reading as sixteen tokens. */
+
+/** One cluster of the facts line. */
+function grp(...children) { return el('span', { className: 'grp' }, ...children); }
+
+/** What a reading is called. */
+function lbl(text) { return el('span', { className: 'lbl' }, text); }
+
+/** What a reading says. */
+function val(text) { return el('span', { className: 'val' }, text); }
+
 /** Bucket size for display: a sub-unit bs shows as 1/2^k (e.g. 1/64). */
 function fmtBs(bs) {
     if (bs == null || !Number.isFinite(bs)) return '';
@@ -868,16 +901,25 @@ function fmtBs(bs) {
 }
 
 /**
- * The strip's first line: name, kind, grid, moments, verdict.
+ * The strip's only line: name, verdict if any, kind, grid, moments, clock.
  *
- * Everything after the name is joined by the same `·`, the kind included. It
- * used to hang off the name on a bare `ms-2` margin, which made the first gap
- * on the line the one gap that was not a separator, and the eye read name and
- * kind as one item.
+ * Three clusters separated by space, not eight facts joined by seven `·`. At
+ * a157 the whole line was one mono run at one size, so label and value carried
+ * equal weight and the reader had nothing to group on. The labels are now in the
+ * UI face and grey, the values in mono and dark, and three different gaps say
+ * what belongs to what; see `.summary-inner.clustered` in site.css.
+ *
+ * **The verdict is said only when it is not clean, and then said second.** The
+ * left bar and the tinted ground already state it, so on `ok` the word was a
+ * third copy of a fact nothing disputed, sitting at the far right of a line that
+ * wraps, where its position moved with the window. On `warn` and `bad` it goes
+ * right after the name, which is a fixed place. `validationState` is unchanged;
+ * only what this function does with its `ok` answer is.
  *
  * `log2` joined `bs` at a49. They are one fact between them: bs is how fine the
  * grid is, log2 how far it reaches, and neither alone says whether the window
- * covers the distribution.
+ * covers the distribution. They share a cluster for that reason, with
+ * `value_type` after them, since orientation is a property of the same window.
  */
 function renderSummary(res) {
     const inner = $('summary-inner');
@@ -893,59 +935,67 @@ function renderSummary(res) {
     allocateForm.sync();
     syncEvaluateForm();
     boundsForm.sync();
+    inner.classList.add('clustered');
     const kindLabel = KIND_LABEL[res.kind] || 'Aggregate';
     const bits = [el('span', { className: 'nm' }, res.name || '(anonymous)')];
-    const add = (text) => bits.push(sep(), el('span', { className: 'mono' }, text));
-    add(kindLabel);
+
+    // The verdict, ahead of everything the object says about itself, because a
+    // failing grid is the reason to distrust the numbers that follow it.
+    const parts = res.components || [];
+    const verdict = res.validation ? validationState(res.validation) : 'ok';
+    setStripState(verdict);
+    if (res.validation && verdict !== 'ok') {
+        bits.push(grp(el('span', { className: `verdict ${verdict}` }, res.validation)));
+    }
+    bits.push(grp(el('span', { className: 'kind' }, kindLabel)));
 
     // An object built from a pair measures a grid per axis, so its facts are
     // pairs and the scalar fields are all null. Reported as `(a, b)` in the
     // same slots, rather than as a second line or a different vocabulary: it
     // is the same five facts about a thing that happens to have two halves.
-    const parts = res.components || [];
+    const grid = [];
+    const moments = [];
     if (parts.length) {
         const pair = (fn, key) => `(${parts.map((c) => (c[key] == null ? '?' : fn(c[key]))).join(', ')})`;
-        add(`bs = ${pair(fmtBs, 'bs')}`);
-        add(`log2 = ${pair(String, 'log2')}`);
-        add(`mean ${pair(fmt, 'mean')}`);
-        add(`CV ${pair(fmt, 'cv')}`);
+        grid.push(lbl('bs'), val(pair(fmtBs, 'bs')), lbl('log2'), val(pair(String, 'log2')));
+        moments.push(lbl('mean'), val(pair(fmt, 'mean')), lbl('CV'), val(pair(fmt, 'cv')));
     } else {
-        if (res.bs != null)   add(`bs = ${fmtBs(res.bs)}`);
-        if (res.log2 != null) add(`log2 = ${res.log2}`);
-        // Between log2 and mean, on every object that has an orientation to
+        if (res.bs != null)   grid.push(lbl('bs'), val(fmtBs(res.bs)));
+        if (res.log2 != null) grid.push(lbl('log2'), val(String(res.log2)));
+        // After log2 and before mean, on every object that has an orientation to
         // report. Sent for `loss` as well as `payoff` since a65: reporting only
         // the exceptional case meant reporting nothing at all, because the two
         // kinds that answer are both `loss` and the one that is `payoff` does
         // not answer. A missing value now means the kind has no convention, not
-        // that its convention is the ordinary one.
-        if (res.value_type)   add(res.value_type);
-        if (res.mean != null) add(`mean ${fmt(res.mean)}`);
-        if (res.cv != null)   add(`CV ${fmt(res.cv)}`);
+        // that its convention is the ordinary one. A label with no value, since
+        // the orientation IS the word.
+        if (res.value_type)   grid.push(lbl(res.value_type));
+        if (res.mean != null) moments.push(lbl('mean'), val(fmt(res.mean)));
+        if (res.cv != null)   moments.push(lbl('CV'), val(fmt(res.cv)));
     }
+    if (grid.length) bits.push(grp(...grid));
+    if (moments.length) bits.push(grp(...moments));
 
-    if (res.validation) {
-        const state = validationState(res.validation);
-        bits.push(sep(), el('span', { className: `mono ${state}` }, res.validation));
-        setStripState(state);
-    } else if (parts.length) {
+    if (!res.validation && parts.length) {
         // A bivariate has no `validation_description`: its correctness gate is
         // the tail deficit, a mass-conservation check rather than the moment
         // comparison every other kind reports. Saying `n/a` is the honest
         // answer, and better than a silent gap that reads as a clean bill.
         // Relabeling the deficit as a verdict would not be; that is asked for
         // upstream instead, see `dev/TODO.md`.
-        add('validation n/a');
-        setStripState('ok');
-    } else {
-        setStripState('ok');
+        bits.push(grp(lbl('validation'), val('n/a')));
     }
-    // No `cached` marker here since a56. It said on line one what line two
-    // already says in words ("Loaded from cache"), and it said it in the middle
-    // of the object's own facts, where a property of *this request* does not
-    // belong. What it was incidentally doing, marking a rebuild of the same
-    // program as a no-op, is now the flash's job and done for every build
-    // rather than only for the cached ones.
+    // No `cached` marker among the facts since a56: it put a property of *this
+    // request* in the middle of the object's own readings. It is on the clock
+    // instead, which is where a property of the request belongs, and the flash
+    // is what marks a rebuild of the same program as a no-op.
     inner.append(...bits);
+    // There is an object, so the note slot folds. Set before the slot is drawn,
+    // because `renderNote` is what refreshes the chevron. Keyed on having got
+    // this far rather than on `_note.caption` being null, because a built library
+    // entry carries both: the caption is the program in the box and the
+    // declaration is the object, and both are true at once.
+    $('status-strip').classList.add('foldable');
     clearNote();
     // What the program says about itself, on the line under its own numbers.
     // Straight off the build response rather than off `/v1/objects/{id}/meta`,
@@ -960,7 +1010,6 @@ function renderSummary(res) {
     _note.warnings = res.warnings || [];
     renderNote();
     renderTiming(res);
-    syncSummaryMore();
     flashStrip();
 }
 
@@ -1038,19 +1087,21 @@ function setStripState(state) {
 }
 
 /**
- * Last line of the strip: "Calculated in 0.000 seconds", or the cache note.
+ * The clock, at the right end of the facts line: `0.41s`, or `cached`.
  *
- * No kind word. It named the object a second time, one line under a summary
- * whose second item is the kind, at the one place on the strip where the
- * reader is asking about time rather than about the object.
+ * Four characters where a158 found a whole line and a whole sentence,
+ * "Calculated in 0.412 seconds", spent on a number nobody reads. Two places
+ * rather than three: the millisecond was noise at this size, and the cache hit
+ * is one word rather than the sentence "Loaded from cache", since the reader is
+ * asking how long that took and `cached` is the answer.
  */
 function renderTiming(res) {
-    const node = $('summary-timing');
+    const node = $('summary-clock');
     if (!node) return;
     if (res.elapsed_ms == null) { node.textContent = ''; return; }
     node.textContent = res.cached
-        ? 'Loaded from cache'
-        : `Calculated in ${(res.elapsed_ms / 1000).toFixed(3)} seconds`;
+        ? 'cached'
+        : `${(res.elapsed_ms / 1000).toFixed(2)}s`;
 }
 
 /**
@@ -1101,12 +1152,17 @@ function renderBuildFailure(err, onRebuild) {
     const inner = $('summary-inner');
     empty(inner);
     const { text, detail } = failureLine(err);
+    // A run of prose joined by a `·`, not clusters: the position and the message
+    // are one sentence about what went wrong, and the cluster gap would put
+    // 1.5rem either side of that dot. Nothing folds either, since there is no
+    // object to have declared anything.
+    inner.classList.remove('clustered');
+    $('status-strip').classList.remove('foldable');
     inner.appendChild(el('span', { className: 'mono bad' }, text));
     if (detail) inner.append(sep(), el('span', { className: 'mono' }, detail));
     setStripState('bad');
     clearNote();
-    $('summary-timing').textContent = '';
-    syncSummaryMore();
+    $('summary-clock').textContent = '';
     // Surface the rich parse-error report (or the friendly rate-limit card) on
     // the landing tab. It used to go to Info, which is now a More sub-view: a
     // failed build has no object, so sending the reader into a sub-menu to read
@@ -1119,19 +1175,54 @@ function renderBuildFailure(err, onRebuild) {
     showTab('overview');
 }
 
-// Show the ⌄ expander only when the summary text actually overflows.
+/**
+ * The chevron, and what it says is folded away.
+ *
+ * Its meaning changed outright at a158. It used to ask whether line one
+ * overflowed horizontally, and that test could never pass: `.summary-inner`
+ * neither clamps nor sets `nowrap` while `.status-strip` sets `overflow-wrap:
+ * anywhere`, so the line wraps rather than overflowing and the control never
+ * appeared at all. The `resize` listener went with the old meaning, since the
+ * answer no longer depends on width.
+ *
+ * It now says **how much is folded**, which is what makes a consistently folded
+ * note slot safe. `2 warnings` in the warn hue when the library said something,
+ * `note` when the object merely declares one, and nothing at all when the slot
+ * is empty. Without the count a warning becomes something the reader has to
+ * click for, and a warning you click for is a warning you do not read.
+ *
+ * Hidden where nothing folds, which is a slot with no content and the no-object
+ * states, where the slot is drawn open so a picked example's caption is visible
+ * with no interaction.
+ */
 function syncSummaryMore() {
-    const s = $('summary');
-    const inner = $('summary-inner');
+    const summary = $('summary');
     const more = $('summary-more');
-    if (s.classList.contains('expanded')) { more.style.display = ''; return; }
-    more.style.display = (inner.scrollWidth > inner.clientWidth + 1) ? 'block' : 'none';
+    const label = $('summary-more-text');
+    if (!more || !label) return;
+    const folds = $('status-strip').classList.contains('foldable')
+        && Boolean($('summary-note').firstChild);
+    if (!folds) {
+        more.style.display = 'none';
+        // Nothing to be open about, so the class goes: an `expanded` summary with
+        // a hidden chevron and an empty slot is a control and a state that
+        // disagree. It is deliberately NOT reset on a build that does have a
+        // note, so a reader who asked to see notes keeps seeing them.
+        summary.classList.remove('expanded');
+        more.setAttribute('aria-expanded', 'false');
+        return;
+    }
+    more.style.display = '';
+    const count = _note.warnings.length;
+    label.textContent = count
+        ? `${count} warning${count === 1 ? '' : 's'}`
+        : 'note';
+    more.classList.toggle('has-warnings', count > 0);
 }
 $('summary-more').addEventListener('click', () => {
-    $('summary').classList.toggle('expanded');
-    syncSummaryMore();
+    const open = $('summary').classList.toggle('expanded');
+    $('summary-more').setAttribute('aria-expanded', String(open));
 });
-window.addEventListener('resize', syncSummaryMore);
 
 // ----------------------------------------------------------------------
 // Tabs -- lazy load + cache per built object

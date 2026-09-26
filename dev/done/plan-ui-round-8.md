@@ -1,7 +1,7 @@
 # Plan, UI round 8: where the dividing lines lie
 
-Status: ruled 2026-09-26, phase 1 landed at `1.0.0a157`, phase 2 outstanding.
-Targets `1.0.0a157` (phase 1) and `1.0.0a158` (phase 2), from `1.0.0a156`.
+Status: DONE. Ruled 2026-09-26 and executed the same day, `1.0.0a157` (phase 1)
+and `1.0.0a158` (phase 2), from `1.0.0a156`.
 Four rulings and every divergence are in the "Execution notes" section at the
 foot of this file; where the two disagree, the notes are what shipped.
 Mockup: `hacks/mockup-11-demarcation.html`, self contained, open it directly.
@@ -488,3 +488,64 @@ for a post 1.0 item, so it stays where it is.
 `cd web; npm test`: 157 tests, 157 pass, 0 fail. `node dev/scripts/check-nav.mjs`:
 clean, every leaf and group greys where it should, which the plan asked for
 because `nav.js` and the capability rules are untouched.
+
+## Phase 2 divergences, a158
+
+Both of the plan's traps resolved in its favor. The **examples caption** is keyed
+on a `.foldable` class that `renderSummary` sets and the two no-object renderers
+remove, which is "the same condition `renderSummary` runs under" as the plan asked
+rather than a test on `_note.caption`. The **dormant chevron** needed no browser
+check: the review established it from the code, so the repurposing was free and
+the `resize` listener went with the old meaning.
+
+1. **[Cluster-Layout-Gated] the cluster layout is on a class, not on
+   `.summary-inner` outright.** `renderBuildFailure` and the landing prompt write
+   into the same node, and they are runs of prose joined by a `·`, so the
+   cluster's 1.5rem column gap would have put 1.5rem either side of that dot.
+   `renderSummary` adds `clustered`; `renderStripLine` and `renderBuildFailure`
+   remove it. The plan's CSS list did not anticipate the shared node.
+
+2. **[Chevron-Synced-In-RenderNote] `syncSummaryMore` is called from the end of
+   `renderNote`, not from each of the three strip renderers.** One invariant: the
+   chevron describes the note slot, so it is refreshed wherever the slot is drawn.
+   It also closes a path the plan did not name. `onEdit` clears a picked example's
+   caption and redraws the slot without going through any of the three renderers,
+   so a chevron synced only in those three would have gone on offering a note the
+   slot no longer held. `.foldable` is therefore set **before** `clearNote()` in
+   `renderSummary` rather than after, so the first sync already knows.
+
+3. **[Fold-State-Sticky] `expanded` is dropped only when nothing folds**, not on
+   every build. The plan is silent on this. A reader who asked to see notes keeps
+   seeing them across builds that have one; the class is cleared the moment the
+   chevron hides, so a control and a state cannot disagree.
+
+4. **[ARIA-Expanded] the button gained `aria-expanded`**, which the plan does not
+   mention. It went from a dormant decoration to a real disclosure control at this
+   bump, and a disclosure control without that attribute is one a screen reader
+   cannot read.
+
+5. **[Clock-Two-Places] `0.41s`, two decimal places**, matching the plan's own
+   example line and down from the timing line's three: the millisecond was noise
+   at `.68rem`. `cached` replaces the sentence "Loaded from cache".
+
+6. **[Verdict-Local-Name] the verdict's local is `verdict`, not `state`.** The old
+   `const state = validationState(res.validation)` shadowed the module-level
+   `state` object inside its block. Renamed while the surrounding lines were being
+   rewritten anyway.
+
+7. **[Retired-Rule-Documented] `.summary-timing` is removed and says so.** The
+   block is replaced by a comment recording what it was and why the clock replaced
+   it, the same treatment the file gives its other retired rules. `renderNote`'s
+   docstring is rewritten rather than left contradicting the new order, which the
+   plan explicitly required.
+
+**Gates, a158.** `uv run --no-sync pytest -q`: 399 passed, 4 warnings, 76.64s.
+`cd web; npm test`: 157 tests, 157 pass, 0 fail. `node --check` on both edited
+modules. `node dev/scripts/check-nav.mjs`: clean.
+
+**Not verified here: the five states in the phase 2 acceptance list.** They need a
+running app and real builds, and no suite or harness in this repo exercises
+`renderSummary`, `renderNote` or `syncSummaryMore`. That is the author's tire
+kicking, and the five states to walk are the plan's list above: clean; clean with
+tags and a note; warned; failed with everything; and an example picked but not
+built. Worth walking the bivariate and the `cached` path with them.

@@ -443,35 +443,91 @@ header .navbar { min-height: 56px; }
     .status-strip.is-flash { animation: strip-flash .45s ease-out 1; }
 }
 
-.summary { display: flex; align-items: baseline; gap: .4rem; }
+.summary { display: flex; align-items: baseline; gap: .6rem; }
 .summary-inner {
     flex: 1 1 auto; min-width: 0; font-size: var(--fs-meta); color: var(--ink-2);
 }
 .summary-inner .nm   { font-weight: 650; font-size: var(--fs-body); color: var(--ink); }
+/* The dotted run, kept for the two lines that are prose rather than facts: the
+   build failure and its position, and the landing prompt. */
 .summary-inner .sep  { color: var(--line); font-family: var(--mono); margin: 0 .3rem; }
 .summary-inner .mono { font-family: var(--mono); color: var(--mut); }
 .summary-inner .ok   { color: var(--ok);   font-weight: 600; }
 .summary-inner .warn { color: var(--warn); font-weight: 600; }
 .summary-inner .bad  { color: var(--bad);  font-weight: 600; }
+
+/* ---- The facts line, in clusters ----
+   Three gaps, not one, and the middle one is the whole point. `.clustered` is
+   set only by `renderSummary`, because the cluster gap would put 1.5rem either
+   side of the `·` on the failure line, which is a run of prose and not a set of
+   readings.
+
+   Through a157 the line was one mono run at one size joined by seven `·`, so
+   eight facts read as sixteen tokens and the eye had nothing to group on. */
+.summary-inner.clustered {
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: .15rem 1.5rem;
+}
+/* A cluster holds together on one line or moves to the next whole. */
+.summary-inner .grp {
+    display: inline-flex; align-items: baseline; gap: .35rem; white-space: nowrap;
+}
+/* A label binds to its own value (.35rem, the cluster's gap) more tightly than
+   to the pair beside it. Done with an adjacent sibling rule rather than a
+   wrapper span per pair, so the markup stays flat. Without it `bs 4 log2 18
+   loss` comes out evenly spaced and reads as five items rather than as two
+   pairs and a word. */
+.summary-inner .val + .lbl { margin-left: .5rem; }
+.summary-inner .lbl { color: var(--mut); }
+.summary-inner .val { font-family: var(--mono); color: var(--ink-2); }
+.summary-inner .kind { color: var(--ink-2); }
+/* Said only when it is not clean, and then said second, right after the name.
+   On `ok` the green left bar is the whole statement: the bar, the ground and the
+   word were three copies of one fact, and the word was at the far right of a
+   line that wraps, so its position moved with the window. Saying nothing when
+   nothing is wrong is what buys amber and scarlet their force. */
+.summary-inner .verdict { font-weight: 600; }
+.summary-inner .verdict.warn { color: var(--warn); }
+.summary-inner .verdict.bad  { color: var(--bad); }
+
+/* The elapsed time, in the corner and in four characters. */
+.summary-clock {
+    flex: 0 0 auto; font-family: var(--mono); font-size: .68rem; color: var(--mut);
+}
+
+/* The chevron, given a real job. Through a157 it was shown only when
+   `inner.scrollWidth > inner.clientWidth`, which a freely wrapping block can
+   never satisfy, so the control never appeared and `expanded` only rotated an
+   icon nobody could see. It now says how much is folded away, which is what
+   makes a consistently folded note slot safe: a warning you have to click for
+   is a warning you do not read. */
 .summary-more {
     flex: 0 0 auto; border: 0; background: transparent; color: var(--mut);
-    cursor: pointer; line-height: 1; padding: .1rem .3rem; font-size: 1rem; display: none;
+    cursor: pointer; line-height: 1; padding: .1rem .2rem;
+    font-size: var(--fs-meta); white-space: nowrap; display: none;
 }
+.summary-more:hover { color: var(--ink); }
+.summary-more.has-warnings { color: var(--warn); font-weight: 600; }
+.summary-more i { font-size: .8rem; margin-left: .2rem; }
 .summary.expanded .summary-more i { transform: rotate(180deg); }
-/* The note slot, between the summary row and the timing line: the program's own
-   tags{} and note{}, what a derivation just did, and what the library warned
-   about. Set in the UI face rather than in mono, because these are the prose
-   sentences on a strip that is otherwise all instrument readings, and one step
-   darker than the timing line, because they are worth reading and the timing is
-   not. */
+/* Folded only where there is a built object to fold, which `renderSummary` marks
+   with `.foldable`. With no object the facts line is a prompt, so a picked
+   example's caption has nothing to compete with and shows open. */
+.status-strip.foldable .summary-note { display: none; }
+.status-strip.foldable .summary.expanded + .summary-note { display: block; }
+/* The note slot, under the facts line: what the library warned about, what a
+   derivation just did, and the program's own tags{} and note{}. Set in the UI
+   face rather than in mono, because these are the prose sentences on a strip
+   that is otherwise all instrument readings, and one step darker than the clock,
+   because they are worth reading and the timing is not. */
 .summary-note {
     font-size: var(--fs-meta); color: var(--ink-2); line-height: 1.4;
     max-width: var(--measure); margin: .25rem 0 0;
 }
 .summary-note:empty { display: none; }
-/* Each tenant of the note slot on its own line, so the declaration's own line, a
-   derivation's sentence and two build warnings do not run together into one
-   paragraph. */
+/* Each tenant of the note slot on its own line, so two build warnings, a
+   derivation's sentence and the declaration's own line do not run together into
+   one paragraph. */
 .summary-note > span { display: block; }
 /* The declaration's own line: its tag chips, then its note running on after
    them, wrapping as one paragraph. `line-height` gives the chips room to sit on
@@ -498,12 +554,9 @@ header .navbar { min-height: 56px; }
     color: var(--warn); border-left: 2px solid var(--warn);
     padding-left: .45rem; margin-top: .2rem;
 }
-/* Timing sub-line, inside the strip and last. */
-.summary-timing {
-    font-family: var(--mono); font-size: var(--fs-meta); color: var(--mut);
-    margin: .25rem 0 0;
-}
-.summary-timing:empty { display: none; }
+/* The timing sub-line retired at a158. "Calculated in 0.412 seconds" was a whole
+   line and a whole sentence for a number nobody reads; the clock in line one's
+   corner says the same thing in four characters. */
 
 /* ---- Output tabs: the six groups ----
    Real tab shapes, drawn from Bootstrap's `nav-pills` markup. The markup does

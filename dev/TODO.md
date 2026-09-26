@@ -232,21 +232,26 @@ and the standing REMINDER below about what is worth plotting.
 
 ## Near term (get it healthy)
 
-- [ ] **GUI round 8, where the dividing lines lie** (`dev/plan-ui-round-8.md`),
-      two phases, from an author report that the design is good but a lot
-      "floats about" and that the status strip gets glazed over.
+- [x] **GUI round 8, where the dividing lines lie**
+      (`dev/done/plan-ui-round-8.md`), **a157 to a158**, from an author report
+      that the design is good but a lot "floats about" and that the status strip
+      gets glazed over. Four rulings taken at review time and eleven divergences
+      are in the plan's "Execution notes" section. The five visual states in the
+      phase 2 acceptance list still want walking in the running app: no suite
+      here exercises `renderSummary` or `syncSummaryMore`.
     - [x] Phase 1 [Rhythm-And-The-Control-Band], **a157**. Three spacing tokens
           replacing a page of local margins, one enclosure on the form row with
           its explaining line gathered inside it, and a name on the Pricing and
-          Bounds bands. Four author rulings taken at review time and the four
-          divergences they produced are in the plan's "Execution notes" section;
-          the largest is that the plan's `:has(+ .control-band)` selector reached
-          only Bounds, since Pricing nests its forms in `#leaf-*` wrappers and Re
-          puts its program lede in between.
-    - [ ] Phase 2 [The-Status-Strip], a158. Clusters instead of seven `·`
+          Bounds bands. The largest divergence: the plan's
+          `:has(+ .control-band)` selector reached only Bounds, since Pricing
+          nests its forms in `#leaf-*` wrappers and Re puts its program lede in
+          between.
+    - [x] Phase 2 [The-Status-Strip], **a158**. Clusters instead of seven `·`
           separators, the verdict said only when it is not clean, the clock in
           the corner instead of a sentence on a line of its own, and the note
-          slot folded behind a chevron that carries the warning count.
+          slot folded behind a chevron that carries the warning count. The
+          chevron had been dormant since it was added: it was shown only when
+          line one overflowed horizontally, which a freely wrapping line cannot.
 
 - [x] **[Examples-Search] the doubled list and the alphabetized ties**, from an
       author report, **a139**. Searching `capstone` drew the eleven hits twice

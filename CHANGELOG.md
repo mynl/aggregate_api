@@ -4,6 +4,46 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a158
+
+Phase 2 of `dev/plan-ui-round-8.md`, the other half of the author report: the
+status strip "gets a bit busy" and gets glazed over. Four causes, all addressed.
+
+**Line one is three clusters, not eight facts joined by seven dots.** Labels are
+in the UI face and grey, values in mono and dark, and three different gaps bind a
+label to its value more tightly than to the pair beside it and those pairs more
+tightly than to the cluster alongside. Same information, roughly half the
+apparent density. The dotted run stays on the two lines that are prose rather
+than readings, the build failure and the landing prompt.
+
+**The verdict is said only when it is not clean, and then said second.** The left
+bar and the tinted ground already state it, so on a clean build the word was a
+third copy of a fact nothing disputed, sitting at the far right of a line that
+wraps, where its position moved with the window. On a warning or a failure it now
+appears right after the name. `validationState` and its grading are unchanged.
+
+**The clock is four characters in the corner**, `0.41s` or `cached`. "Calculated
+in 0.412 seconds" was a whole line and a whole sentence for a number nobody
+reads, and the timing sub-line is gone.
+
+**The note slot folds behind the chevron, and the chevron carries the count.** It
+reads `2 warnings` in amber when the library said something, `note` when the
+object merely declares one, and nothing when there is nothing to show. That is
+what makes a consistently folded slot safe: a warning you have to click for is a
+warning you do not read. The chevron itself was dormant through a157, shown only
+when line one overflowed horizontally, which a freely wrapping line can never do.
+
+**Inside the fold, warnings lead and the declaration comes last.** What the
+library says went wrong outranks what the program says about itself. This
+reverses the previous order, whose argument was that the declaration reads as a
+caption on the facts line directly above it. That held while the slot was always
+open and adjacent to those facts; it does not survive the fold.
+
+**A picked example still shows its note and tags with no interaction.** The fold
+applies only when there is a built object. `_note.caption` is set when an entry
+is chosen from the Examples menu, before anything is built, and folding it away
+unconditionally would have been a real regression in that flow.
+
 ## 1.0.0a157
 
 Phase 1 of `dev/plan-ui-round-8.md`, from an author report: the design is good
