@@ -4,6 +4,20 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a162
+
+Two from the author, reading a161 in the running app.
+
+- **Air below a build warning.** The library's warning ran straight into the
+  derivation sentence or the declaration under it, with no gap at the boundary.
+  Warnings stay tight to each other, since consecutive ones are one list; the
+  space goes where the complaint stops and the object's own prose starts, and
+  none is added when a warning is the last thing in the slot.
+- **The page lede loses its box.** It carried the editor box's border, radius,
+  shadow and fill so the two would read as a stack. That is ink spent on a
+  distinction nothing was confusing: the line sits directly above the input box,
+  which is the whole of what says it belongs to it. The text holds its left edge.
+
 ## 1.0.0a161
 
 Phase 3 of `dev/plan-ui-round-9.md`, three rulings from the same reading.
@@ -44,11 +58,19 @@ twelve exhibit blocks a portfolio publishes.
   and prints what Python's `%g` prints. **The `web/package.json` pin cannot move
   until that repo is pushed**, so the interactive view is still broken here until
   it does.
-- **A failing table now says so.** The grid was mounted inside a `then` with
-  nothing after it, so a throw from the constructor was an unhandled rejection
-  and the pane stayed blank. Both views now fall back the way they always meant
-  to: the interactive one to "This table could not be rendered", the static one
-  to the grid.
+- **A failing mount now says so, for every failure this side can see.** The grid
+  was mounted inside a `then` with nothing after it, so a throw would have been
+  an unhandled rejection with the pane left blank; both views now fall back the
+  way they always meant to, the interactive one to "This table could not be
+  rendered" and the static one to the grid.
+
+  **It does not catch this particular failure**, which walking the running app
+  established after the fact. csv-grid calls `_install` inside its own promise
+  chain and loses the throw there, so nothing reaches the caller: the reader gets
+  a toolbar over an empty box, and the only trace is a console exception. That is
+  a second upstream bug, fixed in csv-viewer 3.10.1, and it is the reason this
+  went unreported for so long. Both upstream fixes reach the app on the same pin
+  move.
 - **`check-adapter` grew a second pass**, over every exhibit block in both
   perspectives, checking each derived format spec against the grammar it reads
   out of the installed csv-grid bundle. The old pass compares a document against

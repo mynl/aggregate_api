@@ -561,6 +561,13 @@ header .navbar { min-height: 56px; }
     color: var(--warn); border-left: 2px solid var(--warn);
     padding-left: .45rem; margin-top: .2rem;
 }
+/* Air below the warnings, before the prose. Warnings stay tight to each other
+   at .2rem, since consecutive ones are one list; what needed a gap is the
+   boundary where the library's complaint stops and the object's own sentence
+   or its declaration starts, which ran straight on from the ruled block above
+   it. On the boundary rather than on `.note-warn` itself, so a warning that is
+   the last thing in the slot adds no trailing space. */
+.summary-note .note-warn + span:not(.note-warn) { margin-top: .5rem; }
 /* The timing sub-line retired at a158. "Calculated in 0.412 seconds" was a whole
    line and a whole sentence for a number nobody reads; the clock in line one's
    corner says the same thing in four characters. */
@@ -1190,18 +1197,20 @@ header .navbar { min-height: 56px; }
 .agg-ratelimit-sub   { margin-top: .45rem; }
 
 /* ---- The lede, above the editor ----
-   Where the hero cards were through a36. One band, boxed to the editor's
-   width (same border, radius, and shadow as .editor-box, so the two read as
-   a stack): the tagline leads at body size and the terms notice rides at the
-   right edge in the small grey of the help panel's fine print, wrapping under
-   the tagline on narrow screens. Baseline alignment, not center, so the two
-   runs of text sit on one line of type. */
+   Where the hero cards were through a36. The tagline leads at body size and the
+   terms notice rides at the right edge in the small grey of the help panel's
+   fine print, wrapping under the tagline on narrow screens. Baseline alignment,
+   not center, so the two runs of text sit on one line of type.
+
+   **No box, no ground**, author's ruling at a162. It carried `.editor-box`'s
+   border, radius, shadow and white fill so the two would read as a stack, and
+   that is ink spent on a distinction nothing was confusing: the line sits
+   directly above the input box, which is the whole of what says it belongs to
+   it. The horizontal padding stays, so the text holds the left edge it has
+   always had, a box width in from the page; the vertical padding goes with the
+   border it was holding off. */
 .lede-box {
-    border: 1px solid var(--line);
-    border-radius: .75rem;
-    background: #fff;
-    box-shadow: 0 .125rem .35rem rgba(0, 0, 0, .06);
-    padding: .6rem 1rem;
+    padding: 0 1rem;
     margin: 0 0 var(--gutter);
     display: flex; flex-wrap: wrap; align-items: baseline;
     justify-content: space-between; gap: .1rem 1.25rem;
