@@ -262,10 +262,14 @@ and the standing REMINDER below about what is worth plotting.
               dies on a None frame in `aggregate/_labeled.py` instead of raising
               something the route turns into a 400. The frame route declines the
               same object cleanly with a 400.
-    - [ ] Phase 3 [Three-Rulings], **a161**. More leads with Tail behavior
+    - [x] Phase 3 [Three-Rulings], **a161**. More leads with Tail behavior
           instead of the heavy Density load; Quick Re's refusal names the two
           amounts that collide instead of restating a rule; the control band
           takes the editor's white ground rather than the status strip's tint.
+    - [ ] **Item 1, the chart control strip**, deferred to its own plan and
+          summarized under "Out of scope" in round 9. Three unenclosed rows stand
+          above every canvas and `.exhibit-group-panel`'s equal-share centering
+          promises an alignment to the panels it cannot keep.
 
 - [x] **GUI round 8, where the dividing lines lie**
       (`dev/done/plan-ui-round-8.md`), **a157 to a158**, from an author report

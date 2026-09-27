@@ -2579,6 +2579,49 @@ function layerNumber(v) {
     return Number.isInteger(v) ? String(v) : String(Number(v.toPrecision(6)));
 }
 
+/**
+ * Why this row cannot write a layer, said in the amounts it resolved.
+ *
+ * Through a160 both cases shared one sentence, "the detachment has to sit above
+ * the attachment", which states a rule the reader has not knowingly broken and
+ * gives them no fact to act on. It arrives most often when nothing is obviously
+ * wrong, and there are two quite different ways to get there.
+ *
+ * **An earlier cession.** `net of (q95 - q50) xs q50` leaves the net
+ * distribution with an atom at its attachment, holding every outcome the layer
+ * covered. So on the net object `q(.5)` and `q(.95)` both land inside that atom
+ * and read the same number, and pressing Add re again without touching the boxes
+ * asks for a layer of no width. Measured on a lognormal book: 844 and 2,240
+ * gross, 844 and 848 after one cession.
+ *
+ * **The snap.** `/quantiles` rounds to three significant figures, which is right
+ * for a number going into a program someone reads and means two distinct
+ * quantiles can arrive as one value at six or seven figures: 1,234,000 and
+ * 1,234,500 both snap to 1,230,000. That produces the same refusal on a gross
+ * object with nothing ceded, which is the mystifying case.
+ *
+ * Naming both amounts tells the two apart without the reader having to know any
+ * of the above: equal numbers say the book has nothing left between those points,
+ * different ones say the boxes are the wrong way round. Spelled with
+ * `layerNumber`, the same function that would have spelled them into the clause,
+ * so the refusal quotes the numbers the clause would have carried, and quoting
+ * the field text as typed keeps `50%` as `50%` rather than as a fraction.
+ *
+ * The test itself does not change and **strictly above is correct**: a zero width
+ * layer cedes nothing, and `0 xs a` is a clause that says nothing.
+ */
+function layerRefusal(attachText, detachText, attachAmount, detachAmount) {
+    const at = String(attachText).trim();
+    const dt = String(detachText).trim();
+    if (attachAmount === detachAmount) {
+        return `attach ${at} and detach ${dt} both read `
+            + `${layerNumber(attachAmount)} on this object, so the layer has no `
+            + 'width';
+    }
+    return `detach ${dt} is ${layerNumber(detachAmount)} here, below attach `
+        + `${at} at ${layerNumber(attachAmount)}`;
+}
+
 /** Which tier the segmented control is on. */
 function qrBasis() {
     return $('qr-basis-agg')?.checked ? 'aggregate' : 'occurrence';
@@ -2633,8 +2676,12 @@ const _quantileCache = new Map();
  * @returns {Promise<string>} `occurrence net of 5000 xs 2500`, ready to cede.
  */
 async function composeCession() {
-    const attach = readLayerField($('qr-attach').value);
-    const detach = readLayerField($('qr-detach').value);
+    // The text as typed is kept, not just what it parsed to: a refusal quotes
+    // the reader's own `50%` back at them rather than the 0.5 it became.
+    const attachText = $('qr-attach').value;
+    const detachText = $('qr-detach').value;
+    const attach = readLayerField(attachText);
+    const detach = readLayerField(detachText);
     if (!attach || !detach) throw new Error('attach and detach are both needed');
     const share = readLayerField($('qr-share').value);
     const basis = qrBasis();
@@ -2659,7 +2706,8 @@ async function composeCession() {
     const attachAmount = resolve(attach);
     const detachAmount = resolve(detach);
     if (!(detachAmount > attachAmount)) {
-        throw new Error('the detachment has to sit above the attachment');
+        throw new Error(
+            layerRefusal(attachText, detachText, attachAmount, detachAmount));
     }
     const layer = `${layerNumber(detachAmount - attachAmount)} xs `
         + `${layerNumber(attachAmount)}`;
@@ -2683,9 +2731,9 @@ async function composeCession() {
  * the row explains itself without being used first, which is the author's
  * "initially: preview the default values".
  *
- * Reports the composer's own complaint on a bad field rather than going blank:
- * "the detachment has to sit above the attachment" is the whole message, and it
- * belongs where the reader is looking rather than after they press the button.
+ * Reports the composer's own complaint on a bad field rather than going blank.
+ * `layerRefusal` is the whole message, and it belongs where the reader is
+ * looking rather than after they press the button.
  *
  * Guarded against the answer arriving out of order. A quantile lookup is a
  * round trip and the boxes can move while it is in flight, so each run takes a

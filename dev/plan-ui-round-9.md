@@ -375,4 +375,88 @@ commit. Neither repo is pushed.
 
 # Execution notes
 
-Written as the work ran.
+Written as the work ran. Every divergence from the plan above is recorded here.
+
+## Phase 1, a159
+
+Landed as written, two edits and two comments. The five acceptance states are
+the author's to walk in the running app; nothing here can exercise them, which
+is the same gap round 8 recorded.
+
+## Phase 2, a160
+
+1. **[Upstream-Landed] csv-viewer 3.10.0 is committed**, not merely designed:
+   `g` in `parseFormatSpec`, a `case 'g'` matching Python's `%g`, two pure
+   helpers, ten smoke-test cases whose expectations were checked against Python's
+   own output first, six version sites, six doc sites, and the rebuilt `dist/`
+   plus the python and R embedded copies. Its plan is `dev/plan-3.10-g-format.md`
+   there. **Not pushed**, per the house rule, so the pin here has not moved.
+   Left alone in that repo: an uncommitted `CLAUDE.md` rewrite and a
+   `python/uv.lock` line, both the author's and both predating this work.
+
+2. **[Gate-Reaches-Exhibits] the spec gate needed a second pass, not a line.**
+   The plan said to add the check to `check-adapter.mjs`, which it is; what the
+   plan did not see is that `check-adapter.py` dumps **frame** documents, and the
+   frame route's formats carry no `g` at all. The gate would have passed while
+   the app stayed broken, which is the failure it was written to end. So the
+   python half gained a second pass that dumps every exhibit block in both
+   perspectives, and the node half a second loop over those. There is nothing to
+   compare them against, by design: an exhibit has no `FrameResponse`, and the
+   specs are the one thing that can be checked without a counterpart.
+
+3. **[Grammar-Read-Not-Copied]** the accepted characters are read out of the
+   installed `dist/csv-grid.es.js` with a regex over its regex literal, rather
+   than copied into the gate. The file's existing idiom is to copy csv-grid's
+   internals verbatim with a "re-diff it if this changes" note, and a copy going
+   stale is precisely what is being guarded against here. Falls back to a loud
+   skip when the literal cannot be found.
+
+4. **[Blast-Radius] the bug is six of twelve exhibit blocks, not one.** The gate
+   reports Stats in both perspectives, Summary and Return periods in `raw`, and
+   Validation in both. The author reported Validation; everything else had been
+   failing silently in the same way.
+
+5. **[Static-Path-Too] the `catch` went on both views**, where the plan named the
+   grid path. `mountIrTable(...).then(...)` had the identical shape, so a throw
+   out of `renderTable` was the same silent rejection. It falls back to the grid,
+   which is what the existing null-handle path already does.
+
+6. **[Upstream-Found] `bs_window` kills the exhibit route** on the gate's own
+   object (a portfolio at `log2=12, bs=1`): `available_exhibits` offers it and
+   `build_exhibit` then dies on a None frame inside `aggregate/_labeled.py`,
+   where the frame route declines the same object with a clean 400. The gate
+   builds its client with `raise_server_exceptions=False` so a route that raises
+   is a reported skip rather than the end of the run. Written up in `dev/TODO.md`.
+
+**Gates, a160.** `pytest -q`: 399 passed. `npm test`: 157 pass. `check-adapter`:
+exits 1 **by design**, naming the six blocks and the pin to move. It is the
+signal for the pin move, and green is what says the move worked.
+
+## Phase 3, a161
+
+1. **[Bivariate-Lands-On-Window] a landing change the plan did not predict.**
+   `check-nav` reports that a bivariate now opens More on Window rather than on
+   Density, since Tail behavior and Approximation are not its. That follows from
+   the same ruling (a diagnostic ahead of a dump) and is an improvement, but it
+   was not written down, so it is written down here. The kinds with no diagnostic
+   at all, a distortion, a severity and both P&Ls, still land on Density.
+
+2. **[Two-Docstrings-Rewritten]** `renderCessionPreview`'s docstring quoted the
+   retired sentence as "the whole message", and the `.control-band` comment
+   argued it followed `.editor-box` while drawing the status strip's ground.
+   Both rewritten rather than left contradicting the code, which is the treatment
+   round 8 prescribed for `renderNote`.
+
+3. **[Field-Text-Kept]** `composeCession` now holds the typed strings as well as
+   what they parsed to, so the refusal quotes `50%` rather than `0.5`. Three
+   lines, and it is what makes the message read as being about the reader's own
+   row.
+
+**Gates, a161.** `pytest -q`: 399 passed. `npm test`: 157 pass. `check-nav`:
+clean, with the landing table above. `node --check` on both edited modules.
+
+## Not verified here
+
+The same class of thing round 8 left: anything needing a browser. The refusal
+sentences, the band's new ground, the More row's new order and phase 1's five
+strip states all want the running app.

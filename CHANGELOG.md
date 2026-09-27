@@ -4,6 +4,30 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a161
+
+Phase 3 of `dev/plan-ui-round-9.md`, three rulings from the same reading.
+
+- **More leads with Tail behavior.** Density led it, which meant arriving on the
+  heaviest thing in the app: a bulk frame on the permanent grid path, and a data
+  dump rather than a diagnostic. Tail behavior is the cheapest of the seven, it
+  holds before any grid is chosen, and it opens the Tail behavior, Approximation,
+  Window run instead of interrupting it. Density moves to the end beside
+  Narrative. Kinds that cannot answer Tail behavior are unaffected: a group still
+  lands on its first available leaf.
+- **Quick Re says which amounts collide.** "The detachment has to sit above the
+  attachment" states a rule the reader has not knowingly broken. The refusal now
+  names both resolved amounts, so `attach 50% and detach 95% both read 844 on
+  this object, so the layer has no width` tells the cession-already-in-place case
+  (an earlier layer leaves an atom at its attachment, and both probabilities land
+  inside it) apart from `detach 20% is 500 here, below attach 50% at 844`. The
+  test is unchanged: a zero-width layer cedes nothing.
+- **The control band takes the editor's ground.** It was drawn in `--soft` on
+  `--line-2`, which is the status strip's rule character for character, so a box
+  meant to say "you provide something here" wore the ground of a readout and the
+  page met three tinted panels going down. White with a `--line` hairline, which
+  is what `.editor-box` actually is.
+
 ## 1.0.0a160
 
 Phase 2 of `dev/plan-ui-round-9.md`, the second bug: the interactive table view

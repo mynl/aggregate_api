@@ -713,15 +713,22 @@ header .navbar { min-height: 56px; }
    `.tab-tools.reins-entry`, which already carries `padding-left: var(--tabpad)`;
    the class on that element would indent the row twice.
 
-   Ground and a hairline, not a heavy border: it sits inside a tab body that
-   already has the folder tab's own rule above it.
+   **The editor's ground, not the strip's**, corrected at a161 from an author
+   report. a157 made the argument above, that the box follows `.editor-box`, and
+   then drew it in `--soft` on `--line-2`, which is the `.status-strip` rule
+   character for character. So the band wore the ground of a READOUT while
+   claiming to be an input, and the page met three tinted panels on the way down.
+   White on the page's own white with a `--line` hairline is what `.editor-box`
+   actually is (its shadow is part of its focus affordance and a static band has
+   none), and it leaves the band an outlined region rather than a filled one,
+   which is the least ink that still gathers the preview line in.
 
    The indent is a MARGIN and not the `padding-left` the bare rows carry, so the
    box's left EDGE lands where the pane's text starts rather than a box width
    further out. */
 .control-band {
-    background: var(--soft);
-    border: 1px solid var(--line-2);
+    background: #fff;
+    border: 1px solid var(--line);
     border-radius: .5rem;
     margin: 0 0 var(--gap-unit) var(--tabpad);
     padding: .55rem .75rem;

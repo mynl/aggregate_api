@@ -295,10 +295,21 @@ export const NAV_GROUPS = {
         label: 'More',
         leaves: {
             // Stats left for Overview at a125, on the reasoning recorded there.
-            density: {
-                label: 'Density',
-                hint: 'binned to a power-of-two display grid; copy / save from the grid',
-            },
+            //
+            // **This order is the row's order, and it is the landing order.** A
+            // group opens on its first available leaf (`activeLeaf`), so leading
+            // with Density meant arriving on the heaviest thing in the app: a
+            // bulk frame on the permanent grid path, and a data dump rather than
+            // a diagnostic. Author's ruling at a161, Tail behavior leads. It is
+            // the cheapest of the seven, it holds before any grid is chosen so it
+            // is prior to everything else here, and it opens the run its own
+            // comment already names. Density sits second to last with Narrative,
+            // the two leaves in this group that are not diagnostics.
+            //
+            // Not Dependency first (a bivariate only, so it greys for most
+            // objects) and not Narrative (true of everything, but it is a
+            // footnote).
+
             // Not the same question as Overview / Tail, which is the
             // return-period ladder read off the computed grid. This is the
             // analytic classification of the frequency, severity and aggregate
@@ -366,6 +377,13 @@ export const NAV_GROUPS = {
                 why: 'press Sharpen on the action row first; this is its audit',
                 hint: 'every grid the probe tried and what it scored; lower is '
                     + 'better, and the selected row is the one it moved to',
+            },
+            // The two that are not diagnostics, at the end. Density is the
+            // heaviest leaf in the app and led this group through a160; see the
+            // ruling at the head of `leaves`.
+            density: {
+                label: 'Density',
+                hint: 'binned to a power-of-two display grid; copy / save from the grid',
             },
             narrative: {
                 label: 'Narrative',
