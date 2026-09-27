@@ -2100,9 +2100,21 @@ function mountTable(paneId, host, source, gridOpts = GRID_FULL) {
     // a call site may know something the frame does not carry. Always the
     // *unmodified* document: the grid sorts and filters on the raw values and
     // formats them itself, so full precision is a static-view question only.
+    // The `catch` is not defensive decoration. `irToGrid` reports null for a
+    // document it cannot adapt, which `unavailable()` already answers, but
+    // `asGrid` runs the CsvGrid constructor, and that throws outright on a
+    // format spec it cannot parse: one `.5g` in one column and there is no
+    // table. Inside a `then` with nothing after it that throw was an unhandled
+    // rejection, so the pane simply stayed empty and the reader was told
+    // nothing at all. Now it says what it says for every other kind of failure,
+    // and the console keeps the message, which is where the spec text is.
     const toGrid = () => irToGrid(doc).then(
         (g) => (g ? asGrid(g.frame, { formats: g.formats, align: g.align, ...gridOpts })
-                  : unavailable()));
+                  : unavailable()))
+        .catch((err) => {
+            console.error('[table] the interactive view could not be mounted', err);
+            unavailable();
+        });
 
     if (!wantStatic) {
         toGrid();
@@ -2111,8 +2123,17 @@ function mountTable(paneId, host, source, gridOpts = GRID_FULL) {
     host.className = 'gt-host';
     // Async, but the host is already in the DOM and holds its place, so the
     // table lands without moving anything around it.
+    //
+    // The walker gets the same treatment: `mountIrTable` reports null when the
+    // module will not load, and a throw from `renderTable` itself falls back the
+    // same way rather than leaving the box empty.
     const shown = _tableView === 'precise' ? atFullPrecision(doc) : doc;
-    mountIrTable(paneId, host, shown).then((handle) => { if (!handle) toGrid(); });
+    mountIrTable(paneId, host, shown)
+        .then((handle) => { if (!handle) toGrid(); })
+        .catch((err) => {
+            console.error('[table] the static view could not be drawn', err);
+            toGrid();
+        });
 }
 
 

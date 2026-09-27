@@ -10,6 +10,15 @@ frames through the api and dumps ``(document, FrameResponse)`` pairs; the node
 half runs the **shipped** walker over them (the same asset the browser loads)
 and compares after applying csv-grid's own cell coercion.
 
+**Two passes since a160.** The pair comparison answers "do the two renderings
+agree", and it structurally cannot reach an exhibit: an exhibit envelope has no
+``FrameResponse`` counterpart to disagree with. So a second pass dumps every
+exhibit block, in both perspectives, for the node half to check the one thing
+that does not need a counterpart: whether csv-grid can parse the format specs
+the adapter derives. That is what was missing when a ``.5g`` on Overview /
+Validation stopped the interactive view dead and every harness here stayed
+green.
+
 Run it after touching ``tables.py``, the frame routes, or the SPA's table
 plumbing, and whenever ``greater-tables`` moves::
 
@@ -63,7 +72,14 @@ PAIRS = {
 
 
 def main() -> int:
-    client = TestClient(create_app())
+    # `raise_server_exceptions=False` so a route that raises is a reported skip
+    # rather than the end of the run. Earned immediately: `bs_window` is listed
+    # by `available_exhibits` for an object that cannot produce one, and
+    # `build_exhibit` then dies inside the library on a None frame instead of
+    # declining, which the route would have turned into a 400. Reported upstream;
+    # see `dev/TODO.md`. A harness that walks everything meets things like this,
+    # and it should say so and carry on.
+    client = TestClient(create_app(), raise_server_exceptions=False)
     oid = client.post(
         "/v1/objects", json={"decl": DECL, "log2": 12, "bs": 1}
     ).json()["id"]
@@ -74,7 +90,10 @@ def main() -> int:
             ir = client.get(f"/v1/objects/{oid}/frame/{which}?format=ir")
             frame = client.get(f"/v1/objects/{oid}/{route}")
             if ir.status_code != 200 or frame.status_code != 200:
-                print(f"  skip {which}: ir={ir.status_code} json={frame.status_code}")
+                # Flushed, or python's buffer holds every skip line until after
+                # the node half has printed its whole report.
+                print(f"  skip {which}: ir={ir.status_code} json={frame.status_code}",
+                      flush=True)
                 continue
             (Path(tmp) / f"{which}.pair.json").write_text(
                 json.dumps({"ir": ir.json(), "frame": frame.json()}),
@@ -84,6 +103,27 @@ def main() -> int:
         if not written:
             print("nothing to compare")
             return 1
+
+        # Pass two: every exhibit the object serves, in both perspectives, for
+        # the spec check alone. Both perspectives because the library resolves
+        # formats per perspective, and ``raw`` is the one that comes back
+        # "general" almost throughout, so checking ``insurer`` alone would see
+        # two `gen` columns where there are twenty.
+        listing = client.get(f"/v1/objects/{oid}/exhibits")
+        for item in listing.json().get("exhibits", []) if listing.status_code == 200 else []:
+            for perspective in ("raw", "insurer"):
+                got = client.get(
+                    f"/v1/objects/{oid}/exhibit/{item['name']}"
+                    f"?perspective={perspective}"
+                )
+                if got.status_code != 200:
+                    print(f"  skip exhibit {item['name']} ({perspective}): "
+                          f"{got.status_code}", flush=True)
+                    continue
+                for n, block in enumerate(got.json().get("blocks", [])):
+                    (Path(tmp) / f"{item['name']}.{perspective}.{n}.spec.json").write_text(
+                        json.dumps(block), encoding="utf-8",
+                    )
 
         # The walker out of the installed package, which is the same file the
         # SPA loads from /v1/assets. Checking a bundled copy would prove nothing

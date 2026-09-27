@@ -243,13 +243,25 @@ and the standing REMINDER below about what is worth plotting.
           value rather than setting one. Build warnings, derivation sentences,
           tags and `note{}` were all on the page and none could be opened. This
           is also what round 8's unwalked acceptance states would have caught.
-    - [ ] Phase 2 [Grid-Formats], **a160**. The interactive view throws on any
+    - [x] Phase 2 [Grid-Formats], **a160**. The interactive view throws on any
           `g` format spec, which is what `greater_tables` emits for a "general"
-          column, so Overview / Validation drew nothing in both perspectives and
-          almost every table drew nothing in `raw`. Fixed upstream in
-          `csv-viewer` 3.10.0; **the `web/package.json` pin cannot move until
-          that repo is pushed**, so a160 lands the honest failure message and a
-          gate that names unparseable specs.
+          column: six of the twelve exhibit blocks a portfolio publishes, not the
+          one that was reported. Fixed upstream in `csv-viewer` 3.10.0 (its own
+          `dev/plan-3.10-g-format.md`). a160 lands the honest failure message,
+          which the pane never gave, and a second `check-adapter` pass that names
+          every unparseable spec.
+        - [ ] **Move the pin.** `web/package.json` pins csv-grid by commit and
+              npm fetches that from GitHub, so this waits on **pushing
+              CSV_Viewer**. Then: new sha, `npm install`, rebuild, and
+              `check-adapter` goes green, which is the signal that it worked.
+              Until then the interactive view stays broken for `g` columns and
+              the gate exits 1 on purpose.
+        - [ ] **Upstream, found while walking every exhibit:** `bs_window` is
+              listed by `available_exhibits` for an object that cannot produce
+              one (this portfolio at `log2=12, bs=1`), and `build_exhibit` then
+              dies on a None frame in `aggregate/_labeled.py` instead of raising
+              something the route turns into a 400. The frame route declines the
+              same object cleanly with a 400.
     - [ ] Phase 3 [Three-Rulings], **a161**. More leads with Tail behavior
           instead of the heavy Density load; Quick Re's refusal names the two
           amounts that collide instead of restating a rule; the control band

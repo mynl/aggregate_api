@@ -4,6 +4,36 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a160
+
+Phase 2 of `dev/plan-ui-round-9.md`, the second bug: the interactive table view
+(the third stop on the Ctrl+Shift+U cycle) drew nothing at all on six of the
+twelve exhibit blocks a portfolio publishes.
+
+- **The cause is a format spec.** csv-grid's grammar took `f d % e s` and threw
+  on anything else, and `greater_tables` writes `.Ng` for every column it
+  resolves as "general". The parse runs inside the CsvGrid constructor over every
+  column, so one `.5g` means no table. Overview / Validation was the reported
+  case; Stats in both perspectives, and Summary and Return periods in `raw`, were
+  the same bug unreported.
+- **Fixed upstream**, in csv-viewer 3.10.0: `g` is now a presentation character
+  and prints what Python's `%g` prints. **The `web/package.json` pin cannot move
+  until that repo is pushed**, so the interactive view is still broken here until
+  it does.
+- **A failing table now says so.** The grid was mounted inside a `then` with
+  nothing after it, so a throw from the constructor was an unhandled rejection
+  and the pane stayed blank. Both views now fall back the way they always meant
+  to: the interactive one to "This table could not be rendered", the static one
+  to the grid.
+- **`check-adapter` grew a second pass**, over every exhibit block in both
+  perspectives, checking each derived format spec against the grammar it reads
+  out of the installed csv-grid bundle. The old pass compares a document against
+  its `FrameResponse`, which an exhibit does not have, which is why this was
+  invisible to every harness in the repo.
+- Noted while walking every exhibit: `bs_window` is offered by
+  `available_exhibits` for an object that cannot produce one, and `build_exhibit`
+  then raises inside the library rather than declining. Reported in `dev/TODO.md`.
+
 ## 1.0.0a159
 
 Phase 1 of `dev/plan-ui-round-9.md`, the first of two bugs found kicking round
