@@ -250,12 +250,11 @@ and the standing REMINDER below about what is worth plotting.
           `dev/plan-3.10-g-format.md`). a160 lands the honest failure message,
           which the pane never gave, and a second `check-adapter` pass that names
           every unparseable spec.
-        - [ ] **Move the pin.** `web/package.json` pins csv-grid by commit and
-              npm fetches that from GitHub, so this waits on **pushing
-              CSV_Viewer**. Then: new sha, `npm install`, rebuild, and
-              `check-adapter` goes green, which is the signal that it worked.
-              Until then the interactive view stays broken for `g` columns and
-              the gate exits 1 on purpose.
+        - [x] **The pin moved**, **a163**, once CSV_Viewer was pushed and
+              csv-grid 3.10.1 was on PyPI for the server-side consumers.
+              `check-adapter` now reports `csv-grid 3.10.1 takes [fd%esg]` and
+              passes its spec pass clean, and the six exhibit blocks that drew
+              nothing draw again.
         - [ ] **Upstream, found while walking every exhibit:** `bs_window` is
               listed by `available_exhibits` for an object that cannot produce
               one (this portfolio at `log2=12, bs=1`), and `build_exhibit` then

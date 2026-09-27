@@ -455,8 +455,84 @@ signal for the pin move, and green is what says the move worked.
 **Gates, a161.** `pytest -q`: 399 passed. `npm test`: 157 pass. `check-nav`:
 clean, with the landing table above. `node --check` on both edited modules.
 
-## Not verified here
+## Walked in the running app, 2026-09-27
 
-The same class of thing round 8 left: anything needing a browser. The refusal
-sentences, the band's new ground, the More row's new order and phase 1's five
-strip states all want the running app.
+Against `a161` on `127.0.0.1:8001`, because round 8 left its acceptance list
+unwalked and this plan's phase 1 exists because of that.
+
+**Phase 1, confirmed.** A restored clean build shows one line, no verdict word,
+the clock at the right and no chevron. `agg Probe 10 claims sev lognorm 100 cv 8
+poisson` tints the strip, puts `grid infeasible for this severity; fails sev
+mean, agg mean` right after the name, and carries `1 warning ⌄` in amber at the
+right. Pressing it opens the library's whole sentence under a warn rule. That is
+states 1 and 3 of round 8's list, and the fold, which no reader could reach at
+a158.
+
+Round 8's remaining states, also confirmed. A build carrying `note{}` shows
+`note ▾` in the ordinary hue, the slot hidden until it is pressed, open on the
+press, closed on the next, with `aria-expanded` tracking. Pressing Sharpen puts
+its own sentence in the fold **above** the declaration, which is the order a158
+specified and which no reader could see until now: `Sharpen: not run, the grid
+already scores 7.88e-05 against a target of 0.5.`
+
+**Phase 3a, confirmed.** More reads `Tail behavior [active]  Approximation
+Window  Dependency (grey)  Sharpen (grey)  Density  Narrative`.
+
+**Phase 3b, confirmed, including the author's own case.** An inverted pair reads
+`detach 20% is 22.2 here, below attach 50% at 55.5`. Ceding the defaults on the
+aggregate basis writes `aggregate net of 1058 xs 892`, and pressing Add re again
+without touching the boxes now reads `attach 50% and detach 95% both read 892 on
+this object, so the layer has no width`. That is exactly the report ("the agg
+message appears if there is agg re already there and you don't change the
+percents"), and the atom at the attachment is visible in the numbers.
+
+**Phase 3c, confirmed.** The band computes to `#fff` on a `#d4d4d4` hairline
+against the status strip's `#f6f6f6` on `#ebebeb`; six bands on the page, the
+preview line inside each. The Re lede sits above the band, outside it, as it has
+since round 8.
+
+**Phase 2, and a finding that corrects the phase 2 entry.** Overview /
+Validation draws in both static readings and then, on the third press of
+Ctrl+Shift+U, mounts a grid with **zero rows and zero headers under a working
+Copy / Save toolbar**. The console carries
+`Error: CsvGrid: unrecognized format spec '.5g'` at `_install`, and nothing else
+on the page says a word.
+
+The `catch` added this round does not fire, and cannot: csv-grid's `setData`
+runs `_install` inside `.then(onFulfilled, onRejected)`, where the rejection
+handler never sees its sibling's own throw. The throw lands on an intermediate
+promise nobody holds, so the returned promise never settles at all, the grid's
+own `_showError` never runs, and no rejection reaches this side to be caught.
+
+Fixed upstream as **csv-viewer 3.10.1**, `.catch` instead of the second argument,
+which is what makes an install failure visible in the grid the way that class
+always intended. So the empty box the author can still see is not the missing
+`g` alone; it is the missing `g` plus an error that could not report itself.
+Both land here on the same pin move. The a160 CHANGELOG entry is corrected to say
+this rather than to claim a symptom that is not fixed yet.
+
+## The pin moved, a163
+
+CSV_Viewer pushed and csv-grid 3.10.1 on PyPI, so `web/package.json` moved from
+`01a9773` to `07310c0b` and `npm install` took the lock to 3.10.1.
+
+`check-adapter` flipped from naming six blocks to
+`csv-grid 3.10.1 takes [fd%esg]` and clean, which is the signal the plan named
+for this. In the running app, Overview / Validation on a two unit portfolio now
+draws in all three readings, the interactive one with its ten headers, nine rows,
+fzf search and filters.
+
+**The digits agree**, which is the point of having matched Python's `%g` rather
+than d3's `g` or `toPrecision`. The same row read in both views:
+
+```
+static:       Sev  98.14  98.14  2.7351e-10  131.4%  131.4%  1.5732e-07  3.509  3.509
+interactive:  Sev  98.14  98.14  2.7351e-10  131.4%  131.4%  1.5732e-07  3.509  3.509
+```
+
+Console clean, no CsvGrid exception.
+
+## Still not walked
+
+Round 8's state 5, a picked example that has not been built, and the band on a
+phone width. Neither is touched by anything this round changed.

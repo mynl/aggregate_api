@@ -4,6 +4,21 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a163
+
+The other half of a160: the pin moves, so the interactive table view works again.
+
+- **csv-grid 3.10.1 replaces 3.9.0**, the pin in `web/package.json` moving from
+  `01a9773` to `07310c0b` now that CSV_Viewer is pushed. Two upstream fixes land
+  together: `g` joins the format mini-language, so a `.7g` or `.5g` column no
+  longer takes the whole table down, and a failure while installing data shows in
+  the grid rather than vanishing into a promise nobody holds.
+- **Six exhibit blocks come back** on a portfolio: Stats in both perspectives,
+  Summary and Return periods in `raw`, Validation in both. Overview / Validation
+  was the reported case; the other five had been failing the same silent way.
+- `check-adapter` reports `csv-grid 3.10.1 takes [fd%esg]` and passes its spec
+  pass clean, which is what says the move worked.
+
 ## 1.0.0a162
 
 Two from the author, reading a161 in the running app.
