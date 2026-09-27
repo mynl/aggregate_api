@@ -4,6 +4,25 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a159
+
+Phase 1 of `dev/plan-ui-round-9.md`, the first of two bugs found kicking round
+8's tires.
+
+- **The status strip's note slot is reachable again.** a158 hid it behind the
+  chevron and the chevron could not appear, so on every built object the
+  library's build warnings, the sentence Sharpen / Hints / P&L write about what
+  they just did, the program's `tags{}` chips and its `note{}` were all on the
+  page and none of them could be opened.
+- The cause was one declaration and one assignment: the base `.summary-more` rule
+  ended `display: none`, and the reveal was `more.style.display = ''`, which
+  clears an inline value instead of setting one and so fell straight back to that
+  rule. Visibility now rides on the `hidden` attribute, which cannot fail that
+  way.
+- No other part of the fold moved. The count on the chevron, the order inside the
+  slot, the sticky open state and the unbuilt example's open caption are all as
+  a158 specified.
+
 ## 1.0.0a158
 
 Phase 2 of `dev/plan-ui-round-8.md`, the other half of the author report: the

@@ -504,8 +504,15 @@ header .navbar { min-height: 56px; }
 .summary-more {
     flex: 0 0 auto; border: 0; background: transparent; color: var(--mut);
     cursor: pointer; line-height: 1; padding: .1rem .2rem;
-    font-size: var(--fs-meta); white-space: nowrap; display: none;
+    font-size: var(--fs-meta); white-space: nowrap;
 }
+/* Hidden on the attribute, not on a `display` in the rule above. Through a158
+   the base rule ended `display: none` and `syncSummaryMore` revealed the button
+   with `more.style.display = ''`, which clears an inline value and falls back to
+   this rule: the chevron could not appear in any state, and since it is the only
+   thing that sets `.expanded`, the whole note slot was unreachable on a built
+   object. Warnings, a derivation sentence, tags and note{} all went with it. */
+.summary-more[hidden] { display: none; }
 .summary-more:hover { color: var(--ink); }
 .summary-more.has-warnings { color: var(--warn); font-weight: 600; }
 .summary-more i { font-size: .8rem; margin-left: .2rem; }

@@ -232,6 +232,29 @@ and the standing REMINDER below about what is worth plotting.
 
 ## Near term (get it healthy)
 
+- [ ] **GUI round 9, five punch-ups from kicking round 8's tires**
+      (`dev/plan-ui-round-9.md`), **a159 onward**, from an author report on the
+      running app. Two of the five were bugs with proven causes; three were
+      rulings. The author's sixth item, the chart control strip, is deferred to
+      its own plan and is summarized in this one's "Out of scope".
+    - [x] Phase 1 [Strip-Fold], **a159**. a158's note slot was unreachable: the
+          chevron that opens it was hidden by a `display: none` in its own rule
+          and revealed with `more.style.display = ''`, which clears an inline
+          value rather than setting one. Build warnings, derivation sentences,
+          tags and `note{}` were all on the page and none could be opened. This
+          is also what round 8's unwalked acceptance states would have caught.
+    - [ ] Phase 2 [Grid-Formats], **a160**. The interactive view throws on any
+          `g` format spec, which is what `greater_tables` emits for a "general"
+          column, so Overview / Validation drew nothing in both perspectives and
+          almost every table drew nothing in `raw`. Fixed upstream in
+          `csv-viewer` 3.10.0; **the `web/package.json` pin cannot move until
+          that repo is pushed**, so a160 lands the honest failure message and a
+          gate that names unparseable specs.
+    - [ ] Phase 3 [Three-Rulings], **a161**. More leads with Tail behavior
+          instead of the heavy Density load; Quick Re's refusal names the two
+          amounts that collide instead of restating a rule; the control band
+          takes the editor's white ground rather than the status strip's tint.
+
 - [x] **GUI round 8, where the dividing lines lie**
       (`dev/done/plan-ui-round-8.md`), **a157 to a158**, from an author report
       that the design is good but a lot "floats about" and that the status strip

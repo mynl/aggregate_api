@@ -1194,6 +1194,15 @@ function renderBuildFailure(err, onRebuild) {
  * Hidden where nothing folds, which is a slot with no content and the no-object
  * states, where the slot is drawn open so a picked example's caption is visible
  * with no interaction.
+ *
+ * **Hidden on the `hidden` attribute**, since a159. a158 shipped it hidden by a
+ * `display: none` in the `.summary-more` rule and revealed it with
+ * `more.style.display = ''`, which clears an inline value rather than setting
+ * one, so the fallback was that same rule and the button never appeared. The
+ * cost was not the chevron: it is the only thing that sets `.expanded`, so
+ * warnings, a derivation sentence, tags and `note{}` were all unreachable on
+ * every built object. The attribute cannot fail that way, and it keeps the two
+ * halves of the state, visibility and `aria-expanded`, in one place.
  */
 function syncSummaryMore() {
     const summary = $('summary');
@@ -1203,7 +1212,7 @@ function syncSummaryMore() {
     const folds = $('status-strip').classList.contains('foldable')
         && Boolean($('summary-note').firstChild);
     if (!folds) {
-        more.style.display = 'none';
+        more.hidden = true;
         // Nothing to be open about, so the class goes: an `expanded` summary with
         // a hidden chevron and an empty slot is a control and a state that
         // disagree. It is deliberately NOT reset on a build that does have a
@@ -1212,7 +1221,7 @@ function syncSummaryMore() {
         more.setAttribute('aria-expanded', 'false');
         return;
     }
-    more.style.display = '';
+    more.hidden = false;
     const count = _note.warnings.length;
     label.textContent = count
         ? `${count} warning${count === 1 ? '' : 's'}`
