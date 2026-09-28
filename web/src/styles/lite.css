@@ -134,6 +134,104 @@ body {
 .p-tile .l { font-size: .62rem; color: var(--mut); }
 .p-tile .v { font-family: var(--mono); font-size: .88rem; color: var(--ink); margin-top: .1rem; }
 
+/* ---- The chart card. The document and adapter are the full app's; only
+       the dressing is the phone's. ---- */
+.p-chart { margin: .7rem .9rem 0; }
+/* The control apparatus below the canvas, hidden wholesale. Ruled 2026-09-28:
+   the chart ships the emitter's default scales on the phone, and no shared
+   chart code changes for it. The readout legend stays: it is the value under
+   the finger, not a control. */
+.p-chart .exhibit-controls,
+.p-chart .exhibit-footer { display: none; }
+.exhibit-canvas { width: 100%; }
+/* The readout legend, from site.css, at the phone's meta size. */
+.chart-readout {
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: .15rem .8rem; min-height: 1.4rem;
+    padding: 0 0 .5rem; margin: 0;
+    font-size: .72rem; color: var(--ink);
+}
+.chart-readout-line {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .8rem;
+    width: 100%;
+}
+.chart-readout-head { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 13ch; }
+.chart-readout-head.is-idle { font-weight: 400; color: var(--mut); font-style: italic; min-width: 0; }
+.chart-readout-item {
+    display: inline-flex; align-items: baseline; gap: .3rem;
+    background: none; border: 0; padding: 0; margin: 0;
+    font: inherit; color: inherit; cursor: pointer;
+}
+.chart-readout-item b {
+    display: inline-block; min-width: 9ch; text-align: right;
+    font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600;
+}
+.chart-readout-item.is-off { opacity: .4; }
+.chart-readout-name { color: var(--mut); }
+.chart-readout-swatch {
+    display: inline-block; width: 14px; height: 2px;
+    border-radius: 1px; align-self: center;
+}
+/* The fetch skeleton, so the box holds its size before the document lands.
+   The bootstrap-icons font is not shipped here, so the panel is a plain
+   pulsing outline rather than an outline with a glyph. */
+.exhibit-skeleton { position: absolute; inset: 0; pointer-events: none; }
+.exhibit-skeleton-panel {
+    position: absolute; border: 1px solid var(--line-2); border-radius: var(--radius);
+    background: var(--soft); display: flex; align-items: center; justify-content: center;
+    animation: lite-skeleton-pulse 1.8s ease-in-out infinite;
+}
+.exhibit-skeleton-panel .bi { display: none; }
+@keyframes lite-skeleton-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+/* Bootstrap utility shims: the `notDrawable` / `fetchFailed` cards carry
+   these class names, and Bootstrap itself never boards the phone. */
+.text-muted { color: var(--mut); }
+.small { font-size: var(--fs-meta); }
+.fst-italic { font-style: italic; }
+
+/* ---- The one table: the walker's own gt.css does the typography; this
+       compacts it to the phone and carries the caption. ---- */
+.p-table { margin: .8rem .9rem 0; overflow-x: auto; }
+.p-table-caption { font-size: .62rem; color: var(--mut); margin-top: .2rem; }
+
+/* ---- The example sheet: frame 3, a bottom sheet over a dimmed page. ----
+   The explicit displays below would beat the `hidden` attribute's UA rule,
+   so hidden is restated at higher specificity. */
+.p-dim[hidden], .p-sheet[hidden] { display: none; }
+.p-dim { position: fixed; inset: 0; background: rgba(0, 0, 0, .35); z-index: 8; }
+.p-sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 9;
+    background: #fff; border-radius: 18px 18px 0 0; max-height: 82%;
+    display: flex; flex-direction: column;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, .25);
+}
+.p-sheet-grab {
+    width: 38px; height: 4px; border-radius: 2px; background: var(--line);
+    margin: .5rem auto .3rem; flex: 0 0 auto;
+}
+.p-sheet-head { padding: .2rem .95rem .5rem; border-bottom: 1px solid var(--line-2); }
+.p-sheet-title { font-weight: 650; color: var(--ink); font-size: var(--fs-body); }
+.p-search {
+    width: 100%; margin-top: .45rem; padding: .45rem .7rem;
+    font-size: var(--fs-ui); font-family: var(--ui);
+    border: 1px solid var(--line); border-radius: 999px; background: var(--soft);
+    color: var(--ink-2);
+}
+.p-search:focus { outline: 2px solid var(--house-ring); }
+.p-sheet-list { overflow-y: auto; padding: .2rem 0 .8rem; }
+.p-item { padding: .55rem .95rem .5rem; border-bottom: 1px solid var(--line-2); cursor: pointer; }
+.p-item.on { background: #faf3f3; box-shadow: inset 3px 0 0 var(--house); }
+.p-item .nm { font-weight: 600; color: var(--ink); font-size: var(--fs-ui); }
+.p-item-kind {
+    font-size: .62rem; color: var(--mut); font-weight: 400;
+    margin-left: .45rem; text-transform: uppercase; letter-spacing: .04em;
+}
+.p-item .nt {
+    font-size: .72rem; color: var(--mut); line-height: 1.35; margin-top: .1rem;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.p-item-none { padding: .8rem .95rem; font-size: var(--fs-ui); color: var(--mut); }
+
 /* ---- The escape hatch to the full app, pinned to the page foot. ---- */
 .p-full {
     margin: auto .9rem 0; padding: .8rem 0 .95rem;

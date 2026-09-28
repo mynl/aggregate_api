@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone lite: aLL at 390 px</title>
+<!--
+  A standalone mockup of the phone-lite entry to the aggregate Loss Lab.
+  No build step, no dependency, no server: open the file.
+
+  The premise, agreed in conversation 2026-09-28: a phone user at a demo will
+  not author DecL on a glass keyboard, so the lite page is a read-mostly
+  showcase with one big affordance. Pick a curated example, press Build, see
+  the summary facts, one chart, and one four-row table. Everything else
+  (pricing form, interactive grids, the 3-D surface, the derivation buttons)
+  stays on the full site, reached by an explicit escape link.
+
+  Three frames, three states, side by side:
+
+    1. LANDING   what loads: picker, program preview, Build.
+    2. BUILT     what Build returns: facts, density chart, quantile table.
+    3. PICKER    the example sheet open, which is the whole "menu" of the app.
+
+  Tokens are copied from web/src/styles/site.css :root rather than
+  approximated, so color and type here are the app's. The chart line is the
+  first color of aggregate.style's matplotlib cycle (#0d6efd), the same value
+  theme.js falls back to before /v1/meta/style answers. The example programs
+  are real: Capstone.Gross and its family from library.agg, spelled as the
+  file spells them (Recipe.as_read is what would reach this page too).
+
+  Numbers are illustrative but honest: mean 18,950 is the Capstone.Gross
+  premium times loss-ratio profile, and the density is a lognormal drawn at
+  that mean with CV 0.184, computed below rather than traced by hand. Nothing
+  is wired to a server: chips select, the lin/log toggle flips the drawing,
+  Build in frame 1 is inert. The question on this page is what a phone shows,
+  not how it fetches it.
+
+  Routing, for the record (it is not mocked here): one URL, a boot-time branch
+  in main.js on matchMedia('(max-width: 640px) and (pointer: coarse)'),
+  ?full=1 to force the full app and ?lite=1 to force this one. No user-agent
+  sniffing, no m-dot redirect.
+-->
+<style>
+/* ---- Tokens, from web/src/styles/site.css :root ---- */
+:root {
+    --ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "Cascadia Mono", SFMono-Regular, Consolas, Menlo, monospace;
+    --fs-meta:  .74rem;
+    --fs-ui:    .82rem;
+    --fs-body:  .94rem;
+    --fs-head:  1.15rem;
+    --ink:     #000000;
+    --ink-2:   #2b2b2b;
+    --mut:     #5f5f5f;
+    --line:    #d4d4d4;
+    --line-2:  #ebebeb;
+    --soft:    #f6f6f6;
+    --house:   #a81313;
+    --house-dark: #8c1010;
+    --house-ring: rgba(168, 19, 19, .25);
+    --chart-1: #0d6efd;   /* aggregate.style cycle color 0, via theme.js FALLBACK */
+    --ok-tint: #f2f8f3;
+    --bs-border-radius: .375rem;
+}
+* { box-sizing: border-box; }
+body {
+    font-family: var(--ui); font-size: var(--fs-body); color: var(--ink-2);
+    margin: 0; padding: 1.5rem 1.5rem 6rem; background: #fff;
+}
+h1 { font-size: 1.45rem; color: var(--ink); margin: 0 0 .3rem; }
+h2 { font-size: var(--fs-head); color: var(--ink); margin: 2.2rem 0 .2rem; }
+p  { max-width: 46rem; line-height: 1.5; margin: .35rem 0 .8rem; }
+code { font-family: var(--mono); font-size: .86em; color: var(--house); }
+.meta { font-size: var(--fs-meta); color: var(--mut); }
+.wrap { max-width: 1420px; margin: 0 auto; }
+
+/* ---- The page's own controls, deliberately unlike the app's ---- */
+.rig {
+    position: sticky; top: 0; z-index: 20; background: #fff;
+    border-bottom: 1px solid var(--line); padding: .7rem 0 .75rem;
+    margin: 0 0 1.5rem; display: flex; flex-wrap: wrap;
+    align-items: center; gap: .4rem 1.5rem;
+}
+.rig-label {
+    font-size: var(--fs-meta); color: var(--mut);
+    text-transform: uppercase; letter-spacing: .04em;
+}
+.rig button {
+    font-size: var(--fs-ui); padding: .25rem .6rem; cursor: pointer;
+    border: 1px solid var(--line); background: #fff; color: var(--ink-2);
+    border-radius: var(--bs-border-radius);
+}
+.rig button.on { background: var(--house); border-color: var(--house); color: #fff; }
+
+/* ================= Phone frames ================= */
+.stages { display: flex; flex-wrap: wrap; gap: 2.5rem 2rem; align-items: flex-start; }
+.stage  { position: relative; }
+.stage > figcaption {
+    font-size: var(--fs-ui); color: var(--ink); font-weight: 650;
+    margin: 0 0 .5rem .25rem;
+}
+.stage > figcaption .meta { font-weight: 400; margin-left: .4rem; }
+/* A 390 x 780 interior, the iPhone 14/15 CSS viewport give or take, behind a
+   plain dark bezel. The interior scrolls, because the built state is taller
+   than one screen and that is a fact worth seeing rather than hiding. */
+.phone {
+    width: 390px; height: 780px; background: #fff;
+    border: 11px solid #17181a; border-radius: 44px;
+    overflow: hidden; position: relative;
+    box-shadow: 0 12px 30px rgba(0,0,0,.16);
+    display: flex; flex-direction: column;
+}
+.screen { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+
+/* ---- Lite header: the app's brand row, shrunk. One line, no logo image
+       (this file ships alone), versions kept because "which build answered"
+       matters at a demo more than ever. ---- */
+.p-hdr {
+    position: sticky; top: 0; z-index: 5; background: #fff;
+    display: flex; align-items: baseline; gap: .5rem;
+    padding: .8rem .9rem .55rem; border-bottom: 1px solid var(--line-2);
+}
+.p-brand  { font-weight: 700; font-size: 1.02rem; color: var(--ink); line-height: 1.05; }
+.p-kicker {
+    font-size: .56rem; font-variant: small-caps; letter-spacing: .16em;
+    color: var(--mut); display: block; margin-top: .1rem;
+}
+.p-vers { margin-left: auto; font-family: var(--mono); font-size: .62rem; color: var(--mut); }
+
+/* ---- Example chips: the picker IS the control surface. Horizontal scroll,
+       thumb-sized targets, house red as the selection mark exactly as the
+       tabs use it in the full app. ---- */
+.p-chips {
+    display: flex; gap: .45rem; overflow-x: auto; padding: .7rem .9rem .55rem;
+    scrollbar-width: none;
+}
+.p-chips::-webkit-scrollbar { display: none; }
+.p-chip {
+    flex: 0 0 auto; font-size: var(--fs-ui); padding: .42rem .8rem;
+    border: 1px solid var(--line); border-radius: 999px; background: #fff;
+    color: var(--ink-2); cursor: pointer; white-space: nowrap; font-family: var(--ui);
+}
+.p-chip.on { background: var(--house); border-color: var(--house); color: #fff; }
+.p-chip.more { color: var(--mut); border-style: dashed; }
+.p-sect {
+    font-size: var(--fs-meta); color: var(--mut); text-transform: uppercase;
+    letter-spacing: .05em; padding: .35rem .95rem 0;
+}
+
+/* ---- Program card: read-only, collapsed to its first lines. The full app's
+       editor does not come to the phone; the program is a thing you read
+       here, and a tap opens the rest. ---- */
+.p-prog {
+    margin: .5rem .9rem; border: 1px solid var(--line-2);
+    border-radius: var(--bs-border-radius); background: var(--soft);
+    padding: .55rem .7rem .5rem; cursor: pointer;
+}
+.p-prog pre {
+    margin: 0; font-family: var(--mono); font-size: .72rem; line-height: 1.45;
+    color: var(--ink-2); white-space: pre; overflow-x: auto;
+}
+.p-prog .fade-tail { color: var(--mut); }
+.p-prog .hint { font-size: var(--fs-meta); color: var(--mut); margin-top: .3rem; }
+
+/* ---- Build: one big verb, full width, thumb height. ---- */
+.p-build {
+    display: block; width: calc(100% - 1.8rem); margin: .7rem .9rem;
+    padding: .78rem; font-size: 1rem; font-weight: 650; font-family: var(--ui);
+    color: #fff; background: var(--house); border: 1px solid var(--house);
+    border-radius: .55rem; cursor: pointer;
+}
+.p-build:active { background: var(--house-dark); }
+
+/* ---- Escape hatch to the full app. Honest about the tradeoff. ---- */
+.p-full {
+    margin: auto .9rem 0; padding: .8rem 0 .95rem;
+    border-top: 1px solid var(--line-2);
+    font-size: var(--fs-meta); color: var(--mut);
+}
+.p-full a { color: var(--house); text-decoration: none; font-weight: 600; }
+.screen { display: flex; flex-direction: column; }
+
+/* ---- Built state: the status strip's facts, promoted to tiles. The strip's
+       grammar survives: labels grey in the UI face, values dark in mono. The
+       ok verdict is a tint, not a word, exactly as in the app. ---- */
+.p-strip {
+    margin: .6rem .9rem 0; padding: .5rem .7rem .55rem;
+    border: 1px solid #dbe7dd; border-left: 3px solid #2e7d43;
+    background: var(--ok-tint); border-radius: var(--bs-border-radius);
+}
+.p-name { font-weight: 650; color: var(--ink); font-size: var(--fs-body); }
+.p-kind { font-size: var(--fs-meta); color: var(--mut); margin-left: .45rem; }
+.p-grid-facts {
+    font-size: .68rem; color: var(--mut); margin-top: .15rem; font-family: var(--ui);
+}
+.p-grid-facts b { font-family: var(--mono); font-weight: 500; color: var(--ink-2); }
+.p-tiles {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: .45rem;
+    margin: .55rem .9rem 0;
+}
+.p-tile {
+    border: 1px solid var(--line-2); border-radius: var(--bs-border-radius);
+    padding: .4rem .2rem .45rem; text-align: center; background: #fff;
+}
+.p-tile .l { font-size: .62rem; color: var(--mut); }
+.p-tile .v { font-family: var(--mono); font-size: .88rem; color: var(--ink); margin-top: .1rem; }
+
+/* ---- Chart card. SVG here; echarts CanvasRenderer in the real thing, same
+       tree-shaken bundle the full app already ships. Lin/log is the one
+       control the chart keeps, because it is the one readers actually flip. ---- */
+.p-chart { margin: .7rem .9rem 0; }
+.p-chart-head { display: flex; align-items: baseline; gap: .6rem; }
+.p-chart-title { font-size: var(--fs-ui); font-weight: 650; color: var(--ink); }
+.p-seg { margin-left: auto; display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.p-seg button {
+    font-size: .68rem; font-family: var(--ui); padding: .18rem .6rem;
+    border: 0; background: #fff; color: var(--ink-2); cursor: pointer;
+}
+.p-seg button.on { background: var(--house); color: #fff; }
+.p-chart svg { display: block; width: 100%; height: auto; margin-top: .35rem; }
+.p-chart .cap { font-size: .62rem; color: var(--mut); margin-top: .15rem; }
+
+/* ---- The one table: four rows, static HTML, numbers short. greater-tables
+       renders it server side in the real thing; the phone never sees the
+       interactive grid. ---- */
+.p-table { margin: .8rem .9rem 0; }
+.p-table table { border-collapse: collapse; width: 100%; }
+.p-table caption {
+    caption-side: top; text-align: left; font-size: var(--fs-ui);
+    font-weight: 650; color: var(--ink); padding-bottom: .25rem;
+}
+.p-table th, .p-table td {
+    font-size: .78rem; padding: .3rem .4rem; text-align: right;
+    border-bottom: 1px solid var(--line-2);
+}
+.p-table th { font-family: var(--ui); color: var(--mut); font-weight: 500;
+    border-bottom: 1px solid var(--line); }
+.p-table td { font-family: var(--mono); color: var(--ink-2); }
+.p-table th:first-child, .p-table td:first-child { text-align: left; }
+
+/* ---- Frame 3: the picker sheet over a dimmed landing. ---- */
+.p-dim { position: absolute; inset: 0; background: rgba(0,0,0,.35); z-index: 8; }
+.p-sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 9;
+    background: #fff; border-radius: 18px 18px 0 0; max-height: 82%;
+    display: flex; flex-direction: column;
+    box-shadow: 0 -8px 30px rgba(0,0,0,.25);
+}
+.p-sheet-grab {
+    width: 38px; height: 4px; border-radius: 2px; background: var(--line);
+    margin: .5rem auto .3rem;
+}
+.p-sheet-head { padding: .2rem .95rem .5rem; border-bottom: 1px solid var(--line-2); }
+.p-sheet-title { font-weight: 650; color: var(--ink); font-size: var(--fs-body); }
+.p-search {
+    width: 100%; margin-top: .45rem; padding: .45rem .7rem;
+    font-size: var(--fs-ui); font-family: var(--ui);
+    border: 1px solid var(--line); border-radius: 999px; background: var(--soft);
+    color: var(--ink-2);
+}
+.p-sheet-list { overflow-y: auto; padding: .2rem 0 .8rem; }
+.p-item { padding: .55rem .95rem .5rem; border-bottom: 1px solid var(--line-2); cursor: pointer; }
+.p-item.on { background: #faf3f3; box-shadow: inset 3px 0 0 var(--house); }
+.p-item .nm { font-weight: 600; color: var(--ink); font-size: var(--fs-ui); }
+.p-item .nt {
+    font-size: .72rem; color: var(--mut); line-height: 1.35; margin-top: .1rem;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* ================= Callouts ================= */
+/* Numbered dots on the bezel edge, legend under each frame. The rig toggle
+   hides the dots for a clean look at the frames themselves. */
+.dot {
+    position: absolute; z-index: 15; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--ink); color: #fff; font-size: .72rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 3px #fff;
+}
+body.no-notes .dot { display: none; }
+.legend { max-width: 400px; margin: .8rem 0 0; padding: 0; list-style: none; }
+.legend li {
+    font-size: var(--fs-meta); color: var(--mut); line-height: 1.45;
+    margin: .3rem 0; padding-left: 1.7rem; position: relative;
+}
+.legend li::before {
+    content: attr(data-n); position: absolute; left: 0; top: .05rem;
+    width: 17px; height: 17px; border-radius: 50%; background: var(--ink);
+    color: #fff; font-size: .62rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+}
+.prose { max-width: 46rem; }
+.prose ul { line-height: 1.5; }
+.prose li { margin: .25rem 0; }
+pre.snippet {
+    max-width: 46rem; background: var(--soft); border: 1px solid var(--line-2);
+    border-radius: var(--bs-border-radius); padding: .7rem .9rem;
+    font-family: var(--mono); font-size: .78rem; line-height: 1.5; overflow-x: auto;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Phone lite: the aggregate Loss Lab at 390&nbsp;px</h1>
+<p class="meta">dev/prototypes/phone.html · standalone, nothing wired · 2026-09-28</p>
+<p>The full app assumes a widescreen and a keyboard. This is the other entry:
+what a phone in the audience gets when it opens the same URL. The design bet is
+that a phone user never types DecL, so the editor gives way to a picker of
+curated examples, and the six tabs give way to the four things that survive
+390&nbsp;px: the facts line, one chart, one small table, and the program itself,
+read-only. Everything else lives behind the full-site link.</p>
+<p>Tokens, type scale, and the selection red are copied from
+<code>web/src/styles/site.css</code>; the chart line is
+<code>aggregate.style</code>'s first cycle color via the <code>theme.js</code>
+fallback; the programs are <code>library.agg</code>'s Capstone family as
+written. The density really is a lognormal at mean 18,950 and CV 0.184,
+computed in this file, so the curve and its quantile marks agree.</p>
+
+<div class="rig">
+    <span class="rig-label">Callouts</span>
+    <button id="notes-btn" class="on">shown</button>
+</div>
+
+<div class="stages">
+
+<!-- ============ Frame 1: landing ============ -->
+<figure class="stage" style="margin:0;">
+<figcaption>1 · Landing<span class="meta">what the URL opens to</span></figcaption>
+<div class="phone">
+  <div class="screen">
+    <div class="p-hdr">
+        <div>
+            <span class="p-brand">aggregate Loss Lab</span>
+            <span class="p-kicker">description to distribution</span>
+        </div>
+        <span class="p-vers">1.0.0a353 · api a181</span>
+    </div>
+    <div class="p-sect">Pick an example</div>
+    <div class="p-chips" data-chips>
+        <button class="p-chip">Dice of Dice</button>
+        <button class="p-chip">Basic Book</button>
+        <button class="p-chip on">Capstone.Gross</button>
+        <button class="p-chip">Capstone.XOL</button>
+        <button class="p-chip">Full Program</button>
+        <button class="p-chip more" data-sheet>All examples…</button>
+    </div>
+    <div class="p-prog">
+        <pre>agg Capstone.Gross
+  [2000 5000 10000 3000 1000] premium as GWP
+    at [0.95 0.95 0.9 0.85 0.75] lr
+  [500 1000 5000 10000 5000] xs [0 0 0 0 1000]
+<span class="fade-tail">  sev.Capstone.Sev
+  mixed gamma 0.125</span></pre>
+        <div class="hint">the program, as library.agg writes it · tap to expand</div>
+    </div>
+    <button class="p-build">Build</button>
+    <div class="p-full">aLL is built for a wide screen. On a laptop?
+        <a href="#">Open the full site</a></div>
+  </div>
+</div>
+<span class="dot" style="top:118px; left:-11px;">1</span>
+<span class="dot" style="top:210px; left:-11px;">2</span>
+<span class="dot" style="top:400px; right:-11px;">3</span>
+<span class="dot" style="top:706px; right:-11px;">4</span>
+<ol class="legend" style="list-style:none;">
+    <li data-n="1">The chip row replaces the editor as the primary control.
+        Five curated names plus the sheet; house red is the selection mark,
+        as on the full app's tabs.</li>
+    <li data-n="2">The program is displayed, not edited. Collapsed to the
+        lines that teach; a tap shows the rest, a long-press (not mocked)
+        could open a real editor for the determined.</li>
+    <li data-n="3">One verb, full width, thumb height. No derivation
+        buttons, no reformat, no history arrows.</li>
+    <li data-n="4">The escape hatch. ?full=1 forces the full app; this link
+        is the same override made visible.</li>
+</ol>
+</figure>
+
+<!-- ============ Frame 2: built ============ -->
+<figure class="stage" style="margin:0;">
+<figcaption>2 · Built<span class="meta">what Build returns</span></figcaption>
+<div class="phone">
+  <div class="screen">
+    <div class="p-hdr">
+        <div>
+            <span class="p-brand">aggregate Loss Lab</span>
+            <span class="p-kicker">description to distribution</span>
+        </div>
+        <span class="p-vers">1.0.0a353 · api a181</span>
+    </div>
+    <div class="p-chips" data-chips>
+        <button class="p-chip on">Capstone.Gross</button>
+        <button class="p-chip">Capstone.XOL</button>
+        <button class="p-chip">Full Program</button>
+        <button class="p-chip more" data-sheet>All…</button>
+    </div>
+    <div class="p-strip">
+        <span class="p-name">Capstone.Gross</span><span class="p-kind">Aggregate</span>
+        <div class="p-grid-facts">bs <b>2</b> · log2 <b>16</b> · loss ·
+            built in <b>0.31&nbsp;s</b></div>
+    </div>
+    <div class="p-tiles">
+        <div class="p-tile"><div class="l">Mean</div><div class="v">18,950</div></div>
+        <div class="p-tile"><div class="l">CV</div><div class="v">0.184</div></div>
+        <div class="p-tile"><div class="l">Skew</div><div class="v">0.56</div></div>
+        <div class="p-tile"><div class="l">P99</div><div class="v">28.9k</div></div>
+    </div>
+    <div class="p-chart">
+        <div class="p-chart-head">
+            <span class="p-chart-title">Aggregate density</span>
+            <span class="p-seg" data-seg>
+                <button class="on" data-scale="lin">lin</button><button data-scale="log">log</button>
+            </span>
+        </div>
+        <svg id="density-svg" viewBox="0 0 352 190" role="img"
+             aria-label="aggregate density with mean and P99 marked"></svg>
+        <div class="cap">mean grey · P99 red · drag to zoom in the real thing</div>
+    </div>
+    <div class="p-table">
+        <table>
+            <caption>Quantiles</caption>
+            <thead><tr><th>p</th><th>VaR</th><th>TVaR</th></tr></thead>
+            <tbody>
+                <tr><td>0.90</td><td>23,600</td><td>25,700</td></tr>
+                <tr><td>0.95</td><td>25,300</td><td>27,200</td></tr>
+                <tr><td>0.99</td><td>28,900</td><td>30,500</td></tr>
+                <tr><td>0.996</td><td>30,400</td><td>31,900</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="p-full">Pricing, reinsurance, P&amp;L and the 3-D surface live on
+        <a href="#">the full site</a></div>
+  </div>
+</div>
+<span class="dot" style="top:180px; left:-11px;">1</span>
+<span class="dot" style="top:262px; left:-11px;">2</span>
+<span class="dot" style="top:420px; right:-11px;">3</span>
+<span class="dot" style="top:610px; right:-11px;">4</span>
+<ol class="legend" style="list-style:none;">
+    <li data-n="1">The status strip survives, tinted ok exactly as in the
+        app: verdict said by color, spoken only when it is not clean.</li>
+    <li data-n="2">The facts line promoted to tiles: the four numbers a
+        reader quotes back. Labels grey UI face, values dark mono, the
+        strip's grammar unchanged.</li>
+    <li data-n="3">One chart, echarts in the real thing with touch
+        tooltips. Lin/log is the single control kept, and it works in this
+        mock. No hover anywhere: everything a title attribute says on
+        desktop must be visible or absent here.</li>
+    <li data-n="4">One static four-row table. The interactive grid, the
+        pricing form, Bounds and PnL do not board the phone.</li>
+</ol>
+</figure>
+
+<!-- ============ Frame 3: picker sheet ============ -->
+<figure class="stage" style="margin:0;">
+<figcaption>3 · Example sheet<span class="meta">the whole menu of the lite app</span></figcaption>
+<div class="phone">
+  <div class="screen" style="filter:none;">
+    <div class="p-hdr">
+        <div>
+            <span class="p-brand">aggregate Loss Lab</span>
+            <span class="p-kicker">description to distribution</span>
+        </div>
+        <span class="p-vers">1.0.0a353 · api a181</span>
+    </div>
+    <div class="p-sect">Pick an example</div>
+    <div class="p-chips">
+        <button class="p-chip on">Capstone.Gross</button>
+        <button class="p-chip">Capstone.XOL</button>
+        <button class="p-chip more">All examples…</button>
+    </div>
+  </div>
+  <div class="p-dim"></div>
+  <div class="p-sheet">
+    <div class="p-sheet-grab"></div>
+    <div class="p-sheet-head">
+        <div class="p-sheet-title">Examples</div>
+        <input class="p-search" placeholder="search name, tag, note" readonly>
+    </div>
+    <div class="p-sheet-list" data-chips>
+        <div class="p-item"><div class="nm">DiceOneDie</div>
+            <div class="nt">One throw of one die: the two-line hello world.</div></div>
+        <div class="p-item"><div class="nm">DiceOfDice</div>
+            <div class="nt">Throw a die to see how many dice to throw. The compound idea in one line.</div></div>
+        <div class="p-item"><div class="nm">BasicBook</div>
+            <div class="nt">A small book: claim count, lognormal severity, nothing else.</div></div>
+        <div class="p-item on"><div class="nm">Capstone.Gross</div>
+            <div class="nt">Capstone gross portfolio entered from a limit and attachment
+            profile by premium and loss ratio.</div></div>
+        <div class="p-item"><div class="nm">Capstone.XOL</div>
+            <div class="nt">Apply the XOL program terms to the capstone book using the
+            adjusted severity curve.</div></div>
+        <div class="p-item"><div class="nm">Capstone.FullProgram</div>
+            <div class="nt">Quota share on the net book, in addition to the XOL program.</div></div>
+        <div class="p-item"><div class="nm">MixedExponentialSev</div>
+            <div class="nt">Three-part mixed exponential severity with weights.</div></div>
+    </div>
+  </div>
+</div>
+<span class="dot" style="top:330px; left:-11px;">1</span>
+<span class="dot" style="top:430px; right:-11px;">2</span>
+<ol class="legend" style="list-style:none;">
+    <li data-n="1">A bottom sheet, not a dropdown: the platform idiom for a
+        long list on a phone. Same uFuzzy search over name, tags, and note
+        that examples.js already runs; the search box is decorative here.</li>
+    <li data-n="2">Name plus the recipe's own note, clamped to two lines.
+        The note replaces every hover title the desktop menu leans on. Perhaps
+        a dozen curated entries, not the full library: a demo audience wants
+        eight good doors, not four hundred.</li>
+</ol>
+</figure>
+
+</div><!-- /stages -->
+
+<h2>What is deliberately absent</h2>
+<div class="prose">
+<ul>
+    <li><b>The editor.</b> CodeMirror stays in the bundle for the full app
+        only. On glass, autocorrect fights the grammar and completion popups
+        land under the thumb. The program card is read-only; expansion shows
+        all of it, still read-only.</li>
+    <li><b>Five of the six tabs.</b> Re, Pricing, PnL, Bounds, More are
+        widescreen work. The lite page is the Overview's soul: facts, one
+        chart, one table.</li>
+    <li><b>Interactive grids.</b> csv-grid at 390&nbsp;px is horizontal
+        scrolling misery. Tables arrive static, four rows, formatted short.</li>
+    <li><b>The 3-D surface.</b> Touch rotation works but the GPU cost is
+        real and the payoff on a 6-inch screen is not. If wanted later, it
+        goes behind an explicit tap that says it is heavy.</li>
+    <li><b>Hover anything.</b> Title attributes never fire on touch. Every
+        explanation is either visible text (the recipe notes, the chart
+        caption) or gone.</li>
+</ul>
+</div>
+
+<h2>Routing</h2>
+<div class="prose">
+<p>One URL, no user-agent sniffing, no m-dot redirect. A boot-time branch
+before anything mounts, with the query param as master override so a desktop
+window can test the lite shell:</p>
+</div>
+<pre class="snippet">const q = new URLSearchParams(location.search);
+const lite = q.has('lite') ? true
+           : q.has('full') ? false
+           : matchMedia('(max-width: 640px) and (pointer: coarse)').matches;
+if (lite) { mountLite(); } else { mountFull(); }</pre>
+<div class="prose">
+<p>Vite makes the two-entry variant (<code>lite.html</code> +
+<code>lite.js</code>) equally cheap if keeping the full bundle off the phone
+matters; the shared modules (<code>api.js</code>, <code>examples.js</code>,
+<code>charts/theme.js</code>) are the point either way. Note the lite page
+still needs the api reachable from cell networks, which is the same deployment
+the widescreen demo needs.</p>
+</div>
+
+<p class="meta" style="margin-top:3rem;">Programs from
+<code>aggregate/agg/library.agg</code>; tokens from
+<code>web/src/styles/site.css</code>; chart color from
+<code>web/src/charts/theme.js</code>. Numbers illustrative: lognormal at the
+Capstone.Gross premium and loss-ratio profile.</p>
+
+</div><!-- /wrap -->
+
+<script>
+// ---- Page rig ----
+const notesBtn = document.getElementById('notes-btn');
+notesBtn.addEventListener('click', () => {
+    const on = notesBtn.classList.toggle('on');
+    notesBtn.textContent = on ? 'shown' : 'hidden';
+    document.body.classList.toggle('no-notes', !on);
+});
+
+// ---- Chip and list-item selection: marks selected, does nothing else ----
+document.querySelectorAll('[data-chips]').forEach((row) => {
+    row.addEventListener('click', (e) => {
+        const chip = e.target.closest('.p-chip:not(.more), .p-item');
+        if (!chip) return;
+        row.querySelectorAll('.on').forEach((c) => c.classList.remove('on'));
+        chip.classList.add('on');
+    });
+});
+
+// ---- The density, computed rather than traced ----
+// Lognormal at the Capstone.Gross book: mean 18,950 (the premium profile
+// times the loss-ratio profile), CV 0.184. sigma^2 = ln(1 + cv^2), mu from
+// the mean. The P99 mark is exp(mu + 2.326 sigma) from the same parameters,
+// so the curve and its annotations cannot disagree.
+const MEAN = 18950, CV = 0.184;
+const SIG = Math.sqrt(Math.log(1 + CV * CV));
+const MU = Math.log(MEAN) - SIG * SIG / 2;
+const P99 = Math.exp(MU + 2.326 * SIG);
+const pdf = (x) => Math.exp(-((Math.log(x) - MU) ** 2) / (2 * SIG * SIG))
+                 / (x * SIG * Math.sqrt(2 * Math.PI));
+
+const W = 352, H = 190, L = 34, R = 8, T = 10, B = 24;   // plot box margins
+const IW = W - L - R, IH = H - T - B;
+
+/** Map data to pixels and return { area, line, gx } for one scale. */
+function paths(scale) {
+    const x0 = scale === 'lin' ? 10000 : 6000;
+    const x1 = scale === 'lin' ? 32000 : 42000;
+    const n = 140;
+    const xs = Array.from({ length: n + 1 }, (_, i) => x0 + (x1 - x0) * i / n);
+    let ys, yMin, yMax;
+    if (scale === 'lin') {
+        ys = xs.map(pdf);
+        yMin = 0; yMax = Math.max(...ys) * 1.06;
+    } else {
+        // log10 density, clipped: the tail is the point of this view.
+        ys = xs.map((x) => Math.log10(Math.max(pdf(x), 1e-12)));
+        yMax = Math.max(...ys) + 0.15; yMin = yMax - 4.2;
+        ys = ys.map((y) => Math.max(y, yMin));
+    }
+    const px = (x) => L + IW * (x - x0) / (x1 - x0);
+    const py = (y) => T + IH * (1 - (y - yMin) / (yMax - yMin));
+    const pts = xs.map((x, i) => `${px(x).toFixed(1)},${py(ys[i]).toFixed(1)}`);
+    return {
+        line: `M${pts.join('L')}`,
+        area: `M${px(x0).toFixed(1)},${py(yMin)}L${pts.join('L')}L${px(x1).toFixed(1)},${py(yMin)}Z`,
+        px,
+        ticks: scale === 'lin' ? [10000, 15000, 20000, 25000, 30000]
+                               : [10000, 20000, 30000, 40000],
+    };
+}
+
+function drawDensity(scale) {
+    const { line, area, px, ticks } = paths(scale);
+    const tick = (x) => `<line x1="${px(x)}" y1="${T + IH}" x2="${px(x)}" y2="${T + IH + 4}"
+            stroke="#d4d4d4"/>
+        <text x="${px(x)}" y="${H - 8}" font-size="8.5" fill="#5f5f5f"
+            text-anchor="middle" font-family="var(--ui)">${x / 1000}k</text>`;
+    const mark = (x, color, label) => `
+        <line x1="${px(x)}" y1="${T}" x2="${px(x)}" y2="${T + IH}"
+            stroke="${color}" stroke-width="1" stroke-dasharray="3 3"/>
+        <text x="${px(x) + 3}" y="${T + 10}" font-size="8.5" fill="${color}"
+            font-family="var(--ui)">${label}</text>`;
+    document.getElementById('density-svg').innerHTML = `
+        <rect x="${L}" y="${T}" width="${IW}" height="${IH}" fill="#fff"
+            stroke="#ebebeb"/>
+        <path d="${area}" fill="rgba(13,110,253,.10)"/>
+        <path d="${line}" fill="none" stroke="#0d6efd" stroke-width="1.6"/>
+        ${mark(MEAN, '#5f5f5f', 'mean')}
+        ${mark(P99, '#a81313', 'P99')}
+        ${ticks.map(tick).join('')}
+        <text x="${L - 6}" y="${T + 12}" font-size="8.5" fill="#5f5f5f"
+            text-anchor="end" font-family="var(--ui)"
+            transform="rotate(-90 ${L - 6} ${T + 12})">${scale === 'lin' ? 'density' : 'log density'}</text>`;
+}
+drawDensity('lin');
+
+document.querySelector('[data-seg]').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    e.currentTarget.querySelectorAll('button').forEach((b) => b.classList.remove('on'));
+    btn.classList.add('on');
+    drawDensity(btn.dataset.scale);
+});
+</script>
+</body>
+</html>

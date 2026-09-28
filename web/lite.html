@@ -46,10 +46,33 @@
     <section id="lite-built" hidden>
         <div class="p-strip" id="lite-strip"></div>
         <div class="p-tiles" id="lite-tiles"></div>
+        <!-- The object's own picture: the same chart document and adapter the
+             full app's Overview Plot leaf uses. The control apparatus below
+             the canvas is hidden by lite.css (ruled 2026-09-28): the chart
+             ships the emitter's default scales. -->
+        <div class="p-chart" id="lite-chart" hidden>
+            <div id="lite-chart-host"></div>
+        </div>
+        <!-- One static table: the return-period ladder, rendered by the
+             walker. The interactive grid never boards the phone. -->
+        <div class="p-table" id="lite-table" hidden></div>
     </section>
 
     <footer class="p-full">aLL is built for a wide screen. On a laptop?
         <a href="./?full=1">Open the full site</a></footer>
+
+    <!-- The example sheet: prototype frame 3, the whole menu of the lite app.
+         Plain DOM, no Bootstrap offcanvas. -->
+    <div class="p-dim" id="lite-dim" hidden></div>
+    <div class="p-sheet" id="lite-sheet" hidden>
+        <div class="p-sheet-grab"></div>
+        <div class="p-sheet-head">
+            <div class="p-sheet-title">Examples</div>
+            <input class="p-search" id="lite-search" type="search"
+                   placeholder="search name, tag, note" autocomplete="off">
+        </div>
+        <div class="p-sheet-list" id="lite-sheet-list"></div>
+    </div>
 
     <script type="module" src="/src/lite.js"></script>
 </body>

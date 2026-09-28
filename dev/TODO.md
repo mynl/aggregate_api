@@ -232,6 +232,17 @@ and the standing REMINDER below about what is worth plotting.
 
 ## Near term (get it healthy)
 
+- [x] **[Lite-Shell] [Lite-Reading] the phone lite entry**
+      (`dev/done/plan-phone-lite.md`, spec `dev/prototypes/phone.html`),
+      **a168 to a169**, for the 2026-10-16 live demonstration. One URL: a
+      boot-time branch in `index.html` sends a narrow, coarse-pointer device
+      to `lite.html`, a read-mostly showcase (curated chips, read-only
+      program, Build, facts, tiles, one chart, one static table, the example
+      sheet); `?full=1` / `?lite=1` override. The full app is untouched
+      beyond the branch script and a second Vite input.
+    - [ ] **[Lite-Device]** the author's hour on a real phone before
+          2026-10-16; findings become ordinary tweak bumps (a170 on).
+
 - [ ] **GUI round 9, five punch-ups from kicking round 8's tires**
       (`dev/plan-ui-round-9.md`), **a159 onward**, from an author report on the
       running app. Two of the five were bugs with proven causes; three were

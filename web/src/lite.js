@@ -12,8 +12,11 @@
 // full app's own wiring.
 
 import './styles/lite.css';
-import { api, errorMessage } from './api.js';
-import { loadExamples } from './examples.js';
+import { ApiError, api, errorMessage } from './api.js';
+import { fetchFailed, mountChart, notDrawable } from './charts/mount.js';
+import { loadExamples, rankMatches } from './examples.js';
+import { clearGrids } from './grid.js';
+import { mountIrTable } from './tables.js';
 
 // The curated chips, in display order. A starter list, ruled 2026-09-28;
 // editing it is this one line. A name that stops resolving against the library
@@ -63,6 +66,10 @@ function tileNumber(x) {
 // ---- Page state ----
 let current = null;        // the selected ExampleItem
 let building = false;
+let chartHandle = null;    // the mounted ECharts instance, disposed per build
+let items = [];            // the whole library, in file order
+let haystack = [];         // one search string per item, aligned with `items`
+let clockTimer = null;     // the in-flight elapsed readout on the Build button
 
 // ---- The program card ----
 
@@ -77,9 +84,31 @@ function showProgram(item) {
 
 // ---- The chips ----
 
+/** Mark the chip named `name` selected, or clear the marks for a sheet pick. */
+function markChip(name) {
+    const row = $('lite-chips');
+    row.querySelectorAll('.on').forEach((c) => c.classList.remove('on'));
+    for (const chip of row.querySelectorAll('.p-chip')) {
+        if (chip.dataset.name === name) chip.classList.add('on');
+    }
+}
+
+/** Select `item`: mark its chip (if it has one) and show its program. */
+function pick(item) {
+    current = item;
+    markChip(item.name);
+    showProgram(item);
+}
+
 async function initChips() {
     const payload = await loadExamples();
-    const byName = new Map((payload.items || []).map((i) => [i.name, i]));
+    items = payload.items || [];
+    // The same haystack recipe the desktop menu indexes: name, kind, tags
+    // (with their namespace), and the note, so a search can be about the
+    // subject rather than the name.
+    haystack = items.map((i) =>
+        `${i.name} ${i.kind} ${(i.tags || []).join(' ')} ${i.note || ''}`);
+    const byName = new Map(items.map((i) => [i.name, i]));
     const row = $('lite-chips');
     for (const name of CURATED) {
         const item = byName.get(name);
@@ -91,16 +120,76 @@ async function initChips() {
         chip.className = 'p-chip';
         chip.type = 'button';
         chip.textContent = item.name;
-        chip.addEventListener('click', () => {
-            row.querySelectorAll('.on').forEach((c) => c.classList.remove('on'));
-            chip.classList.add('on');
-            current = item;
-            showProgram(item);
-        });
+        chip.dataset.name = item.name;
+        chip.addEventListener('click', () => pick(item));
         row.appendChild(chip);
     }
-    // Land on the first chip so the page never opens empty.
-    row.querySelector('.p-chip')?.click();
+    // The sheet opener: the whole library behind one dashed chip.
+    const more = document.createElement('button');
+    more.className = 'p-chip more';
+    more.type = 'button';
+    more.textContent = 'All examples…';
+    more.addEventListener('click', openSheet);
+    row.appendChild(more);
+    // Land on the first curated example so the page never opens empty.
+    const first = row.querySelector('.p-chip:not(.more)');
+    if (first) pick(byName.get(first.dataset.name));
+}
+
+// ---- The example sheet: frame 3, the whole menu of the lite app ----
+
+/** The entries matching the search box, best first; file order when empty. */
+function sheetMatches(q) {
+    const needle = q.trim();
+    if (!needle) return items;
+    return rankMatches(haystack, needle).map((i) => items[i]);
+}
+
+function renderSheetList(matches) {
+    const list = $('lite-sheet-list');
+    list.replaceChildren();
+    for (const item of matches) {
+        const row = document.createElement('div');
+        row.className = `p-item${current && item.name === current.name ? ' on' : ''}`;
+        const nm = document.createElement('div');
+        nm.className = 'nm';
+        nm.textContent = item.name;
+        const kind = document.createElement('span');
+        kind.className = 'p-item-kind';
+        kind.textContent = item.kind;
+        nm.appendChild(kind);
+        row.appendChild(nm);
+        // The note, visible and clamped to two lines: it replaces every hover
+        // title the desktop menu leans on, because titles never fire on touch.
+        if (item.note) {
+            const nt = document.createElement('div');
+            nt.className = 'nt';
+            nt.textContent = item.note;
+            row.appendChild(nt);
+        }
+        row.addEventListener('click', () => {
+            pick(item);
+            closeSheet();
+        });
+        list.appendChild(row);
+    }
+    if (!matches.length) {
+        const none = document.createElement('div');
+        none.className = 'p-item-none';
+        none.textContent = 'Nothing matches.';
+        list.appendChild(none);
+    }
+}
+
+function openSheet() {
+    renderSheetList(sheetMatches($('lite-search').value));
+    $('lite-dim').hidden = false;
+    $('lite-sheet').hidden = false;
+}
+
+function closeSheet() {
+    $('lite-dim').hidden = true;
+    $('lite-sheet').hidden = true;
 }
 
 // ---- The built state ----
@@ -161,7 +250,73 @@ function renderBuilt(res) {
     return p99;
 }
 
-/** A failed build, said in the strip's own vocabulary. Refined at a169. */
+/**
+ * The object's own picture, exactly the Overview Plot leaf's rule.
+ *
+ * `capability.primary_chart` names the chart, `mountChart` realizes the
+ * document, and a failure never blocks the page: the `fetchFailed` /
+ * `notDrawable` cards render in its place. The control apparatus below the
+ * canvas is hidden by lite.css rather than suppressed here, so no shared
+ * chart code changes for the phone.
+ */
+async function renderChart(res) {
+    if (chartHandle) { chartHandle.dispose(); chartHandle = null; }
+    const wrap = $('lite-chart');
+    const host = $('lite-chart-host');
+    host.replaceChildren();
+    wrap.hidden = false;
+    const chart = res.capability ? res.capability.primary_chart : null;
+    if (!chart) { host.appendChild(notDrawable()); return; }
+    let failed = false;
+    try {
+        chartHandle = await mountChart(host, { id: res.id, chart });
+    } catch { failed = true; }
+    if (!chartHandle) {
+        host.replaceChildren(failed ? fetchFailed() : notDrawable());
+    }
+}
+
+/**
+ * The one table: the return-period ladder, static, with the library's own
+ * caption. Served as the `tail` exhibit envelope and rendered by the walker;
+ * the interactive grid never mounts here. An object without the exhibit (a
+ * severity, a distortion) simply shows no table, and a fetch or walker
+ * failure hides it too: the table is a bonus, the facts carry the story.
+ */
+async function renderTable(res) {
+    const wrap = $('lite-table');
+    clearGrids('lite-table');
+    wrap.replaceChildren();
+    wrap.hidden = true;
+    const exhibits = (res.capability && res.capability.exhibits) || [];
+    if (!exhibits.some((e) => e.name === 'tail')) return;
+    try {
+        const envelope = await api.exhibit(res.id, 'tail');
+        let mounted = false;
+        for (const block of envelope.blocks || []) {
+            const { caption, ...doc } = block;
+            const host = document.createElement('div');
+            wrap.appendChild(host);
+            const handle = await mountIrTable('lite-table', host, doc);
+            if (handle) mounted = true;
+            if (caption) {
+                const cap = document.createElement('div');
+                cap.className = 'p-table-caption';
+                cap.textContent = caption;
+                wrap.appendChild(cap);
+            }
+        }
+        wrap.hidden = !mounted;
+    } catch (err) {
+        console.warn('[lite] tail exhibit did not render', err);
+    }
+}
+
+/**
+ * A failed build, said in the strip's own vocabulary: the parse or validation
+ * sentence `errorMessage` writes, or the rate-limit line with its retry-after
+ * wait. No toast, no modal.
+ */
 function renderBuildFailure(err) {
     const strip = $('lite-strip');
     strip.replaceChildren();
@@ -169,14 +324,40 @@ function renderBuildFailure(err) {
     strip.classList.add('is-fail');
     const name = document.createElement('span');
     name.className = 'p-name';
-    name.textContent = 'Build failed';
-    strip.appendChild(name);
     const msg = document.createElement('div');
     msg.className = 'p-error';
-    msg.textContent = errorMessage(err);
-    strip.appendChild(msg);
+    if (err instanceof ApiError && err.status === 429) {
+        name.textContent = 'Easy there';
+        const secs = Number(err.retryAfter);
+        msg.textContent = 'This is a shared, free demo, so builds are gently '
+            + 'rate-limited. '
+            + (Number.isFinite(secs) && secs > 0
+                ? `Please try again in about ${secs} second${secs === 1 ? '' : 's'}.`
+                : 'Please give it a moment and try again.');
+    } else {
+        name.textContent = 'Build failed';
+        msg.textContent = errorMessage(err);
+    }
+    strip.append(name, msg);
     $('lite-tiles').replaceChildren();
+    $('lite-chart').hidden = true;
+    $('lite-table').hidden = true;
     $('lite-built').hidden = false;
+}
+
+/** The in-flight state: Build disabled, the elapsed clock running on it. */
+function startClock(btn) {
+    const t0 = performance.now();
+    btn.textContent = 'Building…';
+    clockTimer = setInterval(() => {
+        btn.textContent = `Building… ${((performance.now() - t0) / 1000).toFixed(1)} s`;
+    }, 100);
+}
+
+function stopClock(btn) {
+    clearInterval(clockTimer);
+    clockTimer = null;
+    btn.textContent = 'Build';
 }
 
 async function build() {
@@ -184,21 +365,22 @@ async function build() {
     building = true;
     const btn = $('lite-build');
     btn.disabled = true;
+    startClock(btn);
     try {
         const res = await api.build(current.decl);
         const p99 = renderBuilt(res);
-        // P99 off one quantiles call, filled when it lands; the exact value
-        // (`q`), not the three-figure `snapped` form Quick Re writes.
-        try {
-            const qs = await api.quantiles(res.id, [0.99]);
-            p99.value.textContent = tileNumber(qs.quantiles[0]?.q);
-        } catch {
-            p99.value.textContent = '·';
-        }
+        // The chart and the table land as they arrive; neither blocks the
+        // other or the facts already on screen. P99 off one quantiles call,
+        // the exact value (`q`), not the three-figure `snapped` form.
+        const fillP99 = api.quantiles(res.id, [0.99])
+            .then((qs) => { p99.value.textContent = tileNumber(qs.quantiles[0]?.q); })
+            .catch(() => { p99.value.textContent = '·'; });
+        await Promise.all([renderChart(res), renderTable(res), fillP99]);
     } catch (err) {
         renderBuildFailure(err);
     } finally {
         building = false;
+        stopClock(btn);
         btn.disabled = false;
     }
 }
@@ -219,6 +401,12 @@ function init() {
             : 'the program, as library.agg writes it · tap to collapse';
     });
     $('lite-build').addEventListener('click', build);
+
+    // The sheet closes on the dim, and its search re-ranks as you type.
+    $('lite-dim').addEventListener('click', closeSheet);
+    $('lite-search').addEventListener('input', (ev) => {
+        renderSheetList(sheetMatches(ev.target.value));
+    });
 
     initChips().catch((err) => {
         console.error('[lite] examples did not load', err);
