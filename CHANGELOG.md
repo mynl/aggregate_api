@@ -4,6 +4,10 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a168
+
+The phone lite entry, first half (`dev/plan-phone-lite.md`, `[Lite-Shell]`; the specification is `dev/prototypes/phone.html`). One URL, no user-agent sniffing: an inline script in `index.html`'s head sends a narrow, coarse-pointer device (a phone, not a narrow desktop window and not a touch-screen laptop) to the new `lite.html` before any bundle is fetched; `?full=1` forces the full app, `?lite=1` forces lite for desktop testing, and the lite footer links back with `?full=1`. The lite page (`web/lite.html`, `web/src/lite.js`, `web/src/styles/lite.css`, a second Vite input) is a read-mostly showcase: curated example chips resolved against `/v1/examples` (`DiceOfDice`, `BasicBook`, the Capstone trio; a one-line list in `lite.js`), the program displayed read-only and collapsed to its opening lines, one full-width Build posting `/v1/objects`, then the facts strip and four tiles, Mean and CV off the response, P99 off one quantiles call, and the build clock. No Bootstrap and no CodeMirror: the built lite page references only its own chunks, and the full app's behavior is unchanged.
+
 ## 1.0.0a167
 
 Two more from the author, reading a166 in the running app.

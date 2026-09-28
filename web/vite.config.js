@@ -15,6 +15,7 @@
 // matching the production behavior.
 
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
 // The SPA freezes specific library builds at `npm run build`. These versions
@@ -42,6 +43,14 @@ export default defineConfig({
         assetsDir: 'assets',
         sourcemap: false,
         rollupOptions: {
+            // Two pages, one build. `lite.html` + `lite.js` is the phone
+            // entry (see dev/plan-phone-lite.md); the vendor split below
+            // applies per page automatically, and the lite page simply never
+            // references the codemirror or bootstrap chunks.
+            input: {
+                main: fileURLToPath(new URL('./index.html', import.meta.url)),
+                lite: fileURLToPath(new URL('./lite.html', import.meta.url)),
+            },
             output: {
                 // Split the big vendors into their own chunks. They change only
                 // when their version does, while the app chunk changes every

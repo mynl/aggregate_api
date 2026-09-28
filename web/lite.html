@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="aggregate Loss Lab (aLL), phone edition: pick an example, press Build, read the distribution.">
+    <meta name="theme-color" content="#ffffff">
+    <title>aggregate Loss Lab</title>
+
+    <link rel="icon"            type="image/x-icon" href="/favicon.ico">
+    <link rel="icon"            type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon"            type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon"                                 href="/apple-touch-icon.png">
+    <link rel="manifest"                                         href="/site.webmanifest">
+</head>
+<body>
+
+    <!-- The lite shell: dev/prototypes/phone.html frame 1 is the drawing this
+         markup realizes. A phone user never types DecL, so the chip row is the
+         primary control, the program is read-only, and Build is the one verb.
+         The full app is one explicit link away (?full=1). -->
+
+    <header class="p-hdr">
+        <div>
+            <span class="p-brand">aggregate Loss Lab</span>
+            <span class="p-kicker">description to distribution</span>
+        </div>
+        <!-- Filled from /v1/meta; blank until it answers, and blank if it does
+             not, since a wrong version is worse than none. -->
+        <span class="p-vers" id="lite-versions"></span>
+    </header>
+
+    <div class="p-sect">Pick an example</div>
+    <div class="p-chips" id="lite-chips"></div>
+
+    <!-- The program, displayed rather than edited, collapsed to its opening
+         lines. A tap toggles the rest; it stays read-only either way. -->
+    <div class="p-prog" id="lite-prog" hidden>
+        <pre id="lite-prog-text"></pre>
+        <div class="hint" id="lite-prog-hint">the program, as library.agg writes it · tap to expand</div>
+    </div>
+
+    <button class="p-build" id="lite-build" disabled>Build</button>
+
+    <!-- The built state: prototype frame 2. Hidden until the first build. -->
+    <section id="lite-built" hidden>
+        <div class="p-strip" id="lite-strip"></div>
+        <div class="p-tiles" id="lite-tiles"></div>
+    </section>
+
+    <footer class="p-full">aLL is built for a wide screen. On a laptop?
+        <a href="./?full=1">Open the full site</a></footer>
+
+    <script type="module" src="/src/lite.js"></script>
+</body>
+</html>
