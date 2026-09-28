@@ -265,10 +265,15 @@ and the standing REMINDER below about what is worth plotting.
           instead of the heavy Density load; Quick Re's refusal names the two
           amounts that collide instead of restating a rule; the control band
           takes the editor's white ground rather than the status strip's tint.
-    - [ ] **Item 1, the chart control strip**, deferred to its own plan and
-          summarized under "Out of scope" in round 9. Three unenclosed rows stand
-          above every canvas and `.exhibit-group-panel`'s equal-share centering
-          promises an alignment to the panels it cannot keep.
+    - [ ] **Item 1, the chart control strip**, its own plan
+          (`dev/plan-chart-controls.md`), **a164 onward**. Three unenclosed rows
+          stand above every canvas and `.exhibit-group-panel`'s equal-share
+          centering promises an alignment to the panels it cannot keep.
+        - [x] `[scope]`, **a164**. The four grid rendering controls and the cut
+              become panel controls, since what they change is one panel's
+              drawing. `lights` stays in the figure box by the author's ruling.
+        - [ ] `[align] [below] [box] [short] [fold] [trim] [stack] [tone]`,
+              **a165**, the arrangement.
 
 - [x] **GUI round 8, where the dividing lines lie**
       (`dev/done/plan-ui-round-8.md`), **a157 to a158**, from an author report

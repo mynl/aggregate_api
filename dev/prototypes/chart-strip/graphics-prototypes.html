@@ -1,0 +1,1079 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chart controls: the D′ arrangement</title>
+<!--
+  The chosen arrangement, on its own. Open the file, no build step and no
+  server. `index.html` beside this one holds the four way comparison that got
+  here (A today, B align only, C align + footer + band, D below, D′ folded) and
+  is kept as the record; this page is the design.
+
+  Everything geometric is copied from the app rather than approximated.
+  `panelLayout` below is `web/src/charts/chartdoc-to-echarts.js:715` transcribed,
+  and the constants above it are that file's lines 92 to 168. The figures are
+  SVG drawn at the grid rectangles it returns, with each panel title at
+  `grids[i].left, grids[i].top - 24`, where the adapter puts it (line 2268). So
+  what lines up here lines up in the app, and what does not is out by the amount
+  the table shows.
+
+  Button labels and hover text are the real ones, from `CONTROLS`,
+  `SURFACE_CONTROLS` and `KIND_LABELS` in `web/src/charts/mount.js`.
+
+  Nothing is wired: pressing a toggle marks it pressed and does nothing else.
+  The question here is where a control sits, not what it does.
+
+  The arrangement, top to bottom:
+
+    the drawing            nothing above it, so every chart starts at the same
+                           height down the page whatever apparatus it carries
+    the legend             close under the drawing it reads
+    the panel groups       one per panel, at that panel's own grid column
+    the figure controls    a rounded box the width of the drawing, contents
+                           left aligned like everything above them
+
+  Settled: the muted red for a pressed toggle, the folded relief, short labels
+  at one width each spelling itself out on hover, and the stacked spacing.
+
+  Open question this page exists to settle: what belongs in the bottom box.
+  See `OPEN QUESTION` below, which is where the fig versus panel split is
+  written down.
+-->
+<style>
+/* ---- Tokens, from web/src/styles/site.css :root ---- */
+:root {
+    --ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "Cascadia Mono", SFMono-Regular, Consolas, Menlo, monospace;
+    --fs-meta:  .74rem;
+    --fs-ui:    .82rem;
+    --fs-body:  .94rem;
+    --fs-head:  1.15rem;
+    --ink:     #000000;
+    --ink-2:   #2b2b2b;
+    --mut:     #5f5f5f;
+    --line:    #d4d4d4;
+    --line-2:  #ebebeb;
+    --soft:    #f6f6f6;
+    --house:   #a81313;
+    --primary: var(--house);
+    --house-dark: #8c1010;
+    --gutter:  1.15rem;
+    --measure: 46rem;
+    --tabpad:  1.05rem;
+    --bs-border-radius: .375rem;
+
+    /* The pressed chart toggle, desaturated. The house red is the page's
+       selection mark: it paints the active tab and the active sub-tab, both a
+       few pixels above the chart's own row, so a pressed chart toggle in the
+       same red reads as a third tab rather than as a setting on the drawing.
+       Same hue, at roughly a third of the saturation. */
+    --chart-on: #935353;
+}
+* { box-sizing: border-box; }
+body {
+    font-family: var(--ui); font-size: var(--fs-body); color: var(--ink-2);
+    margin: 0; padding: 1.5rem 1.5rem 6rem; background: #fff;
+}
+h1 { font-size: 1.45rem; color: var(--ink); margin: 0 0 .3rem; }
+h2 { font-size: var(--fs-head); color: var(--ink); margin: 1.6rem 0 .2rem; }
+p  { max-width: var(--measure); line-height: 1.5; margin: .35rem 0 .8rem; }
+code { font-family: var(--mono); font-size: .86em; color: var(--house); }
+.meta { font-size: var(--fs-meta); color: var(--mut); }
+.wrap { max-width: 1340px; margin: 0 auto; }
+
+/* ---- The page's own controls, deliberately unlike the app's ---- */
+.rig {
+    position: sticky; top: 0; z-index: 5; background: #fff;
+    border-bottom: 1px solid var(--line); padding: .7rem 0 .75rem;
+    margin: 0 0 1.5rem; display: flex; flex-wrap: wrap;
+    align-items: center; gap: .4rem 1.5rem;
+}
+.rig-group { display: flex; align-items: center; gap: .4rem; }
+.rig-label {
+    font-size: var(--fs-meta); color: var(--mut);
+    text-transform: uppercase; letter-spacing: .04em;
+}
+.rig button {
+    font-size: var(--fs-ui); padding: .25rem .6rem; cursor: pointer;
+    border: 1px solid var(--line); background: #fff; color: var(--ink-2);
+    border-radius: var(--bs-border-radius);
+}
+.rig button.on { background: var(--house); border-color: var(--house); color: #fff; }
+.rig input[type=range] { width: 260px; accent-color: var(--house); }
+.rig output { font-family: var(--mono); font-size: var(--fs-ui); min-width: 5ch; }
+
+/* ================= the app's own rules, verbatim =================
+   From site.css 1425 to 1520, so the parts that are not changing are the real
+   thing rather than a reconstruction of them. */
+.exhibit-controls {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0;
+    margin: 0 0 .45rem;
+}
+.exhibit-group {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .35rem;
+    padding: .1rem .7rem;
+}
+.exhibit-group:first-child { padding-left: 0; }
+.exhibit-controls-stacked { flex-direction: column; align-items: stretch; }
+/* Stacked, a group is a heading and a row of buttons rather than one line, and
+   it needs room to say so. The app's `.1rem .7rem` was written for groups
+   sitting side by side in a single row, where the vertical padding does nothing;
+   stacked, it put a hairline three pixels under one panel's buttons and three
+   above the next panel's label, which is the clutter the author saw. `.6rem`
+   top and bottom gives the rule a clear 1.2rem between the two rows it
+   separates, and the label takes a line of its own so it reads as the heading
+   of the group instead of as the first item in it. */
+.exhibit-controls-stacked .exhibit-group {
+    flex: 0 0 auto; justify-content: flex-start;
+    padding: .6rem 0; border-left: 0;
+}
+.exhibit-controls-stacked .exhibit-group:first-child { padding-top: .1rem; }
+.exhibit-controls-stacked .exhibit-group-label {
+    flex: 0 0 100%; margin-bottom: .15rem;
+}
+/* The app's own weight, kept. Only the space around it was asked for. */
+.exhibit-controls-stacked .exhibit-group + .exhibit-group {
+    border-top: 1px solid var(--line);
+}
+.exhibit-group-label {
+    font-size: .68rem; color: var(--mut);
+    text-transform: uppercase; letter-spacing: .04em;
+}
+.exhibit-toggle {
+    font-size: .72rem; line-height: 1; padding: .3rem .6rem;
+    color: var(--mut); background: #fff;
+    border: 1px solid var(--line); cursor: pointer;
+    border-radius: var(--bs-border-radius);
+}
+.exhibit-toggle:hover { color: var(--chart-on); border-color: var(--chart-on); }
+.exhibit-toggle.active {
+    color: #fff; background: var(--chart-on); border-color: var(--chart-on);
+}
+/* The house red, for comparison with the desaturated default. The sub-tab row
+   is this color and sits a few pixels above the chart. */
+body.loud .exhibit-toggle:hover { color: var(--primary); border-color: var(--primary); }
+body.loud .exhibit-toggle.active {
+    background: var(--primary); border-color: var(--primary);
+}
+.exhibit-window {
+    display: inline-flex; align-items: center; gap: .3rem;
+    font-size: .78rem; color: var(--mut); margin: 0;
+}
+.exhibit-window-input {
+    width: 4.6rem; height: 1.6rem; padding: .05rem .3rem; font-size: .78rem;
+}
+.chart-readout {
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: .15rem 1rem; font-size: .78rem; color: var(--ink);
+}
+.chart-readout-head {
+    font-weight: 700; font-variant-numeric: tabular-nums; min-width: 13ch;
+}
+.chart-readout-item {
+    display: inline-flex; align-items: baseline; gap: .3rem;
+    background: none; border: 0; padding: 0; margin: 0;
+    font: inherit; color: inherit; cursor: pointer;
+}
+.chart-readout-item b {
+    display: inline-block; min-width: 9ch; text-align: right;
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+.chart-readout-name { color: var(--mut); }
+.chart-readout-swatch {
+    display: inline-block; width: 14px; height: 2px;
+    border-radius: 1px; align-self: center;
+}
+
+/* ================= the arrangement =================
+
+   [align]  a panel's group sits at that panel's own grid column, left aligned
+            with its title and its y-axis, rather than at an even share of the
+            row. `panelLayout` already returns the columns, so this is a read
+            rather than a calculation
+   [below]  nothing above the drawing at all
+   [box]    the figure controls in a rounded box, contents centered
+   [short]  one width for every toggle, each label spelling itself out on hover
+   [fold]   the relief's occasional controls behind one menu
+*/
+
+/* [align]. The row is the positioning context and each group is placed on it.
+   Absolute rather than a flex basis because a group has to sit at a left offset
+   that owes nothing to the group before it: the tower's panels are 1:2:2 by
+   ratio, so no sequence of flex bases reproduces them.
+
+   `flow-root` as well as `relative`, because the row has an in-flow child in
+   some readings and a top margin on it would otherwise collapse through this
+   element and move the whole row instead. */
+.strip-aligned { position: relative; display: flow-root; margin: 0; }
+.strip-aligned .exhibit-group {
+    position: absolute; top: 0; padding: 0;
+    border-left: 0; justify-content: flex-start;
+}
+
+/* [below]. Tight above the legend, looser below it. The legend is a reading of
+   the drawing directly over it, so it sits almost on the axis labels; the
+   buttons are a different kind of thing and get the gap. Closing `BELOW_TRIM`
+   inside the canvas is what made the first possible: no padding here could have
+   crossed a band reserved inside the SVG. */
+.chart-readout { padding: 0 0 1.25rem; margin: 0; }
+
+/* [short]. One width for every toggle, about what `log x` needs, which is the
+   size the author named as good. A floor rather than a fixed width, so
+   `marginals` and `contours` still fit and only the short ones are padded out.
+   What it buys is a row that reads as a row: the eye finds the third button
+   from the left without reading any of them, and a cycling button no longer
+   changes width as it moves through its modes. */
+.exhibit-toggle { min-width: 4.4rem; }
+/* The menus and the window box keep their natural width: they are not one of
+   the set, and padding `Download ▾` out to match would make them look like one. */
+.exhibit-toggle.dropdown-toggle, .exhibit-window { min-width: 0; }
+
+/* [box]. The figure controls: rounded, bordered, centered contents, no rule and
+   no label.
+
+   The labeled row behind a hairline came first and did not land. Both devices
+   were saying the same thing and neither said it well: a rule across the full
+   width reads as the end of the figure rather than the start of a group, and a
+   caption that has to name what its buttons govern is a caption admitting the
+   arrangement did not. Centered under the drawing says it without either.
+
+   **Width is the drawing's, not the host's.** See `drawnExtent`. A square panel
+   clamps at `SQUARE_MAX`, so the relief's drawing stops less than half way
+   across a wide host and a host width box spans several hundred pixels of white
+   space to the right of the picture it belongs to. Hit "box: host width" to see
+   that reading.
+
+   The gap above is the largest in the block, so the box sits apart from the
+   drawing it governs rather than reading as a fourth row of it. */
+.exhibit-footer {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .35rem;
+    margin: 1.15rem 0 0;
+    padding: .45rem .7rem;
+    justify-content: flex-start;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: .5rem;
+}
+/* Contents centered, which is what this was until 2026-09-28. Kept behind a
+   toggle rather than deleted, because the argument for it was real and is worth
+   being able to see again: centering was doing the job of the label that came
+   off, a thing centered under a figure being read as belonging to the whole
+   figure rather than to either half of it.
+   What retired it is that the box no longer needs the help. It has a border and
+   it is exactly the drawing's width, so the enclosure says what the centering
+   was saying, and the page's own idiom then wins: the legend and the panel
+   groups are left aligned on the drawing's left edge, and a centered row is the
+   one thing under the drawing that is not. It also reads worse when it wraps,
+   which the relief's does, since two centered rows share neither edge. */
+body.centered .exhibit-footer { justify-content: center; }
+
+/* ---- The figure and the fake chart ---- */
+.figure { margin: 0; }
+.exhibit-canvas { position: relative; }
+.exhibit-canvas svg { display: block; }
+.stage {
+    border: 1px dashed var(--line); border-radius: .5rem;
+    padding: 1rem; margin: .6rem 0 0; overflow-x: auto;
+}
+
+/* The miss table: how far each group's left edge is from its panel's. */
+table.miss { border-collapse: collapse; font-size: var(--fs-meta); margin: .6rem 0 0; }
+table.miss th, table.miss td {
+    text-align: right; padding: .15rem .6rem .15rem 0;
+    font-variant-numeric: tabular-nums; font-family: var(--mono);
+}
+table.miss th { color: var(--mut); font-weight: 600; font-family: var(--ui); }
+table.miss td:first-child, table.miss th:first-child {
+    text-align: left; font-family: var(--ui);
+}
+td.bad  { color: var(--house); font-weight: 700; }
+td.good { color: #1a7f37; }
+
+/* The scope table, which is the open question written out. */
+table.scope { border-collapse: collapse; font-size: var(--fs-meta); margin: .5rem 0 1rem; }
+table.scope th, table.scope td {
+    text-align: left; padding: .2rem 1.1rem .2rem 0; vertical-align: top;
+}
+table.scope th { color: var(--mut); font-weight: 600; }
+table.scope td:first-child { font-family: var(--mono); white-space: nowrap; }
+table.scope tr.split td { border-top: 1px solid var(--line-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Chart controls: the D′ arrangement</h1>
+<p class="meta">
+    For <code>dev/plan-ui-round-9.md</code> item 1. Geometry, panel placement,
+    button labels and hover text are transcribed from the app.
+    <code>index.html</code> beside this holds the four way comparison that got
+    here and is kept as the record.
+</p>
+
+<div class="rig">
+    <div class="rig-group">
+        <span class="rig-label">Figure</span>
+        <button data-fig="pair" class="on">two panel 2-D</button>
+        <button data-fig="surface">surface, 3-D</button>
+        <button data-fig="tower">tower, three panels</button>
+    </div>
+    <div class="rig-group">
+        <span class="rig-label">Host width</span>
+        <input type="range" id="width" min="340" max="1280" step="10" value="980">
+        <output id="widthOut">980</output>
+        <button data-width="390">390</button>
+        <button data-width="700">700</button>
+        <button data-width="820">820</button>
+        <button data-width="1100">1100</button>
+    </div>
+    <div class="rig-group">
+        <span class="rig-label">Show</span>
+        <button id="ruler">panel guides</button>
+        <button id="hostbox">box: host width</button>
+        <button id="centered">center fig controls</button>
+        <button id="loud">house red</button>
+        <button id="unfold">unfold relief</button>
+    </div>
+</div>
+
+<div id="stage"></div>
+
+<h2>Widths</h2>
+<p id="widths" class="meta"></p>
+<p>
+    The box takes the plot areas' width, which <code>panelLayout</code> already
+    knows: <code>grids[0].left</code> to the right edge of the last panel. Axis
+    furniture is excluded at both ends by the same rule. The left edge is not
+    zero, so the box does not sit under the y-axis labels; the right edge is not
+    the colorbar, which is the value axis of a grid panel and belongs to that
+    panel rather than to the figure. Both edges are then where the panel groups
+    and the panel titles are, so the whole block under the drawing shares one
+    margin.
+</p>
+<p>
+    The relief is the case that needs it. A square panel clamps at
+    <code>SQUARE_MAX</code>, 420, so at a wide host the drawing stops less than
+    half way across and a host width box spans several hundred pixels of white
+    space. <b>box: host width</b> shows that reading.
+</p>
+
+<h2>Which controls go where</h2>
+<p>
+    The app decided this by where the state is stored, not by what the control
+    changes: a panel control if it went through
+    <code>setPanelView(panel.id, ...)</code>, a figure control if it went
+    through the one shared <code>setView(...)</code>. The relief is where that
+    showed. It has one panel, so everything in the box was acting on that panel
+    and nothing else, yet only <code>c: gam</code> was drawn as a panel control,
+    because only that one happened to be stored per panel id.
+</p>
+<p>
+    The rule is now what the control changes, which moves five controls up to
+    the panel and leaves the box with what is genuinely figure level.
+</p>
+<table class="scope" id="scope"></table>
+<p>
+    The move also closes a latent bug. Those five drive the document today, so
+    the first document with two grid panels would have them driving the wrong
+    one. And it leaves <code>Download</code> and <code>reset</code> as the two
+    controls in every figure box on every chart, which is a good test of the
+    rule: they are the only two that are about the drawing rather than about
+    what it shows. <b>unfold relief</b> puts the folded menu back to plain
+    buttons.
+</p>
+
+</div>
+
+<script>
+// =====================================================================
+// The app's geometry, transcribed.
+// web/src/charts/chartdoc-to-echarts.js lines 92 to 168 and 715 to 776.
+// =====================================================================
+const AXIS_LEFT = 64;
+const AXIS_BOTTOM = 46;
+const PAD_RIGHT = 18;
+const PAD_TOP = 26;
+const GAP_X = 96;
+const GAP_Y = 30;
+const LEGEND_H = 24;
+const PANEL_MIN_H = 130;
+const PANEL_MAX_H = 380;
+const PANEL_ASPECT = 4 / 3.25;
+const WIDE_PX = 720;
+const SQUARE_MIN = 240;
+const SQUARE_MAX = 420;
+const TOWER_WIDTH = 1;
+const CURVE_WIDTH = 2;
+const TOWER_MIN_H = 260;
+const TOWER_MAX_H = 420;
+const TOWER_ASPECT = 1.75 / 4.41;
+
+/**
+ * What comes off the bottom of the host box, so the legend can sit close.
+ *
+ * `LEGEND_H` is the certain part: the app adds 24px to `hostHeight` for the
+ * ECharts legend, and that legend has been declared and not drawn since a63,
+ * the readout having taken its job. Nobody notices a reserved band at the
+ * bottom of a drawing while the legend is above it. Below it, that band is the
+ * gap between the x-axis labels and the legend.
+ *
+ * The extra 6 is slack at the bottom of `AXIS_BOTTOM`, past where the axis name
+ * is drawn, and it is the provisional part: this page places that name by hand,
+ * and the real figure is whatever ECharts leaves under its own `nameGap`.
+ * Measure it in the app rather than carrying this number over.
+ */
+const BELOW_TRIM = LEGEND_H + 6;
+
+/** `panelLayout`, verbatim, so the alignment here is the app's alignment. */
+function panelLayout(count, square, width, rightPad = 0, plan = null) {
+    const n = Math.max(1, count || 1);
+    const w = width || 900;
+    const wide = w >= WIDE_PX;
+    const laid = (wide && plan && plan.ratios && plan.ratios.length === n) ? plan : null;
+    const perRow = laid ? n : (wide ? Math.min(2, n) : 1);
+    const pad = PAD_RIGHT + rightPad;
+    const free = (k) => w - AXIS_LEFT - (k - 1) * GAP_X - pad;
+    const chrome = PAD_TOP + AXIS_BOTTOM;
+    const uniformW = Math.max(wide ? 160 : 200, free(perRow) / perRow);
+    const panelH = laid && laid.tall
+        ? Math.max(TOWER_MIN_H, Math.min(TOWER_MAX_H, w / PANEL_ASPECT - chrome))
+        : (square
+            ? Math.max(SQUARE_MIN, Math.min(SQUARE_MAX, uniformW))
+            : Math.max(PANEL_MIN_H,
+                Math.min(PANEL_MAX_H, uniformW / PANEL_ASPECT - chrome)));
+    const boxW = square && !laid ? panelH : uniformW;
+    const units = laid ? laid.ratios.reduce((a, b) => a + b, 0) : 0;
+    const unit = laid ? Math.min(panelH * TOWER_ASPECT, free(n) / units) : 0;
+    const widthOf = (k) => (laid ? unit * laid.ratios[k] : boxW);
+
+    const grids = [];
+    let left = AXIS_LEFT;
+    for (let i = 0; i < n; i++) {
+        const r = Math.floor(i / perRow);
+        if (i % perRow === 0) left = AXIS_LEFT;
+        const width_ = widthOf(i);
+        grids.push({ left, top: PAD_TOP + r * (panelH + AXIS_BOTTOM + GAP_Y),
+                     width: width_, height: panelH });
+        left += width_ + GAP_X;
+    }
+    const bottom = Math.max(...grids.map((g) => g.top + g.height));
+    return { grids, wide, panelW: boxW, panelH,
+             footprint: chrome + panelH,
+             hostHeight: Math.round(bottom + AXIS_BOTTOM + LEGEND_H) };
+}
+
+/**
+ * The horizontal extent of the plot areas, as opposed to of the host box.
+ *
+ * Left edge of the first plot area to right edge of the last. Knowable at the
+ * moment the strip is built, which was the open question: `panelLayout` returns
+ * every grid, so nothing has to be measured off a rendered canvas or guessed.
+ *
+ * **Axis furniture is excluded at both ends, and that is the rule.** The left
+ * edge is `grids[0].left` and not zero, so the box does not sit under the
+ * y-axis labels; by the same rule the right edge is the last plot area and not
+ * the colorbar, which `rightPad` reserves beyond it. A colorbar is the value
+ * axis of a grid panel, the same kind of thing as the tick labels on the left,
+ * and it belongs to its panel rather than to the figure. Including it made the
+ * relief's box reach past the picture to cover a bar the author could not
+ * identify, which is the whole argument against. Author's call, 2026-09-28.
+ *
+ * The box therefore spans exactly the ink, and lines up with the panel groups
+ * and the panel titles, which all sit on `grids[i].left`.
+ *
+ * Stacked, every panel is at the same left and the same width, so this is still
+ * right without a special case.
+ */
+function drawnExtent(box) {
+    const left = box.grids[0].left;
+    const right = Math.max(...box.grids.map((g) => g.left + g.width));
+    return { left, width: right - left };
+}
+
+// =====================================================================
+// The controls, from web/src/charts/mount.js.
+// =====================================================================
+const KIND_LABELS = { xy: 'curves', heatmap: 'flat', surface: '3D' };
+
+/**
+ * The short labels. The target is the width of `log x`, the size the author
+ * named as good. Most of these are not contractions at all, they are the word
+ * the code already uses:
+ *
+ *   reference lines -> marks    `CONTROLS` gates this button on `offer:
+ *                               'marks'` and its own tooltip says "show the
+ *                               marks this panel carries"
+ *   SpaceMouse      -> puck     what mount.js calls it in every comment
+ *   full range      -> range    the reading is "the whole extent declared"
+ *   wall grid       -> walls    only the walls carry one, so the noun is enough
+ *   return period   -> ret prd  the one true contraction. `RP` was the other
+ *                               candidate, shorter and the standard actuarial
+ *                               form, but it is the only capitalized thing in a
+ *                               row of lowercase and it looks it. Author's
+ *                               call, 2026-09-28
+ *   color: gamma    -> c: gam   the mode is the button's state so it has to
+ *                               stay visible; this shortens both halves
+ *   cut: total      -> cut: tot the four modes become off, cpt, tot, all, which
+ *                               are the same width, so the button stops
+ *                               changing size as it cycles
+ *
+ * Everything not listed is already short enough and is left alone, so the map
+ * is the whole of the change and can be read at a glance.
+ */
+const SHORT = {
+    'full range': 'range',
+    'return period': 'ret prd',
+    'reference lines': 'marks',
+    'color: gamma': 'c: gam',
+    'cut: total': 'cut: tot',
+    SpaceMouse: 'puck',
+    'wall grid': 'walls',
+};
+
+/**
+ * The hover text for an abbreviated button, which spells the abbreviation out
+ * before explaining anything.
+ *
+ * A tooltip is what makes a short label safe, and it only does that if the
+ * first thing it says is what the short label stands for. `ret prd` hovering to
+ * "Read this panel's probability axis as the return period it pairs with" gets
+ * there eventually; "Return period: read this panel's..." gets there in two
+ * words. Author's ruling, 2026-09-28.
+ *
+ * A label already carrying a colon takes a full stop instead, because
+ * "Color: gamma: how value maps" is not a sentence anyone can read. The
+ * explanation's first letter is lowered only when its second is already
+ * lowercase, so an acronym or a `3D` opening survives.
+ */
+function spellOut(label, why) {
+    const head = label[0].toUpperCase() + label.slice(1);
+    if (label.includes(':')) return `${head}. ${why}`;
+    const body = (why[1] && why[1] === why[1].toLowerCase())
+        ? why[0].toLowerCase() + why.slice(1)
+        : why;
+    return `${head}: ${body}`;
+}
+
+/** The hover text, keyed by long label, trimmed from mount.js. */
+const TITLES = {
+    'log x': 'Read this panel\'s horizontal axis on log, where it offers a log '
+        + 'reading. It acts on this panel alone',
+    'log y': 'Read this panel\'s vertical axis on log. A density ordinate is '
+        + 'uncropped on the way there, because room for a spike is the point',
+    'full range': 'Draw this panel\'s axes over the whole extent they declare, '
+        + 'instead of the window the library suggested',
+    'return period': 'Read this panel\'s probability axis as the return period '
+        + 'it pairs with: the same curve, interrogated at 1-in-200 rather than '
+        + 'at 0.995',
+    reflect: 'Read this panel\'s probability axis as its complement, 1 - v. A '
+        + 'distribution function reflected is the survival function',
+    invert: 'Exchange this panel\'s axes, where it says they exchange. A '
+        + 'quantile plot inverted is the distribution function',
+    'reference lines': 'Show the marks this panel carries, the mean and break '
+        + 'even, drawn where the document puts them',
+    'color: gamma': 'How value maps to color on this panel. Gamma lifts the '
+        + 'faint structure a linear ramp buries under the peak; log resolves '
+        + 'the deep decades. Only where the colors sit along the bar changes',
+    contours: 'Contour lines at eight levels, running on the surface and on '
+        + 'the floor image at the same levels',
+    marginals: 'Draw each component\'s own distribution on the wall behind it. '
+        + 'These are the library\'s exact marginals',
+    mesh: 'The grid over the skin, every sixth line. Off leaves a bare surface',
+    'wall grid': 'Grid lines on the three walls of the box',
+    'cut: total': 'Cut the joint and read the conditional it leaves, drawn on '
+        + 'the wall beside the marginal it should be compared with. On the '
+        + 'total, the two means are kappa',
+    walk: 'Walk the cuts out along the diagonal, the total rising steadily, '
+        + 'and watch where the split falls against an even one',
+    SpaceMouse: 'Drive the relief with a 3Dconnexion SpaceMouse. One grant per '
+        + 'browser: after that it reattaches silently',
+    window: 'How deep a window the drawing is fetched over. The one control '
+        + 'here that is a new request rather than a new drawing',
+    lee: 'Draw the Lee curve beside the tower',
+    curves: 'Draw the grid as curves',
+    flat: 'Draw the grid as a flat image',
+    '3D': 'Draw the grid in relief',
+    Download: 'Save what is on screen. The file is the box you are looking at, '
+        + 'so the log reading and the proportions come with it',
+    'relief...': 'The relief\'s occasional controls: the walk, the puck, and '
+        + 'the window the drawing is fetched over',
+    reset: 'Back to the default view: the full range, and the camera with it '
+        + 'on a surface',
+};
+
+/**
+ * SETTLED: what makes a control a figure control.
+ *
+ * The app's answer was storage: `setPanelView(panel.id, ...)` made it a panel
+ * control and the shared `setView(...)` made it a figure control, which is an
+ * implementation detail standing in for a design decision. The relief was where
+ * that showed. It has one panel, so every control in the box was acting on that
+ * panel and nothing else, yet only the color stretch was drawn as a panel
+ * control, because only the color stretch happened to be held per panel id.
+ *
+ * The rule now is what the control changes. Everything that changes what a
+ * panel draws sits with that panel, which moves contours, marginals, mesh,
+ * walls and cut up out of the box; the box keeps what is genuinely figure
+ * level. Author's call, 2026-09-28. It also closes a latent bug: those five
+ * drive the document today, so the first document with two grid panels would
+ * have them driving the wrong one.
+ *
+ * The table below is rendered onto the page, because it is the spec for which
+ * control goes where.
+ */
+const SCOPE = [
+    ['log x, log y, range, ret prd, reflect, invert, marks',
+     'what this panel shows',
+     'panel: already stored per panel id'],
+    ['c: gam',
+     'what this panel shows',
+     'panel: already stored per panel id'],
+    ['contours, marginals, mesh, walls, cut',
+     'what this grid panel draws',
+     'panel: moving, the one behavioral change'],
+    ['curves, flat, 3D, lee, window',
+     'what is fetched and how it is realized',
+     'figure: the whole document. `window` and `lee` are a new request, not a '
+     + 'new drawing'],
+    ['Download, reset, walk, puck',
+     'what happens to the drawing',
+     'figure: saving it, putting it back, moving the camera'],
+];
+/** Where the rule changes, for the rule in the table. */
+const SCOPE_SPLIT = 3;
+
+/** The three figures, with plausible per panel declarations. */
+const FIGURES = {
+    pair: {
+        name: 'A two unit portfolio: Overview',
+        square: false,
+        rightPad: 0,
+        panels: [
+            { title: 'Density', y: 'density',
+              buttons: [['log x'], ['log y', true], ['full range'],
+                        ['reference lines', true]] },
+            { title: 'Lee diagram', y: 'loss',
+              buttons: [['log y'], ['full range'], ['return period'],
+                        ['reflect'], ['invert']] },
+        ],
+        doc: [['curves', true], ['Download', false, 'menu'], ['reset']],
+        readout: [['total', '1.284e-05'], ['unit A', '8.117e-06'],
+                  ['unit B', '4.723e-06']],
+    },
+    surface: {
+        name: 'A joint severity: the relief',
+        square: true,
+        rightPad: 34,               // the colorbar
+        // The five grid rendering controls sit with the panel, not in the
+        // figure box. They change what this panel draws, exactly as the color
+        // stretch beside them does, and they were only ever figure scoped
+        // because of where their state happened to live. Author's call,
+        // 2026-09-28; see `SCOPE` below.
+        panels: [
+            { title: 'Joint density', y: 'unit B',
+              buttons: [['log x'], ['log y'], ['color: gamma', true],
+                        ['contours', true], ['marginals'], ['mesh'],
+                        ['wall grid'], ['cut: total', true]] },
+        ],
+        doc: [['walk'], ['SpaceMouse'], ['window', false, 'number'],
+              ['3D', true], ['flat'], ['Download', false, 'menu'], ['reset']],
+        // [fold]: the three occasional controls behind one menu, following the
+        // Download precedent.
+        docFolded: [['relief...', false, 'menu'],
+                    ['3D', true], ['flat'], ['Download', false, 'menu'],
+                    ['reset']],
+        readout: [['at cell', '312.5, 187.5'], ['height', '2.7351e-10']],
+    },
+    tower: {
+        name: 'A tower with its Lee curve: gross, ceded, net',
+        square: false,
+        rightPad: 0,
+        plan: { ratios: [TOWER_WIDTH, CURVE_WIDTH, CURVE_WIDTH], tall: true },
+        panels: [
+            { title: 'Tower', y: 'loss', buttons: [['log y', true]] },
+            { title: 'Gross and ceded', y: 'loss',
+              buttons: [['log y', true], ['full range'], ['return period']] },
+            { title: 'Net', y: 'loss',
+              buttons: [['log y', true], ['full range'], ['return period']] },
+        ],
+        doc: [['lee', true], ['Download', false, 'menu'], ['reset']],
+        readout: [['loss', '1,284,000'], ['gross', '1,284,000'],
+                  ['ceded', '284,000'], ['net', '1,000,000']],
+    },
+};
+
+const SERIES_COLOR = ['#a81313', '#1f4e79', '#2e7d32', '#8a6d1f'];
+
+// =====================================================================
+// Building blocks
+// =====================================================================
+function el(tag, props = {}, ...kids) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+        if (k === 'className') node.className = v;
+        else if (k === 'style') node.setAttribute('style', v);
+        else if (k.startsWith('on')) node.addEventListener(k.slice(2).toLowerCase(), v);
+        else node.setAttribute(k, v);
+    }
+    for (const kid of kids) {
+        if (kid == null) continue;
+        node.appendChild(typeof kid === 'string' ? document.createTextNode(kid) : kid);
+    }
+    return node;
+}
+
+/**
+ * One control. `kind` is 'toggle', 'menu' or 'number'.
+ *
+ * Where the label is shortened the hover text opens by spelling the short form
+ * out, so the tooltip answers "what is this" before it answers "what does it
+ * do". Buttons that were never shortened keep their plain tooltip: prefixing
+ * `log x` with "Log x:" would be noise.
+ */
+function toggle([label, active, kind, title]) {
+    const why = title || TITLES[label] || label;
+    if (kind === 'number') {
+        return el('label', { className: 'exhibit-window', title: why }, 'window',
+            el('input', { className: 'exhibit-window-input', type: 'text',
+                          value: '1e-4', size: '6' }));
+    }
+    const text = SHORT[label] || label;
+    const btn = el('button', {
+        type: 'button',
+        className: `exhibit-toggle${active ? ' active' : ''}`,
+        title: text === label ? why : spellOut(label, why),
+        onclick: () => btn.classList.toggle('active'),
+    }, kind === 'menu' ? `${text} ▾` : text);
+    return btn;
+}
+
+/**
+ * The legend, which is also the readout, idle since nothing is hovered.
+ *
+ * Indented to the drawing's left edge, with the panel groups and the box, so
+ * the whole block under the drawing shares one margin.
+ */
+function readout(fig, indent) {
+    const row = el('div', { className: 'chart-readout',
+                            style: `padding-left:${indent}px` });
+    row.appendChild(el('span', { className: 'chart-readout-head' },
+                       fig === FIGURES.surface ? 'at cell' : 'loss  1,000,000'));
+    fig.readout.forEach(([name, value], i) => {
+        row.appendChild(el('span', { className: 'chart-readout-item' },
+            el('span', { className: 'chart-readout-swatch',
+                         style: `background:${SERIES_COLOR[i % SERIES_COLOR.length]}` }),
+            el('span', { className: 'chart-readout-name' }, name),
+            el('b', {}, value)));
+    });
+    return row;
+}
+
+/**
+ * The fake chart: real grid rectangles, real title placement, a plausible curve.
+ *
+ * `createElementNS`, not `el`. An <svg> built with `createElement` is an unknown
+ * HTML element that accepts SVG children and draws none of them, which is a
+ * blank box and no error.
+ */
+function canvas(fig, box, width, guides, trim = 0) {
+    const h = box.hostHeight - trim;
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    for (const [k, v] of Object.entries({
+        width: String(width), height: String(h),
+        viewBox: `0 0 ${width} ${h}`, role: 'img', 'aria-label': fig.name,
+    })) svg.setAttribute(k, v);
+    const add = (tag, attrs, text) => {
+        const n = document.createElementNS(ns, tag);
+        for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v));
+        if (text != null) n.textContent = text;
+        svg.appendChild(n);
+        return n;
+    };
+
+    box.grids.forEach((g, i) => {
+        const panel = fig.panels[i];
+        add('rect', { x: g.left, y: g.top, width: g.width, height: g.height,
+                      fill: '#fbfbfb', stroke: '#ebebeb' });
+        if (guides) {
+            add('rect', { x: g.left, y: 0, width: g.width, height: h,
+                          fill: 'rgba(168,19,19,.05)',
+                          stroke: 'rgba(168,19,19,.35)',
+                          'stroke-dasharray': '3 3' });
+        }
+        add('line', { x1: g.left, y1: g.top, x2: g.left, y2: g.top + g.height,
+                      stroke: '#5f5f5f' });
+        add('line', { x1: g.left, y1: g.top + g.height,
+                      x2: g.left + g.width, y2: g.top + g.height,
+                      stroke: '#5f5f5f' });
+        // The panel title, where the adapter puts it: grids[i].left, top - 24.
+        add('text', { x: g.left, y: g.top - 24 + 12, 'font-size': 13,
+                      'font-family': 'system-ui, sans-serif', fill: '#000000',
+                      'font-weight': 600 }, panel.title);
+        add('text', { x: 14, y: g.top + g.height / 2, 'font-size': 11,
+                      'font-family': 'system-ui, sans-serif', fill: '#5f5f5f',
+                      transform: `rotate(-90 14 ${g.top + g.height / 2})`,
+                      'text-anchor': 'middle' }, panel.y);
+        for (let t = 0; t <= 4; t++) {
+            const y = g.top + (g.height * t) / 4;
+            add('text', { x: g.left - 6, y: y + 3, 'font-size': 10,
+                          'font-family': 'ui-monospace, monospace', fill: '#5f5f5f',
+                          'text-anchor': 'end' },
+                ['1.0', '0.8', '0.5', '0.2', '0.0'][t]);
+        }
+        add('text', { x: g.left + g.width / 2, y: g.top + g.height + 32,
+                      'font-size': 11, 'font-family': 'system-ui, sans-serif',
+                      fill: '#5f5f5f', 'text-anchor': 'middle' }, 'loss');
+        // The colorbar, where `rightPad` reserves room for one.
+        //
+        // Drawn as a viridis ramp with its numbers rather than as a plain grey
+        // rectangle, which is what it was and which read as a scrollbar. It is
+        // the value axis of a grid panel, so it has to look like an axis: that
+        // is the point being made about where the box's right edge belongs.
+        if (fig.rightPad) {
+            const barX = g.left + g.width + 14;
+            const stops = ['#440154', '#3b528b', '#21918c', '#5ec962', '#fde725'];
+            const defs = document.createElementNS(ns, 'defs');
+            const grad = document.createElementNS(ns, 'linearGradient');
+            grad.setAttribute('id', `viridis-${i}`);
+            // Bottom to top, so the high end is at the top of the bar.
+            for (const [k, v] of [['x1', '0'], ['y1', '1'],
+                                  ['x2', '0'], ['y2', '0']]) grad.setAttribute(k, v);
+            stops.forEach((c, k) => {
+                const s = document.createElementNS(ns, 'stop');
+                s.setAttribute('offset', `${(k / (stops.length - 1)) * 100}%`);
+                s.setAttribute('stop-color', c);
+                grad.appendChild(s);
+            });
+            defs.appendChild(grad);
+            svg.appendChild(defs);
+            add('rect', { x: barX, y: g.top, width: 12, height: g.height,
+                          fill: `url(#viridis-${i})`, stroke: '#ebebeb' });
+            ['1e-3', '1e-6', '1e-9'].forEach((t, k) => {
+                add('text', { x: barX + 16, y: g.top + 4 + (g.height / 2) * k,
+                              'font-size': 9,
+                              'font-family': 'ui-monospace, monospace',
+                              fill: '#5f5f5f' }, t);
+            });
+        }
+        const n = 60;
+        const pts = [];
+        for (let k = 0; k <= n; k++) {
+            const u = k / n;
+            const v = Math.exp(-Math.pow((u - .22) / .16, 2)) * .82
+                    + Math.exp(-Math.pow((u - .62) / .30, 2)) * .34;
+            pts.push(`${g.left + u * g.width},${g.top + g.height * (1 - Math.min(1, v))}`);
+        }
+        add('polyline', { points: pts.join(' '), fill: 'none',
+                          stroke: SERIES_COLOR[0], 'stroke-width': 1.5 });
+        const pts2 = pts.map((p) => {
+            const [x, y] = p.split(',').map(Number);
+            return `${x},${g.top + (y - g.top) * .55 + g.height * .2}`;
+        });
+        add('polyline', { points: pts2.join(' '), fill: 'none',
+                          stroke: SERIES_COLOR[1], 'stroke-width': 1.5 });
+    });
+    return el('div', { className: 'exhibit-canvas' }, svg);
+}
+
+/**
+ * [align]: one group per panel, at that panel's own grid column.
+ *
+ * Left aligned, so the first button's left edge is the panel title's left edge
+ * and the y-axis line. Below `WIDE_PX` there are no columns to align to, since
+ * every panel is on its own row at the same left, and the labeled stack the app
+ * already has is the right answer; the figure controls are not drawn here in
+ * either case, they are in the box below the canvas.
+ */
+function panelStrip(fig, box, width) {
+    if (width < WIDE_PX) {
+        const stack = el('div', { className: 'exhibit-controls exhibit-controls-stacked' });
+        fig.panels.forEach((panel) => {
+            const group = el('div', { className: 'exhibit-group exhibit-group-panel' });
+            if (fig.panels.length > 1) {
+                group.appendChild(el('span', { className: 'exhibit-group-label' },
+                                      panel.title));
+            }
+            for (const b of panel.buttons) group.appendChild(toggle(b));
+            stack.appendChild(group);
+        });
+        return stack;
+    }
+    const row = el('div', { className: 'strip-aligned' });
+    fig.panels.forEach((panel, i) => {
+        const g = box.grids[i];
+        const group = el('div', {
+            className: 'exhibit-group exhibit-group-panel',
+            style: `left:${g.left}px; width:${g.width}px`,
+        });
+        for (const b of panel.buttons) group.appendChild(toggle(b));
+        row.appendChild(group);
+    });
+    return row;
+}
+
+/**
+ * Give the aligned row the height its absolutely placed children cannot.
+ *
+ * Called once the row is in the document, and synchronous: reading
+ * `offsetHeight` forces the layout that has not happened yet, which is what is
+ * wanted. It was on a frame callback once, and a backgrounded tab throttles
+ * `requestAnimationFrame` to nothing, so the page came up with every group on
+ * one line. A group that wraps inside a narrow column is taller than one line,
+ * so the row takes the tallest rather than a constant.
+ */
+function settleAligned(root) {
+    for (const row of root.querySelectorAll('.strip-aligned')) {
+        let tallest = 0;
+        for (const g of row.querySelectorAll('.exhibit-group-panel')) {
+            tallest = Math.max(tallest, g.offsetHeight);
+        }
+        row.style.minHeight = `${tallest}px`;
+    }
+}
+
+/** [box]: the figure controls, at the drawing's width, contents centered. */
+function figureBox(fig, extent, folded, hostWidth) {
+    const set = (folded && fig.docFolded) ? fig.docFolded : fig.doc;
+    const row = el('div', {
+        className: 'exhibit-footer',
+        style: hostWidth
+            ? ''
+            : `margin-left:${extent.left}px; width:${extent.width}px`,
+    });
+    for (const b of set) row.appendChild(toggle(b));
+    return row;
+}
+
+/** Where each group's left edge landed against its panel's. */
+function missTable(fig, box, root) {
+    if (!box.wide) {
+        return el('p', { className: 'meta' },
+            'Stacked below the 720px breakpoint: one panel per row, every panel '
+            + 'at the same left, so there is no column to miss.');
+    }
+    const table = el('table', { className: 'miss' });
+    table.appendChild(el('tr', {},
+        el('th', {}, 'panel'), el('th', {}, 'panel left'),
+        el('th', {}, 'group left'), el('th', {}, 'miss')));
+    const groups = [...root.querySelectorAll('.exhibit-group-panel')];
+    const base = root.getBoundingClientRect().left;
+    fig.panels.forEach((panel, i) => {
+        const node = groups[i];
+        if (!node) return;
+        const left = node.getBoundingClientRect().left - base;
+        const miss = Math.round(left - box.grids[i].left);
+        table.appendChild(el('tr', {},
+            el('td', {}, panel.title),
+            el('td', {}, String(Math.round(box.grids[i].left))),
+            el('td', {}, String(Math.round(left))),
+            el('td', { className: Math.abs(miss) <= 1 ? 'good' : 'bad' },
+               `${miss > 0 ? '+' : ''}${miss}`)));
+    });
+    return table;
+}
+
+/** The scope table, drawn once. */
+function scopeTable() {
+    const table = document.getElementById('scope');
+    table.appendChild(el('tr', {},
+        el('th', {}, 'controls'), el('th', {}, 'changes'), el('th', {}, 'scope')));
+    SCOPE.forEach(([what, changes, scope], i) => {
+        table.appendChild(el('tr', { className: i === SCOPE_SPLIT ? 'split' : '' },
+            el('td', {}, what), el('td', {}, changes), el('td', {}, scope)));
+    });
+}
+
+// =====================================================================
+// Render
+// =====================================================================
+let FIG = 'pair';
+let WIDTH = 980;
+let GUIDES = false;
+let HOST_BOX = false;
+let FOLDED = true;
+
+function render() {
+    const host = document.getElementById('stage');
+    host.textContent = '';
+    const fig = FIGURES[FIG];
+    const box = panelLayout(fig.panels.length, fig.square, WIDTH,
+                            fig.rightPad || 0, fig.plan || null);
+    const extent = drawnExtent(box);
+
+    const stage = el('div', { className: 'stage', style: `width:${WIDTH + 34}px` });
+    const figure = el('div', { className: 'figure', style: `width:${WIDTH}px` });
+    const strip = panelStrip(fig, box, WIDTH);
+    figure.appendChild(canvas(fig, box, WIDTH, GUIDES, BELOW_TRIM));
+    figure.appendChild(readout(fig, extent.left));
+    figure.appendChild(strip);
+    figure.appendChild(figureBox(fig, extent, FOLDED, HOST_BOX));
+    stage.appendChild(figure);
+    host.appendChild(stage);
+    // Reads laid out positions, so after attachment and in this order.
+    settleAligned(stage);
+    host.appendChild(missTable(fig, box, strip));
+
+    document.getElementById('widths').textContent =
+        `${fig.name}. Host ${WIDTH}px, ${box.wide ? 'side by side' : 'stacked'}. `
+        + `Panel ${Math.round(box.grids[0].width)} × ${Math.round(box.panelH)}, `
+        + `columns at ${box.grids.map((g) => Math.round(g.left)).join(', ')}. `
+        + `Drawing ${Math.round(extent.left)} to `
+        + `${Math.round(extent.left + extent.width)}, so `
+        + `${Math.round(extent.width)} wide against a ${WIDTH}px host, `
+        + `${Math.round(WIDTH - extent.width - extent.left)}px of it to the `
+        + 'right of the picture.';
+}
+
+// ---- the rig ----
+const widthInput = document.getElementById('width');
+const widthOut = document.getElementById('widthOut');
+widthInput.addEventListener('input', () => {
+    WIDTH = Number(widthInput.value);
+    widthOut.value = String(WIDTH);
+    render();
+});
+for (const btn of document.querySelectorAll('[data-width]')) {
+    btn.addEventListener('click', () => {
+        WIDTH = Number(btn.dataset.width);
+        widthInput.value = String(WIDTH);
+        widthOut.value = String(WIDTH);
+        render();
+    });
+}
+for (const btn of document.querySelectorAll('[data-fig]')) {
+    btn.addEventListener('click', () => {
+        FIG = btn.dataset.fig;
+        for (const other of document.querySelectorAll('[data-fig]')) {
+            other.classList.toggle('on', other === btn);
+        }
+        render();
+    });
+}
+const flag = (id, get, set) => {
+    const btn = document.getElementById(id);
+    btn.addEventListener('click', () => {
+        set(!get());
+        btn.classList.toggle('on', get());
+        render();
+    });
+};
+flag('ruler', () => GUIDES, (v) => { GUIDES = v; });
+flag('hostbox', () => HOST_BOX, (v) => { HOST_BOX = v; });
+flag('unfold', () => !FOLDED, (v) => { FOLDED = !v; });
+// These two are pure CSS, so they do not redraw.
+for (const [id, cls] of [['loud', 'loud'], ['centered', 'centered']]) {
+    const btn = document.getElementById(id);
+    btn.addEventListener('click', () => {
+        btn.classList.toggle('on', document.body.classList.toggle(cls));
+    });
+}
+
+widthOut.value = String(WIDTH);
+scopeTable();
+render();
+</script>
+</body>
+</html>

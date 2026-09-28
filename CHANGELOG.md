@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a164
+
+The first half of the chart control strip plan (`dev/plan-chart-controls.md`): which group a control belongs to is decided by what it changes, not by where its state happens to be stored.
+
+- **The grid rendering controls belong to their panel.** `contours`, `marginals`, `mesh`, `wall grid` and the `cut` cycle move out of the document group and sit beside the color stretch, in the group of the panel they draw. They were never document controls by meaning. They were document controls because `setView` is where their state lived, and on the first document carrying two grid panels they would have driven the wrong one.
+- **The cut's three positions move with it**, so a click that places all three cuts, and the walk that drives them out along the diagonal, act on the panel being cut rather than on the document.
+- `lights` stays in the figure box, as the one of the six that acts on the drawing rather than on what it shows.
+- **Stored choices survive.** The defaults stay at the document level, so a choice made in an earlier build goes on being the default for any panel that has not been touched, and a panel that has been touched overrides it. Nothing needs clearing.
+- **`reset` puts the panels back too.** It used to restore the document level alone, which on a panel holding its own answer would have looked like a button that did nothing.
+
 ## 1.0.0a163
 
 The other half of a160: the pin moves, so the interactive table view works again.

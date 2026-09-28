@@ -114,6 +114,23 @@ const VIEW_DEFAULTS = {
 const SURFACE_KEYS = ['mesh', 'wallGrid', 'marginals', 'contours', 'lights',
                       'cut', 'cutX', 'cutY', 'cutS'];
 
+/**
+ * Which of those a panel can hold its own answer to, since a164.
+ *
+ * The four grid rendering controls and the four numbers behind the cut. They
+ * change what one grid panel draws, so they are panel controls by meaning, and
+ * were document controls only because `setView` is where their state happened
+ * to live. `lights` is the one that stayed at the document level: the author's
+ * ruling is that it is used rarely enough to leave in the figure box, and it is
+ * read through `overridesFor`, which has no panel in hand.
+ *
+ * `reset` clears these from every panel blob as well as putting the top level
+ * back, or a panel that had been touched would keep its answer through a reset
+ * that appeared to work everywhere else.
+ */
+const PANEL_GRID_KEYS = ['mesh', 'wallGrid', 'marginals', 'contours',
+                         'cut', 'cutX', 'cutY', 'cutS'];
+
 /** The cut control cycles rather than branching into four buttons. */
 const CUT_MODES = ['none', 'components', 'total', 'all'];
 
@@ -165,9 +182,45 @@ function panelView(id) {
 }
 
 /** Set one reading on one panel, leaving every other panel alone. */
-function setPanelView(id, patch) {
+function setPanelView(id, patch, persist = true) {
     setView({ panels: { ...(view.panels || {}),
-                        [id]: { ...panelView(id), ...patch } } });
+                        [id]: { ...panelView(id), ...patch } } }, persist);
+}
+
+/**
+ * One grid panel's rendering choices, resolved the way the adapter resolves
+ * them.
+ *
+ * `panelView` is the readings resolver and reaches only `PANEL_DEFAULTS` and
+ * the panel's own blob, which is right for a reading: every one of them has an
+ * entry in `PANEL_DEFAULTS`, so there is always an answer. The grid controls
+ * that became panel controls at a164 are different. Their defaults stay at the
+ * top level of `VIEW_DEFAULTS` deliberately, so that a reader's stored choice
+ * keeps working as the document-level default for any panel that has not been
+ * touched, and `PANEL_DEFAULTS` would override it if they moved there.
+ *
+ * So the precedence has to be the adapter's, `{...view, ...PANEL_DEFAULTS,
+ * ...blob}`, which is what `forPanel` spreads. Reading the pressed state off
+ * `panelView` instead would leave `contours`, `mesh` and `wallGrid` drawn as
+ * unpressed buttons over a drawing that has them on, until each was clicked
+ * once.
+ */
+function gridView(id) {
+    return { ...view, ...panelView(id) };
+}
+
+/**
+ * The grid panel a relief or a flat image is drawing, which is its only one.
+ *
+ * The cuts, the walk and the click-to-cut all act on that panel and need its
+ * id to read and write the cut state now that it is held per panel. A document
+ * with two grid panels would need this to say which; there is none yet, and
+ * the surface path itself takes `doc.panels[0]`.
+ */
+function gridPanelId(doc) {
+    const panel = ((doc && doc.panels) || []).find(
+        (p) => p.kind === 'surface' || p.kind === 'heatmap');
+    return panel ? panel.id : null;
 }
 
 // The controls, in the house order: axis readings first, then panel
@@ -259,9 +312,20 @@ const CONTROLS = [
 // are not document readings: nothing in the IR declares that a joint has
 // marginals worth drawing on a wall, and nothing should, because these are
 // decisions about *this* drawing. `dev/plan-3d-plot.md` 4.4 is the list.
+//
+// `panel` says which of them belong to the grid panel rather than to the
+// figure, and since a164 that is all but `lights`. Every one of them changes
+// what one grid panel draws, exactly as the color stretch beside them does; the
+// old arrangement put them in the document group because their state was held
+// by `setView`, which is an implementation detail standing in for a design
+// decision. On a document with two grid panels the old arrangement would have
+// had them driving the wrong one. `lights` stays at the figure level by the
+// author's ruling: it is the least used of the six and it is read through
+// `overridesFor`, which is handed the document and no panel.
 const SURFACE_CONTROLS = [
     {
         key: 'contours',
+        panel: true,
         label: 'contours',
         title: 'Contour lines at eight levels. In relief they run on the '
             + 'surface and on the floor image at the same levels, which is what '
@@ -272,6 +336,7 @@ const SURFACE_CONTROLS = [
     },
     {
         key: 'marginals',
+        panel: true,
         label: 'marginals',
         title: 'Draw each component\'s own distribution on the wall behind it. '
             + 'These are the library\'s exact marginals, not an integral of '
@@ -279,6 +344,7 @@ const SURFACE_CONTROLS = [
     },
     {
         key: 'mesh',
+        panel: true,
         label: 'mesh',
         title: 'The grid over the skin, every sixth line. Off leaves a bare '
             + 'surface, which reads the shape more cleanly and the resolution '
@@ -286,6 +352,7 @@ const SURFACE_CONTROLS = [
     },
     {
         key: 'wallGrid',
+        panel: true,
         label: 'wall grid',
         title: 'Grid lines on the three walls of the box',
     },
@@ -692,6 +759,13 @@ function renderControls(doc, hooks) {
     // one and there has to be somewhere to fold them into.
     const box = el('div', { className: 'exhibit-group' });
     const panelGroups = [];
+    // Which realization is on screen, and whether the document holds a grid
+    // panel at all. Resolved before the panel loop rather than after it since
+    // a164, because the grid rendering controls are drawn inside that loop now
+    // and both gate them: a wall grid means nothing on a flat image and a
+    // contour means nothing on a curve.
+    const realized = view.kind || defaultKind(doc);
+    const grid = (doc.panels || []).some((p) => p.kind === 'surface' || p.kind === 'heatmap');
     // A tower document's groups are labeled whether or not the strip is
     // stacked. Side by side they are one pair of buttons per cession stage,
     // identical in every respect but which loss axis they drive, so without
@@ -755,6 +829,50 @@ function renderControls(doc, hooks) {
                 },
             }, `color: ${mode()}`);
             group.appendChild(colorBtn);
+
+            // The grid rendering controls, beside the color stretch and for the
+            // same reason: each changes what this panel draws. Gated on the
+            // realization as well as on the panel's kind, since all but the
+            // contours describe a box drawn in perspective.
+            for (const spec of SURFACE_CONTROLS) {
+                if (!spec.panel) continue;
+                if (realized !== 'surface' && !spec.flat) continue;
+                const btn = el('button', {
+                    type: 'button',
+                    className: `exhibit-toggle${gridView(panel.id)[spec.key] ? ' active' : ''}`,
+                    title: spec.title,
+                    onClick: () => {
+                        setPanelView(panel.id, { [spec.key]: !gridView(panel.id)[spec.key] });
+                        btn.classList.toggle('active',
+                                             Boolean(gridView(panel.id)[spec.key]));
+                        onChange();
+                    },
+                }, spec.label);
+                group.appendChild(btn);
+            }
+            // The cut, last of the panel's own: a choice among four rather than
+            // a toggle, and cycling one button through them keeps the group one
+            // row. None, each component held in turn, the total, and all three
+            // at once. Only in relief, since a flat image has no wall to draw a
+            // conditional on.
+            if (realized === 'surface') {
+                const cutBtn = el('button', {
+                    type: 'button',
+                    className: `exhibit-toggle${gridView(panel.id).cut !== 'none' ? ' active' : ''}`,
+                    title: 'Cut the joint and read the conditional it leaves, '
+                        + 'drawn on the wall beside the marginal it should be '
+                        + 'compared with. On the total, the two means are kappa',
+                    onClick: () => {
+                        const held = gridView(panel.id).cut;
+                        const next = CUT_MODES[(CUT_MODES.indexOf(held) + 1) % CUT_MODES.length];
+                        setPanelView(panel.id, { cut: next });
+                        cutBtn.textContent = `cut: ${next}`;
+                        cutBtn.classList.toggle('active', next !== 'none');
+                        onChange();
+                    },
+                }, `cut: ${gridView(panel.id).cut}`);
+                group.appendChild(cutBtn);
+            }
         }
         // A panel declaring nothing gets no group at all rather than an empty
         // one, which would draw a rule with nothing beside it.
@@ -785,13 +903,13 @@ function renderControls(doc, hooks) {
     // the document group sits apart from the panel groups and takes only the
     // width it needs while they share what is left.
     //
-    // The relief's own controls, between the readings and the realization:
-    // they act on one drawing rather than on the document, and they exist only
-    // while that drawing is the one on screen.
-    const realized = view.kind || defaultKind(doc);
-    const grid = (doc.panels || []).some((p) => p.kind === 'surface' || p.kind === 'heatmap');
+    // What is left of the relief's own controls once the four that draw the
+    // grid have gone to the panel: `lights`, which is the least used of the six
+    // and is read through `overridesFor`, where there is no panel to resolve
+    // against. Author's ruling, 2026-09-28.
     if (grid && (realized === 'surface' || realized === 'heatmap')) {
         for (const spec of SURFACE_CONTROLS) {
+            if (spec.panel) continue;
             if (realized !== 'surface' && !spec.flat) continue;
             const btn = el('button', {
                 type: 'button',
@@ -806,28 +924,10 @@ function renderControls(doc, hooks) {
             box.appendChild(btn);
         }
     }
-    // The cuts and the camera are the relief's alone: a flat image has no wall
-    // to draw a conditional on and no camera to put back.
+    // The camera is the relief's alone, and so is the walk that drives it. The
+    // cut the walk moves is the panel's, up in the panel group; what is left
+    // here is what happens to the drawing rather than what it shows.
     if (grid && realized === 'surface') {
-        // The cut is a choice among four rather than a toggle, and cycling one
-        // button through them keeps the strip one row: none, each component
-        // held in turn, the total, and all three at once.
-        const cutBtn = el('button', {
-            type: 'button',
-            className: `exhibit-toggle${view.cut !== 'none' ? ' active' : ''}`,
-            title: 'Cut the joint and read the conditional it leaves, drawn on '
-                + 'the wall beside the marginal it should be compared with. On '
-                + 'the total, the two means are kappa',
-            onClick: () => {
-                const next = CUT_MODES[(CUT_MODES.indexOf(view.cut) + 1) % CUT_MODES.length];
-                setView({ cut: next });
-                cutBtn.textContent = `cut: ${next}`;
-                cutBtn.classList.toggle('active', next !== 'none');
-                onChange();
-            },
-        }, `cut: ${view.cut}`);
-        box.appendChild(cutBtn);
-
         // The walk. All three cuts move together out along y = x, the total
         // rising steadily, which is the one animation with an argument behind
         // it: watching kappa move as the total rises is the whole exercise.
@@ -1506,13 +1606,15 @@ function draw(container, tools, host, doc, spec = null) {
             // leave. Updating on click rather than live is what the author asked
             // for and is also what the picking cost allows.
             pointer = value;
+            const id = gridPanelId(doc);
+            if (!id) return;
             const patch = cutFractions(box, value[0], value[1]);
             // A click with no cut showing has to show one, or it does nothing
             // visible and reads as a dead gesture. Kept even though the reading
             // now always gives a click something visible to do: changing it is a
             // separate behavior decision.
-            if (view.cut === 'none') patch.cut = 'all';
-            setView(patch);
+            if (gridView(id).cut === 'none') patch.cut = 'all';
+            setPanelView(id, patch);
             renderTools();
             render();
         });
@@ -1620,7 +1722,20 @@ function draw(container, tools, host, doc, spec = null) {
         if ((view.kind || defaultKind(doc)) === 'surface') {
             const patch = {};
             for (const key of SURFACE_KEYS) patch[key] = VIEW_DEFAULTS[key];
-            setView(patch);
+            // The top level is the default for a panel that has not been
+            // touched, so putting it back is only half a reset: a panel holding
+            // its own answer would keep it, and the button would look broken on
+            // exactly the drawing the reader had been working on. The keys are
+            // cleared from every panel blob rather than written back to the
+            // defaults, so the document value goes on being what an untouched
+            // panel takes.
+            const panels = {};
+            for (const [id, held] of Object.entries(view.panels || {})) {
+                const kept = { ...held };
+                for (const key of PANEL_GRID_KEYS) delete kept[key];
+                panels[id] = kept;
+            }
+            setView({ ...patch, panels });
             if (renderer) { renderer.dispose(); renderer = null; }
         }
         renderTools();
@@ -1671,6 +1786,13 @@ function draw(container, tools, host, doc, spec = null) {
      */
     function setWalk(on) {
         if (walking === on) return;
+        // The cut the walk moves belongs to the grid panel, so the walk reads
+        // and writes it there. A relief has exactly one, which is the panel the
+        // walk is being run on. Resolved before the flag moves, or a document
+        // with no grid panel would be left flagged as walking with no interval
+        // behind it and a button stuck pressed.
+        const id = gridPanelId(doc);
+        if (on && !id) return;
         walking = on;
         if (!on) {
             if (walkFrame) clearInterval(walkFrame);
@@ -1678,7 +1800,7 @@ function draw(container, tools, host, doc, spec = null) {
             setView({});                // persist where it stopped
             return;
         }
-        if (view.cut === 'none') setView({ cut: 'all' });
+        if (gridView(id).cut === 'none') setPanelView(id, { cut: 'all' });
         // The walk is one parameter, and the three cuts are derived from it, so
         // they cross at the point being walked to. Setting each to the same
         // fraction of its own range does not: the two axes cover different
@@ -1690,14 +1812,14 @@ function draw(container, tools, host, doc, spec = null) {
             const chart = renderer && renderer.chart;
             if (!walking || !ready || !box || !chart) return;
             u = (u + WALK_INTERVAL / WALK_PERIOD) % 1;
-            setView(walkPositions(box, u), false);
+            setPanelView(id, walkPositions(box, u), false);
             // Only the cuts. A full rebuild decodes the grid, rebuilds a
             // hundred thousand surface vertices and hands echarts a new scene,
             // which at twenty frames a second is more work than the browser
             // has, and it is what made the walk crawl. These merge by id: the
             // set of cut series does not change while the walk runs, only
             // where they are.
-            const bundle = surfaceCuts(drawn, view);
+            const bundle = surfaceCuts(drawn, gridView(id));
             if (!bundle) { render(); return; }
             chart.setOption({ series: bundle.series }, false);
             writeCutReadout(bundle.readout);
