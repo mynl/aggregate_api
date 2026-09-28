@@ -511,6 +511,16 @@ Three reports from the author on the running a165, all presentation, none of the
 - **The click-to-cut gesture loses its cut.** Not a plan step: the behavior predates it, and `mount.js` carried a comment saying so ("changing it is a separate behavior decision"). The author took that decision. `[scope]` is what made it worth taking, since the readout's doubling was the visible symptom: with `cut: all` forced on, the "at cell" line names x, y and the density and the cut's own line names x, y, the total and the density again. With the cut off, `cutSeries` returns empty rows and the clicked cell stands alone.
 - **The stacked strip was missing the drawing's left margin.** `placeStrip` set the readout's indent and the figure box's offset in both branches and the groups' lefts in the aligned branch only, so under the breakpoint the buttons sat at the page edge between two things indented to 64. Caught on Approximation, which stacks at every window size because `.plot-half` caps its host at 520px, well under `WIDE_PX`. A single `padding-left` on the row in the stacked branch.
 
+### a172, the third kick: a dead `log x`
+
+Not this plan's doing at all, but found walking its acceptance list, so it is recorded here with the rest. The author reported that `log x` on the right-hand panel of Overview / Plot did nothing.
+
+It did nothing. A sweep of every offered reading, on every panel, of every chart in `dev/fixtures/charts.json`, in all eight combinations of `reflect`, `invert` and the return period, found 18 dead (reading, state) pairs across seven charts. **Every one is a log button, and every one is the same mechanism**: `panelReadings` offers `log` when any member of `positionAxes` admits it, and `positionAxes` is the union of every axis that could occupy the position, while the drawing resolves only the axis that does. On a Lee panel that occupant is the non-exceeding probability, `scales: ["linear"]`, so the offer was made and `axisScale` refused it. Four of the eight readings were dead in the opening state, which is why it read as simply broken.
+
+Nothing else on the strip is affected: `full range`, `reflect`, `ret prd`, `invert` and `marks` change the drawing in every state they are offered in, as do the five grid controls, `lights`, the color stretch and the realization pair.
+
+`full range` shares the same over-broad union (`opens` over `[...x, ...y]`) and no document in the corpus trips it. Worth knowing, not worth pre-emptively changing: the fix would need a document whose `full_range` lives only on a paired axis, and there is none to test against.
+
 ### Left for the author
 
 Acceptance 1 through 6 are a browser walk: `web/test/` has no coverage of `renderControls` and the arithmetic behind the placement is what the new test file asserts instead. Item 7's two suites and both harnesses are green.

@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a172
+
+A dead `log x` on the Lee panel, reported by the author, and the class of bug behind it.
+
+- **A log button is greyed where the axis under it has one reading.** On an `agg`'s Lee panel `log x` was offered, pressed, and did nothing: x is the non-exceeding probability, which declares `["linear"]`. The button is now disabled there, with a hover text naming the axis and saying which of `reflect`, `invert` and the return period would put a different one under it. Greyed rather than hidden, per the rule the strip already follows: a control that appeared and vanished as those three were pressed would be worse than either.
+- **The cause was an offer wider than the drawing.** The button is offered off the union of every axis that could occupy a position, which is right for deciding that the control exists at all, while the drawing resolves only the axis actually there. A new `logAvailable` answers the second question, and the strip repaints the two buttons in place whenever a control that exchanges axes is pressed.
+- **Eight readings across seven charts were affected**, four of them in the state a reader meets first. A P&L was the worst: its quantity axis is linear-only too, so both log buttons on its Lee panel were dead on arrival.
+- Everything else on the strip was swept and is sound: `full range`, `reflect`, `ret prd`, `invert`, `marks`, the five grid controls, `lights`, the color stretch and the realization pair all change the drawing wherever they are offered.
+- `web/test/log-availability.test.js` locks it: the query must agree with the drawing on every topology in every state, and no offered log button may be dead in all of them.
+
 ## 1.0.0a171
 
 A pair fills the lite tiles (author, reading a170). The build response's scalar `mean` and `cv`, `None` for a `bvagg` through a170, are now the total's, read from `stats_df`'s `total` column when the object's own attributes carry nothing; and the quantile route answers the `aggregate` basis for a pair off `obj.total.q`, the pair's aggregate law (the occurrence basis stays a 400: there is no single per-claim law behind a pair). The lite tiles therefore show the total's Mean, CV and P99, and the lite facts line prints the per-axis pairs `bs (a, b) · log2 (m, n)` exactly as the desktop strip does. The desktop strip itself is untouched: its pair branch renders from `components` and never read the scalars.

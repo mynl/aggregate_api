@@ -568,6 +568,72 @@ export function readings(doc) {
 }
 
 /**
+ * Whether a log reading is available *right now*, per position, on one panel.
+ *
+ * Parameters
+ * ----------
+ * doc : object
+ *     A ChartDoc canonical dict.
+ * panel : object
+ *     The document's own panel, not the `readings` entry for it.
+ * view : object
+ *     That panel's resolved readings. Only `reflect`, `returnPeriod` and
+ *     `invert` are read, those being what decide which axis occupies which
+ *     position.
+ *
+ * Returns
+ * -------
+ * object
+ *     `{logX, logY, xLabel, yLabel}`. The booleans say whether the axis
+ *     currently on that position admits a log scale; the labels name it, for a
+ *     control that has to explain why it is greyed.
+ *
+ * Notes
+ * -----
+ * **`readings` answers a different question, and both answers are wanted.**
+ * `panelReadings` offers the button off `positionAxes`, which is the union of
+ * every axis that *could* occupy a position: the panel's own, its complement,
+ * its reciprocal, and, on an invertible panel, the same for the other position.
+ * That union is the right gate for whether the control exists at all, because
+ * the reading genuinely is available on that panel, in some state.
+ *
+ * The drawing resolves one member of that union, the axis actually on the
+ * position, and `axisScale` refuses log where it is not declared. So a button
+ * offered off the union alone is pressed and does nothing whenever the
+ * occupying axis is the linear-only member. On an `agg`'s Lee panel that is the
+ * state a reader meets first: x is the non-exceeding probability, which
+ * declares `["linear"]`, while its complement, its reciprocal and the loss axis
+ * on the other position all admit log, so `log x` was offered and refused. Four
+ * charts had a dead `log x` in their opening state and eight had a dead reading
+ * in some state, all of them this. Reported by the author on a167.
+ *
+ * This is what the strip greys the button with, per the house rule that a
+ * control is disabled with a reason rather than hidden: the reader learns the
+ * reading exists on this panel and that the axis under it today has one honest
+ * scale. Hiding it would have the button appear and vanish as `reflect` and
+ * `invert` are pressed, which is worse than either.
+ */
+export function logAvailable(doc, panel, view = {}) {
+    const axes = Object.fromEntries(((doc && doc.axes) || []).map((a) => [a.id, a]));
+    const admits = (axis) => Boolean(axis) && axisScale(axis, true) === 'log';
+    // A grid panel's log reading is its height, which rides `logY` because a
+    // surface's z and a density ordinate are the same quantity seen two ways.
+    // Its two position axes are components and carry no scale choice, which is
+    // also why `readings` never offers `log x` on one.
+    if (panel && panel.z_axis) {
+        const z = axes[panel.z_axis];
+        return { logX: false, logY: admits(z), xLabel: '', yLabel: (z && z.label) || '' };
+    }
+    const { xAxis, yAxis } = panelAxes(doc, panel, axes, view);
+    return {
+        logX: admits(xAxis),
+        logY: admits(yAxis),
+        xLabel: (xAxis && xAxis.label) || '',
+        yLabel: (yAxis && yAxis.label) || '',
+    };
+}
+
+/**
  * `{axisId: panelId}`, which tower panel carries each quantity axis' readings.
  *
  * Empty for a document holding no tower, which is what leaves every other

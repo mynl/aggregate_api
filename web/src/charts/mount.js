@@ -24,8 +24,8 @@ import { api } from '../api.js';
 import * as spacemouse from '../spacemouse.js';
 import { el, empty } from '../utils/dom.js';
 import {
-    PANEL_DEFAULTS, WIDE_PX, chartdocToEcharts, panelLayout, panelStretch,
-    readings, rungAt, surfaceCuts,
+    PANEL_DEFAULTS, WIDE_PX, chartdocToEcharts, logAvailable, panelLayout,
+    panelStretch, readings, rungAt, surfaceCuts,
 } from './chartdoc-to-echarts.js';
 import { stretchMode } from './color-stretch.js';
 import { fileStem, meshToGlb, meshToObj, meshToStl, surfaceMesh } from './mesh-export.js';
@@ -286,6 +286,44 @@ function shortForm(spec) {
     return spec.short
         ? { text: spec.short, title: spellOut(spec.label, spec.title) }
         : { text: spec.label, title: spec.title };
+}
+
+/** "a", "a and b", "a, b and c". */
+function andList(items) {
+    if (items.length < 2) return items.join('');
+    return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+/**
+ * Why a log button is greyed: which axis is under it, and what would move it.
+ *
+ * Parameters
+ * ----------
+ * position : str
+ *     'horizontal' or 'vertical', as the reader sees it.
+ * label : str
+ *     The occupying axis' own label, or empty.
+ * panel : object
+ *     The panel's `readings` entry, for which of the three axis-moving
+ *     controls this panel actually offers. Naming a control the panel does not
+ *     carry would send the reader looking for a button that is not there.
+ *
+ * Returns
+ * -------
+ * str
+ */
+function noLogHere(position, label, panel) {
+    const named = label ? `${label}, on this panel's ${position} axis,` : `This panel's ${position} axis`;
+    const moves = andList([
+        panel.reflect && 'reflect',
+        panel.returnPeriod && 'the return period',
+        panel.invert && 'invert',
+    ].filter(Boolean));
+    const escape = moves
+        ? ` ${moves[0].toUpperCase()}${moves.slice(1)} put a different axis under this button.`
+        : '';
+    return `${named} declares a single reading, so there is no log to switch `
+        + `to.${escape}`;
 }
 
 // The controls, in the house order: axis readings first, then panel
@@ -917,6 +955,9 @@ function renderControls(doc, hooks) {
             group.appendChild(el('span', { className: 'exhibit-group-label' },
                                   panel.title));
         }
+        const docPanel = docPanels.find((p) => p.id === panel.id);
+        // The two log buttons, held so `syncLogs` can grey them in place.
+        const logs = [];
         for (const spec of CONTROLS) {
             // `offer` names the declaration that decides whether the button
             // exists, where it differs from the view key the button sets. Only
@@ -932,11 +973,38 @@ function renderControls(doc, hooks) {
                     setPanelView(panel.id, { [spec.key]: !panelView(panel.id)[spec.key] });
                     btn.classList.toggle('active',
                                          Boolean(panelView(panel.id)[spec.key]));
+                    // Before `onChange`, so the strip is already right by the
+                    // time the drawing comes back: `reflect`, `invert` and the
+                    // return period each exchange which axis is under the two
+                    // log buttons, and the one that lands there may have a
+                    // different answer about log than the one that left.
+                    syncLogs();
                     onChange();
                 },
             }, text);
+            if (spec.key === 'logX' || spec.key === 'logY') logs.push({ spec, btn, title });
             group.appendChild(btn);
         }
+        // Greyed where the axis under the button admits no log, per the house
+        // rule that a control says it exists and that this case is not covered,
+        // which a missing button cannot. Repainted in place rather than by
+        // rebuilding the strip: only these two buttons can change, and a
+        // rebuild would re-register the puck's watchers on every press.
+        // See `logAvailable`, which is also where the why is written down.
+        const syncLogs = () => {
+            if (!docPanel || !logs.length) return;
+            const live = logAvailable(doc, docPanel, panelView(panel.id));
+            for (const { spec, btn, title } of logs) {
+                btn.disabled = !live[spec.key];
+                btn.setAttribute('aria-disabled', btn.disabled ? 'true' : 'false');
+                btn.title = btn.disabled
+                    ? noLogHere(spec.key === 'logX' ? 'horizontal' : 'vertical',
+                                spec.key === 'logX' ? live.xLabel : live.yLabel,
+                                panel)
+                    : title;
+            }
+        };
+        syncLogs();
         // The color control, on a grid panel only: how value maps to color,
         // cycling linear, gamma, log the way the cut control cycles its four.
         // Per panel like the readings above it, so gamma chosen on the density
@@ -945,7 +1013,6 @@ function renderControls(doc, hooks) {
         // the panel's kind rather than on `readings`. The label shows the
         // *effective* mode: with nothing held, the relief resolves to gamma
         // and the flat reading to linear, per `dev/plan-color-stretch.md`.
-        const docPanel = ((doc && doc.panels) || []).find((p) => p.id === panel.id);
         if (docPanel && (docPanel.kind === 'surface' || docPanel.kind === 'heatmap')) {
             const mode = () => stretchMode(panelStretch(
                 doc, docPanel, panelView(panel.id),
