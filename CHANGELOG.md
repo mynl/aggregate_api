@@ -4,6 +4,14 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a167
+
+Two more from the author, reading a166 in the running app.
+
+- **A click on a relief reads the cell and nothing else.** It used to turn the cut on as well, when none was showing, on the reasoning that a click with no visible consequence reads as a dead gesture. That expired when the cell reading arrived: a click already has something to do. A reader who wanted one number got three cutting planes they had not asked for, and the readout named x, y and the density twice, once on the "at cell" line and again on the cut's own. The positions are still recorded, so turning the cut on afterwards puts it where you last pointed.
+- **A stacked control strip takes the drawing's left margin.** Below the 720px breakpoint the panel groups sat hard against the page edge while the legend above them and the figure box below were indented to the plot area. Visible on Approximation at any window size, since `.plot-half` caps that chart's host at 520px.
+- A click no longer rebuilds the whole control strip, which it was doing to repaint a button the click no longer changes.
+
 ## 1.0.0a166
 
 Three from the author, reading a165 in the running app.

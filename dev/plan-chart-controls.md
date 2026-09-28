@@ -506,6 +506,11 @@ Three reports from the author on the running a165, all presentation, none of the
 - **`[fold]` took one control too many.** The author's report was that the SpaceMouse button had been lost. The puck comes back out as a plain figure control and keeps its long label: it is the one of the three that is reached for before the picture arrives, where the walk and the window are things done to a relief already on screen. `[short]`'s width argument does not reach it either, since it sits at the end of the box beside `Download` and `reset` and the floor width is doing nothing for it.
 - **`[short]` went one step too far on the cut.** `cpt` and `tot` name nothing, and the control was reported as no longer cycling. It was: probed against the `bvagg/joint_surface` fixture, the four modes build 20, 30, 30 and 40 series through a per-panel view, exactly as through a document-level one. The labels become `off`, `x,y`, `x+y`, `all`, which say the arithmetic the modes are, and the hover text names the whole cycle rather than spelling out one mode.
 
+### a167, the second kick
+
+- **The click-to-cut gesture loses its cut.** Not a plan step: the behavior predates it, and `mount.js` carried a comment saying so ("changing it is a separate behavior decision"). The author took that decision. `[scope]` is what made it worth taking, since the readout's doubling was the visible symptom: with `cut: all` forced on, the "at cell" line names x, y and the density and the cut's own line names x, y, the total and the density again. With the cut off, `cutSeries` returns empty rows and the clicked cell stands alone.
+- **The stacked strip was missing the drawing's left margin.** `placeStrip` set the readout's indent and the figure box's offset in both branches and the groups' lefts in the aligned branch only, so under the breakpoint the buttons sat at the page edge between two things indented to 64. Caught on Approximation, which stacks at every window size because `.plot-half` caps its host at 520px, well under `WIDE_PX`. A single `padding-left` on the row in the stacked branch.
+
 ### Left for the author
 
 Acceptance 1 through 6 are a browser walk: `web/test/` has no coverage of `renderControls` and the arithmetic behind the placement is what the new test file asserts instead. Item 7's two suites and both harnesses are green.

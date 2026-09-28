@@ -1763,13 +1763,23 @@ function draw(container, tools, host, doc, spec = null) {
             const id = gridPanelId(doc);
             if (!id) return;
             const patch = cutFractions(box, value[0], value[1]);
-            // A click with no cut showing has to show one, or it does nothing
-            // visible and reads as a dead gesture. Kept even though the reading
-            // now always gives a click something visible to do: changing it is a
-            // separate behavior decision.
-            if (gridView(id).cut === 'none') patch.cut = 'all';
+            // **A click does not turn the cut on.** Through a165 it did, on the
+            // reasoning that a click with no cut showing does nothing visible
+            // and reads as a dead gesture. That reasoning expired when the cell
+            // reading arrived: a click already has something to do, which is to
+            // say what is under the pointer, and forcing `cut: all` on top of
+            // it meant a reader who wanted one number got three cutting planes
+            // they had not asked for. It also doubled the readout, where the
+            // "at cell" line names x, y and the density and the cut's own line
+            // names x, y, the total and the density again. The positions are
+            // still recorded, so turning the cut on afterwards puts it where
+            // the reader last pointed. Author's ruling, 2026-09-28.
             setPanelView(id, patch);
-            renderTools();
+            // No `renderTools()` here any more. It was rebuilding the strip on
+            // every click, to repaint a cut button whose label the click was
+            // changing; the click no longer changes it, and reading cells is
+            // the common gesture on a relief, so a full strip rebuild per click
+            // is work for nothing.
             render();
         });
         const zr = chart.getZr();
@@ -1844,7 +1854,13 @@ function draw(container, tools, host, doc, spec = null) {
         }
         // Below the breakpoint there are no columns to align to: every panel is
         // on its own row at the same left, and the labeled stack is the answer.
+        // The stack still takes the drawing's own left margin, though, or the
+        // buttons sit hard against the page edge while the legend and the
+        // figure box above and below them are indented to the plot area. That
+        // is not a phone-only case: `.plot-half` caps the approximation chart's
+        // host at 520px on a wide screen, so it stacks at any window size.
         if (!wide) {
+            strip.row.style.paddingLeft = extent ? `${extent.left}px` : '';
             for (const group of strip.groups) {
                 group.style.left = '';
                 group.style.width = '';
@@ -1852,6 +1868,7 @@ function draw(container, tools, host, doc, spec = null) {
             strip.row.style.minHeight = '';
             return;
         }
+        strip.row.style.paddingLeft = '';
         let tallest = 0;
         for (const group of strip.groups) {
             const at = columns[Number(group.dataset.panel)];
