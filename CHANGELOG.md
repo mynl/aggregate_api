@@ -4,6 +4,10 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a170
+
+Two lite punchups from the author reading a169 (`[Lite-Device]` line of work). The one table now follows the object rather than always showing the return-period ladder: the P&L ledger for a pnl, the reinsurance summary (the `reins` exhibit's first block, the desktop Re / Summary leaf) when the object carries a cession, and the `summary` exhibit for everything else; an object publishing none of the three (a severity) shows no table. The program card's footline reads "DecL program from the library · tap to expand", and says collapse while the card is open, in every state.
+
 ## 1.0.0a169
 
 The phone lite entry, second half (`[Lite-Reading]`), completing `dev/plan-phone-lite.md`, which retires to `dev/done/` with its execution log. The built state now matches the prototype's frame 2 end to end. The object's own chart rides the live chartdoc route through the same `mountChart` the Overview Plot leaf uses, with the control apparatus hidden by `lite.css` (default scales, ruled 2026-09-28) and the `fetchFailed` / `notDrawable` cards in its place on failure. The `tail` exhibit renders as one static table through the walker, with the library's own caption, and stays absent for a kind that does not publish it. The example sheet lists the whole library, the note visible and clamped to two lines, searched through the same `rankMatches` ranking the desktop menu uses. The three failure states are visible in place: a build in flight (Build disabled, the elapsed clock running on it), a parse or validation failure (the `errorMessage` sentence in the strip), and a rate limit (the retry-after line). Real-phone punchups are tracked as `[Lite-Device]` in `dev/TODO.md`.

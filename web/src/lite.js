@@ -73,12 +73,20 @@ let clockTimer = null;     // the in-flight elapsed readout on the Build button
 
 // ---- The program card ----
 
+/** The footline under the program, naming the state a tap moves to. */
+function setProgHint() {
+    const collapsed = $('lite-prog').classList.contains('collapsed');
+    $('lite-prog-hint').textContent =
+        `DecL program from the library · tap to ${collapsed ? 'expand' : 'collapse'}`;
+}
+
 /** Show `item`'s program in the card, collapsed to its opening lines. */
 function showProgram(item) {
     const card = $('lite-prog');
     $('lite-prog-text').textContent = item.decl || '';
     card.hidden = false;
     card.classList.add('collapsed');
+    setProgHint();
     $('lite-build').disabled = false;
 }
 
@@ -277,23 +285,44 @@ async function renderChart(res) {
 }
 
 /**
- * The one table: the return-period ladder, static, with the library's own
- * caption. Served as the `tail` exhibit envelope and rendered by the walker;
- * the interactive grid never mounts here. An object without the exhibit (a
- * severity, a distortion) simply shows no table, and a fetch or walker
- * failure hides it too: the table is a bonus, the facts carry the story.
+ * Which exhibit the one table shows, ruled by the author 2026-09-28 after
+ * kicking a169's tires: the P&L ledger for a pnl, the reinsurance summary
+ * (the `reins` exhibit's first block, exactly the desktop Re / Summary leaf)
+ * when the object carries a cession, and the `summary` exhibit for all
+ * others. `block` narrows a multi-block envelope to one table; null takes
+ * the envelope whole. Null result: the object publishes none of them.
+ */
+function tableSpec(res) {
+    const names = new Set(
+        ((res.capability && res.capability.exhibits) || []).map((e) => e.name));
+    if (res.kind === 'pnl' && names.has('economic')) {
+        return { name: 'economic', block: null };
+    }
+    if (res.has_reins && names.has('reins')) return { name: 'reins', block: 0 };
+    if (names.has('summary')) return { name: 'summary', block: null };
+    return null;
+}
+
+/**
+ * The one table, static, with the library's own caption. Which exhibit it is
+ * comes from `tableSpec`; the walker renders it, and the interactive grid
+ * never mounts here. An object publishing none of the three (a severity)
+ * simply shows no table, and a fetch or walker failure hides it too: the
+ * table is a bonus, the facts carry the story.
  */
 async function renderTable(res) {
     const wrap = $('lite-table');
     clearGrids('lite-table');
     wrap.replaceChildren();
     wrap.hidden = true;
-    const exhibits = (res.capability && res.capability.exhibits) || [];
-    if (!exhibits.some((e) => e.name === 'tail')) return;
+    const spec = tableSpec(res);
+    if (!spec) return;
     try {
-        const envelope = await api.exhibit(res.id, 'tail');
+        const envelope = await api.exhibit(res.id, spec.name);
+        const all = envelope.blocks || [];
+        const blocks = spec.block === null ? all : all.slice(spec.block, spec.block + 1);
         let mounted = false;
-        for (const block of envelope.blocks || []) {
+        for (const block of blocks) {
             const { caption, ...doc } = block;
             const host = document.createElement('div');
             wrap.appendChild(host);
@@ -308,7 +337,7 @@ async function renderTable(res) {
         }
         wrap.hidden = !mounted;
     } catch (err) {
-        console.warn('[lite] tail exhibit did not render', err);
+        console.warn(`[lite] ${spec.name} exhibit did not render`, err);
     }
 }
 
@@ -396,9 +425,7 @@ function init() {
 
     $('lite-prog').addEventListener('click', () => {
         $('lite-prog').classList.toggle('collapsed');
-        $('lite-prog-hint').textContent = $('lite-prog').classList.contains('collapsed')
-            ? 'the program, as library.agg writes it · tap to expand'
-            : 'the program, as library.agg writes it · tap to collapse';
+        setProgHint();
     });
     $('lite-build').addEventListener('click', build);
 
