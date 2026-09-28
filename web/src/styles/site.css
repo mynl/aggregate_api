@@ -74,13 +74,25 @@
     --house-dark: #8c1010;
     --house-ring: rgba(168, 19, 19, .25);
 
-    /* The pressed chart toggle, desaturated. The house red is the page's
-       selection mark: it paints the active tab and the active sub-tab, both a
-       few pixels above the chart's own row, so a pressed chart toggle in the
-       same red reads as a third rank of tabs rather than as a setting on the
-       drawing. Same hue, at roughly a third of the saturation. Resting buttons
-       are unchanged. Author's call, 2026-09-28. */
-    --chart-on: #935353;
+    /* The pressed chart toggle: the house red, paler. It has to be lighter
+       than `--house`, because the house red is the page's selection mark and
+       paints the active tab and the active sub-tab a few pixels above the
+       chart's own row, so a pressed chart toggle in it reads as a third rank of
+       tabs rather than as a setting on the drawing.
+
+       **A tint of `--house`, not an independently chosen red.** a165 shipped
+       `#935353`, which held the hue and cut the saturation to about a third,
+       and in context it read as a different color rather than as a paler one:
+       washing out that much takes a red past pink and into mauve, and the eye
+       calls that a mismatch even where the hue is identical. This is `--house`
+       mixed 78% with white, so it can only ever be the same red with less of
+       it. Written as a literal, like `--house-dark` above, so the ramp stays
+       adjustable in one place. Author's report on the running app, 2026-09-28.
+
+       Dark enough to keep carrying white text: 5.0:1, which clears AA. Paler
+       than this needs the text to go dark, which is a different design.
+       Resting buttons are unchanged. */
+    --chart-on: #bb4747;
 
     /* ---- State ----
        One green for the whole app. This is the editor's own string green, now

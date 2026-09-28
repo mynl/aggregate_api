@@ -141,8 +141,16 @@ const CUT_MODES = ['none', 'components', 'total', 'all'];
  * control that moves its neighbors every time it is pressed is hard to press
  * twice. The stored values are unchanged, so nothing in a reader's held view
  * and nothing the adapter reads has to know about this.
+ *
+ * **`x,y` and `x+y` rather than a165's `cpt` and `tot`.** Contracting the words
+ * left the button cycling through four labels, two of which named nothing: the
+ * author read `off`, then `cpt`, and reported the control as no longer offering
+ * what it used to. These say the arithmetic instead, which is what the modes
+ * are. Nothing, each component held in turn on its own axis, the total on their
+ * sum, and all three at once. `x+y` is the author's own word for the total.
+ * Author's report on the running app, 2026-09-28.
  */
-const CUT_LABELS = { none: 'off', components: 'cpt', total: 'tot', all: 'all' };
+const CUT_LABELS = { none: 'off', components: 'x,y', total: 'x+y', all: 'all' };
 
 /** The same, for the color stretch. The mode is the button's state, so it stays
  *  visible; shortening both halves is what keeps it inside one width. */
@@ -688,13 +696,18 @@ function leeToggle(chart, onRefetch) {
  * who wants to know whether it is on sees the color.
  */
 function spaceMouseButton(onSpaceMouse, register) {
-    // `puck` since a165, which is what this module calls it in every comment.
-    // Not a contraction for width: it sits inside the relief menu, one item to
-    // a row, so it is the plainer word rather than the shorter one. Each of the
-    // three titles below already opens by naming the device, so there is
-    // nothing for `spellOut` to add.
+    // **`spacemouse`, not `puck`.** a165 took the short label from the plan's
+    // `[short]` table, on the argument that `puck` is what this module calls it
+    // in every comment. True of the comments and false of the reader: the
+    // author looked for the SpaceMouse button and reported it missing. A short
+    // label is worth having where a row of them line up, and this one sits at
+    // the end of the figure box beside `Download` and `reset`, where the floor
+    // width is doing nothing for it anyway. Author's report, 2026-09-28.
+    //
+    // Each of the three titles below already opens by naming the device, so
+    // there is nothing for `spellOut` to add.
     const btn = el('button', { type: 'button', className: 'exhibit-toggle' },
-                   'puck');
+                   'spacemouse');
     const paint = () => {
         const on = spacemouse.isConnected();
         btn.classList.toggle('active', on);
@@ -794,11 +807,11 @@ function downloadMenu(formats, onExport, canExport) {
  *
  * Notes
  * -----
- * Following the `Download` precedent already in the box. The walk, the puck and
- * the window are each used occasionally and none is used twice in a row, so
- * three permanent buttons spend the figure box's width on controls that are
- * mostly not wanted. Folded, a relief's box is five items. Author's ruling,
- * 2026-09-27.
+ * Following the `Download` precedent already in the box. The walk and the
+ * window are each used occasionally and neither is used twice in a row, so
+ * permanent buttons for them spend the figure box's width on controls that are
+ * mostly not wanted. Author's ruling, 2026-09-27; the puck came back out of the
+ * menu at a166, see `spaceMouseButton`.
  *
  * `autoClose="outside"` because these are live controls rather than one-shot
  * actions: a menu that shut on the press would make stopping a walk a two step
@@ -814,8 +827,8 @@ function reliefMenu(items) {
         'data-bs-toggle': 'dropdown',
         'data-bs-auto-close': 'outside',
         'aria-expanded': 'false',
-        title: 'The relief\'s occasional controls: the walk, the puck, and how '
-            + 'deep a window the drawing is fetched over',
+        title: 'The relief\'s occasional controls: the walk, and how deep a '
+            + 'window the drawing is fetched over',
     }, 'relief'));
     const menu = el('ul', { className: 'dropdown-menu exhibit-menu' });
     for (const item of items) menu.appendChild(el('li', {}, item));
@@ -988,10 +1001,14 @@ function renderControls(doc, hooks) {
                 const cutBtn = el('button', {
                     type: 'button',
                     className: `exhibit-toggle${held !== 'none' ? ' active' : ''}`,
-                    title: spellOut(`cut: ${held}`,
-                        'Cut the joint and read the conditional it leaves, '
+                    // The whole cycle is named, since the labels are arithmetic
+                    // rather than words and a reader meeting `x,y` for the first
+                    // time has no way to guess which of the four it is.
+                    title: 'Cut the joint and read the conditional it leaves, '
                         + 'drawn on the wall beside the marginal it should be '
-                        + 'compared with. On the total, the two means are kappa'),
+                        + 'compared with. Cycles off, then x,y with each '
+                        + 'component held in turn, then x+y on the total, where '
+                        + 'the two means are kappa, then all three at once',
                     onClick: () => {
                         const at = gridView(panel.id).cut;
                         const next = CUT_MODES[(CUT_MODES.indexOf(at) + 1) % CUT_MODES.length];
@@ -1054,20 +1071,29 @@ function renderControls(doc, hooks) {
                 walkBtn.classList.toggle('active', walking());
             },
         }, 'walk');
-        // The puck. Greyed with a why where WebHID is not, which is Firefox,
-        // Safari and the iPad, so the control still says the feature exists
-        // and that this browser is not covered, per the never-hide rule.
+        // The walk and the window fold behind one menu; the puck does not.
+        //
+        // a165 folded all three, and the author's first report on the running
+        // app was that the SpaceMouse button had been lost. A control nobody
+        // can find is worse than a wide row, and the puck is the one of the
+        // three that is reached for without a drawing already in front of you:
+        // it is how the reader intends to navigate, decided before the picture
+        // arrives, where the walk and the window are things you do to a relief
+        // you are already reading. Author's call, 2026-09-28.
+        //
+        // Greyed with a why where WebHID is not, which is Firefox, Safari and
+        // the iPad, so the control still says the feature exists and that this
+        // browser is not covered, per the never-hide rule.
         //
         // No `feel` button beside it. a89 put the gains, the reverses, the
         // deadzone, the curve and a live readout behind one, and a136 took the
         // page of controls away again: see `surface-nav.js` `NAV_DEFAULTS` for
         // what the puck does now, which is one setting for everyone.
-        //
-        // The window last, and a number rather than a toggle: it is the one
-        // control on a relief that is a new request rather than a new drawing.
+        box.appendChild(spaceMouseButton(onSpaceMouse, register));
+        // The window is a number rather than a toggle: it is the one control on
+        // a relief that is a new request rather than a new drawing.
         box.appendChild(reliefMenu([
             walkBtn,
-            spaceMouseButton(onSpaceMouse, register),
             ...(onRefetch ? [windowBox(chart, onRefetch)] : []),
         ]));
     }

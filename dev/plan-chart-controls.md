@@ -498,6 +498,14 @@ Divergences from section 3's `[scope]`, all consequences of the rulings above.
 - **`.exhibit-rubric` is deleted**, as the plan asked: nothing on any path ever wrote one.
 - **`.exhibit-controls` comes out of the shared `padding-left: var(--tabpad)` rule.** Absolutely positioned children measure from the padding box, so the indent had become a silent no-op, and the block under the drawing takes its left margin from the drawing instead.
 
+### a166, the first kick of the tires
+
+Three reports from the author on the running a165, all presentation, none of them a change of ruling.
+
+- **`[tone]` overshot.** `#935353` is the house hue at about a third of the saturation, which is what the prototype settled, and in the app it read as a mismatched red rather than a paler one. Washing a red out that far takes it past pink into mauve, and the eye calls that a different color even where the hue is identical. `#bb4747` is `--house` mixed 78% with white, so the two can only ever be the same red with less of it. White text holds at 5.0:1; paler than this the text has to go dark, which is a different design.
+- **`[fold]` took one control too many.** The author's report was that the SpaceMouse button had been lost. The puck comes back out as a plain figure control and keeps its long label: it is the one of the three that is reached for before the picture arrives, where the walk and the window are things done to a relief already on screen. `[short]`'s width argument does not reach it either, since it sits at the end of the box beside `Download` and `reset` and the floor width is doing nothing for it.
+- **`[short]` went one step too far on the cut.** `cpt` and `tot` name nothing, and the control was reported as no longer cycling. It was: probed against the `bvagg/joint_surface` fixture, the four modes build 20, 30, 30 and 40 series through a per-panel view, exactly as through a document-level one. The labels become `off`, `x,y`, `x+y`, `all`, which say the arithmetic the modes are, and the hover text names the whole cycle rather than spelling out one mode.
+
 ### Left for the author
 
 Acceptance 1 through 6 are a browser walk: `web/test/` has no coverage of `renderControls` and the arithmetic behind the placement is what the new test file asserts instead. Item 7's two suites and both harnesses are green.

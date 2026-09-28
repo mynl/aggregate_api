@@ -4,6 +4,14 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a166
+
+Three from the author, reading a165 in the running app.
+
+- **The pressed toggle is a tint of the house red**, `#bb4747`, rather than an independently chosen muted one. a165's `#935353` held the hue and cut the saturation to about a third, which takes a red far enough toward mauve that it reads as a different color rather than as a paler one. This is the house red mixed 78% with white, so it can only ever be the same red with less of it, and it still carries white text at 5.0:1.
+- **The SpaceMouse button is back in the figure box**, and is called `spacemouse` again. a165 folded it into the `relief` menu with the walk and the window and shortened it to `puck`, and between the two the author could not find it. It is the one of the three that is reached for before the picture arrives rather than while reading one, so it belongs in the open. The walk and the window stay folded.
+- **The cut's four modes read `off`, `x,y`, `x+y`, `all`.** a165 contracted them to `cpt` and `tot`, which name nothing, and the control was reported as no longer offering what it used to. The cycle was never broken; the labels were. They now say the arithmetic, and the button's hover text names the whole cycle.
+
 ## 1.0.0a165
 
 The second half of `dev/plan-chart-controls.md`: the apparatus moves below the drawing and lines up with it. Presentation only, all of it judged first in the standalone prototype under `dev/prototypes/chart-strip/`.
