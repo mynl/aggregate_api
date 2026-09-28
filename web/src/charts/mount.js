@@ -134,6 +134,20 @@ const PANEL_GRID_KEYS = ['mesh', 'wallGrid', 'marginals', 'contours',
 /** The cut control cycles rather than branching into four buttons. */
 const CUT_MODES = ['none', 'components', 'total', 'all'];
 
+/**
+ * What each cut mode is drawn as, which is not what it is stored as.
+ *
+ * Four labels of one width, so the button stops resizing as it cycles: a
+ * control that moves its neighbors every time it is pressed is hard to press
+ * twice. The stored values are unchanged, so nothing in a reader's held view
+ * and nothing the adapter reads has to know about this.
+ */
+const CUT_LABELS = { none: 'off', components: 'cpt', total: 'tot', all: 'all' };
+
+/** The same, for the color stretch. The mode is the button's state, so it stays
+ *  visible; shortening both halves is what keeps it inside one width. */
+const STRETCH_LABELS = { linear: 'lin', gamma: 'gam', log: 'log' };
+
 /** One pass of the walk, and how often it redraws.
  *
  * Twenty frames a second, not sixty. Each step rebuilds the option and hands
@@ -223,6 +237,49 @@ function gridPanelId(doc) {
     return panel ? panel.id : null;
 }
 
+/**
+ * The hover text for a shortened button, which spells the label out first.
+ *
+ * Parameters
+ * ----------
+ * label : str
+ *     The long form, the word the control would carry if there were room.
+ * why : str
+ *     The explanation the button already had.
+ *
+ * Returns
+ * -------
+ * str
+ *
+ * Notes
+ * -----
+ * A tooltip is what makes a short label safe, and it only does that if the
+ * first thing it says is what the short label stands for. `ret prd` hovering to
+ * "Read this panel's probability axis as the return period it pairs with" gets
+ * there eventually; "Return period: read this panel's..." gets there in two
+ * words. Author's ruling, 2026-09-28.
+ *
+ * A label already carrying a colon takes a full stop instead, or the result is
+ * "Color: gamma: how value maps", which nobody can read. The explanation's
+ * first letter is lowered only when its second is already lowercase, so an
+ * acronym or a `3D` opening survives.
+ */
+function spellOut(label, why) {
+    const head = label[0].toUpperCase() + label.slice(1);
+    if (label.includes(':')) return `${head}. ${why}`;
+    const body = (why[1] && why[1] === why[1].toLowerCase())
+        ? why[0].toLowerCase() + why.slice(1)
+        : why;
+    return `${head}: ${body}`;
+}
+
+/** A control spec's drawn label and its hover text, shortened or not. */
+function shortForm(spec) {
+    return spec.short
+        ? { text: spec.short, title: spellOut(spec.label, spec.title) }
+        : { text: spec.label, title: spec.title };
+}
+
 // The controls, in the house order: axis readings first, then panel
 // realizations, each family appended within its group as it arrives. Fixed so
 // the strip does not reorder itself between charts and a reader's hand learns
@@ -265,6 +322,7 @@ const CONTROLS = [
     {
         key: 'fullRange',
         label: 'full range',
+        short: 'range',
         title: 'Draw this panel\'s axes over the whole extent they declare, '
             + 'instead of the window the library suggested. On a return period '
             + 'that opens the ladder past 1-in-10,000 to the deep tail',
@@ -279,6 +337,11 @@ const CONTROLS = [
     {
         key: 'returnPeriod',
         label: 'return period',
+        // The one true contraction on the strip. `RP` was the other candidate,
+        // shorter and the standard actuarial form, and it was rejected: it is
+        // the only capitalized thing in a row of lowercase and it shows.
+        // Author's call, 2026-09-28.
+        short: 'ret prd',
         title: 'Read this panel\'s probability axis as the return period it '
             + 'pairs with: the same curve, interrogated at 1-in-200 rather '
             + 'than at 0.995',
@@ -303,6 +366,10 @@ const CONTROLS = [
         key: 'refLines',
         offer: 'marks',
         label: 'reference lines',
+        // Not a contraction: `offer: 'marks'` is what gates the button and the
+        // title below already calls them marks, so the short form is the word
+        // the code was using all along.
+        short: 'marks',
         title: 'Show the marks this panel carries, the mean and break even, '
             + 'drawn where the document puts them',
     },
@@ -354,6 +421,8 @@ const SURFACE_CONTROLS = [
         key: 'wallGrid',
         panel: true,
         label: 'wall grid',
+        // Only the walls carry one, so the noun is enough.
+        short: 'walls',
         title: 'Grid lines on the three walls of the box',
     },
     // A `tips` toggle stood here through a130, offering the hover tooltip that
@@ -619,8 +688,13 @@ function leeToggle(chart, onRefetch) {
  * who wants to know whether it is on sees the color.
  */
 function spaceMouseButton(onSpaceMouse, register) {
+    // `puck` since a165, which is what this module calls it in every comment.
+    // Not a contraction for width: it sits inside the relief menu, one item to
+    // a row, so it is the plainer word rather than the shorter one. Each of the
+    // three titles below already opens by naming the device, so there is
+    // nothing for `spellOut` to add.
     const btn = el('button', { type: 'button', className: 'exhibit-toggle' },
-                   'spacemouse');
+                   'puck');
     const paint = () => {
         const on = spacemouse.isConnected();
         btn.classList.toggle('active', on);
@@ -703,6 +777,52 @@ function downloadMenu(formats, onExport, canExport) {
     return wrap;
 }
 
+/**
+ * The relief's occasional controls, behind one menu.
+ *
+ * Parameters
+ * ----------
+ * items : Array<HTMLElement>
+ *     The controls themselves, already built and already wired. They are put
+ *     into the menu unchanged, so the walk keeps its pressed state, the puck
+ *     keeps its watcher and its greyed reason, and the window box keeps the
+ *     number the reader typed.
+ *
+ * Returns
+ * -------
+ * HTMLElement
+ *
+ * Notes
+ * -----
+ * Following the `Download` precedent already in the box. The walk, the puck and
+ * the window are each used occasionally and none is used twice in a row, so
+ * three permanent buttons spend the figure box's width on controls that are
+ * mostly not wanted. Folded, a relief's box is five items. Author's ruling,
+ * 2026-09-27.
+ *
+ * `autoClose="outside"` because these are live controls rather than one-shot
+ * actions: a menu that shut on the press would make stopping a walk a two step
+ * gesture, and typing a window depth impossible. Bootstrap already declines to
+ * close on a click landing in an `input`; this extends the same courtesy to the
+ * two buttons beside it.
+ */
+function reliefMenu(items) {
+    const wrap = el('div', { className: 'dropdown' });
+    wrap.appendChild(el('button', {
+        type: 'button',
+        className: 'exhibit-toggle dropdown-toggle',
+        'data-bs-toggle': 'dropdown',
+        'data-bs-auto-close': 'outside',
+        'aria-expanded': 'false',
+        title: 'The relief\'s occasional controls: the walk, the puck, and how '
+            + 'deep a window the drawing is fetched over',
+    }, 'relief'));
+    const menu = el('ul', { className: 'dropdown-menu exhibit-menu' });
+    for (const item of items) menu.appendChild(el('li', {}, item));
+    wrap.appendChild(menu);
+    return wrap;
+}
+
 /** The picture, offered on every chart. */
 const IMAGE_FORMAT = {
     ext: 'png',
@@ -746,7 +866,7 @@ function renderControls(doc, hooks) {
     // way and take their panel's title as a label, which is the only thing that
     // can say which group is which once they are no longer side by side.
     const stacked = (width ? width() : 0) < WIDE_PX;
-    if (stacked) row.classList.add('exhibit-controls-stacked');
+    row.classList.add(stacked ? 'exhibit-controls-stacked' : 'exhibit-controls-aligned');
     // One group per panel, in document order, each holding only what that
     // panel's own axes declare. Author ruling 2026-08-21, reversing
     // `dev/done/plan-plot-ir-api.md` section 6 and restoring the arrangement
@@ -754,10 +874,10 @@ function renderControls(doc, hooks) {
     // labeled halves reads as less cluttered than seven in one undifferentiated
     // centered row, because each half visibly belongs to the panel above it,
     // which the centered row could not say at all.
-    // The document's own group. Created before the panel loop rather than after
-    // it, because with a single panel the panel's buttons are folded into this
-    // one and there has to be somewhere to fold them into.
-    const box = el('div', { className: 'exhibit-group' });
+    // The figure controls, in a box of their own below the drawing since a165:
+    // what happens to the drawing rather than what it shows. The border and the
+    // exact width say what a caption would have said, so it carries no label.
+    const box = el('div', { className: 'exhibit-footer' });
     const panelGroups = [];
     // Which realization is on screen, and whether the document holds a grid
     // panel at all. Resolved before the panel loop rather than after it since
@@ -773,8 +893,13 @@ function renderControls(doc, hooks) {
     // while watching the other half of the chart reads as a control that does
     // not work. `readings` titles them by the axis for the same reason.
     const towered = ((doc && doc.panels) || []).some((p) => p.kind === 'tower');
+    const docPanels = (doc && doc.panels) || [];
     for (const panel of offered.panels) {
         const group = el('div', { className: 'exhibit-group exhibit-group-panel' });
+        // Which column this group is placed at, above the breakpoint. The
+        // document's own index, not the offered one: a panel declaring nothing
+        // gets no group, so the two lists part company the moment one does.
+        group.dataset.panel = String(docPanels.findIndex((p) => p.id === panel.id));
         if ((stacked || towered) && offered.panels.length > 1 && panel.title) {
             group.appendChild(el('span', { className: 'exhibit-group-label' },
                                   panel.title));
@@ -785,17 +910,18 @@ function renderControls(doc, hooks) {
             // reference lines needs it: it is gated on the panel carrying marks
             // at all, and there is no reading called `refLines` to read.
             if (!panel[spec.offer || spec.key]) continue;
+            const { text, title } = shortForm(spec);
             const btn = el('button', {
                 type: 'button',
                 className: `exhibit-toggle${panelView(panel.id)[spec.key] ? ' active' : ''}`,
-                title: spec.title,
+                title,
                 onClick: () => {
                     setPanelView(panel.id, { [spec.key]: !panelView(panel.id)[spec.key] });
                     btn.classList.toggle('active',
                                          Boolean(panelView(panel.id)[spec.key]));
                     onChange();
                 },
-            }, spec.label);
+            }, text);
             group.appendChild(btn);
         }
         // The color control, on a grid panel only: how value maps to color,
@@ -814,20 +940,21 @@ function renderControls(doc, hooks) {
             const colorBtn = el('button', {
                 type: 'button',
                 className: `exhibit-toggle${mode() !== 'linear' ? ' active' : ''}`,
-                title: 'How value maps to color on this panel. Gamma lifts the '
+                title: spellOut(`color: ${mode()}`,
+                    'How value maps to color on this panel. Gamma lifts the '
                     + 'faint structure a linear ramp buries under the peak; log '
                     + 'resolves the deep decades. The values, the tooltips and '
                     + 'the colorbar\'s numbers never change, only where the '
-                    + 'colors sit along the bar',
+                    + 'colors sit along the bar'),
                 onClick: () => {
                     const order = ['linear', 'gamma', 'log'];
                     const next = order[(order.indexOf(mode()) + 1) % order.length];
                     setPanelView(panel.id, { stretch: next });
-                    colorBtn.textContent = `color: ${next}`;
+                    colorBtn.textContent = `c: ${STRETCH_LABELS[next]}`;
                     colorBtn.classList.toggle('active', next !== 'linear');
                     onChange();
                 },
-            }, `color: ${mode()}`);
+            }, `c: ${STRETCH_LABELS[mode()] || mode()}`);
             group.appendChild(colorBtn);
 
             // The grid rendering controls, beside the color stretch and for the
@@ -837,17 +964,18 @@ function renderControls(doc, hooks) {
             for (const spec of SURFACE_CONTROLS) {
                 if (!spec.panel) continue;
                 if (realized !== 'surface' && !spec.flat) continue;
+                const { text, title } = shortForm(spec);
                 const btn = el('button', {
                     type: 'button',
                     className: `exhibit-toggle${gridView(panel.id)[spec.key] ? ' active' : ''}`,
-                    title: spec.title,
+                    title,
                     onClick: () => {
                         setPanelView(panel.id, { [spec.key]: !gridView(panel.id)[spec.key] });
                         btn.classList.toggle('active',
                                              Boolean(gridView(panel.id)[spec.key]));
                         onChange();
                     },
-                }, spec.label);
+                }, text);
                 group.appendChild(btn);
             }
             // The cut, last of the panel's own: a choice among four rather than
@@ -856,21 +984,23 @@ function renderControls(doc, hooks) {
             // at once. Only in relief, since a flat image has no wall to draw a
             // conditional on.
             if (realized === 'surface') {
+                const held = gridView(panel.id).cut;
                 const cutBtn = el('button', {
                     type: 'button',
-                    className: `exhibit-toggle${gridView(panel.id).cut !== 'none' ? ' active' : ''}`,
-                    title: 'Cut the joint and read the conditional it leaves, '
+                    className: `exhibit-toggle${held !== 'none' ? ' active' : ''}`,
+                    title: spellOut(`cut: ${held}`,
+                        'Cut the joint and read the conditional it leaves, '
                         + 'drawn on the wall beside the marginal it should be '
-                        + 'compared with. On the total, the two means are kappa',
+                        + 'compared with. On the total, the two means are kappa'),
                     onClick: () => {
-                        const held = gridView(panel.id).cut;
-                        const next = CUT_MODES[(CUT_MODES.indexOf(held) + 1) % CUT_MODES.length];
+                        const at = gridView(panel.id).cut;
+                        const next = CUT_MODES[(CUT_MODES.indexOf(at) + 1) % CUT_MODES.length];
                         setPanelView(panel.id, { cut: next });
-                        cutBtn.textContent = `cut: ${next}`;
+                        cutBtn.textContent = `cut: ${CUT_LABELS[next]}`;
                         cutBtn.classList.toggle('active', next !== 'none');
                         onChange();
                     },
-                }, `cut: ${gridView(panel.id).cut}`);
+                }, `cut: ${CUT_LABELS[held] || held}`);
                 group.appendChild(cutBtn);
             }
         }
@@ -878,31 +1008,13 @@ function renderControls(doc, hooks) {
         // one, which would draw a rule with nothing beside it.
         if (group.querySelector('button')) panelGroups.push(group);
     }
-    // **One group is not a group.** `.exhibit-group-panel` is
-    // `flex: 1 1 0; justify-content: center`, which exists so that with two
-    // panels each group sits over its own half of the canvas, and
-    // `.exhibit-group + .exhibit-group` draws a rule between them. With a single
-    // panel that layout takes all the spare width, centers one or two buttons in
-    // the middle of it, and separates them from everything else by a rule: the
-    // surface's lone `log y` floating away from the strip is exactly this. The
-    // layout was doing what it was built to do, on a case it was not built for.
-    //
-    // So a single panel's buttons go into the document group instead, at the
-    // front, which keeps the house order of axis readings before realizations.
-    // Not a surface special case: with one panel there is nothing for the half
-    // and half layout to align to, and a labeled column of one is the
-    // disconnected look on any chart. The `setPanelView` handlers are untouched;
-    // only the parent node moves.
-    if (panelGroups.length === 1) {
-        const only = panelGroups[0];
-        while (only.firstChild) box.appendChild(only.firstChild);
-    } else {
-        for (const group of panelGroups) row.appendChild(group);
-    }
-    // Everything below acts on the whole drawing rather than on one panel, so
-    // the document group sits apart from the panel groups and takes only the
-    // width it needs while they share what is left.
-    //
+    // A single panel's buttons were folded into the document group through
+    // a164, because `flex: 1 1 0; justify-content: center` took all the spare
+    // width for a lone group and centered two buttons in the middle of it, with
+    // a rule between them and everything else. Aligned, a single panel's group
+    // sits over its only plot at its own left edge, so the special case has no
+    // case and is gone with the layout that made it necessary.
+    for (const group of panelGroups) row.appendChild(group);
     // What is left of the relief's own controls once the four that draw the
     // grid have gone to the panel: `lights`, which is the least used of the six
     // and is read through `overridesFor`, where there is no panel to resolve
@@ -911,16 +1023,17 @@ function renderControls(doc, hooks) {
         for (const spec of SURFACE_CONTROLS) {
             if (spec.panel) continue;
             if (realized !== 'surface' && !spec.flat) continue;
+            const { text, title } = shortForm(spec);
             const btn = el('button', {
                 type: 'button',
                 className: `exhibit-toggle${view[spec.key] ? ' active' : ''}`,
-                title: spec.title,
+                title,
                 onClick: () => {
                     setView({ [spec.key]: !view[spec.key] });
                     btn.classList.toggle('active', Boolean(view[spec.key]));
                     onChange();
                 },
-            }, spec.label);
+            }, text);
             box.appendChild(btn);
         }
     }
@@ -941,19 +1054,22 @@ function renderControls(doc, hooks) {
                 walkBtn.classList.toggle('active', walking());
             },
         }, 'walk');
-        box.appendChild(walkBtn);
-
         // The puck. Greyed with a why where WebHID is not, which is Firefox,
         // Safari and the iPad, so the control still says the feature exists
         // and that this browser is not covered, per the never-hide rule.
-        box.appendChild(spaceMouseButton(onSpaceMouse, register));
+        //
         // No `feel` button beside it. a89 put the gains, the reverses, the
         // deadzone, the curve and a live readout behind one, and a136 took the
         // page of controls away again: see `surface-nav.js` `NAV_DEFAULTS` for
         // what the puck does now, which is one setting for everyone.
-        // The window, last, and a number rather than a toggle: it is the one
+        //
+        // The window last, and a number rather than a toggle: it is the one
         // control on a relief that is a new request rather than a new drawing.
-        if (onRefetch) box.appendChild(windowBox(chart, onRefetch));
+        box.appendChild(reliefMenu([
+            walkBtn,
+            spaceMouseButton(onSpaceMouse, register),
+            ...(onRefetch ? [windowBox(chart, onRefetch)] : []),
+        ]));
     }
 
     // The tower's own request, beside the grid's for the same reason: it does
@@ -1031,8 +1147,11 @@ function renderControls(doc, hooks) {
     // No `if (!box.childNodes.length) return null` guard here any more. With
     // reset always appended the box is never empty, and a line claiming a case
     // that cannot arise is worse than no line.
-    row.appendChild(box);
-    return row;
+    //
+    // Two nodes rather than one since a165: the panel groups and the figure box
+    // are different kinds of thing in different places, and the caller places
+    // both against the drawing's own geometry.
+    return { row, figure: box, groups: panelGroups };
 }
 
 /**
@@ -1084,8 +1203,11 @@ export async function mountChart(container, spec) {
     empty(container);
     const tools = el('div');
     const host = el('div', { className: 'exhibit-canvas' });
-    container.appendChild(tools);
+    // The canvas first, and nothing above it, since a165. The apparatus used to
+    // push the drawing down the page by a different amount on every chart, and
+    // by the most on the charts carrying the most controls.
     container.appendChild(host);
+    container.appendChild(tools);
     // The outline first, at its final size, before anything is fetched. A
     // document for a book at log2 16 is megabytes; a chart that sizes itself on
     // arrival shoves everything below it down the page at the moment the reader
@@ -1128,8 +1250,8 @@ export function mountChartDoc(container, doc) {
     empty(container);
     const tools = el('div');
     const host = el('div', { className: 'exhibit-canvas' });
-    container.appendChild(tools);
     container.appendChild(host);
+    container.appendChild(tools);
     return draw(container, tools, host, doc);
 }
 
@@ -1152,11 +1274,14 @@ function draw(container, tools, host, doc, spec = null) {
     // live. So the built-in legend is declared and not drawn (it still owns
     // series selection), and this takes both jobs.
     //
-    // Inserted before the canvas rather than appended, and created before the
-    // first render, so it holds its own height from the start and nothing below
-    // the chart moves when a reader puts the cursor on it.
+    // Close under the drawing it reads, since a165, with a clear step down to
+    // the buttons below it: a legend belongs to its picture and a control does
+    // not. Created before the first render, which is what it was doing above
+    // the canvas too, so it holds its own height from the start and nothing
+    // below the chart moves when a reader puts the cursor on it. Only where it
+    // is inserted changed.
     const readout = el('div', { className: 'chart-readout' });
-    container.insertBefore(readout, host);
+    container.insertBefore(readout, tools);
 
     let zoom = null;
     let renderer = null;
@@ -1553,6 +1678,9 @@ function draw(container, tools, host, doc, spec = null) {
         }
         writeReadout(null);
         syncTools();
+        // Last, because the geometry the block under the drawing is placed on
+        // is the one this render just drew at.
+        placeStrip();
         return true;
     }
 
@@ -1651,11 +1779,69 @@ function draw(container, tools, host, doc, spec = null) {
     // drawing nobody is looking at.
     let stripKind = view.kind || defaultKind(doc);
 
+    // The strip as built: the aligned row, the figure box, and the groups to be
+    // placed. Held so a resize can rewrite their geometry, which is a style
+    // write, without rebuilding the strip, which is not.
+    let strip = null;
+
+    /**
+     * Put the block under the drawing on the drawing's own geometry.
+     *
+     * Each panel group at its panel's grid column, the figure box at the
+     * drawing's extent, and the legend indented to the same left edge, so
+     * everything under the canvas shares one margin and every group's first
+     * button starts on its panel's y-axis line.
+     *
+     * Notes
+     * -----
+     * The columns come off the option the renderer actually drew, rather than
+     * from a second call to `documentLayout`: two calls at an odd width drift
+     * by a pixel and the strip would be wrong exactly where the renderer was
+     * right.
+     *
+     * The row has no height of its own once its children are absolute, so the
+     * tallest group is measured and written back as a `min-height`. The
+     * measurement is **synchronous**, reading `offsetHeight` to force the
+     * layout that has not happened yet. On a frame callback it would be
+     * throttled to nothing in a backgrounded tab and the page would come up
+     * with every group on one line.
+     */
+    function placeStrip() {
+        if (!strip) return;
+        const extent = drawn && drawn.extent;
+        const columns = (drawn && drawn.columns) || [];
+        const wide = (host.clientWidth || 0) >= WIDE_PX;
+        if (extent) {
+            readout.style.paddingLeft = `${extent.left}px`;
+            strip.figure.style.marginLeft = `${extent.left}px`;
+            strip.figure.style.width = `${extent.width}px`;
+        }
+        // Below the breakpoint there are no columns to align to: every panel is
+        // on its own row at the same left, and the labeled stack is the answer.
+        if (!wide) {
+            for (const group of strip.groups) {
+                group.style.left = '';
+                group.style.width = '';
+            }
+            strip.row.style.minHeight = '';
+            return;
+        }
+        let tallest = 0;
+        for (const group of strip.groups) {
+            const at = columns[Number(group.dataset.panel)];
+            if (!at) continue;
+            group.style.left = `${at.left}px`;
+            group.style.width = `${at.width}px`;
+            tallest = Math.max(tallest, group.offsetHeight);
+        }
+        strip.row.style.minHeight = tallest ? `${tallest}px` : '';
+    }
+
     function renderTools() {
         for (const off of stripOff) off();
         stripOff = [];
         empty(tools);
-        const strip = renderControls(doc, {
+        strip = renderControls(doc, {
             chart: spec ? spec.chart : null,
             onChange: () => { if (ready) onToggle(); },
             onReset: () => { if (ready) resetView(); },
@@ -1678,7 +1864,9 @@ function draw(container, tools, host, doc, spec = null) {
             // panels do.
             width: () => host.clientWidth || 0,
         });
-        if (strip) tools.appendChild(strip);
+        tools.appendChild(strip.row);
+        tools.appendChild(strip.figure);
+        placeStrip();
     }
     renderTools();
 
@@ -1847,7 +2035,9 @@ function draw(container, tools, host, doc, spec = null) {
         // The strip is rebuilt only when the breakpoint is actually crossed:
         // that is what changes whether the groups stack and carry their panel
         // titles, and rebuilding it on every resize tick would re-register the
-        // puck's watchers for nothing.
+        // puck's watchers for nothing. Its geometry is rewritten on every tick
+        // regardless, by `placeStrip` off the back of the render below, since
+        // every column moves with the host width.
         if (crossed) renderTools();
         render();
     });

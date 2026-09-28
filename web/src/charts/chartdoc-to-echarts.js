@@ -99,7 +99,12 @@ const PAD_TOP = 26;        // the panel title strip
 // plot area as it always had.
 const GAP_X = 96;
 const GAP_Y = 30;          // between stacked panels, on top of AXIS_BOTTOM
-const LEGEND_H = 24;
+// A `LEGEND_H = 24` band sat under the last panel through a164, reserved for
+// the ECharts legend. That legend has been declared and not drawn since a63,
+// the page's own readout having taken its job, so the band was dead on every
+// path. Nobody notices a reserved strip at the bottom of a drawing while the
+// legend is above it; below it, from a165, that band is the gap between the
+// x-axis labels and the legend, and it had to go.
 
 // Clamps on the computed plot-area height. The aspect rules between them.
 const PANEL_MIN_H = 130;
@@ -771,8 +776,76 @@ export function panelLayout(count, square, width, rightPad = 0, plan = null) {
         panelW: boxW,
         panelH,
         footprint: chrome + panelH,
-        hostHeight: Math.round(bottom + AXIS_BOTTOM + LEGEND_H),
+        hostHeight: Math.round(bottom + AXIS_BOTTOM),
     };
+}
+
+/**
+ * The horizontal extent of the plot areas, as opposed to of the host box.
+ *
+ * Left edge of the first plot area to the right edge of the last, in CSS
+ * pixels against the same host width the layout was computed at.
+ *
+ * Parameters
+ * ----------
+ * box : object
+ *     A `panelLayout` result.
+ *
+ * Returns
+ * -------
+ * {left, width}
+ *
+ * Notes
+ * -----
+ * **Axis furniture is excluded at both ends, and that is the rule rather than
+ * a nudge.** The left edge is `grids[0].left` and not zero, so nothing drawn
+ * against this sits under the y-axis tick labels; by the same argument the
+ * right edge is the last plot area and **not** the colorbar, which `rightPad`
+ * reserves beyond it. A colorbar is the value axis of a grid panel, the same
+ * kind of thing as the tick labels on the left, and it belongs to its panel
+ * rather than to the figure. Author's call, 2026-09-28.
+ *
+ * The extent therefore spans exactly the ink, and agrees with the panel groups
+ * and the panel titles, which all sit on `grids[i].left`.
+ *
+ * Stacked, every panel is at the same left and the same width, so this is
+ * still right with no special case.
+ */
+export function drawnExtent(box) {
+    const grids = (box && box.grids) || [];
+    if (!grids.length) return { left: AXIS_LEFT, width: 0 };
+    const left = grids[0].left;
+    const right = Math.max(...grids.map((g) => g.left + g.width));
+    return { left, width: Math.max(0, right - left) };
+}
+
+/**
+ * The same extent for a drawing that fills its host, which is the relief.
+ *
+ * Parameters
+ * ----------
+ * width : number
+ *     Host width in CSS pixels.
+ *
+ * Returns
+ * -------
+ * {left, width}
+ *
+ * Notes
+ * -----
+ * `drawnExtent` reads the grids a 2-D realization is drawn at. The 3-D path
+ * has none to read: `grid3D` is given no `left` or `width`, so the scene fills
+ * the canvas, and the colorbar is pinned to the host's right edge rather than
+ * sitting beyond a plot area. Taking `documentLayout`'s square there would put
+ * the figure box under the left half of a picture spanning the whole host.
+ *
+ * So the extent is the host less the same furniture margins a plot area leaves,
+ * which keeps the block under the drawing on one left edge whichever way the
+ * grid is realized. Author's ruling, 2026-09-28.
+ */
+export function hostExtent(width) {
+    const w = width || 900;
+    return { left: AXIS_LEFT, width: Math.max(0, w - AXIS_LEFT - PAD_RIGHT) };
 }
 
 /**
@@ -2317,6 +2390,14 @@ function xyOption(doc, opts, view, realized) {
     option.legendItems = grids.length ? [] : legendItems;
     option.hostHeight = box.hostHeight;
     option.panelFootprint = box.footprint;
+    // The layout this option was actually built at, for the block the mount
+    // draws under the canvas: one column per panel for the control groups, and
+    // the drawing's own extent for the figure box and the legend's indent.
+    // Published rather than recomputed at the other end, because two calls to
+    // `documentLayout` at an odd width drift by a pixel, and the strip would
+    // then be wrong in exactly the case where the renderer was right.
+    option.columns = box.grids.map((g) => ({ left: g.left, width: g.width }));
+    option.extent = drawnExtent(box);
     option.is3d = false;
     // What the mount's zoom listener reads: the shared window, the grid the
     // atom count was taken over, and the rung it produced.
@@ -2453,8 +2534,17 @@ const SURFACE_BASE_DROP = 0.45;
  * chrome. This is the one place the app sizes a chart by what it is rather
  * than by the document's aspect, and it is a drawing decision, not a semantic
  * one.
+ *
+ * **1.47 rather than 1.4 since a165**, and the odd number is the point: the
+ * dead legend band came out of `hostHeight` in the same version, and the
+ * relief is sized off that number, so leaving the factor alone would have cost
+ * it 34 pixels of height nobody asked to lose. A square panel clamps at
+ * `SQUARE_MAX` for any host wider than 580, which is the ordinary case, and
+ * there the old 516px host and the new 492px one meet at 1.4675. The relief is
+ * within a pixel of where it was; narrower than 580 it comes out a few pixels
+ * shorter, the band being a larger share of a smaller box.
  */
-const SURFACE_HOST_SCALE = 1.4;
+const SURFACE_HOST_SCALE = 1.47;
 const SURFACE_HOST_MAX = 760;
 
 /** The floor image's opacity, and the target cells per axis it is decimated to. */
@@ -3131,6 +3221,11 @@ function surfaceOption(doc, opts, documentView) {
                   hostHeight, side: box.panelW };
     const option = merge(base, resolveOverrides(opts.overrides, ctx));
     option.hostHeight = hostHeight;
+    // The relief fills its host, so its one panel's column is the extent, and
+    // both come off the host width rather than off `box.grids`. See
+    // `hostExtent`.
+    option.extent = hostExtent(opts.width);
+    option.columns = [option.extent];
     option.is3d = true;
     // What the cut is standing on, for the fixed strip above the chart, and
     // enough context for the mount to rebuild the cuts alone while the walk

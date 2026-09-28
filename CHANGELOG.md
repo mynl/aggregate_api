@@ -4,6 +4,19 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a165
+
+The second half of `dev/plan-chart-controls.md`: the apparatus moves below the drawing and lines up with it. Presentation only, all of it judged first in the standalone prototype under `dev/prototypes/chart-strip/`.
+
+- **Nothing above the drawing.** The legend and the controls used to push every chart down the page, by a different amount on every chart and by the most on the ones carrying the most controls. The top of the drawing is now the top of the figure block, whatever it carries. Under it: the legend, then the panel groups, then a box of figure controls.
+- **A panel's controls sit at that panel's own column**, so the first button starts on the panel title's left edge and the y-axis line. They took even shares of the row before, which put a two panel chart's second group 188px from where it belonged and could not be right at all on a tower, whose panels are split 1:2:2.
+- **The figure controls take a bordered box at the drawing's width**, from the first plot area to the last. The colorbar is outside it, being the value axis of its panel rather than part of the figure.
+- **One width for every toggle, and shorter labels**: `range`, `ret prd`, `marks`, `walls`, `c: gam`, `cut: tot`. Each shortened button's hover text opens by spelling the label out. The cut's four modes are now the same width, so it stops resizing as it cycles.
+- **A relief's occasional controls fold behind one `relief` menu**: the walk, the puck and the window. That leaves five items in its figure box.
+- **A dead band comes out of every chart.** `hostHeight` reserved 24px for an ECharts legend that has been declared and not drawn since a63. Below the drawing that band was the gap between the x-axis labels and the legend. The relief is sized off the same number and keeps the height it had.
+- **A pressed toggle is a muted red** rather than the house red, which is the page's selection mark and paints the tab row a few pixels above the chart.
+- Stacked under 720px, a panel's label takes a line of its own and the rule between groups gets room on both sides.
+
 ## 1.0.0a164
 
 The first half of the chart control strip plan (`dev/plan-chart-controls.md`): which group a control belongs to is decided by what it changes, not by where its state happens to be stored.

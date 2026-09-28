@@ -74,6 +74,14 @@
     --house-dark: #8c1010;
     --house-ring: rgba(168, 19, 19, .25);
 
+    /* The pressed chart toggle, desaturated. The house red is the page's
+       selection mark: it paints the active tab and the active sub-tab, both a
+       few pixels above the chart's own row, so a pressed chart toggle in the
+       same red reads as a third rank of tabs rather than as a setting on the
+       drawing. Same hue, at roughly a third of the saturation. Resting buttons
+       are unchanged. Author's call, 2026-09-28. */
+    --chart-on: #935353;
+
     /* ---- State ----
        One green for the whole app. This is the editor's own string green, now
        read from here by `cm6.css` too, so there is exactly one green in the
@@ -702,7 +710,7 @@ header .navbar { min-height: 56px; }
 }
 /* The panes are indented to match, so a table starts under the first tab's
    label rather than at the page edge. */
-.pane, .reins-desc, .tab-tools, .exhibit-controls, .price-preview {
+.pane, .reins-desc, .tab-tools, .price-preview {
     padding-left: var(--tabpad);
 }
 
@@ -1351,14 +1359,25 @@ header .navbar { min-height: 56px; }
    Fixed height, reserved from the first paint, so nothing below the chart moves
    when a reader puts the cursor on it and nothing moves back when they take it
    off. */
-/* The legend, which is also the readout. Above the canvas, where a legend
-   belongs; a63 had it below and left the ECharts legend drawing above it, which
-   is two things where the author asked for one. `min-height` holds the row so
-   nothing below the chart moves as values arrive and leave. */
+/* The legend, which is also the readout. Directly under the canvas since a165,
+   where a legend belongs: a63 had it below and left the ECharts legend drawing
+   above it, which is two things where the author asked for one, and a64 to a164
+   had it above, where it pushed the drawing down the page.
+
+   Tight above, loose below. The legend is a reading of the drawing directly
+   over it, so it sits almost on the x-axis labels; the buttons under it are a
+   different kind of thing and get the gap. Closing the dead `LEGEND_H` band
+   inside the canvas is what made the first possible, since no padding here
+   could have crossed a band reserved inside the drawing.
+
+   `padding-left` is written inline, to the drawing's own left edge, with the
+   panel groups and the figure box: the whole block under the canvas shares one
+   margin. `min-height` holds the row so nothing below the chart moves as values
+   arrive and leave. */
 .chart-readout {
     display: flex; flex-wrap: wrap; align-items: baseline;
     gap: .15rem 1rem; min-height: 1.5rem;
-    padding: 0 0 .35rem var(--tabpad);
+    padding: 0 0 1.25rem; margin: 0;
     font-size: .78rem; color: var(--ink);
 }
 /* The interrogated coordinate leads and is the one thing in the strip that is
@@ -1422,47 +1441,104 @@ header .navbar { min-height: 56px; }
     .exhibit-skeleton-panel { animation: none; }
 }
 
-/* ---- The chart control strip (log x / log y / full range / return period) ----
-   Sits directly above the chart. One group per PANEL, holding one button per
-   reading that panel's own axes declare, so the strip is a function of what is
-   on screen rather than of its kind, and the pressed state is sticky per
-   browser and per panel id: `log y` chosen on a density panel survives a
-   rebuild and carries to the next document with a density panel.
+/* ---- The chart control strip (log x / log y / range / ret prd) ----
+   Sits under the chart and under its legend, since a165. One group per PANEL,
+   holding one button per reading that panel's own axes declare, so the strip is
+   a function of what is on screen rather than of its kind, and the pressed
+   state is sticky per browser and per panel id: `log y` chosen on a density
+   panel survives a rebuild and carries to the next document with a density
+   panel.
 */
 .exhibit-controls {
     display: flex; flex-wrap: wrap; align-items: center; gap: 0;
-    margin: 0 0 .45rem;
+    margin: 0;
 }
-/* One group per panel, with a rule between adjacent groups so a button reads as
-   belonging to the panel below it rather than to one undifferentiated row.
-   Restored at a121 from `dev/done/plan-exhibit-punchups-3.md`, which the a62
-   chart-IR rewrite collapsed into a centered row on the reasoning that a
-   reading belonged to the document rather than to a panel. That reasoning is
-   what the author reversed on 2026-08-21. */
 .exhibit-group {
     display: flex; flex-wrap: wrap; align-items: center; gap: .35rem;
     padding: .1rem .7rem;
 }
-.exhibit-group + .exhibit-group { border-left: 1px solid var(--line); }
 .exhibit-group:first-child { padding-left: 0; }
-/* Equal shares of the row, so group 0 sits over the left panel and group 1 over
-   the right. Exact alignment to the ECharts grid columns is not attempted and
-   cannot be: the strip is a DOM row above a single canvas holding both grids,
-   so no control can sit physically under its panel. Equal shares is the honest
-   approximation. The document's own group is not a panel and takes only the
-   width it needs, leaving the rest to be halved. */
-.exhibit-group-panel { flex: 1 1 0; justify-content: center; }
+/* Each group at its panel's own grid column, left aligned, so its first
+   button's left edge is the panel title's left edge and the y-axis line.
+   `panelLayout` already returns the columns and the option publishes the ones
+   it drew at, so `mount.js` reads them rather than calculating anything.
+
+   Through a164 the groups took equal shares of the row, on the reasoning that
+   exact alignment was impossible because the strip is a DOM row and the panels
+   are grids inside one canvas. The first half was never the problem: the
+   numbers were sitting on the option all along. Equal shares put group 1 some
+   188px from its panel on a two panel chart, and on a tower, whose panels are
+   1:2:2 by ratio, there is no even share to be approximately right about.
+
+   Absolute rather than a flex basis because a group has to sit at a left offset
+   that owes nothing to the group before it, which no sequence of flex bases
+   reproduces. `flow-root` as well as `relative`, because with every child
+   absolute and an in-flow sibling below, a top margin on the sibling would
+   collapse through this element and move the whole row instead of the sibling.
+
+   No `border-left` between adjacent groups any more: the columns are separated
+   by a real `GAP_X` of 96px and the rule had nothing left to say. */
+.exhibit-controls-aligned { position: relative; display: flow-root; margin: 0; }
+.exhibit-controls-aligned .exhibit-group {
+    position: absolute; top: 0; padding: 0;
+    border-left: 0; justify-content: flex-start;
+}
 /* Stacked below `WIDE_PX`, where `panelLayout` puts the panels one per row and
    left and right stop corresponding to anything. Each group takes a full row
-   and its panel's title, which is then the only thing saying which is which. */
+   and its panel's title, which is then the only thing saying which is which.
+
+   The padding is `.6rem 0` rather than the row's `.1rem .7rem`: that value was
+   written for groups sitting side by side in one row, where the vertical part
+   does nothing, and stacked it put the hairline three pixels under one panel's
+   buttons and three above the next panel's label. `.6rem` top and bottom gives
+   the rule a clear 1.2rem between the two rows it separates. The label takes a
+   line of its own so it reads as the heading of its group rather than as the
+   first item in it. Rule weight is unchanged. */
 .exhibit-controls-stacked { flex-direction: column; align-items: stretch; }
 .exhibit-controls-stacked .exhibit-group {
-    flex: 0 0 auto; justify-content: flex-start; padding-left: 0;
-    border-left: 0;
+    flex: 0 0 auto; justify-content: flex-start;
+    padding: .6rem 0; border-left: 0;
+}
+.exhibit-controls-stacked .exhibit-group:first-child { padding-top: .1rem; }
+.exhibit-controls-stacked .exhibit-group-label {
+    flex: 0 0 100%; margin-bottom: .15rem;
 }
 .exhibit-controls-stacked .exhibit-group + .exhibit-group {
     border-left: 0; border-top: 1px solid var(--line);
 }
+/* The figure controls: what happens to the drawing rather than what it shows.
+   Rounded, bordered, contents left aligned like everything else under the
+   canvas, and carrying no label.
+
+   A labeled row behind a hairline came first and did not land. Both devices
+   were saying the same thing and neither said it well: a rule across the full
+   width reads as the end of the figure rather than the start of a group, and a
+   caption that has to name what its buttons govern is a caption admitting the
+   arrangement did not. The border and the exact width say it without either.
+
+   **The width is the drawing's, not the host's**, written inline from the
+   option's own extent. A square panel clamps at `SQUARE_MAX`, so on a relief
+   read flat the drawing stops less than half way across a wide host and a host
+   width box would span several hundred pixels of white space to the right of
+   the picture it belongs to.
+
+   The gap above is the largest in the block, so the box sits apart from the
+   drawing it governs rather than reading as a fourth row of it. */
+.exhibit-footer {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .35rem;
+    margin: 1.15rem 0 .45rem;
+    padding: .45rem .7rem;
+    justify-content: flex-start;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: .5rem;
+}
+/* The relief's occasional controls, folded behind one menu. The items are the
+   controls themselves rather than `dropdown-item` links, so the walk keeps its
+   pressed state and the window box keeps being a number box; the menu is only
+   the container that stacks them. */
+.exhibit-menu { padding: .35rem; }
+.exhibit-menu li + li { margin-top: .3rem; }
 .exhibit-group-label {
     font-size: .68rem; color: var(--mut);
     text-transform: uppercase; letter-spacing: .04em;
@@ -1473,6 +1549,7 @@ header .navbar { min-height: 56px; }
 .exhibit-window {
     display: inline-flex; align-items: center; gap: .3rem;
     font-size: .78rem; color: var(--mut); margin: 0;
+    min-width: 0;
 }
 .exhibit-window-input {
     width: 4.6rem; height: 1.6rem; padding: .05rem .3rem;
@@ -1488,28 +1565,30 @@ header .navbar { min-height: 56px; }
    a pill next to a rounded rectangle looks like a different kind of thing, and
    these are not a different kind of thing. `--bs-border-radius` is Bootstrap's
    own token, so the two cannot drift. */
+/* `min-width` is about the width of `log x`, the size the author named as good,
+   and a floor rather than a fixed width so `marginals` and `contours` still fit
+   and only the short labels are padded out. What it buys is a row that reads as
+   a row: the eye finds the third button from the left without reading any of
+   them, and a cycling button stops changing width as it moves through its
+   modes. The menus and the window box are exempt: they are not one of the set,
+   and padding `Download` out to match would make them look like one. */
 .exhibit-toggle {
     font-size: .72rem; line-height: 1; padding: .3rem .6rem;
+    min-width: 4.4rem;
     color: var(--mut); background: #fff;
     border: 1px solid var(--line); cursor: pointer;
     border-radius: var(--bs-border-radius, .375rem);
 }
-.exhibit-toggle:hover { color: var(--primary); border-color: var(--primary); }
+.exhibit-toggle.dropdown-toggle { min-width: 0; }
+.exhibit-toggle:hover { color: var(--chart-on); border-color: var(--chart-on); }
 .exhibit-toggle.active {
-    color: #fff; background: var(--primary); border-color: var(--primary);
+    color: #fff; background: var(--chart-on); border-color: var(--chart-on);
 }
 
-/* The rubric under a control row: what the buttons above are choosing between,
-   in the reader's terms. Set as a caption rather than as body, because it is
-   read once and then ignored, and capped at the measure like every other run of
-   prose. Empty on an exhibit that declares none. */
-.exhibit-rubric {
-    font-size: var(--fs-meta); color: var(--mut); line-height: 1.45;
-    max-width: var(--measure); margin: .1rem 0 .6rem;
-    padding-left: var(--tabpad);
-}
-.exhibit-rubric:empty { display: none; }
-.exhibit-rubric b { color: var(--ink-2); font-weight: 650; }
+/* An `.exhibit-rubric` caption stood here through a164, for what a control row
+   was choosing between in the reader's terms. Nothing ever wrote one, on any
+   path, so it is gone rather than left as a rule waiting for a caller that
+   never arrived. */
 
 /* Greyed out, never hidden: the reader learns the control exists and that this
    kind is not covered, which a missing button cannot say. */

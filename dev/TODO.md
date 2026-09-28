@@ -272,8 +272,11 @@ and the standing REMINDER below about what is worth plotting.
         - [x] `[scope]`, **a164**. The four grid rendering controls and the cut
               become panel controls, since what they change is one panel's
               drawing. `lights` stays in the figure box by the author's ruling.
-        - [ ] `[align] [below] [box] [short] [fold] [trim] [stack] [tone]`,
-              **a165**, the arrangement.
+        - [x] `[align] [below] [box] [short] [fold] [trim] [stack] [tone]`,
+              **a165**, the arrangement: everything below the drawing, panel
+              groups at their own columns, the figure box at the drawing's
+              width. Acceptance 1 to 6 are a browser walk and are still to be
+              kicked; the plan's "Execution notes" carry the divergences.
 
 - [x] **GUI round 8, where the dividing lines lie**
       (`dev/done/plan-ui-round-8.md`), **a157 to a158**, from an author report
