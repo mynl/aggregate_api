@@ -1092,6 +1092,36 @@ def test_bivariate_builds_and_reports(client):
     assert client.get(f"/v1/objects/{oid}/bs_window_df").status_code == 200
 
 
+def test_bivariate_total_moments_and_quantiles(client):
+    """A pair's scalar mean / cv are the total's, and quantiles answer off it.
+
+    The scalar moment fields were ``None`` for a ``bvagg`` through a170 (its
+    own ``actual_m`` genuinely is), which left the lite page's tiles empty.
+    The total is the pair's headline reading: ``stats_df`` publishes its
+    moments in the ``total`` column, and ``obj.total`` carries a callable
+    ``q``, the pair's aggregate law, which the quantile route now falls back
+    to on the ``aggregate`` basis (the occurrence basis stays a 400: there is
+    no single per-claim law behind a pair).
+    """
+    r = client.post("/v1/objects", json={"decl": _BV})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["mean"] is not None and body["mean"] > 0
+    assert body["cv"] is not None and body["cv"] > 0
+    # The total is the 25-claim compound of the two per-claim laws, each with
+    # per-claim mean 0.5 * 50 = 25 (the ``components`` block carries those
+    # per-claim means, so the scalar cannot be read off it): 25 * 50 = 1250,
+    # up to discretization. Whatever the copula, expectation is linear.
+    assert body["mean"] == pytest.approx(1250, rel=1e-2)
+    qr = client.get(f"/v1/objects/{body['id']}/quantiles?p=0.99")
+    assert qr.status_code == 200, qr.text
+    q99 = qr.json()["quantiles"][0]["q"]
+    assert q99 > body["mean"]
+    assert client.get(
+        f"/v1/objects/{body['id']}/quantiles?p=0.99&basis=occurrence"
+    ).status_code == 400
+
+
 def test_bivariate_chart_document(client):
     """chart/joint_surface serves canonical ChartDoc bytes, hash as ETag.
 

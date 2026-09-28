@@ -240,8 +240,17 @@ function renderBuilt(res) {
     const facts = document.createElement('div');
     facts.className = 'p-grid-facts';
     const bits = [];
-    if (res.bs !== null && res.bs !== undefined) bits.push(`bs <b>${res.bs}</b>`);
-    if (res.log2 !== null && res.log2 !== undefined) bits.push(`log2 <b>${res.log2}</b>`);
+    // A pair measures a grid per axis, so its facts are pairs in the same
+    // slots, exactly the desktop strip's rule; its scalar mean / cv / P99 are
+    // the total's and go to the tiles below.
+    const parts = res.components || [];
+    if (parts.length) {
+        const pair = (key) => `(${parts.map((c) => (c[key] == null ? '?' : c[key])).join(', ')})`;
+        bits.push(`bs <b>${pair('bs')}</b>`, `log2 <b>${pair('log2')}</b>`);
+    } else {
+        if (res.bs !== null && res.bs !== undefined) bits.push(`bs <b>${res.bs}</b>`);
+        if (res.log2 !== null && res.log2 !== undefined) bits.push(`log2 <b>${res.log2}</b>`);
+    }
     if (res.value_type) bits.push(res.value_type);
     facts.innerHTML = bits.join(' · ');
     strip.appendChild(facts);

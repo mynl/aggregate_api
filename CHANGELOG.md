@@ -4,6 +4,10 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a171
+
+A pair fills the lite tiles (author, reading a170). The build response's scalar `mean` and `cv`, `None` for a `bvagg` through a170, are now the total's, read from `stats_df`'s `total` column when the object's own attributes carry nothing; and the quantile route answers the `aggregate` basis for a pair off `obj.total.q`, the pair's aggregate law (the occurrence basis stays a 400: there is no single per-claim law behind a pair). The lite tiles therefore show the total's Mean, CV and P99, and the lite facts line prints the per-axis pairs `bs (a, b) · log2 (m, n)` exactly as the desktop strip does. The desktop strip itself is untouched: its pair branch renders from `components` and never read the scalars.
+
 ## 1.0.0a170
 
 Two lite punchups from the author reading a169 (`[Lite-Device]` line of work). The one table now follows the object rather than always showing the return-period ladder: the P&L ledger for a pnl, the reinsurance summary (the `reins` exhibit's first block, the desktop Re / Summary leaf) when the object carries a cession, and the `summary` exhibit for everything else; an object publishing none of the three (a severity) shows no table. The program card's footline reads "DecL program from the library · tap to expand", and says collapse while the card is open, in every state.

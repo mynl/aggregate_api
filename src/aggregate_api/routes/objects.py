@@ -846,11 +846,27 @@ def _summary_fields(obj: Any) -> dict:
     note = str(note).strip() if note is not None else ""
     tags = [str(t) for t in (getattr(obj, "tags", ()) or ())]
 
+    # An object built from a pair carries no scalar moments of its own (its
+    # ``bs`` is genuinely two numbers, and ``actual_m`` describes a single
+    # ``Aggregate``), but its TOTAL does: the joint's total distribution is
+    # the pair's headline reading, and ``stats_df`` publishes it in the
+    # ``total`` column of the ``(component, measure)`` frame (library
+    # ``[Bivariate-Punchup]``, a330). Filled only when the scalar path found
+    # nothing, so every other kind is untouched. The desktop strip is also
+    # untouched: its pair branch renders from ``components`` and never reads
+    # these scalars. The consumer is the lite page's tiles, empty for a pair
+    # through a170.
+    mean = _num(*m)
+    cv = _num(*cv)
+    if mean is None and cv is None:
+        mean = _total_stat(obj, "mean")
+        cv = _total_stat(obj, "cv")
+
     return {
         "bs": _num("bs"),
         "log2": log2,
-        "mean": _num(*m),
-        "cv": _num(*cv),
+        "mean": mean,
+        "cv": cv,
         "validation": validation,
         "has_reins": reinsured,
         "value_type": str(value_type) if value_type is not None else None,
@@ -858,6 +874,33 @@ def _summary_fields(obj: Any) -> dict:
         "tags": tags,
         "components": _component_fields(obj),
     }
+
+
+def _total_stat(obj: Any, stat: str) -> float | None:
+    """One aggregate statistic of a pair's total, off ``stats_df['total']``.
+
+    Parameters
+    ----------
+    obj : Any
+        The built object; only one carrying a ``stats_df`` with a ``total``
+        column and the ``(component, measure)`` row index answers.
+    stat : str
+        ``'mean'`` / ``'cv'`` / ``'skew'``, a row of the ``agg`` block.
+
+    Returns
+    -------
+    float or None
+        The statistic, or ``None`` wherever the frame, the column, or the row
+        is absent or non-finite: this is a fallback, never a requirement.
+    """
+    stats = getattr(obj, "stats_df", None)
+    if stats is None or "total" not in getattr(stats, "columns", ()):
+        return None
+    try:
+        value = float(stats.loc[("agg", stat), "total"])
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+    return value if math.isfinite(value) else None
 
 
 def _component_fields(obj: Any) -> list[dict]:
@@ -2554,6 +2597,14 @@ def get_quantiles(
             status_code=422, detail="every p must lie strictly inside (0, 1)")
     name = "q_sev" if basis == "occurrence" else "q"
     q = getattr(entry.obj, name, None)
+    # A pair carries no ``q`` of its own, but its total does: the joint's
+    # total distribution is the pair's aggregate law, so its quantile function
+    # is the honest ``aggregate``-basis answer (it is what the lite tiles read
+    # P99 from). The occurrence basis stays a 400, since there is no single
+    # per-claim law behind a pair.
+    if not callable(q) and basis == "aggregate":
+        total = getattr(entry.obj, "total", None)
+        q = getattr(total, "q", None) if total is not None else None
     if not callable(q):
         raise HTTPException(
             status_code=400,
