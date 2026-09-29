@@ -136,8 +136,15 @@ export const PANEL_DEFAULTS = {
 };
 
 // Bounds on the square plot area an equal-aspect panel is drawn at.
+//
+// The cap came down a fifth at a173, from 420, on the author's report that the
+// distortion plots were too big. It is the only number that moves a square on a
+// desktop: the floor binds under about a 320 pixel host and is a legibility
+// limit rather than a size choice, so it stays where it was. The three
+// documents this sizes are the distortion's unit square, a book's kappa panel
+// and the pricing envelope, all of them one equal-aspect panel.
 const SQUARE_MIN = 240;
-const SQUARE_MAX = 420;
+const SQUARE_MAX = 336;
 
 // Extra right margin on a grid panel, for its colorbar.
 const COLORBAR_W = 78;
@@ -334,10 +341,59 @@ function extentOf(series) {
     return Number.isFinite(lo) && Number.isFinite(hi) ? [lo, hi] : null;
 }
 
-/** The scale this axis is drawn on: its default, or its log reading. */
+/**
+ * The scale this axis is drawn on, from the reading the panel holds.
+ *
+ * Both directions are honored, which is the whole of it: `log` true asks for
+ * the log reading and `log` false asks for the linear one, each granted where
+ * the axis declares it. Through a172 the false branch returned the axis' own
+ * default instead, so an axis declaring `scale: 'log'` was drawn on log
+ * whatever the button said. The reins chart's occurrence density is the one
+ * axis in the library that declares it, and its `log y` button was therefore
+ * dead: pressed or not, the panel drew log. Reported by the author on a172.
+ *
+ * The default is not lost, it moved: `declaredLogs` seeds the panel's reading
+ * from it, so the panel still *opens* on log and the button now says so.
+ */
 function axisScale(axis, log) {
     const scales = axis.scales || [axis.scale || 'linear'];
-    return (log && scales.includes('log')) ? 'log' : (axis.scale || 'linear');
+    if (log) return scales.includes('log') ? 'log' : (axis.scale || 'linear');
+    return scales.includes('linear') ? 'linear' : (axis.scale || 'linear');
+}
+
+/**
+ * The log readings a panel opens on, off what its own axes declare.
+ *
+ * Parameters
+ * ----------
+ * doc : object
+ *     A ChartDoc canonical dict.
+ * panel : object
+ *     One of its panels.
+ *
+ * Returns
+ * -------
+ * object
+ *     `{logX, logY}`, true where the axis on that position declares
+ *     `scale: 'log'` as its default reading.
+ *
+ * Notes
+ * -----
+ * The seed under `PANEL_DEFAULTS`, and above nothing: a reader's own answer
+ * wins over it, which is what makes the button a switch rather than a
+ * suggestion. A grid panel's height is its z axis, the same axis `logAvailable`
+ * answers about, so the two agree about which axis `log y` drives there.
+ *
+ * Read off the panel's **own** axes rather than off whichever axis `reflect`,
+ * `invert` or the return period has put on the position. The document declares
+ * a default for the picture it describes, and a reader who has exchanged the
+ * axes has pressed something; from then on the buttons carry their own answer.
+ */
+export function declaredLogs(doc, panel) {
+    const axes = Object.fromEntries(((doc && doc.axes) || []).map((a) => [a.id, a]));
+    const isLog = (id) => Boolean(id) && (axes[id] || {}).scale === 'log';
+    if (panel && panel.z_axis) return { logX: false, logY: isLog(panel.z_axis) };
+    return { logX: isLog(panel && panel.x_axis), logY: isLog(panel && panel.y_axis) };
 }
 
 /**
@@ -2268,8 +2324,13 @@ export function chartdocToEcharts(doc, opts = {}) {
     const owner = towerAxisOwners(panels);
     const byId = Object.fromEntries(panels.map((p) => [p.id, p]));
     const logged = new Set();
+    // Resolved the way `forPanel` resolves it, seed and all, so a tower whose
+    // quantity axis declared log by default would open on it. None does today;
+    // reading the blob alone would make this the one place that missed it.
+    const held = (id) => ({ ...declaredLogs(doc, byId[id]),
+                            ...((view.panels || {})[id] || {}) });
     for (const [axisId, panelId] of owner) {
-        if (((view.panels || {})[panelId] || {}).logY) logged.add(axisId);
+        if (held(panelId).logY) logged.add(axisId);
     }
     //
     // **A companion panel's own stored blob is dropped, not merged.** It
@@ -2287,7 +2348,11 @@ export function chartdocToEcharts(doc, opts = {}) {
         const own = byId[id];
         const owned = Boolean(own) && owner.has(own.y_axis);
         const companion = owned && owner.get(own.y_axis) !== id;
-        const resolved = { ...view, ...PANEL_DEFAULTS,
+        // `declaredLogs` sits between the defaults and the reader's blob: the
+        // document says which reading the panel opens on, the reader overrides
+        // it, and a companion keeps the document's answer since its own blob is
+        // dropped.
+        const resolved = { ...view, ...PANEL_DEFAULTS, ...declaredLogs(doc, own),
                            ...(companion ? {} : ((view.panels || {})[id] || {})) };
         if (owned) resolved.logY = logged.has(own.y_axis);
         return resolved;

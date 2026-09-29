@@ -24,12 +24,13 @@ import { api } from '../api.js';
 import * as spacemouse from '../spacemouse.js';
 import { el, empty } from '../utils/dom.js';
 import {
-    PANEL_DEFAULTS, WIDE_PX, chartdocToEcharts, logAvailable, panelLayout,
-    panelStretch, readings, rungAt, surfaceCuts,
+    PANEL_DEFAULTS, WIDE_PX, chartdocToEcharts, declaredLogs, logAvailable,
+    panelLayout, panelStretch, readings, rungAt, surfaceCuts,
 } from './chartdoc-to-echarts.js';
 import { stretchMode } from './color-stretch.js';
 import { fileStem, meshToGlb, meshToObj, meshToStl, surfaceMesh } from './mesh-export.js';
-import { chartParamsFor, leeWith, migrateChartView, windowsWith } from './request-params.js';
+import { chartParamsFor, leeWith, migrateChartView, windowsWith,
+         withoutPanelLogs } from './request-params.js';
 import { createSurfaceNav } from './surface-nav.js';
 import { loadSurface, readCamera, surfaceOverrides } from './surface.js';
 import { stampTouchCoordinates } from './touch.js';
@@ -56,8 +57,14 @@ let surfaceReady = false;
 // not a reading, and a browser holding one asked every 2-D chart for something
 // no 2-D chart takes. See `dev/plan-plot-2d-fix.md`. The previous key is read
 // once, migrated and dropped, so the readings survive and the leak does not.
-const VIEW_KEY = 'aggapi.chartView.v4';
-const VIEW_KEY_PREVIOUS = 'aggapi.chartView.v3';
+//
+// v5 is the same test again, and passes it: a stored `logY: false` meant "no
+// request made" through a172 and means "draw this axis linear" from a173, so a
+// value nobody chose would now change a picture. `withoutPanelLogs` takes the
+// two log readings out of the v4 entry on the way through and leaves everything
+// else, so the bump costs a reader those two answers per panel and nothing more.
+const VIEW_KEY = 'aggapi.chartView.v5';
+const VIEW_KEY_PREVIOUS = 'aggapi.chartView.v4';
 
 const VIEW_DEFAULTS = {
     // The seven readings live per panel, under `panels`, keyed by the
@@ -177,7 +184,8 @@ let view = (() => {
         }
         const previous = localStorage.getItem(VIEW_KEY_PREVIOUS);
         if (previous === null) return { ...VIEW_DEFAULTS };
-        const migrated = { ...VIEW_DEFAULTS, ...migrateChartView(JSON.parse(previous)) };
+        const migrated = { ...VIEW_DEFAULTS,
+                           ...withoutPanelLogs(migrateChartView(JSON.parse(previous))) };
         // Written through at once rather than left to the first control the
         // reader touches: the old key is gone as of the next line, so a reload
         // before any click would otherwise land on the defaults.
@@ -198,15 +206,34 @@ function setView(patch, persist = true) {
     try { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch { /* private mode */ }
 }
 
-/** One panel's held readings, resolved against the defaults. */
-function panelView(id) {
-    return { ...PANEL_DEFAULTS, ...((view.panels || {})[id] || {}) };
+/**
+ * One panel's held readings, resolved against the defaults.
+ *
+ * `declared` is the document's own answer for this panel, from `declaredLogs`,
+ * and sits between the defaults and what the reader holds. Optional because the
+ * grid paths resolve a panel with no document in hand and none of them reads a
+ * log; the strip, which draws the log buttons, always passes it. Resolved the
+ * same way here as in the adapter's `forPanel`, or a panel would open on log
+ * with its own button drawn unpressed.
+ */
+function panelView(id, declared = null) {
+    return { ...PANEL_DEFAULTS, ...(declared || {}),
+             ...((view.panels || {})[id] || {}) };
 }
 
-/** Set one reading on one panel, leaving every other panel alone. */
+/**
+ * Set one reading on one panel, leaving every other panel alone.
+ *
+ * **Only what is set is stored.** Through a172 this wrote the panel's whole
+ * resolved view, so pressing any one button froze all seven readings at their
+ * defaults, and a reading whose default later came from the document could
+ * never reach a panel the reader had touched. The blob is a set of answers
+ * given, not a snapshot.
+ */
 function setPanelView(id, patch, persist = true) {
     setView({ panels: { ...(view.panels || {}),
-                        [id]: { ...panelView(id), ...patch } } }, persist);
+                        [id]: { ...((view.panels || {})[id] || {}), ...patch } } },
+            persist);
 }
 
 /**
@@ -956,6 +983,12 @@ function renderControls(doc, hooks) {
                                   panel.title));
         }
         const docPanel = docPanels.find((p) => p.id === panel.id);
+        // The document's own log readings for this panel, which is what the
+        // buttons open pressed on where it declares one. Resolved once per
+        // panel and handed to every `panelView` below, so the strip and the
+        // drawing answer the same question the same way.
+        const declared = declaredLogs(doc, docPanel);
+        const held = () => panelView(panel.id, declared);
         // The two log buttons, held so `syncLogs` can grey them in place.
         const logs = [];
         for (const spec of CONTROLS) {
@@ -967,12 +1000,11 @@ function renderControls(doc, hooks) {
             const { text, title } = shortForm(spec);
             const btn = el('button', {
                 type: 'button',
-                className: `exhibit-toggle${panelView(panel.id)[spec.key] ? ' active' : ''}`,
+                className: `exhibit-toggle${held()[spec.key] ? ' active' : ''}`,
                 title,
                 onClick: () => {
-                    setPanelView(panel.id, { [spec.key]: !panelView(panel.id)[spec.key] });
-                    btn.classList.toggle('active',
-                                         Boolean(panelView(panel.id)[spec.key]));
+                    setPanelView(panel.id, { [spec.key]: !held()[spec.key] });
+                    btn.classList.toggle('active', Boolean(held()[spec.key]));
                     // Before `onChange`, so the strip is already right by the
                     // time the drawing comes back: `reflect`, `invert` and the
                     // return period each exchange which axis is under the two
@@ -993,7 +1025,7 @@ function renderControls(doc, hooks) {
         // See `logAvailable`, which is also where the why is written down.
         const syncLogs = () => {
             if (!docPanel || !logs.length) return;
-            const live = logAvailable(doc, docPanel, panelView(panel.id));
+            const live = logAvailable(doc, docPanel, held());
             for (const { spec, btn, title } of logs) {
                 btn.disabled = !live[spec.key];
                 btn.setAttribute('aria-disabled', btn.disabled ? 'true' : 'false');
@@ -1015,7 +1047,7 @@ function renderControls(doc, hooks) {
         // and the flat reading to linear, per `dev/plan-color-stretch.md`.
         if (docPanel && (docPanel.kind === 'surface' || docPanel.kind === 'heatmap')) {
             const mode = () => stretchMode(panelStretch(
-                doc, docPanel, panelView(panel.id),
+                doc, docPanel, held(),
                 (view.kind || defaultKind(doc)) === 'surface'));
             const colorBtn = el('button', {
                 type: 'button',

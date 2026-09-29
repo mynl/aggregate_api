@@ -174,3 +174,43 @@ export function migrateChartView(stored) {
     }
     return migrated;
 }
+
+/**
+ * The same state with every panel's two log readings taken out.
+ *
+ * The v4 to v5 half of the migration, run once on the superseded entry. It is
+ * the case the bump exists for: a stored `logY: false` used to mean "no request
+ * made", and the panel drew whatever its axis declared; from a173 it means
+ * "linear", because the button now says linear as well as log. The one axis in
+ * the library declaring a log default is the reins chart's occurrence density,
+ * and every browser that had ever pressed a button on that panel held a
+ * `logY: false` written by the old whole-view write, so without this the fix
+ * would have shown up as the panel opening linear.
+ *
+ * Only these two keys and only inside `panels`: everything else a reader holds,
+ * the realization, the surface preferences, the cut and the per-chart windows,
+ * survives the bump untouched.
+ *
+ * Parameters
+ * ----------
+ * stored : object
+ *     A migrated v4 entry.
+ *
+ * Returns
+ * -------
+ * object
+ */
+const PANEL_LOG_KEYS = new Set(['logX', 'logY']);
+
+export function withoutPanelLogs(stored) {
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
+    const panels = stored.panels;
+    if (!panels || typeof panels !== 'object' || Array.isArray(panels)) return stored;
+    const cleaned = {};
+    for (const [id, blob] of Object.entries(panels)) {
+        if (!blob || typeof blob !== 'object' || Array.isArray(blob)) continue;
+        cleaned[id] = Object.fromEntries(
+            Object.entries(blob).filter(([key]) => !PANEL_LOG_KEYS.has(key)));
+    }
+    return { ...stored, panels: cleaned };
+}

@@ -34,7 +34,7 @@ globalThis.ResizeObserver = class { observe() {} disconnect() {} };
 if (!globalThis.navigator) globalThis.navigator = { userAgent: 'node' };
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 
-const { chartdocToEcharts, logAvailable, readings } =
+const { chartdocToEcharts, declaredLogs, logAvailable, readings } =
     await import('../src/charts/chartdoc-to-echarts.js');
 
 // Resolved off this file rather than off the working directory, since the
@@ -140,6 +140,50 @@ test('a grid panel answers on its height, which is what log y drives there', () 
 test('a missing panel or axis answers false rather than throwing', () => {
     assert.deepEqual(logAvailable({ axes: [], panels: [] }, { id: 'x' }, {}),
                      { logX: false, logY: false, xLabel: '', yLabel: '' });
+});
+
+// ---- the reading a panel opens on --------------------------------------
+//
+// An axis may declare `scale: 'log'`, which says the panel opens on log. The
+// reins chart's occurrence density is the one axis in the library that does,
+// and through a172 that default was applied inside `axisScale`, where no button
+// could get past it: pressed or not, the panel drew log. The default is a seed
+// for the reading now, so the panel still opens on log and the button switches
+// it off.
+
+const REINS = CHARTS.reins.charts.reins;
+const OCCURRENCE = REINS.panels.find((p) => p.id === 'occurrence');
+
+/** The `type` of each panel's y axis, in document order. */
+const yTypes = (panels) => chartdocToEcharts(
+    REINS, { view: { ...BASE, panels }, width: 980 },
+).yAxis.map((a) => a.type);
+
+test('an axis declaring a log default seeds its panel\'s reading', () => {
+    assert.deepEqual(declaredLogs(REINS, OCCURRENCE), { logX: false, logY: true });
+    // The aggregate panel declares no default, so it seeds neither reading.
+    assert.deepEqual(declaredLogs(REINS, REINS.panels.find((p) => p.id === 'aggregate')),
+                     { logX: false, logY: false });
+});
+
+test('so the occurrence panel opens on log, with nothing held', () => {
+    assert.equal(yTypes({})[0], 'log');
+});
+
+test('and the button switches it off, which is what it could not do', () => {
+    assert.equal(yTypes({ occurrence: { logY: false } })[0], 'value');
+    assert.equal(yTypes({ occurrence: { logY: true } })[0], 'log');
+});
+
+test('the seed reaches one panel only, and the other axes are unmoved', () => {
+    // The aggregate panel's loss axis declares both scales and no default, so
+    // it opens linear beside a panel that opens on log.
+    assert.equal(yTypes({})[1], 'value');
+});
+
+test('a panel with no document answers false rather than throwing', () => {
+    assert.deepEqual(declaredLogs(null, null), { logX: false, logY: false });
+    assert.deepEqual(declaredLogs({ axes: [] }, { id: 'x' }), { logX: false, logY: false });
 });
 
 // ---- the sweep ---------------------------------------------------------

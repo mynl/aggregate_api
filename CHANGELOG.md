@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a173
+
+Two reports from the author reading a172: a square panel drawn too large, and a second dead log button.
+
+- **The equal-aspect panels are a fifth smaller.** The cap on the square plot area comes down from 420 to 336 pixels. It sizes three drawings, all of them one equal-aspect panel: a distortion's unit square, a book's kappa panel and the pricing envelope. The floor stays at 240, being a legibility limit that binds only under about a 320 pixel host.
+- **`log y` works on the Re / Plot occurrence panel.** The panel opens on log, as it should, and now switches to linear when the button is pressed. It never did: the library declares `scale: 'log'` on the occurrence density and the app applied that default inside the scale resolver, where no button could get past it.
+- **A declared default is a seed for the reading now, not an override of it.** The document says which reading a panel opens on; the reader's own answer wins over it. That is the general fix, and the occurrence density is the one axis in the library that declares one.
+- **A panel stores the answers it was given, not a snapshot of all seven.** Pressing any one button used to freeze the other six at their defaults, which is what would have kept the declared default off any panel already touched.
+- **The view key moves to v5**, migrating v4 in place: the two log readings come out of each panel blob, and the realization, the surface preferences, the cut and the per-chart windows all survive.
+
 ## 1.0.0a172
 
 A dead `log x` on the Lee panel, reported by the author, and the class of bug behind it.

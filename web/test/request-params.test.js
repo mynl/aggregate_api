@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-    chartParamsFor, leeWith, migrateChartView, windowsWith,
+    chartParamsFor, leeWith, migrateChartView, windowsWith, withoutPanelLogs,
 } from '../src/charts/request-params.js';
 
 test('a view holding no windows asks for nothing', () => {
@@ -108,4 +108,35 @@ test('a corrupt entry migrates to nothing rather than throwing', () => {
     for (const stored of [null, undefined, 7, 'log', [1, 2]]) {
         assert.deepEqual(migrateChartView(stored), {});
     }
+});
+
+test('the v5 bump takes the two log readings out of every panel', () => {
+    // A stored `logY: false` meant "no request made" through a172 and means
+    // "linear" from a173, so it is the one value the bump has to clear. It
+    // clears `logY: true` with it: both are answers to a question that was
+    // asked differently, and the document's own default is the better opening
+    // for a panel the reader has not spoken about since.
+    const stored = {
+        kind: 'surface',
+        panels: { occurrence: { logY: false, fullRange: true },
+                  lee: { logX: true, logY: true, invert: true } },
+        windows: { agg: 18 },
+    };
+    assert.deepEqual(withoutPanelLogs(stored), {
+        kind: 'surface',
+        panels: { occurrence: { fullRange: true }, lee: { invert: true } },
+        windows: { agg: 18 },
+    });
+    // Everything outside `panels` is the reader's and survives the bump.
+    assert.deepEqual(withoutPanelLogs(stored).windows, { agg: 18 });
+});
+
+test('an entry with no panels passes through the v5 migration unchanged', () => {
+    const stored = { kind: 'surface', windows: { agg: 18 } };
+    assert.deepEqual(withoutPanelLogs(stored), stored);
+    for (const bad of [null, undefined, 7, 'log', [1, 2]]) {
+        assert.deepEqual(withoutPanelLogs(bad), {});
+    }
+    // A panel blob that is not an object is dropped rather than carried.
+    assert.deepEqual(withoutPanelLogs({ panels: { lee: 7 } }), { panels: {} });
 });
