@@ -247,24 +247,33 @@ export const NAV_GROUPS = {
         // key stays because it is in `data-tab`, the pane ids, the stored view
         // state and any link already shared.
         label: 'PnL',
+        // Order is the reading order: the sheet first, then the walk across
+        // the tower, then the line by line ledger a reader drops into last.
+        // `activeLeaf` falls back to the first live leaf, so a freshly built
+        // P&L opens on Summary. The keys are unchanged: they are in
+        // `data-tab`, the pane ids, `LOADERS`, the stored per-object view
+        // state and any link already shared, so `ratios` stays `ratios`
+        // though its label now reads Summary.
         leaves: {
-            ledger: {
-                label: 'Ledger',
-                exhibit: 'economic',
-                why: 'a P&L only',
-                hint: 'the P&L sheet, line by line',
-            },
             ratios: {
-                label: 'Ratios',
+                label: 'Summary',
                 exhibit: 'economic_ratios',
                 why: 'a P&L only',
-                hint: 'the same sheet read as ratios',
+                hint: 'expected premium, loss, expense and margins, and '
+                    + 'corresponding ratios',
             },
             waterfall: {
                 label: 'Waterfall',
                 exhibit: 'economic_waterfall',
                 why: 'a P&L tower only',
-                hint: 'the margin walk, gross to net; a tower only',
+                hint: 'the margin (M) and standalone and diversified 1-in-100 '
+                    + 'margin walk over the whole tower',
+            },
+            ledger: {
+                label: 'Ledger',
+                exhibit: 'economic',
+                why: 'a P&L only',
+                hint: 'the P&L sheet, line by line',
             },
         },
     },

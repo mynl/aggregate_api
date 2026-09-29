@@ -12,7 +12,7 @@ resolution-markers = [
 
 [[package]]
 name = "aggregate"
-version = "1.0.0a355"
+version = "1.0.0a358"
 source = { editable = "../../worktrees/aggregate_REFACTOR" }
 dependencies = [
     { name = "greater-tables" },
@@ -28,6 +28,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aggregate", extras = ["notebook", "numba", "massive", "viz"], marker = "extra == 'all'" },
     { name = "attrs", marker = "extra == 'notebook'" },
     { name = "bokeh", marker = "extra == 'viz'" },
     { name = "datashader", marker = "extra == 'viz'" },
@@ -64,11 +65,11 @@ requires-dist = [
     { name = "sphinxcontrib-bibtex", marker = "extra == 'dev'" },
     { name = "zarr", marker = "extra == 'massive'", specifier = ">=3" },
 ]
-provides-extras = ["dev", "notebook", "numba", "massive", "viz"]
+provides-extras = ["dev", "notebook", "numba", "massive", "viz", "all"]
 
 [[package]]
 name = "aggregate-api"
-version = "1.0.0a174"
+version = "1.0.0a175"
 source = { editable = "." }
 dependencies = [
     { name = "aggregate" },

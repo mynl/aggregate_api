@@ -1807,8 +1807,8 @@ function frameDoc(which) {
  * route and nothing here knows what either perspective does to a frame.
  *
  * Thirteen of the nineteen table leaves take one, which is every leaf drawing a
- * published exhibit: Overview Summary, Tail and Validation; Economics Ledger,
- * Ratios and Waterfall; Reinsurance Summary and Stats; More Stats, Tail
+ * published exhibit: Overview Summary, Tail and Validation; Economics Summary,
+ * Waterfall and Ledger; Reinsurance Summary and Stats; More Stats, Tail
  * behavior, Window, Dependency and Sharpen (since a94). The other six are the
  * two densities and the four Pricing and Bounds tables, and the reason each is
  * still outside the generic exhibit loader is above `LOADERS`.

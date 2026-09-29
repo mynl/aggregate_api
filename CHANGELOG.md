@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a175
+
+Five presentation changes the author asked for, in one pass, three here and two in the library at `aggregate` `1.0.0a358`. Nothing computational moves: every number served after this is the number served before it.
+
+- **The PnL sub-tabs read `Summary  Waterfall  Ledger`.** They were `Ledger  Ratios  Waterfall`. The order is the reading order, the sheet first and the line by line ledger last, so a freshly built P&L now opens on Summary rather than Ledger. A P&L already visited still returns to whichever leaf it was left on.
+- **`Ratios` is relabeled `Summary`**, with a lede that says what it holds: expected premium, loss, expense and margins, and corresponding ratios. The leaf key stays `ratios`, so saved view state and any shared link keep working. Two pills are now called Summary, this one and Overview's; the group pill tells them apart.
+- **Waterfall gets a lede of its own**, naming the margin and the standalone and diversified 1-in-100 walk across the tower.
+- From the library half: the waterfall's columns rename onto `M01` (`Margin`, `M01 standalone`, `M01 diversified`, `M / M01 standalone`, `M / M01 diversified`), their captions are rewritten to introduce the word, and the kappa chart's right-hand panel is titled `Cession as share of gross`. The two ratio columns now read as percentages. See the `aggregate` `1.0.0a358` entry, which records the frame rename as breaking.
+
 ## 1.0.0a174
 
 - **The `Massive joint` placeholder is retired** from Pricing / Allocate. It had been greyed since a105, waiting on the library to bring the kappa scenario percentiles to the disk-backed one-sweep route. The author's ruling of 2026-09-29 settles it the other way: a massive joint is a zarr store on local disk, so it belongs to a local or VPN session and has no place in an app that is served. The in-memory kappa the Allocate and Plot leaves draw was never what it was waiting for.
