@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a176
+
+Residue of library `aggregate` `1.0.0a362` to `1.0.0a367` (the Palm ladder and the PnL exhibit pass-throughs); the tabs light themselves from the capability payload, so the app half is comments, one hint, and one test.
+
+- **A reinsured P&L lights the whole Re row and Overview's Tail and Validation.** No app change: `Re / Plot` gates on the `reins` chart, `Re / Summary / Stats / Density` on the `reins` exhibit, `Overview / Tail` on the `tail` exhibit and `Overview / Validation` on `validation`, all of which the library now serves for a P&L through its wrapped engine. The `nav.js` comment recording the 2026-09-25 "Diagram and nothing else" ruling is rewritten to record the 2026-09-29 supersession (library a366 / a367); Plot stays dark on a reinsured *portfolio*, the a244 decision, which does not carry over because an `xpnl` wraps a single aggregate.
+- **The Tail leaf's `why` hint names the P&L** ("an aggregate, a portfolio, or a P&L over its closing margin"); the `Tail behavior` hint is unchanged, that exhibit staying aggregate and portfolio only.
+- **`test_pnl_builds_and_reports` follows the library surface**: `reins_summary_df` exists on every P&L since a367 (a delegation over the engine), so an uncessioned P&L serves an empty frame with a 200 where the test pinned a 400. The Re tabs still gate on the `reins` exhibit, which needs an actual cession.
+- Re-sync required so the editable `aggregate` records `1.0.0a367`.
+
 ## 1.0.0a175
 
 Five presentation changes the author asked for, in one pass, three here and two in the library at `aggregate` `1.0.0a358`. Nothing computational moves: every number served after this is the number served before it.

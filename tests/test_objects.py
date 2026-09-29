@@ -1573,18 +1573,19 @@ def test_pnl_builds_and_reports(client):
     # item of the library's own round-3 plan: a P&L outcome has a downside worth
     # reading return periods off, and it carried the old semantics under the new
     # name until then. This asserted the absence, so it is pinned to the new
-    # contract rather than deleted.
-    #
-    # The navigation is deliberately unmoved by that: Overview / Tail gates on
-    # the `tail` *exhibit*, which the library has not registered for a P&L, so
-    # the frame is reachable through the api and the leaf stays dark. If the
-    # exhibit follows upstream, `check-nav.mjs` is what will say so.
+    # contract rather than deleted. The exhibit followed upstream at library
+    # a366 ([PnL-Overview-Punchups]), so Overview / Tail now lights for a P&L
+    # with no app change, the leaf gating on the `tail` exhibit as always.
     assert client.get(f"/v1/objects/{oid}/tail_df").status_code == 200
-    # No pricing / reinsurance / bs-window -> clean 400 (not 500).
+    # No pricing / bs-window -> clean 400 (not 500).
     assert client.post(
         f"/v1/objects/{oid}/pricing/calibrate", json={"p": 0.99, "coc": 0.15}
     ).status_code == 400
-    assert client.get(f"/v1/objects/{oid}/reins_summary_df").status_code == 400
+    # `reins_summary_df` exists on every P&L since library a367
+    # ([PnL-Reins-Passthrough]), a delegation over the wrapped engine, so an
+    # uncessioned P&L serves an empty frame rather than a 400; the Re tabs
+    # still gate on the `reins` exhibit, which needs an actual cession.
+    assert client.get(f"/v1/objects/{oid}/reins_summary_df").status_code == 200
     assert client.get(f"/v1/objects/{oid}/bs_window_df").status_code == 400
 
 

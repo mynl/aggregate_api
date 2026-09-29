@@ -99,7 +99,7 @@ export const NAV_GROUPS = {
             tail: {
                 label: 'Tail',
                 exhibit: 'tail',
-                why: 'needs a full loss distribution, so an aggregate or a portfolio',
+                why: 'needs a full loss distribution: an aggregate, a portfolio, or a P&L over its closing margin',
                 hint: 'VaR, TVaR and xsVaR by return period',
             },
         },
@@ -134,18 +134,17 @@ export const NAV_GROUPS = {
         // entry box below the row: the tower is the most legible confirmation
         // that a just-typed cession means what was intended.
         //
-        // The two chart leaves have different predicates, and the difference is
-        // deliberate on both sides. `chart_reins` is registered for `Aggregate`
-        // alone, so Plot is dark on a reinsured portfolio: that was logged as
-        // the `replot` item and library a244 settled it the other way, as the
-        // author's decision for 1.0, since a book's units cede on different
-        // stages and a portfolio-level gross / ceded / net triple would have to
-        // pretend they cede on the same one. `chart_structure` takes a `PnL`
-        // as well as an `Aggregate`, so a reinsured P&L lights Diagram and
-        // nothing else here, which is the first time this group has been live
-        // for a P&L at all. Kept, on the author's ruling of 2026-09-25: the
-        // program's shape is the most useful thing that object can say, and the
-        // entry box below already greys itself with its own reason.
+        // The two chart leaves' predicates agree on a reinsured P&L since
+        // library a367 ([PnL-Reins-Passthrough], the author's 2026-09-29
+        // ruling superseding 2026-09-25's "Diagram and nothing else"):
+        // `chart_reins` and the `reins` exhibit both serve a `PnL` through
+        // its wrapped engine, so a reinsured P&L lights the whole row, Plot
+        // and the three tables included. Plot stays dark on a reinsured
+        // *portfolio*: library a244 settled that as the author's decision
+        // for 1.0, since a book's units cede on different stages and a
+        // portfolio-level gross / ceded / net triple would have to pretend
+        // they cede on the same one, and an `xpnl` wraps a single aggregate,
+        // which is why the objection does not carry over to the P&L.
         leaves: {
             diagram: {
                 label: 'Diagram',
