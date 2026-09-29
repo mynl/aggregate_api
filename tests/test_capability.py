@@ -198,6 +198,23 @@ def test_the_structure_chart_tracks_a_cession(client):
         assert "structure" not in lists[label], label
 
 
+def test_the_kappa_chart_tracks_a_cession(client):
+    """``kappa`` lights Pricing, Plot exactly where there is a split to draw.
+
+    The library's [PnL-Kappa-Chart] registration (a369) looks through the
+    P&L's engine, so a reinsured P&L lists the chart (and serves the
+    per-layer Palm curves) while the plain P&L stays dark; a plain
+    aggregate has no cession to condition on either way.
+    ``test_every_listed_chart_serves`` then covers serving.
+    """
+    lists = {label: _build(client, label)[1]["capability"]["charts"]
+             for label in ("agg_reins", "xpnl", "pnl", "agg")}
+    assert "kappa" in lists["agg_reins"]
+    assert "kappa" in lists["xpnl"]
+    assert "kappa" not in lists["pnl"]
+    assert "kappa" not in lists["agg"]
+
+
 def test_capability_reproduces_the_retired_tables(client):
     """The derived answer agrees with the hand tables the app used to carry.
 

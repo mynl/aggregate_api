@@ -191,7 +191,9 @@ export const NAV_GROUPS = {
     // they are two tabs. Summing the parts priced alone against the whole is
     // the diversification story; decomposing the whole into the parts is the
     // consistency one. Through a102 both answered to the name Allocate, and
-    // only the second is an allocation.
+    // only the second is an allocation. Since 2026-09-29 (library a369) Plot
+    // also lights for a reinsured P&L through its engine, the group's one
+    // leaf that does.
     pricing: {
         label: 'Pricing',
         leaves: {
@@ -213,8 +215,15 @@ export const NAV_GROUPS = {
             // one gated on a chart. It asks a question of the object rather
             // than of a form: a kappa curve conditions on an outcome, not on a
             // distortion, so there is no calibration for it to wait for.
+            // 2026-09-29 supersession (library a368/a369): an aggregate's
+            // default document is now the Palm route, mean curves on the fine
+            // model grid with one curve per occurrence layer and no joint;
+            // the percentile band rides only on a joint input (or the
+            // library's bands option). A reinsured P&L serves through its
+            // wrapped engine, which is what lights this leaf for an xpnl.
             plot: { label: 'Plot', chart: 'kappa',
-                    why: 'needs a book of units or an occurrence cession',
+                    why: 'needs a book of units, an occurrence cession, or '
+                        + 'a reinsured P&L',
                     hint: 'the kappa curves behind the allocation: what each '
                         + 'part expects, given the whole' },
             // A chart leaf like Plot, so the pill lights from the library's

@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a177
+
+Residue of library `aggregate` `1.0.0a368` / `1.0.0a369` (the Palm kappa route and the P&L registration); the tab lights itself from the capability payload, so the app half is comments, one `why` hint, and one test.
+
+- **Pricing / Plot lights for a reinsured P&L.** No app change: the leaf gates on the `kappa` chart, which the library now serves for a P&L through its wrapped engine, the per-layer Palm curves on a peel included. The leaf's `why` reads "needs a book of units, an occurrence cession, or a reinsured P&L".
+- **The chart under the leaf changed shape by default.** An aggregate serves the Palm route: mean curves on the fine model grid, one per occurrence layer, no percentile band. The band remains on a joint input, and the library's `bands` option restores it on an aggregate; an exotic frequency still serves the 2-D band chart. The leaf and Pricing group comments record the 2026-09-29 supersession.
+- **`test_the_kappa_chart_tracks_a_cession`** pins the capability: `kappa` listed for the reinsured aggregate and the reinsured P&L, absent for the plain P&L and the plain aggregate; `test_every_listed_chart_serves` covers serving.
+- Re-sync required so the editable `aggregate` records `1.0.0a369`.
+
 ## 1.0.0a176
 
 Residue of library `aggregate` `1.0.0a362` to `1.0.0a367` (the Palm ladder and the PnL exhibit pass-throughs); the tabs light themselves from the capability payload, so the app half is comments, one hint, and one test.
