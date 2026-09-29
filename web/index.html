@@ -590,21 +590,16 @@
                     <div id="pane-standalone" class="pane d-none"></div>
                 </div>
 
+                <!-- A `Massive joint` placeholder sat here from a105 to a173,
+                     greyed, waiting on the library to bring kappa to the
+                     disk-backed one-sweep route. It is gone on the author's
+                     ruling of 2026-09-29: a massive joint is a zarr store on
+                     local disk, so it belongs to a local or VPN session and
+                     never to a served app. The in-memory kappa this pane and
+                     the Plot leaf draw was never the thing it was waiting
+                     for. -->
                 <div id="leaf-allocate" class="d-none">
                     <div class="control-band"><div id="allocate-form"></div></div>
-                    <!-- The massive placeholder. A control that cannot be
-                         operated, said out loud rather than hidden, per the
-                         house rule that nothing coming is invisible. The
-                         disk-backed joint cannot serve the kappa curve yet;
-                         when the library's band iterator lands this becomes a
-                         real switch and the joint's sizing moves onto the form
-                         beside it. -->
-                    <label class="massive-toggle nav-off"
-                           data-why="the disk-backed joint cannot serve the kappa curve yet; a post 1.0 item">
-                        <input type="checkbox" id="allocate-massive" disabled
-                               aria-label="Massive joint, the disk-backed joint cannot serve the kappa curve yet; a post 1.0 item">
-                        <span>Massive joint</span>
-                    </label>
                     <div id="pane-allocate" class="pane"></div>
                 </div>
 

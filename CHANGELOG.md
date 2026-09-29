@@ -4,6 +4,11 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a174
+
+- **The `Massive joint` placeholder is retired** from Pricing / Allocate. It had been greyed since a105, waiting on the library to bring the kappa scenario percentiles to the disk-backed one-sweep route. The author's ruling of 2026-09-29 settles it the other way: a massive joint is a zarr store on local disk, so it belongs to a local or VPN session and has no place in an app that is served. The in-memory kappa the Allocate and Plot leaves draw was never what it was waiting for.
+- Removes the markup, the `.massive-toggle` rules, and the last app surface that named the massive path. The `data-why` footnote still serves the two tab levels and the approximation pill.
+
 ## 1.0.0a173
 
 Two reports from the author reading a172: a square panel drawn too large, and a second dead log button.

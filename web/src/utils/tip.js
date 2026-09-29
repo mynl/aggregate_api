@@ -1,10 +1,11 @@
 // The `data-why` footnote: one node, and the clamp that keeps it on screen.
 //
 // The page has one hand rolled tooltip and it is used in three places: the dark
-// group tabs, the dark sub-tab leaves, and the Allocate leaf's
-// `.massive-toggle` placeholder. Every one of them carries `data-why`, which is
-// set exactly when there is a reason to show and removed when there is not, so
-// the attribute is the whole test.
+// group tabs, the dark sub-tab leaves, and the approximation pill that cannot
+// be plotted. Every one of them carries `data-why`, which is set exactly when
+// there is a reason to show and removed when there is not, so the attribute is
+// the whole test. The Allocate leaf's `Massive joint` placeholder was a fourth
+// through a173, when it was retired.
 //
 // **Why it is a node rather than a pseudo-element.** Through a137 the box was
 // `.nav-off[data-why]:hover::after` and the arrow was the matching `::before`.
