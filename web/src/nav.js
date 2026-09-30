@@ -37,12 +37,19 @@
  */
 
 /**
- * The six groups, in the order they are drawn.
+ * The seven groups, in the order they are drawn.
  *
  * **Key order is load bearing.** It is the tab strip's order, it is what
- * `Alt+1…6` indexes, and it has to match the `<ul class="out-tabs">` list in
+ * `Alt+1…7` indexes, and it has to match the `<ul class="out-tabs">` list in
  * `index.html`, which is the same order written a second time in markup.
  * `dev/scripts/check-nav.mjs` parses that list and asserts the two agree.
+ *
+ * `lab` is the one group whose leaves are **not** authored, because they cannot
+ * be: they come from whatever plugin packages are installed. Its `leaves` start
+ * empty and `installLabLeaves` fills them from the boot manifest. Everything
+ * below the skeleton (`leafAvailable`, `activeLeaf`, `whyGroup`, ...) then works
+ * on them unchanged, which is the whole reason they are installed into the
+ * skeleton rather than carried beside it.
  *
  * The order is the demo flow: look at the gross book, add reinsurance, decide
  * what to charge for what is left, then read the economics of the result.
@@ -408,7 +415,116 @@ export const NAV_GROUPS = {
             },
         },
     },
+    // Where third-party documents land. Last, and the only group with no
+    // authored leaves: a plugin registers a chart or an exhibit into the
+    // library and its leaf appears here, so there is nothing for this file to
+    // name. `Lab` rather than `Extras` because it says experimental, which is
+    // the honest description of what is under it; label and key agree because
+    // the group is new and there was no reason to start a second divergence
+    // like `reinsurance`/`Re`.
+    //
+    // The group is **omitted from the strip entirely** when no plugin is
+    // loaded, which is the one exception to the house rule that nothing is
+    // hidden. The rule is about a capability this object lacks; an absent
+    // plugin is an uninstalled package, and a permanently empty tab on a stock
+    // install is noise rather than information.
+    lab: {
+        label: 'Lab',
+        dynamic: true,
+        leaves: {},
+    },
 };
+
+/**
+ * Every exhibit and chart name the six authored groups already claim.
+ *
+ * Used to keep a plugin from putting a second pill on a document the app
+ * already shows somewhere it was placed deliberately. A plugin that registers a
+ * name the library owns is refused by the loader long before this, so what this
+ * catches is the narrower case: a leaf the app authored over a name the plugin
+ * legitimately owns.
+ *
+ * @returns {Set<string>} `kind:name`, so a chart and an exhibit sharing a name
+ *   (`reins` is both) are distinct entries.
+ */
+export function authoredLeafNames() {
+    const names = new Set();
+    for (const [group, def] of Object.entries(NAV_GROUPS)) {
+        if (group === 'lab') continue;
+        for (const leaf of Object.values(def.leaves || {})) {
+            if (leaf.exhibit) names.add(`exhibit:${leaf.exhibit}`);
+            if (leaf.chart) names.add(`chart:${leaf.chart}`);
+        }
+    }
+    return names;
+}
+
+/**
+ * Turn the boot manifest's plugin list into Lab leaf definitions.
+ *
+ * Pure: it reads the manifest and returns definitions, touching nothing. The
+ * order is plugin name alphabetically, then registration order within a plugin,
+ * which is what the api already reports, so it is stable across installs and
+ * does not depend on the order `importlib.metadata` happened to return
+ * distributions in.
+ *
+ * A failed plugin contributes no leaves, because it registered nothing. Its
+ * error still travels on the manifest and the About panel shows it: a plugin
+ * that silently did not load is otherwise debugged by wondering why a tab is
+ * empty.
+ *
+ * @param {Array} plugins the `plugins` array from `GET /v1/meta`.
+ * @returns {object} `{leafKey: definition}`, ready to install.
+ */
+export function labLeavesFromManifest(plugins) {
+    const authored = authoredLeafNames();
+    const leaves = {};
+    for (const plugin of plugins || []) {
+        for (const leaf of plugin.leaves || []) {
+            if (leaf.kind !== 'exhibit' && leaf.kind !== 'chart') continue;
+            if (authored.has(`${leaf.kind}:${leaf.name}`)) continue;
+            // Keyed by kind and name together, so one plugin may contribute a
+            // chart and an exhibit under one name without the second silently
+            // replacing the first.
+            const key = `${leaf.kind}-${leaf.name}`;
+            if (key in leaves) continue;
+            leaves[key] = {
+                label: leaf.label || leaf.name,
+                hint: leaf.hint || '',
+                why: leaf.why || 'not available for this object',
+                // The gate, and it is the ordinary one: a Lab leaf lights from
+                // the same `available_exhibits` / `available_charts` the other
+                // six groups read. Lab membership is fixed for the process;
+                // whether a leaf answers is per object, like everything else.
+                [leaf.kind]: leaf.name,
+                // Provenance, for the badge. Which plugin owns a name is
+                // process-wide, so it belongs here rather than on the
+                // per-object capability payload.
+                plugin: plugin.name,
+                pluginVersion: plugin.version || null,
+            };
+        }
+    }
+    return leaves;
+}
+
+/**
+ * Install the Lab leaves for this process, and say how many there are.
+ *
+ * The one mutation of `NAV_GROUPS` in the app, and it is deliberate: writing the
+ * leaves into the skeleton is what lets `leafOf`, `leafAvailable`,
+ * `groupAvailable`, `activeLeaf`, `whyLeaf` and `whyGroup` treat a plugin's leaf
+ * as an ordinary one, with no branch anywhere for the dynamic case. Called once,
+ * from the boot path, after the meta fetch resolves.
+ *
+ * @param {Array} plugins the `plugins` array from `GET /v1/meta`.
+ * @returns {number} how many leaves Lab has, so the caller knows whether to
+ *   reveal the tab at all.
+ */
+export function installLabLeaves(plugins) {
+    NAV_GROUPS.lab.leaves = labLeavesFromManifest(plugins);
+    return Object.keys(NAV_GROUPS.lab.leaves).length;
+}
 
 /** The leaf definition for a group, by key. */
 export function leafOf(group, key) {

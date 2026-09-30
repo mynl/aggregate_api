@@ -1001,6 +1001,44 @@ class HealthResponse(BaseModel):
     aggregate_version: str
 
 
+class PluginLeafInfo(BaseModel):
+    """One document a plugin contributes, with the strings the plugin authored.
+
+    Mirrors :class:`aggregate.plugins.PluginLeaf`. The labels ride on the plugin
+    rather than on the chart or exhibit registry entry, because a navigation hint
+    is a client concern and a registry entry is an IR one.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    name: str
+    kind: str
+    label: str
+    hint: str = ""
+    why: str = ""
+
+
+class PluginInfo(BaseModel):
+    """One discovered plugin, whether or not it loaded.
+
+    Notes
+    -----
+    ``error`` is **one line**, not a traceback. The traceback goes to the server
+    log; what a reader needs from the About panel is that a plugin failed and
+    roughly why. Meta already carries five other facts and must not become the
+    place tracebacks accumulate. A failed plugin does have to appear *somewhere*
+    a human looks, or an empty Lab tab becomes a debugging session.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    name: str
+    version: str | None = None
+    source: str
+    leaves: list[PluginLeafInfo] = []
+    error: str | None = None
+
+
 class MetaResponse(BaseModel):
     model_config = _RESPONSE_CFG
 
@@ -1014,6 +1052,13 @@ class MetaResponse(BaseModel):
     log2_default: int
     build_timeout_s: float
     cache_max: int
+    # Third-party charts and exhibits, and the tab they land under. On meta
+    # rather than on a /v1/plugins route of its own because the SPA already
+    # fetches meta unconditionally at boot, on the very path that has to resolve
+    # before the tab strip can know whether Lab exists; a second route would buy
+    # a second round trip to carry a handful of strings. Empty on a stock
+    # install, which is what suppresses the tab entirely.
+    plugins: list[PluginInfo] = []
 
 
 class StatusResponse(BaseModel):

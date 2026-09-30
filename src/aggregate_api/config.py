@@ -209,8 +209,57 @@ class Settings(BaseSettings):
     status_refresh_s: float = 10.0
 
     # ------------------------------------------------------------------
+    # Plugins
+    # ------------------------------------------------------------------
+    # Whether this process runs third-party `aggregate.plugins` registrations.
+    #
+    # The library deliberately does **not** auto-load on `import aggregate`, so
+    # that `build()` stays reproducible and a notebook's results are a function
+    # of the notebook's own text. The decision belongs to the host, and a server
+    # is a deployment, so it is a setting here rather than a fact about what
+    # happens to be installed.
+    #
+    # On by default: the case that exists is a local deployment running the
+    # author's own plugin packages. A plugin is Python in this process with full
+    # privileges and there is no sandbox, which is acceptable while the bind is
+    # 127.0.0.1 and the packages are the author's own, and is exactly why the
+    # allowlist below exists for the case where neither holds.
+    plugins_enabled: bool = True
+
+    # Which plugins to admit, by name. Empty means all of them, which is what a
+    # local deployment wants. A comma-separated list admits only those named, so
+    # a hosted deployment can state what it trusts rather than inheriting
+    # whatever is on the image.
+    #
+    # ``validation_alias`` so the env var stays AGGAPI_PLUGINS_ALLOW rather than
+    # the auto-derived AGGAPI_PLUGINS_ALLOW_RAW, matching the CORS and CIDR
+    # fields above.
+    plugins_allow_raw: str = Field(
+        default="",
+        validation_alias="AGGAPI_PLUGINS_ALLOW",
+    )
+
+    # ------------------------------------------------------------------
     # Derived properties
     # ------------------------------------------------------------------
+    @property
+    def plugins_allow(self) -> list[str] | None:
+        """Parse ``AGGAPI_PLUGINS_ALLOW`` into an allowlist, or None for all.
+
+        Returns
+        -------
+        list of str or None
+            None where the setting is empty, which is what
+            :func:`aggregate.plugins.load` takes to mean "admit everything
+            discovered". An empty *list* would mean the opposite, admit nothing,
+            so the distinction is load bearing and is not a tidied-away falsy
+            check.
+        """
+        raw = self.plugins_allow_raw.strip()
+        if not raw:
+            return None
+        return [name.strip() for name in raw.split(",") if name.strip()]
+
     @property
     def cors_origins(self) -> list[str]:
         """Parse ``AGGAPI_CORS_ORIGINS`` into a list of origins."""

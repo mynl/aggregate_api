@@ -33,6 +33,7 @@ import { mountIrTable, irToGrid, docTruncated, atFullPrecision } from './tables.
 import { renderError, renderRateLimit } from './error-pane.js';
 import {
     NAV_GROUPS,
+    installLabLeaves,
     leafOf,
     leafAvailable as navLeafAvailable,
     groupAvailable as navGroupAvailable,
@@ -1244,7 +1245,7 @@ $('summary-more').addEventListener('click', () => {
 const PANE_OF = {
     overview: 'pane-overview', economics: 'pane-economics',
     reinsurance: 'pane-reinsurance', pricing: 'pane-calibrate',
-    bounds: 'pane-bounds', more: 'pane-more',
+    bounds: 'pane-bounds', more: 'pane-more', lab: 'pane-lab',
 };
 const ALL_PANES = [...Object.values(PANE_OF), 'pane-standalone', 'pane-allocate',
                    'pane-kappa', 'pane-evaluate', 'pane-ruin', 'pane-ruin-stats'];
@@ -1279,7 +1280,8 @@ function showTab(name) {
 }
 
 // ----------------------------------------------------------------------
-// The navigation: six groups, each with its own sub-tab row
+// The navigation: seven groups, each with its own sub-tab row. Six are
+// authored; `lab` is filled from the boot plugin manifest
 // ----------------------------------------------------------------------
 //
 // The skeleton and the rules that decide what is live in it are in `nav.js`,
@@ -1538,7 +1540,11 @@ function selectLeaf(group, key) {
 async function loadLeaf(group) {
     if (!state.id) return;
     const key = activeLeaf(group);
-    const load = LOADERS[`${group}:${key}`];
+    // `lab` is the one group whose leaves are not in LOADERS, because they are
+    // not authored: they come from whatever plugins are installed. One generic
+    // loader serves the whole key space, dispatching on the leaf's kind.
+    const load = LOADERS[`${group}:${key}`]
+        || (group === 'lab' ? () => loadLabLeaf(key) : null);
     if (!load || !leafAvailable(group, key)) return;
     if (state.rendered[group] === key) return;
     state.rendered[group] = key;
@@ -1714,7 +1720,8 @@ document.querySelectorAll('.sub-tabs')
     .forEach((row) => wireStripKeys(row, '.sub-link'));
 
 /**
- * `Alt+1…6` jumps straight to a group from anywhere, including the editor.
+ * `Alt+1…7` jumps straight to a group from anywhere, including the editor.
+ * Indexed off `NAV_GROUPS` key order, so `lab` needed no edit here.
  *
  * Alt is the one modifier the editor does not already spend: Ctrl+Enter builds,
  * Ctrl+Space completes, and Ctrl+arrows walk history and the example library. A
@@ -2158,7 +2165,7 @@ function mountTable(paneId, host, source, gridOpts = GRID_FULL) {
 // `/meta` fetch to draw it with.
 //
 // Both fields ride on the build response now, so the strip has them without
-// asking, and it is drawn under all six groups where this row was drawn under
+// asking, and it is drawn under every group where this row was drawn under
 // one. `GET /v1/objects/{id}/meta` is still a route, and still the place to ask
 // for the program and its hints; nothing in the app asks it any more.
 
@@ -2284,6 +2291,39 @@ function ledeFor(group, key) {
  *   static / interactive flip and would otherwise wipe the control that is
  *   sitting above the table it just redrew.
  */
+/**
+ * Draw any Lab leaf, whatever plugin put it there.
+ *
+ * The one loader for the whole `lab:*` key space, and deliberately the only new
+ * rendering code the plugin mechanism needs. A plugin contributes **documents**:
+ * an exhibit arrives as the same envelope every other table leaf draws, and a
+ * chart arrives as a `ChartDoc` the ECharts adapter already knows how to draw.
+ * There is nothing plugin-specific to render, which is the whole reason the
+ * mechanism is cheap.
+ *
+ * A plugin contributes no app *behavior*, so there is no third branch here and
+ * there must not be one: forms and input controls are the `flag` leaf kind and
+ * they stay the app's.
+ *
+ * @param {string} key the Lab leaf key, `exhibit-<name>` or `chart-<name>`.
+ */
+async function loadLabLeaf(key) {
+    const leaf = leafOf('lab', key);
+    if (!leaf) return;
+    if (labChart) { labChart.dispose(); labChart = null; }
+    if (leaf.exhibit) {
+        await loadExhibitLeaf('pane-lab', leaf.exhibit, ['lab', key]);
+        return;
+    }
+    const doc = await api.chartDoc(state.id, leaf.chart);
+    const host = el('div');
+    replacePane('pane-lab', host);
+    labChart = mountChartDoc(host, doc);
+}
+
+/** The live Lab chart, held so it is disposed before the next draw. */
+let labChart = null;
+
 async function loadExhibitLeaf(paneId, name, leaf, block = null, header = null) {
     const envelope = await api.exhibit(state.id, name, _perspective);
     const all = envelope.blocks || [];
@@ -4032,9 +4072,48 @@ api.meta().then((meta) => {
     // question this answers most often.
     const strip = $('nav-versions');
     if (strip) strip.textContent = `agg ${meta.aggregate_version} · api ${meta.version}`;
+    installPlugins(meta.plugins || []);
 }).catch(() => {
     $('about-api').textContent = '(api offline)';
 });
+
+/**
+ * Take the boot manifest: fill the Lab group's leaves and reveal its tab.
+ *
+ * Called once, from the meta fetch, which is the first thing to resolve and is
+ * already unconditional. The leaves go into `NAV_GROUPS` itself, so every gating
+ * rule treats a plugin's leaf as an ordinary one.
+ *
+ * The tab is revealed rather than appended, and it stays hidden when nothing is
+ * loaded. That is the one exception to the house rule that nothing is hidden:
+ * the rule is about a capability *this object* lacks, and an absent plugin is an
+ * uninstalled package rather than a library capability, so a permanently empty
+ * tab on a stock install would be noise.
+ *
+ * A plugin that failed to load is listed in the About panel with its one-line
+ * error, because a plugin that silently did not load is otherwise debugged by
+ * wondering why a tab is empty.
+ *
+ * @param {Array} plugins the `plugins` array from `GET /v1/meta`.
+ */
+function installPlugins(plugins) {
+    const count = installLabLeaves(plugins);
+    const slot = $('tab-lab-slot');
+    if (slot) slot.classList.toggle('d-none', count === 0);
+    const about = $('about-plugins');
+    if (!about) return;
+    if (!plugins.length) {
+        about.textContent = 'none';
+        return;
+    }
+    about.textContent = plugins
+        .map((p) => {
+            const version = p.version ? ` ${p.version}` : '';
+            return p.error ? `${p.name}${version} (failed: ${p.error})`
+                           : `${p.name}${version}`;
+        })
+        .join(', ');
+}
 
 // Download every DecL program built this session, canonical and re-loadable,
 // from the underwriter's session recipes. The attachment header makes the

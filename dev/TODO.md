@@ -4,6 +4,16 @@ Pending work for `aggregate_api`, newest thinking at the bottom of each list.
 What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 `dev/done/`.
 
+## Landed
+
+- **[Lab-Tab]** DONE (`1.0.0a179`), plan `dev/plan-a179-lab-tab.md`: third-party
+  charts and exhibits appear under a new **Lab** tab, discovered through
+  `aggregate.plugins` entry points. `AGGAPI_PLUGINS_ENABLED` /
+  `AGGAPI_PLUGINS_ALLOW`, the manifest on `GET /v1/meta`, a dynamic seventh nav
+  group, one generic `lab:*` loader. `capability.py` deliberately untouched; see
+  the plan's section 5. Verified against `aggregate-relativity` 0.1.0, which is
+  **not** a dependency of this repo and must not become one.
+
 ## Next up: three things, and then we are in good shape
 
 The author's plan, set out 2026-07-31 (Friday), to finish over the weekend. Each

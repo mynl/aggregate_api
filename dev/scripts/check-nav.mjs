@@ -36,7 +36,7 @@ const repo = path.resolve(here, '..', '..');
 // scheme (`t:`) to the ESM loader, which is the same trap `smoke-charts.mjs`
 // already sidesteps.
 const { NAV_GROUPS, leafAvailable, groupAvailable, activeLeaf, capsFromResponse,
-        leafOf } =
+        leafOf, authoredLeafNames, labLeavesFromManifest } =
     await import(pathToFileURL(path.join(repo, 'web', 'src', 'nav.js')).href);
 
 const fixture = path.join(repo, 'dev', 'fixtures', 'capability.json');
@@ -235,7 +235,7 @@ if (towerCaps && plainCaps) {
 }
 
 // The group order is written twice: as the key order of NAV_GROUPS, which is
-// what `Alt+1…6` indexes, and as the `<ul class="out-tabs">` list in
+// what `Alt+1…7` indexes, and as the `<ul class="out-tabs">` list in
 // index.html, which is what the eye reads. Nothing made the two agree until
 // a49, and a strip whose fourth tab is not what Alt+4 opens is the kind of bug
 // nobody reports because each half looks right on its own.
@@ -268,12 +268,66 @@ if (!strip) {
 // text-level reading as the strip above, and for the same reason.
 const mainSrc = readFileSync(path.join(repo, 'web', 'src', 'main.js'), 'utf8');
 for (const [group, def] of Object.entries(NAV_GROUPS)) {
+    // `lab` is exempt, and it is the only one. Its leaves are not authored, so
+    // there is no row to write: one generic loader serves the whole `lab:*` key
+    // space. Its leaves are also empty here, since nothing installed a manifest,
+    // so this loop would find nothing to check either way. The generic loader is
+    // checked for by name instead, just below.
+    if (group === 'lab') continue;
     for (const key of Object.keys(def.leaves || {})) {
         if (leafOf(group, key)?.soon) continue;
         if (!mainSrc.includes(`'${group}:${key}':`)) {
             findings.push(`${group}:${key} has no LOADERS row in main.js: the `
                 + 'pill would light and do nothing');
         }
+    }
+}
+
+// Lab's one loader, in place of the per-leaf rows above. Without it every plugin
+// pill lights and does nothing, which is the failure mode the rows exist to
+// catch and the one a dynamic group cannot be checked for leaf by leaf.
+if (!mainSrc.includes('loadLabLeaf')) {
+    findings.push('lab has no generic loader in main.js (loadLabLeaf): every '
+        + 'plugin pill would light and do nothing');
+}
+if (!mainSrc.includes('installLabLeaves')) {
+    findings.push('main.js never calls installLabLeaves: the Lab group would '
+        + 'stay empty however many plugins are installed');
+}
+
+// A Lab leaf must not duplicate a leaf the app authored. The loader upstream
+// already refuses a plugin that reuses a name the *library* owns; this is the
+// narrower case it cannot see, a pill the app placed deliberately in one of the
+// six groups over a name a plugin legitimately owns. Two pills for one document,
+// in two places, is a menu that has stopped being a map.
+//
+// Checked against a synthetic manifest rather than against the live one, because
+// the live one is empty in this process and an assertion that passes only because
+// there is nothing to check is not an assertion. The rule is what is under test.
+{
+    const authored = authoredLeafNames();
+    if (!authored.has('exhibit:summary')) {
+        findings.push('authoredLeafNames no longer reports exhibit:summary, so '
+            + 'the Lab exclusion rule is being checked against nothing');
+    }
+    const manifest = [{
+        name: 'probe',
+        version: '0.0.0',
+        leaves: [
+            { name: 'summary', kind: 'exhibit', label: 'Clash', hint: '', why: '' },
+            { name: 'brand_new', kind: 'exhibit', label: 'Fine', hint: '', why: '' },
+        ],
+    }];
+    const built = labLeavesFromManifest(manifest);
+    if ('exhibit-summary' in built) {
+        findings.push('a Lab leaf duplicated the authored overview:summary leaf');
+    }
+    if (!('exhibit-brand_new' in built)) {
+        findings.push('labLeavesFromManifest dropped a leaf that clashes with '
+            + 'nothing the app authored');
+    }
+    if (findings.length === 0) {
+        console.log('Lab leaves: unclaimed names admitted, authored names refused');
     }
 }
 

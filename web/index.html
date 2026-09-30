@@ -392,7 +392,7 @@
              response rather than a second request. See the note above the
              Overview loaders in main.js. -->
 
-        <!-- Output navigation: six groups, each with its own sub-tab row.
+        <!-- Output navigation: seven groups, each with its own sub-tab row.
              The groups are editorial, a judgment about how insurance work
              proceeds, and the app authors them. Which leaves are live inside
              one is a fact about the object, so the library computes it and
@@ -406,7 +406,8 @@
              frames. Nothing may stand between a group strip and its sub menu.
 
              This order is written twice, here and as the key order of
-             NAV_GROUPS in nav.js, which is also what Alt+1…6 indexes.
+             NAV_GROUPS in nav.js, which is also what Alt+1…7 indexes.
+             Lab is last and ships hidden; see its slot below.
              `dev/scripts/check-nav.mjs` parses this list and asserts the two
              agree, so they cannot drift apart again. -->
         <!-- `data-label` repeats the visible label, and must keep matching it.
@@ -422,6 +423,14 @@
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-economics"   data-tab="economics"   data-label="PnL"         type="button">PnL</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-bounds"      data-tab="bounds"      data-label="Bounds"      type="button">Bounds</button></li>
             <li class="nav-item"><button class="nav-link"        data-bs-toggle="pill" data-bs-target="#t-more"        data-tab="more"        data-label="More"        type="button">More</button></li>
+            <!-- Lab: where documents from installed plugin packages land. In the
+                 strip statically and hidden, revealed by main.js when the boot
+                 manifest from /v1/meta is non-empty. Appending a seventh tab
+                 from JS after that fetch resolves would shift the layout on
+                 every page load, and it would break check-nav.mjs's premise
+                 that the strip lists every group the app knows about: the strip
+                 still does, and the manifest decides only visibility. -->
+            <li class="nav-item d-none" id="tab-lab-slot"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#t-lab"         data-tab="lab"         data-label="Lab"         type="button">Lab</button></li>
         </ul>
 
         <div class="tab-content">
@@ -653,6 +662,15 @@
                 <div id="pane-more" class="pane"></div>
             </div>
 
+            <!-- Lab. One pane, whatever the plugins registered: an exhibit
+                 draws through the same envelope path as every other table leaf
+                 and a chart through the same ChartDoc mount, so there is
+                 nothing plugin-shaped in the markup. -->
+            <div class="tab-pane fade" id="t-lab">
+                <div class="sub-tabs" id="sub-lab"></div>
+                <div id="pane-lab" class="pane"></div>
+            </div>
+
         </div>
     </main>
 
@@ -793,6 +811,11 @@
                 <dt>ECharts</dt><dd id="about-echarts" class="mono">…</dd>
                 <dt>echarts-gl</dt><dd id="about-echarts-gl" class="mono">…</dd>
                 <dt>Bootstrap</dt><dd id="about-bootstrap" class="mono">…</dd>
+                <!-- Installed plugin packages and their versions, with a
+                     one-line reason for any that failed to load. A failed
+                     plugin has to be visible somewhere a human looks, or an
+                     empty Lab tab becomes a debugging session. -->
+                <dt>plugins</dt><dd id="about-plugins" class="mono">…</dd>
             </dl>
 
             <!-- The site's terms. The BSD license disclaims warranties for

@@ -8,7 +8,9 @@ Routes
   the SPA's "server up?" splash logic.
 * ``GET /v1/meta``: runtime config (log2_cap, build_timeout, etc.)
   so the SPA can configure its form widgets (e.g. set the log2
-  slider's max to ``log2_cap``).
+  slider's max to ``log2_cap``), plus the loaded plugin manifest,
+  which is what tells the SPA whether the Lab tab exists and what
+  sits under it.
 * ``GET /v1/meta/style``: the house plot style, read off
   ``aggregate.style``, so the SPA's interactive charts and the
   server-rendered matplotlib plots cannot drift apart.
@@ -25,6 +27,7 @@ from functools import lru_cache
 from importlib.metadata import version as _pkg_version
 from importlib.resources import files
 
+from aggregate import plugins as agg_plugins
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 
@@ -156,7 +159,58 @@ def meta(settings: Settings = Depends(get_settings)) -> dict:
         "log2_default": settings.log2_default,
         "build_timeout_s": settings.build_timeout_s,
         "cache_max": settings.cache_max,
+        "plugins": _plugin_manifest(),
     }
+
+
+def _plugin_manifest() -> list[dict]:
+    """The loaded plugins, their versions, their leaves and any load failure.
+
+    Returns
+    -------
+    list of dict
+        Matching :class:`aggregate_api.models.PluginInfo`, in the order
+        :func:`aggregate.plugins.loaded_plugins` reports, which is plugin name
+        alphabetically. Empty on a stock install and whenever
+        ``AGGAPI_PLUGINS_ENABLED`` is off.
+
+    Notes
+    -----
+    Read per request rather than cached, unlike :func:`_plot_style`. It is a list
+    comprehension over a handful of frozen dataclasses, and a cache would add a
+    second place for a stale answer to live on the one route whose whole job is
+    to say what this process currently is.
+
+    Only the **last line** of a failure's traceback travels. See
+    :class:`aggregate_api.models.PluginInfo` for why.
+    """
+    return [
+        {
+            "name": plugin.name,
+            "version": plugin.version,
+            "source": plugin.source,
+            "leaves": [
+                {
+                    "name": leaf.name,
+                    "kind": leaf.kind,
+                    "label": leaf.label,
+                    "hint": leaf.hint,
+                    "why": leaf.why,
+                }
+                for leaf in plugin.leaves
+            ],
+            "error": _one_line(plugin.error),
+        }
+        for plugin in agg_plugins.loaded_plugins()
+    ]
+
+
+def _one_line(error: str | None) -> str | None:
+    """The last non-empty line of a traceback, which is the exception itself."""
+    if not error:
+        return None
+    lines = [line.strip() for line in str(error).strip().splitlines()]
+    return next((line for line in reversed(lines) if line), None)
 
 
 # ----------------------------------------------------------------------

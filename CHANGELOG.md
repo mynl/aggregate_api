@@ -4,6 +4,20 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a179
+
+[Lab-Tab] third-party charts and exhibits now appear in the app, under one new **Lab** tab. Follows library `aggregate` `1.0.0a376` (`aggregate.plugins`) and `a378` (`register_exhibit`). Plan: `dev/plan-a179-lab-tab.md`.
+
+- **`create_app()` runs plugin registrations**, behind `AGGAPI_PLUGINS_ENABLED` (default on) with an `AGGAPI_PLUGINS_ALLOW` allowlist. The library deliberately does not auto-load on import, because `build()` has to stay reproducible, so the host decides and a server is a deployment that may declare what it trusts. An empty allowlist means all of them; a plugin that fails to load is logged at WARNING and skipped, never fatal.
+- **`GET /v1/meta` reports the manifest**: `plugins`, a list of `{name, version, source, leaves, error}`. On meta rather than a new route because the SPA already fetches meta unconditionally at boot, on the path that must resolve before the tab strip can know whether Lab exists. The error is **one line**, the exception itself; the traceback goes to the server log. The About panel lists installed plugins and any failure.
+- **A seventh nav group, `lab`, drawn last, with leaves that are not authored.** `labLeavesFromManifest` turns the boot manifest into leaf definitions, ordered by plugin name then registration order, dropping any name one of the six authored groups already claims. `installLabLeaves` writes them into `NAV_GROUPS`, so every existing gating rule treats a plugin leaf as an ordinary one: membership is fixed for the process, lit-ness is per object, and a dark leaf shows the plugin's own `why`. `Alt+7` works with no edit, since the shortcut indexes the group keys.
+- **The tab ships hidden in `index.html` and is revealed when the manifest is non-empty**, rather than appended after the fetch, which would shift the layout on every page load. With no plugin installed there is no Lab tab at all: the absent thing is an uninstalled package rather than a capability of the object, so the no-hiding rule does not apply.
+- **One generic loader serves the whole `lab:*` key space**, dispatching on the leaf kind and reusing the existing exhibit-envelope pane and ChartDoc mount. No new rendering code, and no third branch: a plugin contributes documents, never app behavior.
+- **`capability.py` is untouched**, a deliberate departure from the library plan's section 6, which asked for a per-entry `provenance` field. Provenance is process-wide rather than per object, the manifest on meta already carries it, and `charts_for` returns bare strings so a per-entry field would change its shape and `models.Capability` with it. Reasoning in the plan's section 5.
+- `check-nav.mjs` gains the Lab invariants: the generic loader must exist, `installLabLeaves` must be called, and no Lab leaf may duplicate an authored one, checked against a synthetic manifest so the rule is under test rather than an empty list.
+
+Verified end to end against `aggregate-relativity` 0.1.0: its entry point is discovered with no configuration, `/v1/meta` names it, `GET /v1/objects/{id}/exhibit/relativity` serves eight rows through the pre-existing generic route with **zero endpoint changes**, and the leaf is dark on an `Aggregate`. The plugin is not a dependency of this repo and must never become one; install it ad hoc with `uv pip install -e ../aggregate-relativity --no-deps`, which the next `uv sync` will prune.
+
 ## 1.0.0a178
 
 Residue of library `aggregate` `1.0.0a375` ([Bounds-PnL-Engine]: `Bounds` and `PricingBounds` accept a P&L through its wrapped engine). The Bounds group lights for a P&L and answers on the engine's loss distribution.

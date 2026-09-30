@@ -24,9 +24,11 @@ Swagger UI (``/docs``) are added by FastAPI automatically.
 
 from __future__ import annotations
 
+import logging
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
 
+from aggregate import plugins as agg_plugins
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -40,6 +42,41 @@ from .routes import examples as examples_routes
 from .routes import meta as meta_routes
 from .routes import objects as objects_routes
 from .routes import status as status_routes
+
+logger = logging.getLogger(__name__)
+
+
+def _load_plugins(settings: Settings) -> None:
+    """Run third-party ``aggregate.plugins`` registrations, once per process.
+
+    Parameters
+    ----------
+    settings : Settings
+        Read for ``plugins_enabled`` and ``plugins_allow``.
+
+    Notes
+    -----
+    The library does not auto-load on import, by design: ``build()`` has to be
+    reproducible, so a notebook's answers must not depend on what happens to be
+    installed. The host decides, and a server is a deployment that may declare
+    what it trusts, which is why this is here and behind a setting.
+
+    :func:`aggregate.plugins.load` is idempotent, so the many apps a test run
+    builds pay for discovery once. It never raises: a plugin whose import or
+    ``register()`` fails is recorded on its own :class:`~aggregate.plugins.LoadedPlugin`
+    and skipped, and one broken experiment must not take the server down. The
+    failure is logged here, at WARNING, **and** reported on ``GET /v1/meta``,
+    because a plugin that silently did not load is otherwise debugged by
+    wondering why a tab is empty.
+    """
+    if not settings.plugins_enabled:
+        return
+    loaded = agg_plugins.load(allow=settings.plugins_allow)
+    for plugin in loaded:
+        if plugin.ok:
+            continue
+        logger.warning("plugin %r failed to load and was skipped: %s",
+                       plugin.name, plugin.error)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -80,6 +117,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # would make every "since process start" label on the page a lie.
     status.mark_started()
     resources.seed()
+    _load_plugins(settings)
 
     app = FastAPI(
         title="aggregate api",
