@@ -4,6 +4,17 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a180
+
+[Matrix-Renderer] the ECharts adapter reads chart IR version 4 and draws the new `matrix` panel kind. Follows library `aggregate` `1.0.0a379` and `a380`. Plan: `dev/plan-a179-lab-tab.md` section 8.
+
+- **Required, not optional.** `chartdoc-to-echarts.js` pinned `CHART_IR_VERSION = 3` and its check is one-sided, refusing anything *later* than it knows. The library moving to 4 therefore blanked **every chart in the app**, not merely the new kind. Anyone running library `a379` or later needs this build.
+- **`matrixPanel` realizes the kind**: an ECharts heatmap over two category axes, rows inverted so they read top to bottom in the order the document lists them, one value and an optional second pre-formatted text per cell.
+- **The color is computed per cell rather than handed to a `visualMap`.** A continuous visualMap is a gradient, and the document's `neutral` field says there is a band around `center` inside which nothing is a signal; a gradient through it would show a signal the emitter said was not there. The band is pinned flat, matching the library's own matplotlib renderer.
+- **`row_polarity` is honored**, so one matrix can hold rows read in opposite directions: for a book, pricing above the reference is an improvement, and for a cover bought, it is not. A cell whose ratio has crossed zero (a non-zero `center` with a value of the other sign) is dropped from the color and from the amplitude, keeping its number.
+- **A band gap is a blank category**, since ECharts spaces categories evenly and there is no coordinate to offset. `bandLayout` is exported and tested directly.
+- Two existing tests moved and both were the tripwires working. `test_objects.py`'s `ir_version` canary fired for the fourth time and its comment now records what the adapter owed version 4. `tower-panel.test.js`'s "a later version is refused" case used a literal `4`, which had stopped being a later version; it is written against `CHART_IR_VERSION + 1` now so it keeps asking its own question.
+
 ## 1.0.0a179
 
 [Lab-Tab] third-party charts and exhibits now appear in the app, under one new **Lab** tab. Follows library `aggregate` `1.0.0a376` (`aggregate.plugins`) and `a378` (`register_exhibit`). Plan: `dev/plan-a179-lab-tab.md`.

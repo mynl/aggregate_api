@@ -116,3 +116,42 @@ the artifact and never commits it. Run `.\scripts\build-web.ps1` and
 reporting a178, and which will prune the ad-hoc `aggregate-relativity` install:
 re-add it with `uv pip install -e ../aggregate-relativity --no-deps` to see the
 Lab tab in the running app).
+
+
+---
+
+## 8. [Matrix-Renderer], `1.0.0a180`
+
+Not in this plan's original scope. It became this repo's work the moment the
+library added a panel kind, and it is **urgent rather than cosmetic**: the
+adapter's `CHART_IR_VERSION` check is one-sided, so an unraised pin blanks every
+chart in the app and not only the unknown kind.
+
+`web/src/charts/chartdoc-to-echarts.js` raises its pin to 4 and gains
+`matrixPanel` and `bandLayout`. `web/test/matrix-panel.test.js`, 17 cases.
+
+### Divergences
+
+1. **Per-cell `itemStyle.color` rather than a `visualMap`.** The document's
+   `neutral` band is a hard stop and a continuous visualMap is a gradient. A
+   piecewise visualMap would give the stop and lose the ramp. Computing the
+   color per cell gives both and matches the library's matplotlib renderer
+   exactly, which matters because the two draw the same document.
+2. **A band gap is a blank category.** ECharts spaces categories evenly, so
+   there is no coordinate to offset the way the matplotlib renderer does. The
+   blank carries no cell and draws as space. `bandLayout` is exported so the
+   mapping from label index to category index is testable on its own.
+3. **No tooltip colorbar or legend.** The matplotlib renderer has none either,
+   and a colorbar for a scale whose middle is deliberately flat would invite the
+   reader to interpolate through the band.
+
+### Verification
+
+* `uv run --no-sync pytest` — **417 passed**.
+* `npm test` in `web/` — **212 passed**, 17 of them new.
+* `node dev/scripts/check-nav.mjs` — clean.
+* End to end with `aggregate-relativity` 0.2.0 installed:
+  `GET /v1/objects/{id}/chart/relativity` returns 200 with
+  `ir_version: 4`, panel kind `matrix`, eight rows and
+  `row_polarity [-1, 1, 1, 1, 1, 1, 1, -1]`, through the **pre-existing**
+  generic chart route.

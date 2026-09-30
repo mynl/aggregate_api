@@ -6,6 +6,11 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Matrix-Renderer]** DONE (`1.0.0a180`), plan `dev/plan-a179-lab-tab.md`
+  section 8: the ECharts adapter reads chart IR version 4 and draws the `matrix`
+  panel kind. Required for any build running library `a379` or later, since the
+  adapter's version check is one-sided and an unraised pin blanks every chart.
+
 - **[Lab-Tab]** DONE (`1.0.0a179`), plan `dev/plan-a179-lab-tab.md`: third-party
   charts and exhibits appear under a new **Lab** tab, discovered through
   `aggregate.plugins` entry points. `AGGAPI_PLUGINS_ENABLED` /

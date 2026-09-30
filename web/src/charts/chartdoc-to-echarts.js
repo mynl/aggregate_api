@@ -45,7 +45,7 @@ import {
  * `ChartDoc.blocks` rather than series, which a reader that does not know the
  * field draws as an empty panel beside the ones it does know.
  */
-export const CHART_IR_VERSION = 3;
+export const CHART_IR_VERSION = 4;
 
 // ---- the drawing ladder ------------------------------------------------
 //
@@ -2094,6 +2094,219 @@ export function panelStretch(doc, panel, view, relief) {
                               relief, logZ: useLog });
 }
 
+// ---------------------------------------------------------------- matrix ----
+//
+// The 'matrix' panel kind, from library `1.0.0a379`. Named categorical rows
+// against named categorical columns, one value and an optional second text per
+// cell, on a diverging scale with a hard neutral band.
+//
+// Drawn as an ECharts heatmap over two category axes, with the color computed
+// per cell here rather than handed to a `visualMap`. That is deliberate: a
+// continuous visualMap is a gradient, and the document's `neutral` field says
+// there is a band around the center inside which nothing is a signal. A
+// gradient through it would show the reader a signal the emitter said was not
+// there, so the ramp is evaluated with the band pinned flat, exactly as the
+// library's own matplotlib renderer does.
+
+/** The diverging ramp: favorable, neutral, unfavorable. Matches `_chartdoc.py`. */
+const MATRIX_FAVORABLE = [0, 131, 0];
+const MATRIX_FAVORABLE_SOFT = [143, 202, 143];
+const MATRIX_NEUTRAL = [240, 239, 236];
+const MATRIX_UNFAVORABLE_SOFT = [240, 160, 159];
+const MATRIX_UNFAVORABLE = [227, 73, 72];
+
+/** Luminance below which a cell's text flips to white. */
+const MATRIX_DARK_TEXT_LUMA = 0.45;
+
+/** Linear blend of two rgb triples. */
+function mixRgb(a, b, t) {
+    return [0, 1, 2].map((i) => Math.round(a[i] + (b[i] - a[i]) * t));
+}
+
+/**
+ * The cell color for a signed departure, with the neutral band pinned flat.
+ *
+ * @param {number} signed the polarity-applied departure from center.
+ * @param {number} amplitude the largest absolute departure in the matrix.
+ * @param {number} neutral half-width of the signal-free band.
+ * @returns {Array<number>} an rgb triple.
+ */
+function matrixColor(signed, amplitude, neutral) {
+    if (!Number.isFinite(signed) || amplitude <= 0) return MATRIX_NEUTRAL;
+    if (Math.abs(signed) <= neutral) return MATRIX_NEUTRAL;
+    // How far outside the band, as a fraction of the room outside it.
+    const room = Math.max(amplitude - neutral, 1e-12);
+    const t = Math.min((Math.abs(signed) - neutral) / room, 1);
+    const [soft, full] = signed < 0
+        ? [MATRIX_FAVORABLE_SOFT, MATRIX_FAVORABLE]
+        : [MATRIX_UNFAVORABLE_SOFT, MATRIX_UNFAVORABLE];
+    return mixRgb(soft, full, t);
+}
+
+/** Relative luminance of an rgb triple, 0 to 1. */
+function luma([r, g, b]) {
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
+
+/**
+ * Lay a banded axis out, inserting a blank category between bands.
+ *
+ * ECharts spaces categories evenly, so a gap between two bands is an empty
+ * category rather than a coordinate offset. The blank carries no cell, so it
+ * draws as space.
+ *
+ * @param {Array<string>} labels the band members, in order.
+ * @param {Array<string>} groups one group name per label, or empty for none.
+ * @returns {{display: Array<string>, at: Array<number>}} the axis' categories,
+ *   and where each original label ended up in them.
+ */
+export function bandLayout(labels, groups) {
+    if (!groups || !groups.length) {
+        return { display: [...labels], at: labels.map((_, i) => i) };
+    }
+    const display = [];
+    const at = [];
+    labels.forEach((label, i) => {
+        if (i > 0 && groups[i] !== groups[i - 1]) display.push('');
+        at.push(display.length);
+        display.push(label);
+    });
+    return { display, at };
+}
+
+/**
+ * Realize a 'matrix' panel.
+ *
+ * @param {object} doc the chart document.
+ * @param {object} panel the panel, kind 'matrix'.
+ * @param {number} i the panel's index, which is also its grid and axis index.
+ * @param {object} axes axis id to axis.
+ * @returns {object|null} the realized panel, or null with no matrix on it.
+ *
+ * Notes
+ * -----
+ * The number printed in a cell is the **raw value** and the color is the
+ * polarity-applied departure. Keeping those apart is the point: a row declared
+ * with polarity -1 shows the same multiple as its neighbors and colors it the
+ * other way, which is what lets one matrix hold rows read in opposite
+ * directions. Printing a negated number instead would be a lie about the
+ * quantity.
+ */
+function matrixPanel(doc, panel, i, axes) {
+    const s = (doc.series || []).find(
+        (entry) => entry.panel_id === panel.id && entry.matrix);
+    if (!s) return null;
+    const m = s.matrix;
+    const rows = m.rows || [];
+    const columns = m.columns || [];
+    const values = m.values || [];
+    const annotations = m.annotations || [];
+    const polarity = (m.row_polarity && m.row_polarity.length)
+        ? m.row_polarity : rows.map(() => 1);
+    const center = (m.center === undefined || m.center === null) ? null : m.center;
+    const neutral = m.neutral || 0;
+
+    // The signed departure the color reads, and its amplitude.
+    //
+    // A non-zero center means the values are **ratios**, and a ratio that has
+    // crossed zero is off the scale rather than far along it: a layer whose
+    // diversified cost of capital went negative has a ratio near -9 against a
+    // positive book, and coloring that as the deepest favorable cell would say
+    // it is nine times better when what happened is that the quantity changed
+    // sign. Dropped from the color and kept in the text. A center of zero is
+    // the other case, differences, where both directions are meaningful.
+    const offScale = (v) => center !== 0 && Math.sign(v) !== Math.sign(center);
+    const signed = values.map((row, r) => row.map((v) => (
+        (center === null || v === null || v === undefined || !Number.isFinite(v)
+            || offScale(v))
+            ? NaN : polarity[r] * (v - center))));
+    let amplitude = 0;
+    for (const row of signed) {
+        for (const v of row) {
+            if (Number.isFinite(v)) amplitude = Math.max(amplitude, Math.abs(v));
+        }
+    }
+
+    const cols = bandLayout(columns, m.column_groups);
+    const rws = bandLayout(rows, m.row_groups);
+
+    const data = [];
+    values.forEach((row, r) => {
+        row.forEach((v, c) => {
+            if (v === null || v === undefined) return;
+            const rgb = matrixColor(signed[r][c], amplitude, neutral);
+            const dark = luma(rgb) <= MATRIX_DARK_TEXT_LUMA;
+            data.push({
+                value: [cols.at[c], rws.at[r], v],
+                // The annotation rides on the point so the label formatter can
+                // reach it without a second lookup keyed on coordinates.
+                annotation: (annotations[r] && annotations[r][c]) || '',
+                itemStyle: { color: `rgb(${rgb.join(',')})` },
+                label: {
+                    color: dark ? '#ffffff' : '#0b0b0b',
+                    // The faint line is the same ink at reduced opacity, which
+                    // reads on both a dark cell and a pale one.
+                    rich: {
+                        v: { fontSize: 12, color: dark ? '#ffffff' : '#0b0b0b',
+                             lineHeight: 15 },
+                        a: { fontSize: 9, opacity: 0.75, lineHeight: 12,
+                             color: dark ? '#ffffff' : '#52514e' },
+                    },
+                },
+            });
+        });
+    });
+
+    // A minus sign, not a hyphen: these are numbers being read.
+    const minus = (text) => String(text).replace(/-/g, '−');
+    return {
+        series: [{
+            type: 'heatmap', name: s.name, data,
+            xAxisIndex: i, yAxisIndex: i,
+            emphasis: { disabled: true },
+            label: {
+                show: true,
+                formatter: (p) => {
+                    const value = `{v|${minus(Number(p.value[2]).toFixed(2))}×}`;
+                    const note = p.data.annotation
+                        ? `\n{a|(${minus(p.data.annotation)})}` : '';
+                    return value + note;
+                },
+            },
+            itemStyle: { borderColor: '#ffffff', borderWidth: 2 },
+        }],
+        legend: [],
+        xAxis: axisStyle({
+            type: 'category', gridIndex: i,
+            name: (axes[panel.x_axis] || {}).label || '',
+            data: cols.display, splitLine: { show: false },
+            axisTick: { show: false }, axisLine: { show: false },
+            axisLabel: { fontSize: 10, color: '#52514e' },
+        }),
+        yAxis: axisStyle({
+            type: 'category', gridIndex: i,
+            name: (axes[panel.y_axis] || {}).label || '',
+            // Rows read top to bottom, the order the document lists them in.
+            inverse: true,
+            data: rws.display, splitLine: { show: false },
+            axisTick: { show: false }, axisLine: { show: false },
+            nameGap: 46,
+            axisLabel: { fontSize: 10, color: '#52514e' },
+        }),
+        tooltip: {
+            trigger: 'item',
+            formatter: (p) => {
+                const zLabel = (axes[panel.z_axis] || {}).label || 'value';
+                const note = p.data.annotation
+                    ? `<br>${minus(p.data.annotation)}` : '';
+                return `${rws.display[p.value[1]]}, ${cols.display[p.value[0]]}`
+                    + `<br>${zLabel} <b>${minus(Number(p.value[2]).toFixed(3))}</b>`
+                    + note;
+            },
+        },
+    };
+}
+
 /**
  * Realize one grid panel flat: the z grid as a heatmap.
  *
@@ -2392,6 +2605,7 @@ function xyOption(doc, opts, view, realized) {
         const pv = view.forPanel(panel.id);
         if (realized[i] === 'xy') return xyPanel(doc, panel, i, axes, pv, opts.zoom, ctx);
         if (realized[i] === 'tower') return towerPanel(doc, panel, i, axes, pv, ctx);
+        if (realized[i] === 'matrix') return matrixPanel(doc, panel, i, axes);
         return heatmapPanel(doc, panel, i, axes, pv, box.grids[i]);
     }).filter(Boolean);
     if (!realizedPanels.length) return null;

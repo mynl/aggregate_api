@@ -30,7 +30,7 @@ globalThis.ResizeObserver = class { observe() {} disconnect() {} };
 if (!globalThis.navigator) globalThis.navigator = { userAgent: 'node' };
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 
-const { chartdocToEcharts, documentLayout, readings } =
+const { chartdocToEcharts, documentLayout, readings, CHART_IR_VERSION } =
     await import('../src/charts/chartdoc-to-echarts.js');
 
 // One occurrence tower with its Lee curve, and an aggregate tower: the shape
@@ -354,5 +354,13 @@ test('an ir_version 3 document with no blocks still translates', () => {
 });
 
 test('a document from a later version is refused rather than half drawn', () => {
-    assert.equal(chartdocToEcharts({ ...DOC, ir_version: 4 }, { width: 1200 }), null);
+    // One past whatever the adapter currently reads, rather than a literal: the
+    // example was `4`, which stopped being a later version when the library
+    // added the 'matrix' panel kind and this adapter learned it (api a180).
+    // Written against the constant, the case keeps asking the question it was
+    // written to ask instead of quietly becoming a supported version.
+    assert.equal(
+        chartdocToEcharts({ ...DOC, ir_version: CHART_IR_VERSION + 1 },
+                          { width: 1200 }),
+        null);
 });

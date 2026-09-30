@@ -1137,13 +1137,22 @@ def test_bivariate_chart_document(client):
     doc = r1.json()
     # A deliberate canary on a literal, not a read of the library's own
     # constant, which would make the assertion tautological. It has now fired
-    # three times and been right every time, so it earns its keep: version 3
-    # (aggregate 1.0.0a349) adds ``ChartDoc.blocks`` and the 'tower' panel
-    # kind, whose content is blocks rather than series, so a reader that does
-    # not know the field draws an empty panel. When this fails, read the
-    # CHART_IR_VERSION note upstream and decide what the adapter owes the new
-    # version before changing the number.
-    assert doc["ir_version"] == 3
+    # four times and been right every time, so it earns its keep. When this
+    # fails, read the CHART_IR_VERSION note upstream and decide what the adapter
+    # owes the new version before changing the number.
+    #
+    # Version 3 (aggregate 1.0.0a349) added ``ChartDoc.blocks`` and the 'tower'
+    # panel kind, whose content is blocks rather than series, so a reader that
+    # does not know the field draws an empty panel.
+    #
+    # Version 4 (aggregate 1.0.0a379) adds the 'matrix' panel kind and the
+    # ``MatrixData`` on ``ChartSeries.matrix``. What the adapter owed, and paid
+    # at a180: `chartdoc-to-echarts.js` raises its own `CHART_IR_VERSION` pin
+    # and realizes the kind. That pin is what made this urgent rather than
+    # cosmetic, because the check it guards is one-sided and refuses anything
+    # *later* than it knows: leaving it at 3 would have blanked **every chart in
+    # the app** the moment the library moved, not merely the new kind.
+    assert doc["ir_version"] == 4
     assert doc["name"] == "joint_surface"
     assert [p["kind"] for p in doc["panels"]] == ["surface"]
     # Whether the height may be read on a log scale is declared by the z AXIS,
