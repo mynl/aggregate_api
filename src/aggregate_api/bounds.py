@@ -150,15 +150,29 @@ def _calibrate_for_envelope(obj: Any, premium: float, assets: float | None) -> b
     return bool(getattr(obj, "distortions", None))
 
 
-def _require_risk(obj: Any) -> None:
-    """Reject anything the bounds classes do not take.
+def _require_risk(obj: Any) -> Any:
+    """Resolve to the risk the bounds classes take, or reject.
 
     The library's own accepted set, not a kind list of ours: ``Bounds`` takes a
     ``Portfolio``, an ``Aggregate``, a Series or a DataFrame, and the two the
     api can hold are the first two.
+
+    A P&L resolves to its wrapped engine here, mirroring the library's own
+    unwrap (aggregate 1.0.0a375, [Bounds-PnL-Engine]). Resolving at the door
+    rather than leaning on the library's is deliberate: the envelope's second
+    panel calibrates onto and reads off the object handed to ``Bounds``
+    (``bounds._obj.distortions``), and a P&L carries no
+    ``calibrate_distortions`` of its own, so the engine has to be the object
+    the whole route works with. A kernel P&L wraps no engine and is rejected
+    like any other wrong kind.
     """
+    engine = getattr(obj, "engine", None)
+    if not isinstance(obj, (Aggregate, Portfolio)) and \
+            isinstance(engine, (Aggregate, Portfolio)):
+        obj = engine
     if not isinstance(obj, (Aggregate, Portfolio)):
         raise ValueError("pricing bounds apply to an Aggregate or a Portfolio")
+    return obj
 
 
 def run_envelope(
@@ -220,7 +234,7 @@ def run_envelope(
     ValueError
         Wrong kind of object, or a premium the library will not accept.
     """
-    _require_risk(obj)
+    obj = _require_risk(obj)
 
     kwargs = {"premium": float(premium)}
     if assets is not None:
@@ -304,7 +318,7 @@ def run_pricing_bounds(obj: Any, *, premium: float, targets: dict,
     """
     from .serializers import frame_to_payload, reset_index_safe
 
-    _require_risk(obj)
+    obj = _require_risk(obj)
     if not targets:
         raise ValueError("name a risk to price against this one")
     engine = PricingBounds(obj, targets,

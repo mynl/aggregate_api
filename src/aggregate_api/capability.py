@@ -489,7 +489,10 @@ def can_bounds(obj: Any) -> bool:
     not, while ``aggregate.bounds.Bounds`` declares the types it accepts and a
     duck-typed near miss would fail somewhere deep instead of at the door. This
     is the library's own accepted set, restricted to the two members the api
-    can hold, so it is still the library deciding.
+    can hold, so it is still the library deciding. A P&L qualifies through its
+    engine: the library unwraps ``obj.engine`` itself (aggregate 1.0.0a375,
+    [Bounds-PnL-Engine]), so this see-through mirrors the constructor and the
+    flag and the constructor cannot disagree.
 
     Parameters
     ----------
@@ -499,7 +502,8 @@ def can_bounds(obj: Any) -> bool:
     -------
     bool
     """
-    return isinstance(obj, (Aggregate, Portfolio))
+    return isinstance(obj, (Aggregate, Portfolio)) or \
+        isinstance(getattr(obj, "engine", None), (Aggregate, Portfolio))
 
 
 def can_allocate(obj: Any) -> bool:

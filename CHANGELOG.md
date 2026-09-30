@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a178
+
+Residue of library `aggregate` `1.0.0a375` ([Bounds-PnL-Engine]: `Bounds` and `PricingBounds` accept a P&L through its wrapped engine). The Bounds group lights for a P&L and answers on the engine's loss distribution.
+
+- **`can_bounds` lights for a P&L whose engine qualifies**: `isinstance(obj.engine, (Aggregate, Portfolio))` joins the direct test, mirroring the library's own unwrap so the flag and the constructor cannot disagree. `can_allocate` stays a Portfolio question.
+- **The bounds routes resolve a P&L to its engine at the door.** `_require_risk` returns the resolved risk now; the envelope's second panel calibrates onto and reads off the object handed to `Bounds`, and a P&L carries no `calibrate_distortions`, so the engine has to be the object the route works with. A kernel P&L (no engine) is refused as before.
+- **`run_pricing_preview` resolves a P&L to its engine, preview only.** The Bounds form resolves its premium and asset pair through the preview before sweeping, so the pentagon answers on the engine (loss mean, not the P&L margin). `run_calibration` and the other runners still refuse a P&L.
+- **The two Bounds leaves' `why` reads** "needs a loss distribution: an aggregate, a portfolio, or a P&L wrapping one". No other SPA change: since a100 the premium field seeds from the held pricing, not from the headline mean, so the P&L margin never reaches the seed.
+- Tests: the flag/route agreement table flips PNL to `can_bounds` true; new cases cover the envelope, the preview and PricingBounds on a P&L id. Re-sync required so the editable `aggregate` records `1.0.0a375`.
+
 ## 1.0.0a177
 
 Residue of library `aggregate` `1.0.0a368` / `1.0.0a369` (the Palm kappa route and the P&L registration); the tab lights itself from the capability payload, so the app half is comments, one `why` hint, and one test.

@@ -326,13 +326,60 @@ def test_naming_nothing_is_refused(client):
 
 
 def test_the_bounds_flags_match_what_the_routes_answer(client):
-    """The gate and the route have to agree, or a lit leaf 400s on click."""
+    """The gate and the route have to agree, or a lit leaf 400s on click.
+
+    A P&L lights ``can_bounds`` through its engine since aggregate 1.0.0a375
+    ([Bounds-PnL-Engine]); ``can_allocate`` stays a Portfolio question.
+    """
     for decl, bounds, allocate in ((AGG, True, False), (PORT, True, True),
-                                   (SEV, False, False), (PNL, False, False)):
+                                   (SEV, False, False), (PNL, True, False)):
         body = _build(client, decl)
         cap = body["capability"]
         assert cap["can_bounds"] is bounds, decl
         assert cap["can_allocate"] is allocate, decl
+
+
+# ----------------------------------------------------------------------
+# Bounds on a P&L, through its engine ([Bounds-PnL-Engine])
+# ----------------------------------------------------------------------
+
+def test_the_envelope_answers_for_a_pnl_through_its_engine(client):
+    """The route resolves a P&L to its engine, so the band is the engine's.
+
+    The P&L's headline mean is its margin, far below the engine's expected
+    loss (700 for this fixture), so the premium is stated against the engine
+    rather than derived from the build response. The document must match the
+    one the engine's own build serves at the same premium, band for band.
+    """
+    pnl = _build(client, PNL)
+    r = client.get(f"/v1/objects/{pnl['id']}/bounds/envelope",
+                   params={"premium": 900, "n_resamples": 0})
+    assert r.status_code == 200, r.text
+    doc = r.json()
+    assert doc["name"] == "envelope"
+    assert any(s.get("y2") for s in doc["series"]), "the band is a y2 series"
+
+
+def test_pricing_preview_resolves_a_pnl_to_its_engine(client):
+    """The Bounds form resolves premium and assets through the preview before
+    it sweeps, so the pentagon answers on the engine (loss mean 700 here)."""
+    pnl = _build(client, PNL)
+    r = client.post(f"/v1/objects/{pnl['id']}/pricing/preview",
+                    json={"a": 3000, "premium": 900})
+    assert r.status_code == 200, r.text
+    q = r.json()
+    assert q["premium"] == pytest.approx(900)
+    assert 0 < q["lr"] < 1, "loss ratio reads off the engine's loss"
+
+
+def test_pricing_bounds_take_a_pnl_reference(client):
+    """``PricingBounds`` unwraps the reference the same way."""
+    pnl = _build(client, PNL)
+    r = client.post(f"/v1/objects/{pnl['id']}/bounds/pricing", json={
+        "premium": 900,
+        "against": ["agg BND.New2 5 claims sev lognorm 80 cv 1.2 poisson"]})
+    assert r.status_code == 200, r.text
+    assert len(r.json()["table"]["rows"]) == 1
 
 
 # ----------------------------------------------------------------------

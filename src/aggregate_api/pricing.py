@@ -239,11 +239,23 @@ def run_pricing_preview(
     the asset level is the answer they asked for; resolving the probability back
     would mean reaching for a grid distribution on a named view, which is a
     private surface and buys a number the line does not print.
+
+    A P&L resolves to its wrapped engine, mirroring the Bounds group's own
+    see-through (aggregate 1.0.0a375, [Bounds-PnL-Engine]): the Bounds form
+    resolves its premium and asset pair through this preview before it sweeps,
+    and the sweep answers on the engine's loss distribution, so the pentagon
+    has to be the engine's too. Preview only: ``run_calibration`` and the
+    other runners still refuse a P&L, whose ledger states a premium on every
+    row and has no single pentagon of its own to calibrate.
     """
     target = _one_target(coc, lr, premium)
     anchor = _one_anchor(p, a)
     if not hasattr(obj, "price_pentagon"):
-        raise ValueError("pricing requires an Aggregate or a Portfolio")
+        engine = getattr(obj, "engine", None)
+        if hasattr(engine, "price_pentagon"):
+            obj = engine
+        else:
+            raise ValueError("pricing requires an Aggregate or a Portfolio")
 
     row = obj.price_pentagon(**anchor, **_pentagon_target(target),
                              reins_view=basis).iloc[0]

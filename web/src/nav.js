@@ -291,13 +291,13 @@ export const NAV_GROUPS = {
             bounds: {
                 label: 'Bounds',
                 flag: 'canBounds',
-                why: 'an aggregate or a portfolio only',
+                why: 'needs a loss distribution: an aggregate, a portfolio, or a P&L wrapping one',
                 hint: 'every distortion consistent with this premium, as a band',
             },
             pricing: {
                 label: 'Pricing Bounds',
                 flag: 'canBounds',
-                why: 'an aggregate or a portfolio only',
+                why: 'needs a loss distribution: an aggregate, a portfolio, or a P&L wrapping one',
                 hint: 'what a second risk can cost, given this one priced there',
             },
             allocation: {
