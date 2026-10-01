@@ -780,22 +780,9 @@ header .navbar { min-height: 56px; }
     line-height: 1.45; margin: .4rem 0 0;
 }
 
-/* The band's name, and the answer to an anonymous row of small buttons sitting
-   where the reader expects a label, at exactly the point they are being asked
-   to decide something. Same letterspaced small caps as `derive` on the action
-   row and as `.reins-lede`, which is the idiom this generalizes. Inline and
-   first in the row, so it costs no height.
-
-   It names the QUESTION, never the leaf. Drawing the Pricing band with
-   `Calibrate` on it put that word on screen three times inside 40 pixels: the
-   selected leaf in accent red, the band label, and the button at the end of the
-   row. Once the band is a box the box says "these are controls", so the label's
-   remaining job is the one the leaf name does not do. */
-.band-label {
-    font-size: .68rem; font-weight: 600; text-transform: uppercase;
-    letter-spacing: .1em; color: var(--mut); margin-right: .35rem;
-    flex: 0 0 auto;
-}
+/* `.band-label` retired at a184: the pricing forms read as a sentence now,
+   Quick Re's idiom, and the sentence lede does the job the letterspaced band
+   name used to. See `pricing-form.js`. */
 
 /* Keyboard navigation is only as good as its focus ring, and the browser
    default is invisible against a filled tab. No radius: a folder tab is not a
@@ -1027,13 +1014,12 @@ header .navbar { min-height: 56px; }
 /* The value box and the control that says what it holds sit as one unit, so the
    gap inside a pair is tighter than the gap between pairs. */
 .price-form .price-field + .btn-group { margin-left: -.25rem; }
-/* Between the anchor pair and the target pair, so the row reads as two things
-   and not as four. Not punctuation and not a separator anyone clicks: it is the
-   breath between two phrases. */
-.price-spacer {
-    color: var(--mut); font-size: .8rem; opacity: .55;
-    padding: 0 .15rem; user-select: none;
-}
+/* The sentence punctuation (a184). The row is a flex line with a .6rem gap,
+   so a comma set as its own flex item would float mid-gap; the negative
+   margin pulls it back against the clause it closes. The words themselves
+   (`and`, the lede) take `.qr-op` unchanged, which is the point: the pricing
+   row and Quick Re read as one idiom because they share one class. */
+.price-form .price-punct { margin-left: -.55rem; }
 /* The whole form asleep, for an object that answers its question by itself (a
    P&L on Evaluate). Every control stays drawn and disabled, so the reader
    learns the question exists; the dimming is what says the row is not waiting

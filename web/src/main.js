@@ -3413,10 +3413,13 @@ const calibratedLeaf = () => (
 const priceForm = createPricingForm($('price-form'), {
     verb: 'Calibrate',
     basisLabel: 'calibrate on',
-    // Names the question, not the leaf: `Calibrate` is already the selected leaf
-    // above the band and the word on the button below it.
-    bandLabel: 'anchor and target',
     preview: true,
+    help: 'Fix capital with a VaR probability p or an asset level, and name '
+        + 'one target: a cost of capital, a loss ratio, or the premium '
+        + 'itself. Calibrate fits the standard distortion families to that '
+        + 'point on the chosen view. The line below previews the completed '
+        + 'pentagon as you type, and is where an impossible ask explains '
+        + 'itself before the press.',
     context: formContext,
     onSubmit: async (body) => {
         if (!state.id) return;
@@ -3455,8 +3458,12 @@ const allocateBases = (bases, kind) => (
 const allocateForm = createPricingForm($('allocate-form'), {
     verb: 'Allocate',
     basisLabel: 'allocate on',
-    bandLabel: 'anchor and target',
     preview: true,
+    help: 'The same anchor and target as Calibrate, struck once and split '
+        + 'across the parts: the units of a book, or the ceded and net '
+        + 'halves of an occurrence program. The allocation splits a gross '
+        + 'premium, which is why an aggregate offers Gross alone here. The '
+        + 'line below previews the pentagon as you type.',
     basisOnly: allocateBases,
     basisWhy: 'net and ceded are this tab’s outputs, not its inputs',
     context: formContext,
@@ -3612,10 +3619,13 @@ const requestRuinSoon = debounce(() => requestRuin(), 350);
 
 const ruinForm = createPricingForm($('ruin-form'), {
     verb: 'Draw',
-    // The shared pricing row plus `ruinExtras`, which is the one capital
-    // probability box, so the band asks for both halves.
-    bandLabel: 'premium and capital',
     preview: true,
+    help: 'The premium half is the ordinary pricing row; Pr default below '
+        + 'states a probability of eventual ruin, which the library resolves '
+        + 'to an initial surplus. The picture tracks the form live. Draw asks '
+        + 'now, without waiting out the debounce; Sample rolls fresh paths on '
+        + 'a new seed. The readout reports the surplus bought, the exact and '
+        + 'simulated ruin probabilities, and the seed.',
     context: formContext,
     extras: ruinExtras,
     onChange: requestRuinSoon,
@@ -3731,11 +3741,16 @@ const boundsForm = createPricingForm($('bounds-form'), {
     // would be one the request cannot carry. `adoptPricing` is where that gap
     // becomes a sentence rather than a silent mislabel.
     basisLabel: null,
-    // The same anchor and target row Calibrate draws, so it takes the same name.
-    // The plan proposed `premium`, which under-describes a row whose target
-    // switches between a premium, a cost of capital and a loss ratio; author's
-    // ruling on 2026-09-26 was to keep the two labels identical.
-    bandLabel: 'anchor and target',
+    // No basis, so the sentence opens at the verb phrase: 'Compute at ...'.
+    // (The a157 band label, and the 2026-09-26 ruling that kept its name
+    // identical to Calibrate's, retired with the label itself at a184.)
+    help: 'Set the premium the sweep holds fixed: every distortion '
+        + 'consistent with it is ranged over, and the width of the band is '
+        + 'how much of the price the choice of distortion decides. A cost of '
+        + 'capital or loss ratio target is resolved to its premium through '
+        + 'the pentagon first; the line below previews that resolution, and '
+        + 'is where a premium below the expected loss refuses before the '
+        + 'press.',
     // The pane said nothing at all until a press, and the press is fifty
     // resamples. One pentagon solve says what is about to be swept, and it puts
     // the refusals in front of the button: Bounds rejects a premium below the
@@ -3883,20 +3898,24 @@ const evaluateForm = createPricingForm($('evaluate-form'), {
     // distribution. The fuller gross versus net story overlaps Economics and
     // stays there.
     basisLabel: 'premium is',
-    // The premium box and the asset anchor beside it, which is what closes the
-    // round trip with a calibration struck at the same level.
-    bandLabel: 'premium and anchor',
     // One question, so nothing to switch. The premium is the input and the
     // stress it survives is the answer.
     targets: ['premium'],
     allowBlank: true,
+    help: 'The other direction from Calibrate: the premium is the input, and '
+        + 'the panel reports, for each family, the distortion that values '
+        + 'its margin at zero (breakeven acceptability). The anchor fixes '
+        + 'the asset level the panel is solved at; blank means the unlimited '
+        + 'reading, which reports four families rather than five. The basis '
+        + 'names which premium is being input. The line below previews the '
+        + 'pentagon the boxes imply.',
     // A line in the band since a157, so the one Pricing leaf that had none is no
     // longer the exception. It says what the premium in the box implies at the
     // anchor beside it, which is the round trip the leaf exists to close. Goes
     // quiet rather than printing the route's refusal when either box is cleared;
-    // see `renderPreview` in pricing-form.js.
+    // see `renderPreview` in pricing-form.js. The a157 gloss folded into the
+    // help text above at a184, and the gloss slot went with it.
     preview: true,
-    gloss: 'breakeven acceptability: the distortion that values the margin at zero',
     context: formContext,
     onSubmit: (fields) => {
         const body = {};
@@ -3915,6 +3934,14 @@ const evaluateForm = createPricingForm($('evaluate-form'), {
         }
         runEvaluation(body);
     },
+});
+
+// The five forms' `?` buttons take the Bootstrap tooltip the Quick Re one
+// gets, and for the same reason: a paragraph in a native title is unstyled
+// and unreadable. After the mounts above, which is what guarantees the
+// buttons exist to find.
+document.querySelectorAll('.price-form .qr-help').forEach((node) => {
+    bootstrap.Tooltip.getOrCreateInstance(node);
 });
 
 // ----------------------------------------------------------------------

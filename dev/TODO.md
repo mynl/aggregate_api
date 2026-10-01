@@ -6,6 +6,12 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Sentence-Forms]** DONE (`1.0.0a184`), plan
+  `dev/plan-a182-pricing-pnl-forms.md` part [sentence-forms]: the five pricing
+  form mounts read as one sentence each in the Quick Re idiom, the band label
+  and `◦` spacer retired, and a `?` per form carries the explanation. Visual
+  acceptance (all six states, phone wrap) awaits the author's browser pass.
+
 - **[PnL-Dropdown]** DONE (`1.0.0a183`), plan
   `dev/plan-a182-pricing-pnl-forms.md` part [pnl-dropdown]: the PnL split
   button with fixed labels (PnL, and a caret with PnL (rate), xPnL,

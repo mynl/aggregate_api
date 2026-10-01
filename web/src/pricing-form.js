@@ -59,25 +59,23 @@ const BASES = [
  * Parameters
  * ----------
  * host : HTMLElement
- *     Emptied and filled. The form is one flex row: the basis group, the anchor
- *     pair, a spacer, the target pair, the verb, then whatever `extras` adds.
+ *     Emptied and filled. The form is one sentence in a flex row: the lede,
+ *     the basis group, the anchor pair, the target pair joined by `and`, a
+ *     period, the verb, a `?`, then whatever `extras` adds below.
  * opts.verb : string
  *     The button's word, and its stem while busy ('Calibrate' / 'Calibrating').
- * opts.bandLabel : string or null
- *     The control band's name, drawn first in the row in letterspaced small
- *     caps, or null to draw none. It names the QUESTION the row asks and must
- *     not repeat the leaf name: the leaf is already on screen in accent red a
- *     few pixels above, and the verb is on the button at the end of the row, so
- *     a third copy inside 40 pixels is the "Summary said twice" failure that
- *     retired the Overview header block. 'anchor and target' is this file's own
- *     vocabulary (`anchorInput`, `targetInput`) and names the two halves the
- *     `◦` spacer already divides the row into.
+ *     On a form with no basis group it also opens the sentence, as the lede
+ *     `'<verb> at'`.
  * opts.onSubmit : function
  *     Called with the body the form reads, `{p|a, coc|lr|premium, basis}`.
  * opts.basisLabel : string or null
- *     The word before the basis group, or null to draw no basis group at all.
- *     'calibrate on' names what is being fitted; 'premium is' names what the
- *     number in the box means. The distinction is the Evaluate leaf's.
+ *     The sentence lede before the basis group, capitalized as the first word
+ *     ('calibrate on' draws as 'Calibrate on'), or null to draw no basis group
+ *     at all. 'calibrate on' names what is being fitted; 'premium is' names
+ *     what the number in the box means. The distinction is the Evaluate leaf's.
+ *     Since a184 the row reads as one sentence in the Quick Re idiom: the lede
+ *     and the `qr-op` connectives do the work the retired band label and `◦`
+ *     spacer used to, and a `?` carries the explanation (`opts.help`).
  * opts.targets : array of string, optional
  *     Which targets to offer. Defaults to all three. Evaluate passes
  *     `['premium']`, which draws a plain label since there is nothing to switch.
@@ -88,8 +86,12 @@ const BASES = [
  *     alone: a blank premium means the object's own consideration, and a blank
  *     anchor is the library's unlimited reading, which solves over the whole
  *     distribution and reports four families rather than five.
- * opts.gloss : string, optional
- *     A muted note after the button, on the same line.
+ * opts.help : string, optional
+ *     The explanation behind the `?` at the end of the row: what the anchor
+ *     means, what the target means, what the preview line reports. Written at
+ *     the mount, one sentence block per leaf; the Quick Re `?` is the model.
+ *     The caller initializes the Bootstrap tooltip, since this module does not
+ *     import bootstrap.
  * opts.extras : HTMLElement, optional
  *     Placed below the form row and above the preview line. The Bounds
  *     `against` field is the only user.
@@ -124,19 +126,31 @@ const BASES = [
  */
 export function createPricingForm(host, opts) {
     const {
-        verb, onSubmit, basisLabel = null, bandLabel = null,
+        verb, onSubmit, basisLabel = null,
         targets = TARGETS.map((t) => t[0]),
-        preview = false, allowBlank = false, gloss = null, extras = null,
+        preview = false, allowBlank = false, help = null, extras = null,
         basisOnly = null, basisWhy = null, context, onChange = null,
     } = opts;
 
     empty(host);
     const row = el('div', { className: 'tab-tools price-form' });
-    if (bandLabel) {
-        row.appendChild(el('span', { className: 'band-label' }, bandLabel));
-    }
+    // The sentence idiom, Quick Re's: boxes joined by operator words in the
+    // `qr-op` face, so the row reads as one clause rather than as a form. The
+    // connectives do the work the a157 band label and the `◦` spacer used to.
+    // Punctuation hugs the clause it closes (`price-punct` swallows the flex
+    // gap), because a comma floating mid-gap reads as a typo.
+    const opWord = (text) => el('span', { className: 'qr-op' }, text);
+    const punct = (text) => el('span', { className: 'qr-op price-punct' }, text);
+    // The lede is the first word of the sentence: the basis label where there
+    // is a basis group, else the verb phrase ('Compute at', 'Draw at').
+    row.appendChild(opWord(basisLabel
+        ? basisLabel[0].toUpperCase() + basisLabel.slice(1)
+        : `${verb} at`));
     const basisHost = el('span', { className: 'price-basis' });
-    if (basisLabel) row.appendChild(basisHost);
+    if (basisLabel) {
+        row.appendChild(basisHost);
+        row.appendChild(punct(','));
+    }
 
     // Value box then switch, so the control that changes what the box means is
     // also the one that labels it. Through a99 the choice was stated twice, a
@@ -157,8 +171,8 @@ export function createPricingForm(host, opts) {
     row.appendChild(anchorField);
     row.appendChild(anchorGroup);
 
-    const spacer = el('span', { className: 'price-spacer', 'aria-hidden': 'true' }, '◦');
-    row.appendChild(spacer);
+    row.appendChild(punct(','));
+    row.appendChild(opWord('and'));
 
     const targetInput = el('input', {
         type: 'number', step: '0.01', value: '0.15', autocomplete: 'off',
@@ -170,11 +184,17 @@ export function createPricingForm(host, opts) {
     const targetField = el('label', { className: 'price-field' }, targetInput);
     row.appendChild(targetField);
     row.appendChild(targetGroup);
+    row.appendChild(punct('.'));
 
     const button = el('button', { className: 'btn btn-primary btn-sm' }, verb);
     row.appendChild(button);
-    if (gloss) {
-        row.appendChild(el('span', { className: 'text-muted ms-1 form-gloss' }, gloss));
+    if (help) {
+        // The Quick Re `?`, verbatim: the whole explanation on demand rather
+        // than a gloss nobody reads twice. The mount initializes the tooltip.
+        row.appendChild(el('button', {
+            type: 'button', className: 'qr-help', title: help,
+            'aria-label': `how ${verb} reads these boxes`,
+        }, '?'));
     }
     host.appendChild(row);
     if (extras) host.appendChild(extras);
@@ -293,8 +313,9 @@ export function createPricingForm(host, opts) {
         empty(basisHost);
         const { bases = [], kind } = context() || {};
         const live = liveBases();
-        basisHost.appendChild(
-            el('span', { className: 'exhibit-group-label' }, basisLabel));
+        // No label of its own since a184: the sentence lede two nodes to the
+        // left is the label, and a second copy inside the clause would be the
+        // "said twice" failure the lede exists to avoid.
         const group = el('div', { className: 'btn-group btn-group-sm', role: 'group' });
         group.setAttribute('aria-label', basisLabel);
         const selected = currentBasis();

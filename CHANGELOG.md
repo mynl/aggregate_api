@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a184
+
+[Sentence-Forms] the pricing forms read as one sentence, the Quick Re idiom. Plan: `dev/plan-a182-pricing-pnl-forms.md` part [sentence-forms].
+
+- **Each form is a sentence**: a lede, the boxes joined by connective words in the `qr-op` face, a period, the verb button, and a `?`. Calibrate reads `Calibrate on [Gross|Net occ|Net], [0.99][p|assets], and [0.15][CoC|LR|Premium]. [Calibrate] [?]`. Leaves without a basis group open at the verb phrase: Bounds `Compute at ...`, Pr Ruin `Draw at ...` (its extras row below is unchanged).
+- **The letterspaced band label and the `◦` spacer retire**, along with the 2026-09-26 ruling that kept the Bounds band name identical to Calibrate's: the lede and the connectives now do that job. The basis group's inner label goes too, the lede being the label.
+- **Every form gets a `?`** carrying the whole explanation as a tooltip, one text per mount, the Quick Re model; Evaluate's trailing gloss folded into its help text and the gloss slot is gone.
+- No behavior change: read, write, sync and preview logic untouched.
+
 ## 1.0.0a183
 
 [PnL-Dropdown] the PnL button becomes a split button with fixed labels, and it derives from the box. Plan: `dev/plan-a182-pricing-pnl-forms.md` part [pnl-dropdown].
