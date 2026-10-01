@@ -4,6 +4,12 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a188
+
+[Lab-Chart-Lede] a Lab chart leaf prints its hint. `ledeFor` was wired into the exhibit loaders and never into a chart path, so a plugin that declared a hint on every leaf had it rendered on one of them: Table printed its line, Grid and Chart printed none. A plugin's leaf strings are the only prose it puts on the page, so dropping two of three is most of what it can say.
+
+Scoped to the Lab loader. The app's authored chart leaves still carry hints that nothing renders, which is the same gap `ledeFor`'s own docstring records for the pre-a44 leaves; widening the fix to them is a separate judgment about every pane.
+
 ## 1.0.0a187
 
 [Spectrum-Punchup] the distortion spectrum reads as a chart rather than as a wall of lines. Follows library `aggregate` `1.0.0a382` and plugin `aggregate-relativity` `0.4.0`. Author's review.

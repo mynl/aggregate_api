@@ -2425,8 +2425,18 @@ async function loadLabLeaf(key) {
         return;
     }
     const doc = await api.chartDoc(state.id, leaf.chart);
+    const root = el('div');
+    // The lede, on a chart leaf as much as on a table one. `ledeFor` was wired
+    // into the exhibit loaders and never into a chart path, so a Lab chart
+    // declared a hint in the manifest and rendered it nowhere: the Table leaf
+    // printed its one line and the Grid and Chart leaves printed none. A
+    // plugin's leaf strings are the only prose it gets to put on the page, so
+    // dropping one of the three is dropping a third of what it can say.
+    const lede = ledeFor('lab', key);
+    if (lede) root.appendChild(lede);
     const host = el('div');
-    replacePane('pane-lab', host);
+    root.appendChild(host);
+    replacePane('pane-lab', root);
     labChart = mountChartDoc(host, doc);
 }
 
