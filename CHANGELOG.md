@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a182
+
+[Evaluate-Auto] Pricing / Evaluate on a P&L computes itself; the form goes dormant rather than hiding. Plan: `dev/plan-a182-pricing-pnl-forms.md` part [evaluate-auto].
+
+- **Arriving at Evaluate with a P&L runs the evaluation at once.** The route already took an empty body for a P&L, so the one live button was a press with no choice in it; the leaf now computes on arrival. `_evaluation` still caches the answer, so revisiting the leaf costs no request and a new build recomputes once.
+- **The form band goes dormant, it does not disappear** (author's ruling). Every control, the anchor and premium boxes included, stays drawn, disabled and dimmed, and the preview line says why: a P&L evaluates every row of its ledger on that row's own terms. The old behavior hid the anchor and premium pairs with `d-none` and left a live primary button over a dead basis group.
+- `setFieldsVisible` on the pricing form is replaced by `setDormant`, one mechanism for the whole band; the Evaluate submit body and the auto path share one `runEvaluation` implementation.
+- No api change.
+
 ## 1.0.0a181
 
 [Matrix-Legibility] the matrix panel is drawn as a custom series, and an ordinal axis reads its own names. Follows library `aggregate` `1.0.0a381`. Author's review of the first Lab render.

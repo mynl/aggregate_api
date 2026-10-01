@@ -3173,7 +3173,12 @@ async function showPricingLeaf(which) {
     $('pane-standalone').classList.toggle('d-none', which !== 'standalone');
     if (which === 'evaluate') {
         syncEvaluateForm();
-        drawPricingPane('evaluate');
+        // A P&L's evaluation takes no input, so the one press the form offers
+        // is a formality; the leaf computes on arrival instead. `_evaluation`
+        // is the cache: `forgetPricing` clears it on every new object, so a
+        // revisit draws what is held and a new build recomputes once.
+        if (state.kind === 'pnl' && !_evaluation) runEvaluation({});
+        else drawPricingPane('evaluate');
     } else if (which === 'ruin') {
         await showRuinLeaf();
     } else if (which === 'plot') {
@@ -3687,9 +3692,11 @@ const boundsForm = createPricingForm($('bounds-form'), {
  * pricing in hand.
  *
  * A P&L carries a premium and an asset level per ledger row, so neither the
- * premium box nor the anchor means anything for it and both go; the api refuses
- * them rather than guessing, and a form that can only produce a 400 is worse
- * than one control fewer.
+ * premium box nor the anchor means anything for it and the whole band goes
+ * dormant: drawn, dead, and explained by the note line, per the author's
+ * ruling that it must not disappear. The api refuses both fields rather than
+ * guessing, and the evaluation runs on arrival (`showPricingLeaf`), because a
+ * press that takes no input is a formality rather than a question.
  *
  * Everything else opens on the held pricing: the premium a calibration was
  * struck at, and the asset level it was struck at, which is what closes the
@@ -3704,9 +3711,15 @@ const boundsForm = createPricingForm($('bounds-form'), {
  */
 function syncEvaluateForm() {
     const isPnl = state.kind === 'pnl';
-    evaluateForm.setFieldsVisible(!isPnl);
+    evaluateForm.setDormant(isPnl);
     evaluateForm.sync();
-    if (isPnl) return;
+    if (isPnl) {
+        // After `sync`, whose preview pass blanks the line; this is the one
+        // sentence the dormant band gets to say, so it must land last.
+        evaluateForm.note('A P&L evaluates every row of its ledger on that '
+            + 'row’s own terms; computed automatically.');
+        return;
+    }
     if (_pricing) {
         evaluateForm.write(_pricing);
         return;
@@ -3714,6 +3727,43 @@ function syncEvaluateForm() {
     const own = state.caps.flags.premium;
     if (Number.isFinite(own)) {
         evaluateForm.write({ octet: { premium: own }, anchor: 'p', target: 'premium' });
+    }
+}
+
+/** Reentry guard for `runEvaluation`: the auto path and the button share it. */
+let _evaluating = false;
+
+/**
+ * Run one evaluation and draw its pane: the one implementation behind the
+ * Evaluate button and the P&L auto-compute path.
+ *
+ * @param {object} body the request body, already in wire shape; `{}` for a
+ *   P&L, which takes no input and evaluates its ledger as it stands.
+ */
+async function runEvaluation(body) {
+    if (!state.id || _evaluating) return;
+    _evaluating = true;
+    evaluateForm.setBusy(true, 'Evaluating…');
+    try {
+        _evaluation = await api.pricingEvaluate(state.id, body);
+        // The premium just evaluated becomes the current one, which is the
+        // point of the leaf: an ad hoc premium tried here is what Bounds
+        // then sweeps. A P&L holds no single premium, so nothing to hold.
+        if (state.kind !== 'pnl') {
+            const octet = await api.pricingPreview(state.id, {
+                ...(Number.isFinite(body.a) ? { a: body.a } : { p: body.p ?? 0.99 }),
+                premium: body.premium ?? state.caps.flags.premium,
+                ...(body.basis ? { basis: body.basis } : {}),
+            }).catch(() => null);
+            holdPricing({ ...body, premium: body.premium }, octet);
+        }
+        drawPricingPane('evaluate');
+    } catch (err) {
+        _evaluation = null;
+        replacePane('pane-evaluate', errorNode(err));
+    } finally {
+        evaluateForm.setBusy(false);
+        _evaluating = false;
     }
 }
 
@@ -3739,8 +3789,7 @@ const evaluateForm = createPricingForm($('evaluate-form'), {
     preview: true,
     gloss: 'breakeven acceptability: the distortion that values the margin at zero',
     context: formContext,
-    onSubmit: async (fields) => {
-        if (!state.id) return;
+    onSubmit: (fields) => {
         const body = {};
         if (state.kind !== 'pnl') {
             // Required only where the object states none of its own. With one,
@@ -3755,27 +3804,7 @@ const evaluateForm = createPricingForm($('evaluate-form'), {
             if (Number.isFinite(fields.a)) body.a = fields.a;
             if (fields.basis) body.basis = fields.basis;
         }
-        evaluateForm.setBusy(true, 'Evaluating…');
-        try {
-            _evaluation = await api.pricingEvaluate(state.id, body);
-            // The premium just evaluated becomes the current one, which is the
-            // point of the leaf: an ad hoc premium tried here is what Bounds
-            // then sweeps.
-            if (state.kind !== 'pnl') {
-                const octet = await api.pricingPreview(state.id, {
-                    ...(Number.isFinite(body.a) ? { a: body.a } : { p: body.p ?? 0.99 }),
-                    premium: body.premium ?? state.caps.flags.premium,
-                    ...(body.basis ? { basis: body.basis } : {}),
-                }).catch(() => null);
-                holdPricing({ ...body, premium: body.premium }, octet);
-            }
-            drawPricingPane('evaluate');
-        } catch (err) {
-            _evaluation = null;
-            replacePane('pane-evaluate', errorNode(err));
-        } finally {
-            evaluateForm.setBusy(false);
-        }
+        runEvaluation(body);
     },
 });
 

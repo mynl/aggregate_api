@@ -117,9 +117,10 @@ const BASES = [
  * Returns
  * -------
  * object
- *     `{read, write, setBusy, sync, note}`. `read` is what the button posts,
- *     `write` adopts a held pricing, `sync` redraws the greying when the object
- *     changes, and `note` prints a line where the preview would go.
+ *     `{read, write, setBusy, sync, note, setDormant}`. `read` is what the
+ *     button posts, `write` adopts a held pricing, `sync` redraws the greying
+ *     when the object changes, `note` prints a line where the preview would
+ *     go, and `setDormant` puts the whole form to sleep.
  */
 export function createPricingForm(host, opts) {
     const {
@@ -183,6 +184,10 @@ export function createPricingForm(host, opts) {
 
     let anchor = 'p';
     let target = targets.includes('coc') ? 'coc' : targets[0];
+    // The whole form asleep: every control drawn and dead. One flag rather
+    // than per-control bookkeeping, because the groups re-render themselves
+    // and would otherwise forget they were put to sleep.
+    let dormant = false;
 
     // ---- the three segmented controls ----
 
@@ -196,9 +201,11 @@ export function createPricingForm(host, opts) {
                 className: 'btn btn-outline-secondary'
                     + (value === selected && !dead ? ' active' : ''),
             }, label);
-            if (dead) {
+            if (dead || dormant) {
+                // A dormant member keeps its selection highlight: the form is
+                // asleep, not unanswered, so it still shows what it would ask.
                 b.disabled = true;
-                b.setAttribute('aria-label', `${label}, ${why}`);
+                if (dead) b.setAttribute('aria-label', `${label}, ${why}`);
             } else {
                 b.addEventListener('click', () => onPick(value));
             }
@@ -469,7 +476,7 @@ export function createPricingForm(host, opts) {
     }
 
     function setBusy(on, busyWord) {
-        button.disabled = on;
+        button.disabled = on || dormant;
         button.textContent = on ? busyWord : verb;
     }
 
@@ -480,24 +487,30 @@ export function createPricingForm(host, opts) {
     }
 
     /**
-     * Show or hide the anchor and target pairs, leaving the basis and the verb.
+     * Put the whole form to sleep, or wake it: every control drawn and dead.
      *
      * For a P&L, which carries a premium and an asset level on every row of its
-     * ledger, so there is no single one to state. The api refuses both rather
-     * than guessing, and a control that can only produce a 400 is worse than one
-     * control fewer.
+     * ledger, so there is no single one to state and nothing for the verb to
+     * add. Dormant rather than hidden, per the author's ruling: the controls
+     * stay on screen so the reader learns the question exists, and the `note()`
+     * sentence says why this object answers it by itself.
      */
-    function setFieldsVisible(on) {
-        for (const node of [anchorField, anchorGroup, spacer, targetField, targetGroup]) {
-            node.classList.toggle('d-none', !on);
-        }
+    function setDormant(on) {
+        dormant = Boolean(on);
+        row.classList.toggle('is-dormant', dormant);
+        anchorInput.disabled = dormant;
+        targetInput.disabled = dormant;
+        button.disabled = dormant;
+        renderAnchor();
+        renderTarget();
+        renderBasis();
     }
 
     renderAnchor();
     renderTarget();
     renderBasis();
 
-    return { read, write, setBusy, sync, note, setFieldsVisible,
+    return { read, write, setBusy, sync, note, setDormant,
              held: () => held, button };
 }
 

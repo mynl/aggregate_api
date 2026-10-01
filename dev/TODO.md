@@ -6,6 +6,13 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Evaluate-Auto]** DONE (`1.0.0a182`), plan
+  `dev/plan-a182-pricing-pnl-forms.md` part [evaluate-auto]: Pricing / Evaluate
+  on a P&L computes on arrival and the form band goes dormant (drawn, dead,
+  explained) rather than hiding its field pairs. The plan's remaining parts
+  ([pnl-dropdown], [sentence-forms], [expenses]) land as a183 onward; the plan
+  stays in `dev/` until the author calls it done.
+
 - **[Matrix-Legibility]** DONE (`1.0.0a181`), plan `dev/plan-a179-lab-tab.md`
   section 9: the matrix is a `custom` series with pixel band gaps and its own
   height, row names wrap, an empty axis label draws no name, and an ordinal `xy`

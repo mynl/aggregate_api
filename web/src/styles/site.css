@@ -1034,6 +1034,12 @@ header .navbar { min-height: 56px; }
     color: var(--mut); font-size: .8rem; opacity: .55;
     padding: 0 .15rem; user-select: none;
 }
+/* The whole form asleep, for an object that answers its question by itself (a
+   P&L on Evaluate). Every control stays drawn and disabled, so the reader
+   learns the question exists; the dimming is what says the row is not waiting
+   on them. The disabling itself is per control in pricing-form.js, because a
+   class cannot stop a keyboard. */
+.price-form.is-dormant { opacity: .55; }
 /* The one-member target, on Evaluate. There is nothing to switch, so it is a
    word rather than a control that cannot be operated. Sized to sit on the
    baseline of the button group it replaces. */
