@@ -6,6 +6,17 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Expenses]** DONE (`1.0.0a186`), plan
+  `dev/plan-a182-pricing-pnl-forms.md` part [expenses]: `expense_ratio` on the
+  four pricing request bodies (a premium target reads as gross, the engine
+  runs on its technical part, the arithmetic in the runners once), the
+  preview's `gross_premium` / `net_of_expense_premium` pair, the shared
+  expense box on Calibrate, Allocate and Evaluate, and the P&L ledger pair on
+  the Bounds preview and the dormant Evaluate band. This closes the plan's
+  four parts (a182, a183, a184, a186; a185 was the unrelated matrix fix); the
+  plan stays in `dev/` until the author calls it done, and the rate menu items
+  stay dark until the upstream `premium_style` ask ships.
+
 - **[Sentence-Forms]** DONE (`1.0.0a184`), plan
   `dev/plan-a182-pricing-pnl-forms.md` part [sentence-forms]: the five pricing
   form mounts read as one sentence each in the Quick Re idiom, the band label

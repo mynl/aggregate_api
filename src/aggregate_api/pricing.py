@@ -53,6 +53,18 @@ this repo reads any of those attributes back, and every request recomputes from
 its own form. The one condition attached to that acceptance is a rule for this
 file, so it is written here rather than left as a habit.
 
+**Expenses enter only through the premium leg, and the arithmetic lives here,
+once.** ``octet.premium`` everywhere in this group is a technical premium, net
+of expenses, and a reader pricing against a real quote types a gross one. With
+an ``expense_ratio`` a premium target is read as gross and the engine is fed
+``premium * (1 - expense_ratio)``; a CoC or LR target calibrates exactly as
+before, the ratio only translating the resolved technical premium into a gross
+reading on the preview. The flat-ratio identity ``gross = net / (1 - e)``
+matches ``pnl_program``'s own ``expense_ratio`` meaning (gross expense as a
+fraction of premium). If the expense model ever grows past a flat ratio, the
+arithmetic moves upstream; it does not grow a second home here or in the SPA,
+whose forms hold no arithmetic.
+
 **Every call from here passes its own target and its own distortions
 explicitly. Never lean on a library default that reads ``self.distortions``.**
 A method that falls back to the stored fit would serve this request an answer
@@ -116,6 +128,29 @@ def _one_anchor(p: float | None, a: float | None) -> dict:
     if (p is None) == (a is None):
         raise ValueError("pass exactly one of p (VaR probability) or a (assets)")
     return {"p": p} if p is not None else {"a": a}
+
+
+def _technical_target(target: dict, expense_ratio: float | None) -> dict:
+    """A premium target read as gross, scaled to the technical premium.
+
+    Parameters
+    ----------
+    target : dict
+        The single validated target, from :func:`_one_target`.
+    expense_ratio : float or None
+        Gross expense as a fraction of premium, in ``[0, 1)``, or None.
+
+    Returns
+    -------
+    dict
+        The target the engine should see: ``premium * (1 - e)`` for a premium
+        target with a non-zero ratio, otherwise the target unchanged. A CoC or
+        LR target never moves: the ratio only changes how the resolved premium
+        is *reported*, which is the caller's job on the way out.
+    """
+    if expense_ratio and "premium" in target:
+        return {"premium": target["premium"] * (1.0 - expense_ratio)}
+    return target
 
 
 def _envelopes(result: Any, name: str) -> dict[str, dict]:
@@ -203,6 +238,7 @@ def run_pricing_preview(
     lr: float | None = None,
     premium: float | None = None,
     basis: str | None = None,
+    expense_ratio: float | None = None,
 ) -> dict:
     """Complete the pentagon and report it as scalars, with no calibration.
 
@@ -219,12 +255,21 @@ def run_pricing_preview(
         Which reinsurance view to answer on, passed through as ``reins_view``.
         Both legs of the anchor come off the named view, so the reading is the
         one a reader who chose that calibration basis is about to get.
+    expense_ratio : float, optional
+        Gross expense as a fraction of premium, in ``[0, 1)``. A premium
+        target is then read as gross and the pentagon is fed
+        ``premium * (1 - e)``; whatever the target, the response reports
+        ``gross_premium``, the resolved technical premium grossed back up.
+        Refused for a P&L, whose ledger states its own expenses.
 
     Returns
     -------
     dict
         Matches :class:`aggregate_api.models.PricingPreviewResponse`: the
         pentagon octet under wire names, plus the probability the caller named.
+        ``gross_premium`` rides when a ratio was sent, and on a P&L both
+        ``gross_premium`` and ``net_of_expense_premium`` report the ledger's
+        own pair off ``economic_ratios_df``'s gross (first) block.
 
     Notes
     -----
@@ -250,6 +295,12 @@ def run_pricing_preview(
     """
     target = _one_target(coc, lr, premium)
     anchor = _one_anchor(p, a)
+    is_pnl = _kind_of(obj) == "pnl"
+    if is_pnl and expense_ratio is not None:
+        raise ValueError("a P&L states its own expenses in the ledger; "
+                         "drop the expense ratio")
+    target = _technical_target(target, expense_ratio)
+    source = obj
     if not hasattr(obj, "price_pentagon"):
         engine = getattr(obj, "engine", None)
         if hasattr(engine, "price_pentagon"):
@@ -259,7 +310,7 @@ def run_pricing_preview(
 
     row = obj.price_pentagon(**anchor, **_pentagon_target(target),
                              reins_view=basis).iloc[0]
-    return {
+    out = {
         "p": p,
         "assets": _scalar(row["a"]),
         "loss": _scalar(row["L"]),
@@ -270,6 +321,21 @@ def run_pricing_preview(
         "pq": _scalar(row["PQ"]),
         "coc": _scalar(row["ROE"]),
     }
+    # `premium` stays technical, as documented; the gross reading is a second
+    # field rather than a relabeling. For a premium target the gross is the
+    # number the caller typed, recovered exactly by the flat-ratio identity.
+    if expense_ratio is not None and out["premium"] is not None:
+        out["gross_premium"] = out["premium"] / (1.0 - expense_ratio)
+    if is_pnl:
+        # The ledger's own pair, not an assumed ratio: the gross (first) block
+        # of `economic_ratios_df`, whose amounts satisfy M == P - L - E.
+        ledger = source.economic_ratios_df.iloc[0]
+        gross = _scalar(ledger["P"])
+        expense = _scalar(ledger["E"])
+        out["gross_premium"] = gross
+        if gross is not None and expense is not None:
+            out["net_of_expense_premium"] = gross - expense
+    return out
 
 
 def run_calibration(
@@ -281,6 +347,7 @@ def run_calibration(
     lr: float | None = None,
     premium: float | None = None,
     basis: str | None = None,
+    expense_ratio: float | None = None,
 ) -> dict:
     """Fit the standard distortion set, and serve what it says.
 
@@ -297,6 +364,11 @@ def run_calibration(
         so rather than reporting a receipt of garbage.
     basis : str, optional
         Calibration basis for a reinsured Aggregate, passed as ``reins_view``.
+    expense_ratio : float, optional
+        Gross expense as a fraction of premium, in ``[0, 1)``. A premium
+        target is read as gross and the fit runs on ``premium * (1 - e)``;
+        with a CoC or LR target the ratio changes nothing here, only the
+        preview's gross reading. See the module docstring.
 
     Returns
     -------
@@ -336,6 +408,7 @@ def run_calibration(
     anchor = _one_anchor(p, a)
     if not hasattr(obj, "calibrate_distortions"):
         raise ValueError("calibration requires an Aggregate or a Portfolio")
+    target = _technical_target(target, expense_ratio)
     if "premium" in target:
         target = {"coc": _coc_for_premium(obj, anchor, target["premium"], basis)}
 
@@ -405,6 +478,7 @@ def run_natural_allocation(
     lr: float | None = None,
     premium: float | None = None,
     basis: str | None = None,
+    expense_ratio: float | None = None,
 ) -> dict:
     """Split one calibrated premium across the parts, and serve the exhibit.
 
@@ -420,6 +494,9 @@ def run_natural_allocation(
         Exactly one pricing target, as :func:`run_calibration` takes it.
     basis : str, optional
         The calibration basis, narrowed by :func:`_allocation_basis`.
+    expense_ratio : float, optional
+        As :func:`run_calibration` takes it: a premium target is read as
+        gross and the fit runs on ``premium * (1 - e)``.
 
     Returns
     -------
@@ -464,6 +541,7 @@ def run_natural_allocation(
             "one premium among parts, which means the units of a book or the "
             "halves of an occurrence cession")
     basis = _allocation_basis(obj, basis)
+    target = _technical_target(target, expense_ratio)
     if "premium" in target:
         target = {"coc": _coc_for_premium(obj, anchor, target["premium"], basis)}
 
@@ -482,6 +560,7 @@ def run_evaluation(
     basis: str | None = None,
     p: float | None = None,
     a: float | None = None,
+    expense_ratio: float | None = None,
 ) -> dict:
     """The breakeven acceptability panel, as the library's own exhibit.
 
@@ -502,6 +581,11 @@ def run_evaluation(
         closes the round trip and recovers that calibration's parameters. Omit
         both for the unlimited reading, which is the library's default and
         reports four families rather than five: ``ccoc`` needs an asset level.
+    expense_ratio : float, optional
+        Gross expense as a fraction of premium, in ``[0, 1)``. A typed
+        premium is read as gross and evaluated at ``premium * (1 - e)``;
+        with no typed premium the ratio has nothing to scale and is ignored.
+        Refused for a P&L, whose ledger states its own expenses.
 
     Returns
     -------
@@ -531,10 +615,19 @@ def run_evaluation(
             raise ValueError(
                 "a P&L carries its own premium in the ledger; drop the premium "
                 "argument and evaluate it as it stands")
+        if expense_ratio is not None:
+            raise ValueError(
+                "a P&L states its own expenses in the ledger; drop the "
+                "expense ratio")
         if basis is not None or p is not None or a is not None:
             raise ValueError(
                 "a P&L evaluates every row of its ledger on that row's own "
                 "terms; drop the basis and the asset anchor")
+
+    # The typed premium is read as gross when a ratio rides with it; the
+    # library sees the technical number, matching the calibrate runners.
+    if premium is not None and expense_ratio:
+        premium = premium * (1.0 - expense_ratio)
 
     warns: list[str] = []
     with library_warnings() as caught:

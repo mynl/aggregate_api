@@ -3779,7 +3779,8 @@ def post_pricing_preview(
     try:
         return run_pricing_preview(entry.obj, p=req.p, a=req.a, coc=req.coc,
                                    lr=req.lr, premium=req.premium,
-                                   basis=req.basis)
+                                   basis=req.basis,
+                                   expense_ratio=req.expense_ratio)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -3803,7 +3804,8 @@ def post_pricing_calibrate(
     try:
         return run_calibration(entry.obj, p=req.p, a=req.a, coc=req.coc,
                                lr=req.lr, premium=req.premium,
-                               basis=req.basis)
+                               basis=req.basis,
+                               expense_ratio=req.expense_ratio)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -3834,7 +3836,8 @@ def post_pricing_allocate(
     try:
         return run_natural_allocation(entry.obj, p=req.p, a=req.a, coc=req.coc,
                                       lr=req.lr, premium=req.premium,
-                                      basis=req.basis)
+                                      basis=req.basis,
+                                      expense_ratio=req.expense_ratio)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -3857,7 +3860,8 @@ def post_pricing_evaluate(
     """
     try:
         return run_evaluation(entry.obj, premium=req.premium, basis=req.basis,
-                              p=req.p, a=req.a)
+                              p=req.p, a=req.a,
+                              expense_ratio=req.expense_ratio)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

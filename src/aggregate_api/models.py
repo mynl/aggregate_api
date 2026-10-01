@@ -621,6 +621,13 @@ class PricingPreviewRequest(BaseModel):
         None, gt=0, description="Premium target; the pentagon's ``P``.")
     basis: str | None = Field(
         None, description="Reinsurance view: 'gross', 'net occ' or 'net'.")
+    expense_ratio: float | None = Field(
+        None, ge=0, lt=1,
+        description=("Gross expense as a fraction of premium. A premium "
+                     "target is read as gross and the pentagon runs on "
+                     "premium × (1 − e); the response reports gross_premium. "
+                     "Refused for a P&L, whose ledger states its own "
+                     "expenses."))
 
 
 class PricingPreviewResponse(BaseModel):
@@ -630,6 +637,13 @@ class PricingPreviewResponse(BaseModel):
     and ``assets`` are the five levels (``L``, ``M``, ``P``, ``Q``, ``a``), and
     ``lr``, ``pq``, ``coc`` the three ratios between them. ``p`` echoes the
     probability the caller named, and is null when they anchored on assets.
+
+    ``premium`` is always the technical premium, net of expenses. The two
+    fields after the octet are the gross story: ``gross_premium`` rides when
+    the request carried an ``expense_ratio`` (the resolved technical premium
+    grossed back up) and on a P&L, where it is the ledger's own stated gross;
+    ``net_of_expense_premium`` is the P&L pair's other half, ``P − E`` off the
+    ledger's gross block, and is null everywhere else.
     """
 
     model_config = _RESPONSE_CFG
@@ -643,6 +657,8 @@ class PricingPreviewResponse(BaseModel):
     lr: float | None = None
     pq: float | None = None
     coc: float | None = None
+    gross_premium: float | None = None
+    net_of_expense_premium: float | None = None
 
 
 class PricingCalibrateRequest(BaseModel):
@@ -669,6 +685,11 @@ class PricingCalibrateRequest(BaseModel):
         None, gt=0, description="Premium target; the pentagon's ``P``.")
     basis: str | None = Field(
         None, description="Calibration basis: 'gross', 'net occ' or 'net'.")
+    expense_ratio: float | None = Field(
+        None, ge=0, lt=1,
+        description=("Gross expense as a fraction of premium. A premium "
+                     "target is read as gross and the fit runs on "
+                     "premium × (1 − e); a CoC or LR target is unaffected."))
 
 
 class PricingAllocateRequest(PricingCalibrateRequest):
@@ -721,6 +742,12 @@ class PricingEvaluateRequest(BaseModel):
         description="VaR probability fixing the asset level the panel is solved at.")
     a: float | None = Field(
         None, gt=0, description="Asset level the panel is solved at.")
+    expense_ratio: float | None = Field(
+        None, ge=0, lt=1,
+        description=("Gross expense as a fraction of premium. A typed "
+                     "premium is read as gross and evaluated at "
+                     "premium × (1 − e). Refused for a P&L, whose ledger "
+                     "states its own expenses."))
 
 
 class PricingExhibitsResponse(BaseModel):

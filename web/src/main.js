@@ -3216,6 +3216,10 @@ async function loadApproximation() {
 let _calibration = null;
 let _allocation = null;
 let _evaluation = null;
+// A P&L's ledger premium pair (gross, net of expense), for the dormant
+// Evaluate band's line; held per object like `_evaluation` so a revisit
+// costs no request.
+let _pnlLedger = null;
 // The Pr Ruin response, chart document and exhibit envelopes together, plus
 // the seed the last Sample rolled: held so typing after a Sample re-prices the
 // same drawn skeleton rather than silently swapping the picture underfoot.
@@ -3244,6 +3248,7 @@ function forgetPricing() {
     _calibration = null;
     _allocation = null;
     _evaluation = null;
+    _pnlLedger = null;
     _ruin = null;
     _ruinSeed = null;
     // The pricing goes with them. It was struck on the previous object, and
@@ -3377,7 +3382,12 @@ const formContext = () => ({
     id: state.id,
     kind: state.kind,
     bases: state.caps.flags.reinsBases || [],
-    canPreview: can('canPrice'),
+    // A P&L previews through its wrapped engine (library a375, and the route
+    // since a101), and since a185 the response carries the ledger's own
+    // gross and net of expense premium, which is what the Bounds preview
+    // line reports for one. `can_price` is the calibrate gate and stays
+    // false for a P&L; the preview is the one question it can answer.
+    canPreview: can('canPrice') || state.kind === 'pnl',
 });
 
 /**
@@ -3396,6 +3406,9 @@ function holdPricing(body, octet) {
         anchor: 'a' in body ? 'a' : 'p',
         target: 'premium' in body ? 'premium' : ('lr' in body ? 'lr' : 'coc'),
         basis: body.basis || null,
+        // The expense ratio the question carried, so a leaf reopens showing
+        // the gross reading the reader was working in. Null where none rode.
+        expense: body.expense_ratio ?? null,
     };
 }
 
@@ -3414,10 +3427,13 @@ const priceForm = createPricingForm($('price-form'), {
     verb: 'Calibrate',
     basisLabel: 'calibrate on',
     preview: true,
+    expense: true,
     help: 'Fix capital with a VaR probability p or an asset level, and name '
         + 'one target: a cost of capital, a loss ratio, or the premium '
         + 'itself. Calibrate fits the standard distortion families to that '
-        + 'point on the chosen view. The line below previews the completed '
+        + 'point on the chosen view. A non-zero expense ratio reads a '
+        + 'premium target as gross and calibrates its technical part; the '
+        + 'preview then reports both. The line below previews the completed '
         + 'pentagon as you type, and is where an impossible ask explains '
         + 'itself before the press.',
     context: formContext,
@@ -3459,11 +3475,14 @@ const allocateForm = createPricingForm($('allocate-form'), {
     verb: 'Allocate',
     basisLabel: 'allocate on',
     preview: true,
+    expense: true,
     help: 'The same anchor and target as Calibrate, struck once and split '
         + 'across the parts: the units of a book, or the ceded and net '
         + 'halves of an occurrence program. The allocation splits a gross '
-        + 'premium, which is why an aggregate offers Gross alone here. The '
-        + 'line below previews the pentagon as you type.',
+        + 'premium, which is why an aggregate offers Gross alone here. A '
+        + 'non-zero expense ratio reads a premium target as gross and '
+        + 'allocates its technical part. The line below previews the '
+        + 'pentagon as you type.',
     basisOnly: allocateBases,
     basisWhy: 'net and ceded are this tab’s outputs, not its inputs',
     context: formContext,
@@ -3839,9 +3858,10 @@ function syncEvaluateForm() {
     evaluateForm.sync();
     if (isPnl) {
         // After `sync`, whose preview pass blanks the line; this is the one
-        // sentence the dormant band gets to say, so it must land last.
-        evaluateForm.note('A P&L evaluates every row of its ledger on that '
-            + 'row’s own terms; computed automatically.');
+        // sentence the dormant band gets to say, so it must land last. The
+        // ledger pair follows when the server answers.
+        evaluateForm.note(PNL_EVALUATE_NOTE);
+        reportPnlLedger();
         return;
     }
     if (_pricing) {
@@ -3852,6 +3872,36 @@ function syncEvaluateForm() {
     if (Number.isFinite(own)) {
         evaluateForm.write({ octet: { premium: own }, anchor: 'p', target: 'premium' });
     }
+}
+
+/** The dormant band's sentence; the ledger pair is appended when it arrives. */
+const PNL_EVALUATE_NOTE = 'A P&L evaluates every row of its ledger on that '
+    + 'row’s own terms; computed automatically.';
+
+/**
+ * Append the ledger's own premium pair to the dormant Evaluate band's line.
+ *
+ * The preview route reports a P&L's `gross_premium` and
+ * `net_of_expense_premium` off the ledger's gross block (a185), and the
+ * dormant band is where that pair belongs: the premium box is dead, so the
+ * line says what the book itself states. The anchor and target in the
+ * request are the form's own defaults, because the route needs a complete
+ * question to answer at all; the ledger fields do not depend on them.
+ */
+async function reportPnlLedger() {
+    const id = state.id;
+    if (!id) return;
+    const say = (pair) => evaluateForm.note(
+        `${PNL_EVALUATE_NOTE} Ledger: gross premium ${money(pair.gross)}, `
+        + `net of expense premium ${money(pair.net)}.`);
+    if (_pnlLedger && _pnlLedger.id === id) { say(_pnlLedger); return; }
+    try {
+        const q = await api.pricingPreview(id, { p: 0.99, coc: 0.15 });
+        if (id !== state.id || state.kind !== 'pnl') return;
+        if (q.gross_premium == null || q.net_of_expense_premium == null) return;
+        _pnlLedger = { id, gross: q.gross_premium, net: q.net_of_expense_premium };
+        say(_pnlLedger);
+    } catch { /* the sentence already on the line stands */ }
 }
 
 /** Reentry guard for `runEvaluation`: the auto path and the button share it. */
@@ -3878,6 +3928,10 @@ async function runEvaluation(body) {
                 ...(Number.isFinite(body.a) ? { a: body.a } : { p: body.p ?? 0.99 }),
                 premium: body.premium ?? state.caps.flags.premium,
                 ...(body.basis ? { basis: body.basis } : {}),
+                // The same gross reading the evaluation ran on, so the held
+                // octet and its preview describe one question.
+                ...(body.expense_ratio != null
+                    ? { expense_ratio: body.expense_ratio } : {}),
             }).catch(() => null);
             holdPricing({ ...body, premium: body.premium }, octet);
         }
@@ -3902,13 +3956,15 @@ const evaluateForm = createPricingForm($('evaluate-form'), {
     // stress it survives is the answer.
     targets: ['premium'],
     allowBlank: true,
+    expense: true,
     help: 'The other direction from Calibrate: the premium is the input, and '
         + 'the panel reports, for each family, the distortion that values '
         + 'its margin at zero (breakeven acceptability). The anchor fixes '
         + 'the asset level the panel is solved at; blank means the unlimited '
         + 'reading, which reports four families rather than five. The basis '
-        + 'names which premium is being input. The line below previews the '
-        + 'pentagon the boxes imply.',
+        + 'names which premium is being input, and a non-zero expense ratio '
+        + 'reads it as gross. The line below previews the pentagon the '
+        + 'boxes imply.',
     // A line in the band since a157, so the one Pricing leaf that had none is no
     // longer the exception. It says what the premium in the box implies at the
     // anchor beside it, which is the round trip the leaf exists to close. Goes
@@ -3931,6 +3987,11 @@ const evaluateForm = createPricingForm($('evaluate-form'), {
             if (Number.isFinite(fields.p)) body.p = fields.p;
             if (Number.isFinite(fields.a)) body.a = fields.a;
             if (fields.basis) body.basis = fields.basis;
+            // The typed premium is gross when a ratio rides with it; the
+            // runner scales, this form holds no arithmetic.
+            if (Number.isFinite(fields.expense_ratio)) {
+                body.expense_ratio = fields.expense_ratio;
+            }
         }
         runEvaluation(body);
     },

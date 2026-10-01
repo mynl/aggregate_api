@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a186
+
+[Expenses] an expense ratio on the pricing forms, and gross versus net premium. Plan: `dev/plan-a182-pricing-pnl-forms.md` part [expenses].
+
+- **The problem**: `octet.premium` everywhere in the pricing group is technical (net of expenses), and a reader pricing against a real quote types a gross premium, which the calibration silently treated as technical, overstating the target by the expense load.
+- **The four pricing request bodies (preview, calibrate, allocate, evaluate) gain `expense_ratio`** in [0, 1). A premium target (or Evaluate's typed premium) is read as gross and the engine runs on premium × (1 − e); a CoC or LR target calibrates exactly as before. The arithmetic lives in the api runners, once (the flat-ratio identity gross = net / (1 − e), matching `pnl_program`'s own `expense_ratio` meaning); the forms hold none.
+- **The preview response gains `gross_premium`** (the resolved technical premium grossed up, when a ratio was sent) and, on a P&L, **`net_of_expense_premium`**: the ledger's own pair off `economic_ratios_df`'s gross block. A typed ratio on a P&L is a 400, the ledger being the authority on its own expenses.
+- **The expense box rides on Calibrate, Allocate and Evaluate** as part of the sentence (`, and [0][expense ratio].`); one shared unpersisted value across the three, riding in the held pricing so leaves reopen consistent. Empty or zero sends nothing, so the default path is byte-identical to a184. On a P&L the box is dead with "the ledger states its own expenses".
+- **Preview lines**: with a ratio, `gross premium …, net premium …` leads; on a P&L, the Bounds preview and Evaluate's dormant band report the ledger pair.
+
 ## 1.0.0a185
 
 [Matrix-Blank-Fix] the matrix panel draws its cells again. A `a181` regression: the Lab Grid leaf rendered its axes and nothing else.

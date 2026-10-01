@@ -263,6 +263,115 @@ def test_a_loss_ratio_that_leaves_no_capital_is_refused(client):
 
 
 # ----------------------------------------------------------------------
+# expense ratio: gross premiums in, gross readings out
+# ----------------------------------------------------------------------
+# `octet.premium` is technical everywhere; a reader pricing a real quote types
+# a gross one. The arithmetic lives in the runners, once (the flat-ratio
+# identity gross = net / (1 - e)); see the pricing.py module docstring.
+
+PNL_EXPENSED = ("pnl PX.PnlE 1000 prem less "
+                "agg PX.PnlEL 1000 prem at 70% lr sev lognorm 100 cv 2 "
+                "poisson less 0.25 premium expenses")
+
+
+def test_preview_reads_a_premium_target_as_gross_with_a_ratio(client):
+    """Gross 1000 at e = 0.25 is technical 750, and both read back.
+
+    ``premium`` stays technical, as documented; ``gross_premium`` is the typed
+    number recovered exactly by the flat-ratio identity. The rest of the octet
+    matches a bare technical-750 ask, which is the claim that the ratio enters
+    through the premium leg and nowhere else.
+    """
+    oid, _ = _build(client, BASIC_BOOK)
+    r = client.post(f"/v1/objects/{oid}/pricing/preview",
+                    json={"p": 0.99, "premium": 1000, "expense_ratio": 0.25})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["premium"] == pytest.approx(750)
+    assert body["gross_premium"] == pytest.approx(1000)
+
+    bare = client.post(f"/v1/objects/{oid}/pricing/preview",
+                       json={"p": 0.99, "premium": 750}).json()
+    assert bare["gross_premium"] is None
+    for key in ("assets", "loss", "margin", "capital", "lr", "pq", "coc"):
+        assert body[key] == pytest.approx(bare[key], rel=1e-9), key
+
+
+def test_a_ratio_with_a_coc_target_only_grosses_the_preview(client):
+    """A CoC target calibrates exactly as before; the ratio is a translation.
+
+    The preview's ``gross_premium`` is the resolved technical premium grossed
+    up, and the calibrate envelopes are identical with and without the ratio,
+    which is the acceptance's "changes nothing but the gross reading".
+    """
+    oid, _ = _build(client, BASIC_BOOK)
+    with_e = client.post(
+        f"/v1/objects/{oid}/pricing/preview",
+        json={"p": 0.99, "coc": 0.15, "expense_ratio": 0.2}).json()
+    bare = client.post(f"/v1/objects/{oid}/pricing/preview",
+                       json={"p": 0.99, "coc": 0.15}).json()
+    assert with_e["premium"] == pytest.approx(bare["premium"])
+    assert with_e["gross_premium"] == pytest.approx(bare["premium"] / 0.8)
+
+    left = _calibrate(client, oid, p=0.99, coc=0.15)
+    right = _calibrate(client, oid, p=0.99, coc=0.15, expense_ratio=0.2)
+    assert left.status_code == right.status_code == 200
+    assert left.json()["exhibits"] == right.json()["exhibits"]
+
+
+def test_a_gross_premium_target_calibrates_its_technical_premium(client):
+    """Premium 1000 at e = 0.25 calibrates identically to a bare 750."""
+    oid, _ = _build(client, BASIC_BOOK)
+    gross = _calibrate(client, oid, coc=None, premium=1000,
+                       expense_ratio=0.25)
+    net = _calibrate(client, oid, coc=None, premium=750)
+    assert gross.status_code == 200, gross.text
+    assert net.status_code == 200, net.text
+    assert gross.json()["exhibits"] == net.json()["exhibits"]
+
+
+def test_evaluate_reads_a_typed_premium_as_gross_with_a_ratio(client):
+    """The same scaling on the evaluate route: gross in, technical evaluated."""
+    oid, _ = _build(client, BASIC_BOOK)
+    gross = client.post(
+        f"/v1/objects/{oid}/pricing/evaluate",
+        json={"premium": 1000, "expense_ratio": 0.25, "p": 0.99})
+    net = client.post(f"/v1/objects/{oid}/pricing/evaluate",
+                      json={"premium": 750, "p": 0.99})
+    assert gross.status_code == 200, gross.text
+    assert net.status_code == 200, net.text
+    assert gross.json()["exhibits"] == net.json()["exhibits"]
+
+
+def test_a_pnl_preview_reports_the_ledger_pair(client):
+    """A P&L's pair comes off the ledger, and a typed ratio is refused.
+
+    ``economic_ratios_df``'s gross (first) block states P and E, so the
+    preview reports the book's own gross premium and its net of expense, and
+    an ``expense_ratio`` in the request is a 400: the ledger is the authority
+    on this book's expenses, not the form.
+    """
+    oid, _ = _build(client, PNL_EXPENSED, log2=12)
+    r = client.post(f"/v1/objects/{oid}/pricing/preview",
+                    json={"p": 0.99, "coc": 0.15})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["gross_premium"] == pytest.approx(1000)
+    assert body["net_of_expense_premium"] == pytest.approx(750)
+
+    refused = client.post(
+        f"/v1/objects/{oid}/pricing/preview",
+        json={"p": 0.99, "coc": 0.15, "expense_ratio": 0.1})
+    assert refused.status_code == 400
+    assert "ledger" in refused.json()["detail"]
+
+    evaluated = client.post(f"/v1/objects/{oid}/pricing/evaluate",
+                            json={"expense_ratio": 0.1})
+    assert evaluated.status_code == 400
+    assert "ledger" in evaluated.json()["detail"]
+
+
+# ----------------------------------------------------------------------
 # calibrate: two exhibits, both perspectives, per source shape
 # ----------------------------------------------------------------------
 

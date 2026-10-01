@@ -46,6 +46,14 @@ let priceBasis = (() => {
     catch { return 'gross'; }
 })();
 
+//: The expense ratio, shared by every form that draws the box (Calibrate,
+//: Allocate, Evaluate) so the three leaves reopen consistent. Module state
+//: beside `priceBasis` but, unlike it, NOT persisted: an expense load is a
+//: fact about the program being priced, not a reader preference. Null means
+//: the box is empty or zero, and nothing travels: the default path is
+//: byte-identical to a form with no box.
+let expenseRatio = null;
+
 /** The three whole-program views, in the order the forms draw them. */
 const BASES = [
     ['gross', 'Gross'],
@@ -86,6 +94,14 @@ const BASES = [
  *     alone: a blank premium means the object's own consideration, and a blank
  *     anchor is the library's unlimited reading, which solves over the whole
  *     distribution and reports four families rather than five.
+ * opts.expense : boolean
+ *     Draw the expense ratio clause, `, and [0][expense ratio].` An empty or
+ *     zero box sends nothing, so the default path is byte-identical to a form
+ *     without it. The value is shared across the mounts that opt in (module
+ *     state beside `priceBasis`), and it is dead with a why on a P&L, whose
+ *     ledger states its own expenses. The api owns the arithmetic: a premium
+ *     target rides as gross and the runner feeds the engine
+ *     `premium * (1 - e)`; this form holds no arithmetic, as ever.
  * opts.help : string, optional
  *     The explanation behind the `?` at the end of the row: what the anchor
  *     means, what the target means, what the preview line reports. Written at
@@ -129,6 +145,7 @@ export function createPricingForm(host, opts) {
         verb, onSubmit, basisLabel = null,
         targets = TARGETS.map((t) => t[0]),
         preview = false, allowBlank = false, help = null, extras = null,
+        expense = false,
         basisOnly = null, basisWhy = null, context, onChange = null,
     } = opts;
 
@@ -172,7 +189,9 @@ export function createPricingForm(host, opts) {
     row.appendChild(anchorGroup);
 
     row.appendChild(punct(','));
-    row.appendChild(opWord('and'));
+    // `and` joins the last two clauses, so with an expense clause it moves
+    // there and a plain comma stands here.
+    if (!expense) row.appendChild(opWord('and'));
 
     const targetInput = el('input', {
         type: 'number', step: '0.01', value: '0.15', autocomplete: 'off',
@@ -184,6 +203,19 @@ export function createPricingForm(host, opts) {
     const targetField = el('label', { className: 'price-field' }, targetInput);
     row.appendChild(targetField);
     row.appendChild(targetGroup);
+
+    let expenseInput = null;
+    if (expense) {
+        row.appendChild(punct(','));
+        row.appendChild(opWord('and'));
+        expenseInput = el('input', {
+            type: 'number', step: '0.01', min: '0', max: '0.99',
+            value: expenseRatio != null ? String(expenseRatio) : '0',
+            autocomplete: 'off',
+        });
+        row.appendChild(el('label', { className: 'price-field' }, expenseInput));
+        row.appendChild(el('span', { className: 'price-unit' }, 'expense ratio'));
+    }
     row.appendChild(punct('.'));
 
     const button = el('button', { className: 'btn btn-primary btn-sm' }, verb);
@@ -406,9 +438,22 @@ export function createPricingForm(host, opts) {
             // PQ as a ratio to three places, matching every table on the pane:
             // it is premium over capital, and a leverage of 4.6 reads as 4.6
             // rather than as 460%.
-            settle(`Preview: premium ${money(q.premium)}, assets ${money(q.assets)}, `
+            const tail = `assets ${money(q.assets)}, `
                 + `loss ratio ${percent(q.lr)}, PQ ${q.pq?.toFixed(3) ?? ''}, `
-                + `and CoC ${percent(q.coc)}`);
+                + `and CoC ${percent(q.coc)}`;
+            // The premium lead. A P&L reports its ledger's own pair; a request
+            // that carried an expense ratio reports the gross reading beside
+            // the technical premium; otherwise the line is what it always was.
+            if (q.net_of_expense_premium != null) {
+                settle(`Preview: gross premium ${money(q.gross_premium)}, net `
+                    + `of expense premium ${money(q.net_of_expense_premium)}, `
+                    + tail);
+            } else if (q.gross_premium != null) {
+                settle(`Preview: gross premium ${money(q.gross_premium)}, `
+                    + `net premium ${money(q.premium)}, ` + tail);
+            } else {
+                settle(`Preview: premium ${money(q.premium)}, ` + tail);
+            }
         } catch (err) {
             held = null;
             settle(errorMessage(err));
@@ -422,6 +467,16 @@ export function createPricingForm(host, opts) {
 
     for (const input of [anchorInput, targetInput]) {
         input.addEventListener('input', () => { previewSoon(); onChange?.(); });
+    }
+    if (expenseInput) {
+        // Keystrokes write the shared value as well as this box, which is what
+        // keeps the three opted-in leaves consistent without a store.
+        expenseInput.addEventListener('input', () => {
+            const value = parseFloat(expenseInput.value);
+            expenseRatio = Number.isFinite(value) && value > 0 ? value : null;
+            previewSoon();
+            onChange?.();
+        });
     }
 
     button.addEventListener('click', () => {
@@ -451,6 +506,13 @@ export function createPricingForm(host, opts) {
         // again. A basis neither of them allows is never sent.
         const basis = basisLabel ? currentBasis() : null;
         if (basis) body.basis = basis;
+        // The expense clause, where drawn and live. Empty or zero sends
+        // nothing, and a P&L's dead box never travels: the ledger is the
+        // authority on that book's expenses.
+        if (expenseInput && !expenseInput.disabled) {
+            const e = parseFloat(expenseInput.value);
+            if (Number.isFinite(e) && e > 0) body.expense_ratio = e;
+        }
         return body;
     }
 
@@ -483,6 +545,13 @@ export function createPricingForm(host, opts) {
             targetInput.value = String(pricing.octet.premium);
         }
         targetInput.step = target === 'premium' ? '1' : '0.01';
+        // The expense ratio the pricing was struck with, when it carried one;
+        // a pricing struck bare leaves the shared value where it stands.
+        if (expenseInput && !expenseInput.disabled
+                && Number.isFinite(pricing.expense)) {
+            expenseInput.value = String(pricing.expense);
+            expenseRatio = pricing.expense > 0 ? pricing.expense : null;
+        }
         renderAnchor();
         renderTarget();
         refresh();
@@ -501,8 +570,29 @@ export function createPricingForm(host, opts) {
         button.textContent = on ? busyWord : verb;
     }
 
+    /**
+     * The expense box's own greying and refresh.
+     *
+     * Dead with a why on a P&L, whose ledger states its own expenses, and
+     * refreshed from the shared value so a leaf opens showing what was typed
+     * on another one. The focused box is left alone: a sync must not retype
+     * under the reader's cursor.
+     */
+    function syncExpense() {
+        if (!expenseInput) return;
+        const isPnl = (context() || {}).kind === 'pnl';
+        expenseInput.disabled = dormant || isPnl;
+        expenseInput.title = isPnl
+            ? 'the ledger states its own expenses'
+            : 'gross expense as a fraction of premium; empty or zero sends nothing';
+        if (document.activeElement !== expenseInput) {
+            expenseInput.value = expenseRatio != null ? String(expenseRatio) : '0';
+        }
+    }
+
     /** Redraw what depends on the object: the basis greying, and the line. */
     function sync() {
+        syncExpense();
         renderBasis();
         refresh();
     }
@@ -522,6 +612,7 @@ export function createPricingForm(host, opts) {
         anchorInput.disabled = dormant;
         targetInput.disabled = dormant;
         button.disabled = dormant;
+        syncExpense();
         renderAnchor();
         renderTarget();
         renderBasis();
