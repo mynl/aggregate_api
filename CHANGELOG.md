@@ -4,6 +4,18 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a187
+
+[Spectrum-Punchup] the distortion spectrum reads as a chart rather than as a wall of lines. Follows library `aggregate` `1.0.0a382` and plugin `aggregate-relativity` `0.4.0`. Author's review.
+
+- **A few-position ordinal panel no longer takes the whole pane.** Width is capped at 110 px per position with a 360 px floor, so the spectrum's four families draw about 440 px wide of a 1200 px host. Four points stretched across the pane is white space with ink in the corners, and it flattens the slope the panel is read for.
+- **Positions sit at band centers** (`boundaryGap: true`), not hard against the frame, where the first point reads as something cut off and the last as running out of the picture.
+- **One color family per `ChartSeries.group`**, assigned in order of appearance, with the shade and the symbol moving within a family. Eight curves in three families were eight points on one prop cycle; they now read as three sets whose members are told apart by shape as well as by shade. `groupStyles` is exported and tested directly.
+- **A grouped ordinal panel labels its lines directly and drops the legend.** `endLabel` plus `labelLayout: {moveOverlap: 'shiftY'}` and a leader line does what the reference script hand-rolled with an order-preserving packing solve: labels shift apart and keep the vertical order of the line ends. A legend of eight names to be matched back to eight lines by color is what this replaces.
+- **A `role: 'base'` mark washes the halves either side of it**, faintly, warm above and cool below. A **price** statement and not a verdict: above the base is dearer for everyone, where whether dearer is good depends on which side of the trade a series sits, which is the trap `MatrixData.row_polarity` exists for on the grid.
+
+Nothing above applies to a panel that declares no groups or no base mark: it keeps its legend, its full width and its plain rule.
+
 ## 1.0.0a186
 
 [Expenses] an expense ratio on the pricing forms, and gross versus net premium. Plan: `dev/plan-a182-pricing-pnl-forms.md` part [expenses].

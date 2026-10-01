@@ -50,8 +50,10 @@ function doc(xAxis = {}) {
             { name: '500x500', role: 'ceded', panel_id: 'spectrum',
               support: 'atomic', x: [0, 1, 2], y: [1.5, 1.55, 1.58] },
         ],
+        // `role: 'base'` is what declares the two halves; without it the wash
+        // is correctly absent, which is what the companion case below checks.
         marks: [{ panel_id: 'spectrum', orient: 'h', at: 1.0,
-                  label: 'gross book', faint: true }],
+                  label: 'gross book', role: 'base', faint: true }],
     };
 }
 
@@ -91,4 +93,113 @@ test('the y axis keeps its log reading', () => {
     const opt = chartdocToEcharts(doc(), {});
     const y = Array.isArray(opt.yAxis) ? opt.yAxis[0] : opt.yAxis;
     assert.equal(y.type, 'log');
+});
+
+// --- families, direct labels and the base wash -------------------------------
+
+const { documentLayout, groupStyles } =
+    await import('../src/charts/chartdoc-to-echarts.js');
+
+/** The spectrum with three families, as the plugin emits it. */
+function grouped() {
+    const mk = (name, group, y) => ({
+        name, role: 'ceded', panel_id: 'spectrum', support: 'atomic',
+        group, x: [0, 1, 2], y,
+    });
+    const d = doc();
+    d.series = [
+        mk('gross book', 'reference books', [1, 1, 1]),
+        mk('final net', 'reference books', [2, 2.1, 2.2]),
+        mk('500x500', 'occurrence', [1.5, 1.55, 1.58]),
+        mk('1x1', 'occurrence', [1.08, 1.12, 1.16]),
+        mk('QS', 'aggregate', [0.05, 0.05, 0.04]),
+    ];
+    return d;
+}
+
+const linesOf = (opt) => opt.series.filter((s) => s.type === 'line');
+
+test('one color family per group, assigned in order of appearance', () => {
+    // The renderer has no business knowing that 'occurrence' means anything in
+    // particular. The document says which series are kin; the first family that
+    // appears gets the first ramp.
+    const styles = groupStyles(grouped().series);
+    const hue = (name) => styles[name].color;
+    assert.notEqual(hue('gross book'), hue('500x500'));
+    assert.notEqual(hue('500x500'), hue('QS'));
+    // kin share a hue and differ in shade
+    assert.notEqual(hue('gross book'), hue('final net'));
+});
+
+test('a family tells its members apart by shape as well as by shade', () => {
+    const styles = groupStyles(grouped().series);
+    assert.notEqual(styles['gross book'].symbol, styles['final net'].symbol);
+    // and the first member of each family starts the symbol run again
+    assert.equal(styles['gross book'].symbol, styles['500x500'].symbol);
+});
+
+test('a family of one is left on its base color', () => {
+    const styles = groupStyles(grouped().series);
+    assert.match(styles.QS.color, /^#|^rgb/);
+});
+
+test('a series with no group keeps the house assignment', () => {
+    assert.deepEqual(groupStyles(doc().series), {});
+});
+
+test('a grouped ordinal panel labels its lines directly and drops the legend', () => {
+    // The legend is what a reader serves worst here: eight names in a box to be
+    // matched back to eight lines by color. `endLabel` plus `labelLayout`
+    // shift-on-overlap does what the reference hand-rolled with a packing solve.
+    const opt = chartdocToEcharts(grouped(), {});
+    const lines = linesOf(opt);
+    assert.ok(lines.length >= 5);
+    for (const s of lines) {
+        assert.equal(s.endLabel.show, true);
+        assert.equal(s.labelLayout.moveOverlap, 'shiftY');
+        assert.equal(s.labelLine.show, true);
+    }
+    assert.deepEqual(opt.legend.data, []);
+});
+
+test('an ungrouped panel keeps its legend', () => {
+    const opt = chartdocToEcharts(doc(), {});
+    assert.ok(opt.legend.data.length > 0);
+    for (const s of linesOf(opt)) assert.equal(s.endLabel, undefined);
+});
+
+test('a base mark washes the halves either side of it', () => {
+    const opt = chartdocToEcharts(grouped(), {});
+    const area = opt.series.find((s) => s.markArea);
+    assert.ok(area, 'the wash is drawn');
+    const [above, below] = area.markArea.data;
+    assert.equal(above[0].yAxis, 1.0);
+    assert.equal(above[1].yAxis, 'max');
+    assert.equal(below[0].yAxis, 'min');
+    assert.equal(below[1].yAxis, 1.0);
+    // dearer above, cheaper below: a price statement, never a verdict
+    assert.notEqual(above[0].itemStyle.color, below[0].itemStyle.color);
+});
+
+test('a mark with no base role draws no wash', () => {
+    const d = grouped();
+    d.marks = [{ ...d.marks[0], role: 'mean' }];
+    assert.equal(chartdocToEcharts(d, {}).series.find((s) => s.markArea),
+                 undefined);
+});
+
+test('a four-point ordinal panel does not take the whole width', () => {
+    // Four points stretched across the pane is white space with ink in the
+    // corners, and it flattens the slope the panel is read for.
+    const wide = documentLayout(grouped(), 1200);
+    assert.ok(wide.grids[0].width < 600, wide.grids[0].width);
+    assert.ok(wide.grids[0].width >= 360, wide.grids[0].width);
+});
+
+test('a value-axis panel is unaffected by the ordinal ceiling', () => {
+    const d = grouped();
+    d.axes = d.axes.map((a) => (a.id === 'family'
+        ? { id: 'family', label: 'x', scales: ['linear'] } : a));
+    const lay = documentLayout(d, 1200);
+    assert.ok(lay.grids[0].width > 600, lay.grids[0].width);
 });

@@ -174,6 +174,11 @@ const CURVE_WIDTH = 2;
 // target is a cell a little wider than tall: square wastes width on short
 // numbers, and the default panel height left them nearly three times as wide as
 // high, which is a ribbon rather than a grid.
+// An ordinal xy panel's preferred width: this much per position, floored so a
+// two-category panel is still a chart rather than a sliver.
+const ORDINAL_PER_CAT = 110;
+const ORDINAL_MIN_W = 360;
+
 const MATRIX_CELL_ASPECT = 0.62;
 const MATRIX_MIN_H = 180;
 const MATRIX_MAX_H = 620;
@@ -898,7 +903,10 @@ export function panelLayout(count, square, width, rightPad = 0, plan = null) {
             : Math.max(PANEL_MIN_H,
                 Math.min(PANEL_MAX_H, uniformW / PANEL_ASPECT - chrome)));
     // A square is as wide as it is tall, so a clamped height narrows the box.
-    const boxW = square && !laid ? panelH : uniformW;
+    let boxW = square && !laid ? panelH : uniformW;
+    // A panel that asked for a ceiling takes it, which is how a four-point
+    // ordinal panel avoids being stretched across the whole pane.
+    if (plan && plan.maxWidth) boxW = Math.min(boxW, plan.maxWidth);
     // **A ratio unit is as wide as the aspect says, or as wide as there is
     // room for.** Dividing the free width among the ratios alone would spend
     // every spare pixel on the strips: three towers in a 980 pixel pane came
@@ -1032,6 +1040,18 @@ export function documentLayout(doc, width) {
         : null;
     // A matrix sizes off its own shape: a panel of 8 rows and 7 columns wants a
     // different height from one of 3 and 12, and the house aspect knows neither.
+    // A panel read at a handful of ordinal positions does not want the full
+    // width: four points stretched across 1200 px is a lot of white space with
+    // some ink in the corners, and the eye reads slope, which a stretched x
+    // axis flattens into nothing.
+    const ordinal = panels.length === 1 && panels[0].kind === 'xy'
+        && ((doc && doc.axes) || []).find(
+            (a) => a.id === panels[0].x_axis && a.kind === 'category'
+                && a.categories && a.categories.length);
+    if (ordinal && !plan) {
+        plan = { maxWidth: Math.max(ORDINAL_MIN_W,
+                                    ordinal.categories.length * ORDINAL_PER_CAT) };
+    }
     const matrix = panels.find((p) => p.kind === 'matrix');
     if (matrix && !plan) {
         const m = ((doc && doc.series) || [])
@@ -1095,6 +1115,66 @@ const STEP_KEY = { 'step-pre': 'start', 'step-mid': 'middle', 'step-post': 'end'
 function gapFree(values) {
     for (const v of values) if (v == null) return false;
     return true;
+}
+
+/** How strong the base wash is. It names which half is which, nothing more. */
+const WASH_OPACITY = 0.06;
+
+/** Above the base costs more; below it costs less. Matches the grid's ramp. */
+const WASH_DEARER = '#e34948';
+const WASH_CHEAPER = '#008300';
+
+//: Symbols a family cycles through, one per member. The first four read at
+//: small sizes; the last two are strokes only, which is why they come last.
+const GROUP_SYMBOLS = ['circle', 'rect', 'triangle', 'diamond', 'pin', 'arrow'];
+
+/** How far a family's shades spread either side of its base color. */
+const GROUP_SHADE_SPREAD = 0.45;
+
+/** `color` moved `t` of the way toward white (t > 0) or black (t < 0). */
+function shade(color, t) {
+    const hex = String(color).replace('#', '');
+    if (hex.length !== 6 || !t) return color;
+    const n = parseInt(hex, 16);
+    const toward = t > 0 ? 255 : 0;
+    const mix = (c) => Math.round(c + (toward - c) * Math.abs(t));
+    return `rgb(${mix((n >> 16) & 255)},${mix((n >> 8) & 255)},${mix(n & 255)})`;
+}
+
+/**
+ * `series name -> {color, symbol}`, one family per declared `group`.
+ *
+ * Families are assigned **in order of appearance**, not by what a group is
+ * called: the renderer has no business knowing that 'occurrence' means blue.
+ * What the document says is that these series are one family and those are
+ * another, and the first family gets the first ramp. Within a family the shade
+ * moves and the symbol changes, so two members read as kin and still read
+ * apart. Hue never moves inside a family, because hue is what says which
+ * family it is.
+ *
+ * A panel whose series declare no group gets an empty map and keeps the
+ * one-color-per-name assignment every other panel uses.
+ */
+export function groupStyles(members) {
+    const groups = [];
+    for (const s of members) {
+        if (s.group && !groups.includes(s.group)) groups.push(s.group);
+    }
+    const out = {};
+    if (!groups.length) return out;
+    for (const s of members) {
+        if (!s.group) continue;
+        const kin = members.filter((e) => e.group === s.group);
+        const member = kin.indexOf(s);
+        const base = seriesColor(groups.indexOf(s.group));
+        const t = kin.length > 1
+            ? (member / (kin.length - 1) - 0.5) * 2 * GROUP_SHADE_SPREAD : 0;
+        out[s.name] = {
+            color: shade(base, t),
+            symbol: GROUP_SYMBOLS[member % GROUP_SYMBOLS.length],
+        };
+    }
+    return out;
 }
 
 /** The house sequential ramp at `t` in [0, 1]: white to the primary color. */
@@ -1246,7 +1326,10 @@ function axisOption(axis, gridIndex, { scale, window, floor, formatter, nameGap 
         return axisStyle({
             type: 'category', gridIndex, data: [...axis.categories],
             name: axis.label || '',
-            boundaryGap: false,
+            // Band centers, not the frame. A first point drawn on the axis
+            // line reads as the start of something cut off, and the last one
+            // as running out of the picture.
+            boundaryGap: true,
             ...(nameGap == null ? {} : { nameGap }),
         });
     }
@@ -1495,14 +1578,25 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
 
     const series = [];
     const legend = [];
+    // One color family per declared group, resolved over the panel's whole
+    // series list before any of it is emitted: a family's members have to agree
+    // with each other and a per-series decision cannot see its kin.
+    const families = groupStyles(drawn.map((d) => d.s));
+    // Direct labels replace the legend where the panel declares families and
+    // the x axis is ordinal, which is the case a legend serves worst: eight
+    // names in a box the reader has to match back to eight lines by color.
+    const direct = Object.keys(families).length > 0
+        && xAxis.kind === 'category';
     for (const { s, x, y, y2 } of drawn) {
         // A `sample` series with no value is one of an interchangeable family
         // (the ruin chart's surviving paths): all muted gray, so the palette
         // is not spent on fifty names and the valued members, colored on the
         // ramp, read as the exceptions they are.
-        const color = s.value != null
-            ? rampColor(VALUE_RAMP_FLOOR + (1 - VALUE_RAMP_FLOOR) * valueAt(s.value))
-            : (s.role === 'sample' ? '#6c757d' : seriesColor(ctx.colorOf(s.name)));
+        const family = families[s.name];
+        const color = family ? family.color
+            : (s.value != null
+                ? rampColor(VALUE_RAMP_FLOOR + (1 - VALUE_RAMP_FLOOR) * valueAt(s.value))
+                : (s.role === 'sample' ? '#6c757d' : seriesColor(ctx.colorOf(s.name))));
         // A log axis cannot place a zero, and the tail of a discretized density
         // is full of exact zeros and of FFT dust below LOG_FLOOR. Both become
         // gaps rather than being clamped onto the axis floor, which would draw
@@ -1689,7 +1783,13 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
             ...(STEP_KEY[style] ? { step: STEP_KEY[style] } : {}),
             data: points,
             sampling: gapFree(points) ? SAMPLING : undefined,
-            showSymbol: false,
+            // A family's members are told apart by shape as well as by shade:
+            // eight lines in three hues are not distinguishable by color alone,
+            // and a reader should not have to match a legend swatch to tell a
+            // layer from its package.
+            ...(family
+                ? { showSymbol: true, symbol: family.symbol, symbolSize: 7 }
+                : { showSymbol: false }),
             connectNulls: false,
             lineStyle: {
                 width: s.value != null || s.role === 'sample' ? 0.75 : lineWidth(),
@@ -1697,13 +1797,27 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
                 color,
             },
             itemStyle: { color },
+            // The curve names itself at its own end, which is the labeling the
+            // reference drew by hand with an order-preserving packing solve and
+            // leader lines. `labelLayout` below does the same job: it shifts
+            // overlapping labels apart and draws the leader to the point it
+            // left, so the vertical order of the labels still matches the
+            // vertical order of the line ends.
+            ...(direct ? {
+                endLabel: {
+                    show: true, color, fontSize: 11, distance: 6,
+                    formatter: s.name,
+                },
+                labelLayout: { moveOverlap: 'shiftY' },
+                labelLine: { show: true, lineStyle: { color } },
+            } : {}),
             emphasis: { focus: 'series' },
         });
         // One of a family labeled by a number rather than by a name stays out
         // of the legend: forty entries would be forty names nobody asked for,
         // and the number is already encoded on the ramp. A `sample` family is
         // the same case whether or not its members carry values.
-        if (s.value == null && s.role !== 'sample') legend.push(s.name);
+        if (s.value == null && s.role !== 'sample' && !direct) legend.push(s.name);
     }
 
     // Marks last, on the panel's first series, so they draw once. A mark names
@@ -1735,6 +1849,28 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
     );
     const marks = placed.map((p, i) => markLineEntry(p.m, p.orient, p.at, i === rightmost));
     if (marks.length && series.length) series[0].markLine = markLine(marks);
+
+    // A `base` mark divides the panel into two halves worth naming, so they are
+    // washed rather than left to be inferred from one thin rule. Faint enough
+    // never to compete with the curves drawn over it.
+    //
+    // A **price** statement and not a verdict: above the base is dearer for
+    // everyone, where whether dearer is *good* depends on which side of the
+    // trade a series sits. That is the same trap `MatrixData.row_polarity`
+    // exists for on the grid, and the reason this says 'dearer' and not 'worse'.
+    const base = placed.find((p) => p.m.role === 'base' && p.orient === 'h');
+    if (base && series.length) {
+        series[0].markArea = {
+            silent: true, z: 0,
+            itemStyle: { opacity: WASH_OPACITY },
+            data: [
+                [{ yAxis: base.at, itemStyle: { color: WASH_DEARER } },
+                 { yAxis: 'max' }],
+                [{ yAxis: 'min', itemStyle: { color: WASH_CHEAPER } },
+                 { yAxis: base.at }],
+            ],
+        };
+    }
 
     const xFormatter = labelFormatter(xAxis, xScale);
     const yFormatter = labelFormatter(yAxis, yScale);
