@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a191
+
+[Punch-List] the author's 2026-10-01 punch list: the PnL rate items light, the P&L exhibits carry the net-of-occurrence row, and a handful of visual fixes. Companion releases: `aggregate` `1.0.0a386` (`pnl_program(premium_style=)`) and `1.0.0a387` (net-of-tier row on `economic_ratios_df` and the walk, `Margin ratio` column, insurer ratios without the legs block), `aggregate-relativity` `0.7.0` (the `net of occ` reference row).
+
+- **PnL (rate) and xPnL (rate) are live.** The upstream `premium_style` ask shipped as library a386, so `PNL_PREMIUM_STYLE_SUPPORTED` flips on this sync and the two items light with no code change here, exactly as a183 designed.
+- **Bounds computes on arrival for a P&L.** The envelope leaf seeds the form with the ledger's net-of-expense premium (the pair the preview route already reports) and runs the sweep, the same auto-run reasoning as Evaluate's; Compute stays live for any other premium.
+- **PnL Summary, Waterfall and the Lab Relativity pages carry the net-of-occurrence subtotal**, muted like the ledger's, from the companion releases; the Insurer Summary drops the third (by-leg) table; the Waterfall's second table gains `Margin ratio` (1 less CR) between CR and MSD.
+- **Pricing Bounds says what its premium is**: the heading reads "With this object priced at X", naming the base-risk constraint the sweep holds fixed, and the caption spells out that lower and upper bound the named risk's price.
+- Visual: the PnL caret squares its right edge mid-group; the Bounds `against` clause takes the sentence face and more air above; the Density hint's typo fixed and the leaf stays last in More (author's edit).
+
 ## 1.0.0a190
 
 [Evaluate-Targets] the Evaluate form takes the full CoC | LR | Premium switch. Author's ruling after kicking a186's tires: most of the time the premium is computed, not typed.

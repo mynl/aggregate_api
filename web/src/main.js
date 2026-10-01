@@ -3693,7 +3693,9 @@ const boundsAgainst = el('input', {
 });
 const boundsAgainstField = el('label',
     { className: 'price-field bounds-against d-none' },
-    'against', boundsAgainst);
+    // The word takes `.qr-op` like every connective in the sentence above it;
+    // as a bare text node it rendered in the label face and read as a stray.
+    el('span', { className: 'qr-op' }, 'against'), boundsAgainst);
 
 /**
  * Show one bounds leaf: same form, different extras, pane cleared.
@@ -3712,8 +3714,31 @@ async function showBoundsLeaf(which) {
     boundsAgainstField.classList.toggle('d-none', which !== 'pricing');
     $('bounds-hint').textContent = BOUNDS_HINTS[which] || '';
     adoptPricing(boundsForm);
+    // A P&L states its own premium, so the envelope computes on arrival
+    // rather than waiting for a press (the author's ask at a191, the same
+    // reasoning as Evaluate's auto-run): the form is seeded with the
+    // ledger's net-of-expense premium, the number the sweep holds fixed,
+    // and Compute stays live for any other premium.
+    const auto = which === 'bounds' && state.kind === 'pnl';
     replacePane('pane-bounds', el('div', { className: 'text-muted small' },
-        'Set a premium and press Compute.'));
+        auto ? 'Computing at the ledger’s own premium…'
+             : 'Set a premium and press Compute.'));
+    if (!auto) return;
+    const id = state.id;
+    try {
+        const q = await api.pricingPreview(id, boundsForm.read()
+            || { p: 0.99, coc: 0.15 });
+        if (id !== state.id || boundsWhich !== 'bounds') return;
+        if (Number.isFinite(q.net_of_expense_premium)) {
+            boundsForm.write({ anchor: 'p', target: 'premium',
+                octet: { p: 0.99, premium: q.net_of_expense_premium } });
+        }
+        computeBounds(boundsForm.read());
+    } catch (err) {
+        if (id === state.id && boundsWhich === 'bounds') {
+            replacePane('pane-bounds', errorNode(err));
+        }
+    }
 }
 
 /**
@@ -3740,19 +3765,31 @@ function adoptPricing(form) {
 }
 
 /** Render a bounds table: one row per unit or per named risk. */
-function renderBoundsTable(payload) {
+function renderBoundsTable(payload, which) {
     const paneId = 'pane-bounds';
     const ir = payload.ir || {};
+    // The premium named in the heading is the constraint, not a quote: it is
+    // the premium on the BASE object (the one in the box), resolved through
+    // the pentagon from whatever the form stated, and it pins the family of
+    // distortions the ranges below are swept over.
+    const title = which === 'pricing'
+        ? `With this object priced at ${fmt(payload.premium)}`
+        : `Consistent with a total premium of ${fmt(payload.premium)}`;
+    const caption = which === 'pricing'
+        ? ('Lower and upper bound what the named risk can cost under every '
+            + 'distortion that prices this object, the base risk, to the '
+            + 'premium above. Width is the reading: it is how much of the '
+            + 'answer the choice of distortion decides rather than the '
+            + 'base pricing.')
+        : ('Lower and upper are the ends of the range over every distortion '
+            + 'that prices this object to the premium above. Width is the '
+            + 'reading: it is how much of the answer the choice of distortion '
+            + 'decides rather than the calibration.');
     const draw = () => {
         const root = el('div', { className: 'price-result' });
         replacePane(paneId, root);
-        root.appendChild(el('div', { className: 'price-section-title' },
-            `Consistent with a premium of ${fmt(payload.premium)}`));
-        root.appendChild(el('div', { className: 'exhibit-caption mb-2' },
-            'Lower and upper are the ends of the range over every distortion '
-            + 'that prices this object to the premium above. Width is the '
-            + 'reading: it is how much of the answer the choice of distortion '
-            + 'decides rather than the calibration.'));
+        root.appendChild(el('div', { className: 'price-section-title' }, title));
+        root.appendChild(el('div', { className: 'exhibit-caption mb-2' }, caption));
         const host = el('div');
         root.appendChild(host);
         mountTable(paneId, host,
@@ -3788,48 +3825,56 @@ const boundsForm = createPricingForm($('bounds-form'), {
     preview: true,
     extras: boundsAgainstField,
     context: formContext,
-    onSubmit: async (body) => {
-        if (!state.id) return;
-        boundsForm.setBusy(true, 'Computing…');
-        try {
-            // The sweep is parameterized by a premium and an asset level, and
-            // the form may have been given a cost of capital instead, so the
-            // pentagon resolves the pair first. One cheap call, and it is the
-            // same one the preview line makes.
-            const octet = await api.pricingPreview(state.id, body);
-            holdPricing(body, octet);
-            const premium = octet.premium;
-            const assets = Number.isFinite(octet.assets) ? octet.assets : null;
-            if (!Number.isFinite(premium)) return;
-            if (boundsWhich === 'bounds') {
-                // A chart document since a60, where this used to be an <img>
-                // whose src was the whole request. The reader gets a picture
-                // they can zoom and read values off, and the api stopped
-                // rendering.
-                const doc = await api.boundsEnvelope(state.id, { premium, assets });
-                const host = el('div', { className: 'bounds-figure' });
-                replacePane('pane-bounds', host);
-                if (boundsChart) { boundsChart.dispose(); boundsChart = null; }
-                // The document is already in hand, since the premium the reader
-                // typed is what identifies it, so this takes the mount's
-                // already-fetched entry point rather than its fetching one.
-                boundsChart = mountChartDoc(host, doc);
-                if (!boundsChart) replacePane('pane-bounds', notDrawable());
-            } else if (boundsWhich === 'allocation') {
-                renderBoundsTable(await api.allocationBounds(state.id, { premium, assets }));
-            } else {
-                const against = boundsAgainst.value.trim();
-                if (!against) return;
-                renderBoundsTable(await api.pricingBounds(
-                    state.id, { premium, assets, against: [against] }));
-            }
-        } catch (err) {
-            replacePane('pane-bounds', errorNode(err));
-        } finally {
-            boundsForm.setBusy(false);
-        }
-    },
+    onSubmit: (body) => computeBounds(body),
 });
+
+/**
+ * One press of Compute, named so the P&L auto-run (`showBoundsLeaf`) can take
+ * the same path as the button.
+ */
+async function computeBounds(body) {
+    if (!state.id || !body) return;
+    boundsForm.setBusy(true, 'Computing…');
+    try {
+        // The sweep is parameterized by a premium and an asset level, and
+        // the form may have been given a cost of capital instead, so the
+        // pentagon resolves the pair first. One cheap call, and it is the
+        // same one the preview line makes.
+        const octet = await api.pricingPreview(state.id, body);
+        holdPricing(body, octet);
+        const premium = octet.premium;
+        const assets = Number.isFinite(octet.assets) ? octet.assets : null;
+        if (!Number.isFinite(premium)) return;
+        if (boundsWhich === 'bounds') {
+            // A chart document since a60, where this used to be an <img>
+            // whose src was the whole request. The reader gets a picture
+            // they can zoom and read values off, and the api stopped
+            // rendering.
+            const doc = await api.boundsEnvelope(state.id, { premium, assets });
+            const host = el('div', { className: 'bounds-figure' });
+            replacePane('pane-bounds', host);
+            if (boundsChart) { boundsChart.dispose(); boundsChart = null; }
+            // The document is already in hand, since the premium the reader
+            // typed is what identifies it, so this takes the mount's
+            // already-fetched entry point rather than its fetching one.
+            boundsChart = mountChartDoc(host, doc);
+            if (!boundsChart) replacePane('pane-bounds', notDrawable());
+        } else if (boundsWhich === 'allocation') {
+            renderBoundsTable(
+                await api.allocationBounds(state.id, { premium, assets }),
+                'allocation');
+        } else {
+            const against = boundsAgainst.value.trim();
+            if (!against) return;
+            renderBoundsTable(await api.pricingBounds(
+                state.id, { premium, assets, against: [against] }), 'pricing');
+        }
+    } catch (err) {
+        replacePane('pane-bounds', errorNode(err));
+    } finally {
+        boundsForm.setBusy(false);
+    }
+}
 
 // ----------------------------------------------------------------------
 // Pricing / Evaluate: the breakeven acceptability panel

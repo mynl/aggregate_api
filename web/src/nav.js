@@ -90,7 +90,7 @@ export const NAV_GROUPS = {
                 label: 'Validation',
                 exhibit: 'validation',
                 why: 'needs computed moments',
-                hint: 'theoretical vs empirical moments; reads “not unreasonable” on a clean build',
+                hint: 'theoretical vs empirical moments; “not unreasonable” on a clean build',
             },
             // Moved up from More, the same move Validation made at a55 and for
             // the same reason: it is a longer look at the row above it rather
@@ -157,13 +157,13 @@ export const NAV_GROUPS = {
                 label: 'Diagram',
                 chart: 'structure',
                 why: 'needs a cession; add one below',
-                hint: 'the program as a tower: layers, shares, retention',
+                hint: 'the reinsurance program: layers, shares, retention',
             },
             plot: {
                 label: 'Plot',
                 chart: 'reins',
                 why: 'needs a cession; add one below',
-                hint: 'what the cession does to the shape, and to the tail',
+                hint: 'impact of the cession on the shape and tail',
             },
             summary: {
                 label: 'Summary',
@@ -216,7 +216,7 @@ export const NAV_GROUPS = {
             allocate: { label: 'Allocate', flag: 'canNaturalAllocation',
                         why: 'needs a book of units or an occurrence cession',
                         hint: 'one premium split across the parts on one '
-                            + 'basis: units of a book, or the halves of an '
+                            + 'basis: units of a book, or the layers of an '
                             + 'occurrence program' },
             // The only pricing leaf that fetches on activation, and the only
             // one gated on a chart. It asks a question of the object rather
@@ -231,8 +231,8 @@ export const NAV_GROUPS = {
             plot: { label: 'Plot', chart: 'kappa',
                     why: 'needs a book of units, an occurrence cession, or '
                         + 'a reinsured P&L',
-                    hint: 'the kappa curves behind the allocation: what each '
-                        + 'part expects, given the whole' },
+                    hint: 'the kappa curves behind the allocation: expectation '
+                        + 'by part, given the whole' },
             // A chart leaf like Plot, so the pill lights from the library's
             // own frequency predicate rather than from a flag this app would
             // have to keep in step with it. Fenced by dividers on both sides:
@@ -248,8 +248,8 @@ export const NAV_GROUPS = {
             evaluate: { label: 'Evaluate', flag: 'canEvaluate',
                         dividerBefore: true,
                         why: 'needs an object that can be priced',
-                        hint: 'the stress a premium already held survives: the '
-                            + 'distortion in each family that values the '
+                        hint: 'distortion parameter '
+                            + 'in each family that values the '
                             + 'margin at zero' },
         },
     },
@@ -282,13 +282,13 @@ export const NAV_GROUPS = {
                 exhibit: 'economic_waterfall',
                 why: 'a P&L tower only',
                 hint: 'the margin (M) and standalone and diversified 1-in-100 '
-                    + 'margin walk over the whole tower',
+                    + 'margin across the tower',
             },
             ledger: {
                 label: 'Ledger',
                 exhibit: 'economic',
                 why: 'a P&L only',
-                hint: 'the P&L sheet, line by line',
+                hint: 'the P&L, line by line',
             },
         },
     },
@@ -305,7 +305,7 @@ export const NAV_GROUPS = {
                 label: 'Pricing Bounds',
                 flag: 'canBounds',
                 why: 'needs a loss distribution: an aggregate, a portfolio, or a P&L wrapping one',
-                hint: 'what a second risk can cost, given this one priced there',
+                hint: 'price of a second risk, given the base-line risk and price',
             },
             allocation: {
                 label: 'Allocation Bounds',
@@ -349,7 +349,7 @@ export const NAV_GROUPS = {
                 label: 'Tail behavior',
                 exhibit: 'tail_behavior',
                 why: 'needs a full loss distribution, so an aggregate or a portfolio',
-                hint: 'the decay class on each side, and whether the support is bounded',
+                hint: 'the left and right tail class; support bounded or unbounded',
             },
             // Between Tail behavior and Window on the author's ruling, and the
             // three read as one run: what the tails do analytically, how well
@@ -383,13 +383,13 @@ export const NAV_GROUPS = {
                 // the grid it implies, since W = bs * 2**log2.
                 hint: 'each row proposes a window [x_min, x_max] of width '
                     + 'W = x_max - x_min, and the grid bs · 2^log2 that covers '
-                    + 'it; the selected row is the one used',
+                    + 'it; the selected row is indicated',
             },
             dependency: {
                 label: 'Dependency',
                 exhibit: 'dependency',
                 why: 'a bivariate only',
-                hint: 'the copula and what it does to the joint; a bivariate only',
+                hint: 'the copula and its impact; a bivariate only',
             },
             // Gated on `hasSharpen`, which is not the negation of the
             // `canSharpen` behind the action-row button: that one asks whether
@@ -399,19 +399,20 @@ export const NAV_GROUPS = {
                 label: 'Sharpen',
                 flag: 'hasSharpen',
                 why: 'press Sharpen on the action row first; this is its audit',
-                hint: 'every grid the probe tried and what it scored; lower is '
-                    + 'better, and the selected row is the one it moved to',
+                hint: 'fit scores for every grid probed; lower is '
+                    + 'better; the selected row is indicated',
             },
-            // The two that are not diagnostics, at the end. Density is the
-            // heaviest leaf in the app and led this group through a160; see the
-            // ruling at the head of `leaves`.
-            density: {
-                label: 'Density',
-                hint: 'binned to a power-of-two display grid; copy / save from the grid',
-            },
+            // The two that are not diagnostics, at the end. Density closes the
+            // row (author's edit at a191, so it is never the landing leaf): it
+            // is the heaviest leaf in the app and led this group through a160;
+            // see the ruling at the head of `leaves`.
             narrative: {
                 label: 'Narrative',
-                hint: 'the object’s own text, verbatim',
+                hint: 'the object’s info and various attribute description strings',
+            },
+            density: {
+                label: 'Density',
+                hint: 'binned probability mass, distribution, and survival functions',
             },
         },
     },

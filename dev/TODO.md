@@ -6,6 +6,14 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Punch-List]** DONE (`1.0.0a191`), the author's 2026-10-01 punch list:
+  the rate menu items light (upstream `pnl_program(premium_style=)` shipped as
+  library a386), the net-of-occurrence subtotal reaches PnL Summary, Waterfall
+  and Lab Relativity (library a387, plugin 0.7.0), Insurer Summary drops the
+  by-leg table, the Waterfall gains `Margin ratio`, Bounds auto-computes on a
+  P&L at the ledger premium, and the Pricing Bounds heading names the base
+  constraint. Detail in `CHANGELOG.md` a191 and the two library entries.
+
 - **[Evaluate-Targets]** DONE (`1.0.0a190`), author's tweak after kicking the
   a186 tires: Evaluate offers the full CoC | LR | Premium switch (it passed
   `targets: ['premium']` and drew a bare label), a CoC or LR resolving its
@@ -21,8 +29,8 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
   expense box on Calibrate, Allocate and Evaluate, and the P&L ledger pair on
   the Bounds preview and the dormant Evaluate band. This closes the plan's
   four parts (a182, a183, a184, a186; a185 was the unrelated matrix fix); the
-  plan stays in `dev/` until the author calls it done, and the rate menu items
-  stay dark until the upstream `premium_style` ask ships.
+  plan stays in `dev/` until the author calls it done. The rate menu items lit
+  at a191, when the upstream `premium_style` ask shipped as library a386.
 
 - **[Sentence-Forms]** DONE (`1.0.0a184`), plan
   `dev/plan-a182-pricing-pnl-forms.md` part [sentence-forms]: the five pricing
@@ -35,9 +43,9 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
   button with fixed labels (PnL, and a caret with PnL (rate), xPnL,
   xPnL (rate)), the stale-object reset bug fixed by deriving from the box,
   `form` and `premium_style` on the pnl route, and the `can_pnl_rate` /
-  `can_xpnl` flags. The two rate items stay dark until the upstream ask ships
-  `pnl_program(premium_style=)` in `aggregate`; the api feature-detects the
-  signature, so the next editable sync lights them with no change here.
+  `can_xpnl` flags. The two rate items stayed dark until the upstream ask
+  shipped (`pnl_program(premium_style=)`, library a386); the api
+  feature-detects the signature, so the a191 sync lit them with no change here.
 
 - **[Evaluate-Auto]** DONE (`1.0.0a182`), plan
   `dev/plan-a182-pricing-pnl-forms.md` part [evaluate-auto]: Pricing / Evaluate

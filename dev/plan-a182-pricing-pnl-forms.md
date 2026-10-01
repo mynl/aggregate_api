@@ -308,3 +308,62 @@ for the two rate menu items, which stay greyed until it ships.
 - `dev/TODO.md`: tick or add entries per part; the rate menu items get a line
   noting the upstream dependency until they light.
 - Move this plan to `dev/done/` only when the author says done.
+
+---
+
+## Execution log (2026-10-01)
+
+Executed in order: [evaluate-auto] a182, [pnl-dropdown] a183,
+[sentence-forms] a184, [expenses] a186. a185 is the unrelated matrix cell
+fix, committed in parallel while [expenses] was in flight; the collision was
+caught at the bump and [expenses] renumbered. Both gates (427 pytest, 222
+node) green at every bump; `check-nav.mjs` clean; SPA rebuilt at each bump.
+The `uv sync --extra dev` re-syncs are owed and wait on a server restart, so
+`/v1/meta` understates the version until then.
+
+Divergences, all small and recorded here rather than silently absorbed:
+
+- **[evaluate-auto] dormant means nothing hides.** The author's ruling with
+  the execute command ("the pricing subbox goes dormant, it does not
+  disappear") was read as overriding the plan's letter, which kept the anchor
+  and premium pairs `d-none` through `setFieldsVisible`. Implemented as
+  `setDormant(on)`: every control stays drawn, disabled and dimmed
+  (`.price-form.is-dormant`), the pairs included, and `setFieldsVisible` is
+  gone. One mechanism, as the plan asked.
+- **[pnl-dropdown] the rate 400 names no version.** The plan's message
+  template `"premium_style='rate' needs aggregate >= <version>"` has no
+  number to name while the upstream ask is unshipped, so the sentence names
+  the gap instead: the installed `pnl_program` does not accept the keyword.
+  The signature test (`capability.PNL_PREMIUM_STYLE_SUPPORTED`) flips it on
+  the sync that ships it.
+- **[pnl-dropdown] `runDerivation` lost its own disabled check.** On a P&L
+  the main PnL button is dark while the xPnL item is live and runs through
+  that button for its busy label, so the guard moved to the pressed control
+  (a disabled control cannot be clicked at all).
+- **[sentence-forms] Pr Ruin's lede.** The plan spells only Bounds
+  (`Compute at ...`); Pr Ruin takes `Draw at ...` by the same rule, the verb
+  phrase of a form with no basis group.
+- **[expenses] the dormant Evaluate band's ledger pair** is fetched through
+  the preview route with the form's default anchor and target (`p 0.99`,
+  `coc 0.15`), because the route requires a complete question and the ledger
+  fields do not depend on it; the pair is cached per object (`_pnlLedger`)
+  so revisits cost no request. `formContext.canPreview` now also answers for
+  a P&L, which is what puts the pair on the Bounds preview line.
+- **[expenses] `test_pnl_request_defaults_are_held_to_the_library_signature`**
+  carves `form` and `premium_style` out as app routing fields, and asserts
+  the `premium_style` default against the library the day the signature
+  ships it.
+
+## Upstream ask: shipped (2026-10-01)
+
+`pnl_program(premium_style=)` landed as `aggregate` 1.0.0a386, to this plan's
+spec: the rate is a respell of the ladder's finished deposit (occurrence rates
+off the stated gross, aggregate rates off the gross less the occurrence
+cession, mirroring the resolver), eight significant figures for the round
+trip, authored clauses verbatim, moot without the ladder, unknown style a
+`ValueError`. The api's a191 sync flipped `PNL_PREMIUM_STYLE_SUPPORTED` and
+the two rate menu items lit with no change here. Both points the plan asked
+to verify upstream hold: an `xpnl` carrying written rate clauses resolves
+each side against its own base (`test_pnl_rate_style_is_a_respelling_of_the_deposits`),
+and the ladder's input-side rate refusal is untouched
+(`test_pnl_ladder_refuses_a_layer_already_priced_as_a_rate`).

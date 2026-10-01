@@ -404,6 +404,11 @@ header .navbar { min-height: 56px; }
    five peer buttons said they were five unrelated verbs. */
 .derive-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em;
     color: var(--mut); margin-left: .45rem; }
+/* Bootstrap leaves a dropdown-toggle's right corners rounded on the assumption
+   that a split button closes its group. The PnL caret sits mid-run with GCN
+   after it, so it squares like any interior member; the GCN caret really is
+   the end of the group and keeps its rounding. */
+#pnl-caret { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 /* Two rows now, so a column rather than a row: what you do to the program on
    the first line, where you go on the second. Right-aligned as one block, since
    two lines ragged on the left against a button row would read as loose text.
@@ -1080,7 +1085,10 @@ header .navbar { min-height: 56px; }
    the pane's width and keeps its own aspect. `against` is prose like the
    cession box, not a number, so it gets room for a DecL fragment. */
 .bounds-figure { max-width: 100%; height: auto; display: block; }
-#bounds-form .bounds-against { flex: 1 1 20rem; min-width: 11rem; }
+/* The margin is the author's ask (a191): the row above closes with its own
+   button, so the clause below wants air to read as a second line rather than
+   as a crowded fifth field. */
+#bounds-form .bounds-against { flex: 1 1 20rem; min-width: 11rem; margin-top: .45rem; }
 #bounds-form .bounds-against input {
     width: 100%; font-family: var(--mono); font-size: .74rem;
     /* Left, against the rest of the form: this one holds a unit name or a
