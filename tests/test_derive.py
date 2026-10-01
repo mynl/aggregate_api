@@ -386,7 +386,17 @@ def test_pnl_request_defaults_are_held_to_the_library_signature(client):
 
     params = inspect.signature(Aggregate.pnl_program).parameters
     fields = models.PnlProgramRequest.model_fields
-    assert set(fields) <= set(params), "a request field the library does not take"
+    # `form` is the app's routing and never the library's: it names which
+    # keyword leads the derived program. `premium_style` becomes passthrough
+    # the day the library ships it, which the assertion below picks up; until
+    # then the route refuses 'rate' with a 400, tested beside the xpnl cases.
+    app_routing = {"form", "premium_style"}
+    assert set(fields) - app_routing <= set(params), \
+        "a request field the library does not take"
+    from aggregate_api.capability import PNL_PREMIUM_STYLE_SUPPORTED
+    if PNL_PREMIUM_STYLE_SUPPORTED:
+        assert fields["premium_style"].default == \
+            params["premium_style"].default
 
     # Shared with the library, and identical to it.
     assert fields["loss_ratio"].default == params["loss_ratio"].default
@@ -398,6 +408,50 @@ def test_pnl_request_defaults_are_held_to_the_library_signature(client):
                        ("agg_combined_ratio", 0.65)):
         assert params[name].default is None, f"{name}: upstream default moved"
         assert fields[name].default == ours, name
+
+
+def test_pnl_form_xpnl_wraps_and_explodes_in_one_press(client):
+    """`form='xpnl'` answers with the book already broken out, and it peels.
+
+    The same transform the explode route applies, run inside the wrap, so the
+    program leads `xpnl` and carries `peel bottom-up` for a reinsured engine.
+    """
+    source = _build(client, REINS)
+    r = client.post(f"/v1/objects/{source['id']}/pnl", json={"form": "xpnl"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["program"].startswith("xpnl DRV.Reins_PnL"), body["program"]
+    assert "peel bottom-up" in body["program"], body["program"]
+    assert body["kind"] == "pnl"
+
+
+def test_pnl_form_xpnl_declines_a_portfolio_engine(client):
+    """The same refusal, in the same sentence, as the explode route's."""
+    source = _build(client, PORT)
+    r = client.post(f"/v1/objects/{source['id']}/pnl", json={"form": "xpnl"})
+    assert r.status_code == 400, r.text
+    assert "hides its units" in r.json()["detail"]
+
+
+def test_pnl_premium_style_rate_is_refused_until_the_library_ships_it(client):
+    """The api is honest about the installed library.
+
+    While `pnl_program` does not take `premium_style`, asking for rates is a
+    400 naming the gap rather than a 500 from an unexpected keyword. Once the
+    upstream ask ships, the same request passes through and the program quotes
+    each priced layer as a `rate`.
+    """
+    from aggregate_api.capability import PNL_PREMIUM_STYLE_SUPPORTED
+
+    source = _build(client, REINS)
+    r = client.post(f"/v1/objects/{source['id']}/pnl",
+                    json={"premium_style": "rate"})
+    if PNL_PREMIUM_STYLE_SUPPORTED:
+        assert r.status_code == 200, r.text
+        assert " rate " in r.json()["program"], r.json()["program"]
+    else:
+        assert r.status_code == 400, r.text
+        assert "premium_style" in r.json()["detail"]
 
 
 # ----------------------------------------------------------------------

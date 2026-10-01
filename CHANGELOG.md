@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a183
+
+[PnL-Dropdown] the PnL button becomes a split button with fixed labels, and it derives from the box. Plan: `dev/plan-a182-pricing-pnl-forms.md` part [pnl-dropdown].
+
+- **The label flip is gone.** One button used to read PnL or Explode off `state.kind`, the state-changing pattern the house UI rules ban, and its defense failed in practice: the kind moves only on a build, so typing a new program over a built P&L left the button saying Explode over text it would destroy. Main button **PnL** (wrap, deposit premiums); caret menu **PnL (rate)**, **xPnL**, **xPnL (rate)**; labels never change.
+- **The reset bug is fixed.** All four controls run through one `applyPnl`, which compares the editor against the program that produced the built object (`_builtDecl`) and rebuilds through the ordinary path first when they differ. No path acts on a stale object.
+- **`POST /objects/{id}/pnl` gains `form` and `premium_style`.** `form='xpnl'` wraps and explodes in one request, with the explode route's peel rule and its portfolio refusal verbatim. `premium_style='rate'` is refused with a 400 until the installed `aggregate` ships `pnl_program(premium_style=)`, which is the plan's upstream ask; the api feature-detects the signature once at import.
+- **Two capability flags**: `can_pnl_rate` lights the two rate menu items (dark until the library ships the keyword), `can_xpnl` lights the xPnL pair (dark for a portfolio and for an already-exploded P&L). `can_explode` stays as the explode route's own gate. Each dark item says why on hover.
+- Tests: wrap-and-explode on a reinsured aggregate, the portfolio refusal, the rate 400, both new flags across kinds, and the signature drift catcher now carves out the two routing fields.
+
 ## 1.0.0a182
 
 [Evaluate-Auto] Pricing / Evaluate on a P&L computes itself; the form goes dormant rather than hiding. Plan: `dev/plan-a182-pricing-pnl-forms.md` part [evaluate-auto].

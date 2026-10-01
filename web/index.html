@@ -291,13 +291,34 @@
                         title="audit the grid and move to a better one">Sharpen</button>
                 <button id="hints-btn" class="btn btn-outline-secondary"
                         title="pin the grid this object built on into its hints{} clause, so a reference to it means one fixed thing">Hints</button>
-                <!-- Two steps of one story, so the label and the title move
-                     with the object in the box: PnL over an aggregate or a
-                     portfolio, Explode once a P&L is what you are reading.
-                     `renderActionRow` owns both; these are the empty-box
-                     state. -->
+                <!-- The PnL split button, following the GCN shape beside it:
+                     one press for the common case, a menu for the rest, and
+                     no label ever changes with state. Through a182 this was
+                     one button that flipped between PnL and Explode on the
+                     object's kind, and the flip failed in practice: type a
+                     new program over a built P&L without building, and the
+                     button still said Explode and still acted on the stale
+                     object. `applyPnl` in main.js now derives from the box,
+                     and `renderActionRow` greys each item off its own flag:
+                     `can_pnl` the main press, `can_pnl_rate` the rate pair,
+                     `can_xpnl` the exploded form. -->
                 <button id="pnl-btn" class="btn btn-outline-secondary"
-                        title="wrap this object in a P&amp;L">PnL</button>
+                        title="wrap this object in a P&amp;L, ceded premiums as deposit amounts">PnL</button>
+                <button id="pnl-caret" type="button"
+                        class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split"
+                        data-bs-toggle="dropdown" aria-expanded="false"
+                        aria-label="choose the P&amp;L form"></button>
+                <ul class="dropdown-menu shadow-sm">
+                    <li><button class="dropdown-item" type="button"
+                        data-pnl-form="pnl" data-pnl-premium="rate">
+                        PnL (rate)</button></li>
+                    <li><button class="dropdown-item" type="button"
+                        data-pnl-form="xpnl" data-pnl-premium="deposit">
+                        xPnL</button></li>
+                    <li><button class="dropdown-item" type="button"
+                        data-pnl-form="xpnl" data-pnl-premium="rate">
+                        xPnL (rate)</button></li>
+                </ul>
                 <!-- GCN: read the program as a pair of views. The main button
                      takes the default (gross / ceded) and the caret offers the
                      other two, which is the split-button shape the author

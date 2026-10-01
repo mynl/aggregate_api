@@ -34,6 +34,7 @@ hit path shares), and one field per fact is the whole point.
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 import numpy as np
@@ -366,6 +367,68 @@ def can_pnl(obj: Any) -> bool:
     bool
     """
     return hasattr(obj, "pnl_program")
+
+
+#: Does the installed library's ``pnl_program`` accept ``premium_style``?
+#:
+#: Feature-detected once at import, off the public method's signature, because
+#: the keyword is an upstream ask (``dev/plan-a182-pricing-pnl-forms.md``, the
+#: upstream section) and the api must be honest before it ships: while this is
+#: False the route refuses ``premium_style='rate'`` with a 400 and the two rate
+#: menu items grey through :func:`can_pnl_rate`. No version dance: the next
+#: editable-checkout sync flips it.
+PNL_PREMIUM_STYLE_SUPPORTED = (
+    "premium_style" in inspect.signature(Aggregate.pnl_program).parameters)
+
+
+def can_pnl_rate(obj: Any) -> bool:
+    """Can this object be wrapped with ceded premiums written as rates?
+
+    Consumer: the action row's two rate menu items, ``PnL (rate)`` and
+    ``xPnL (rate)``.
+
+    :func:`can_pnl` plus the installed library accepting
+    ``pnl_program(premium_style=)``. The second condition is the honest one:
+    the keyword is an upstream ask, so a fresh install can carry a library
+    that cannot write a ``rate`` clause yet, and the items grey with a why
+    rather than the press producing a 400.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    bool
+    """
+    return PNL_PREMIUM_STYLE_SUPPORTED and can_pnl(obj)
+
+
+def can_xpnl(obj: Any) -> bool:
+    """Can this object end up exploded, layer by layer, from one press?
+
+    Consumer: the action row's ``xPnL`` menu item (and, with
+    :func:`can_pnl_rate`, the ``xPnL (rate)`` one).
+
+    Two shapes answer, because the item means "get me the exploded P&L of
+    what is in the box" wherever it starts. A non-P&L wraps and explodes in
+    one request, which needs :func:`can_pnl` and a single ``Aggregate``: the
+    library refuses to explode a portfolio because the portfolio total hides
+    its units. A P&L has only the explode left to do, so it answers through
+    the existing :func:`can_explode`, which stays, unchanged, as the explode
+    route's own gate.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    bool
+    """
+    if type(obj).__name__ == "PnL":
+        return can_explode(obj)
+    return can_pnl(obj) and isinstance(obj, Aggregate)
 
 
 def can_explode(obj: Any) -> bool:
@@ -702,6 +765,8 @@ def capability_for(obj: Any) -> dict:
         "can_sharpen": can_sharpen(obj),
         "has_sharpen": has_sharpen(obj),
         "can_pnl": can_pnl(obj),
+        "can_pnl_rate": can_pnl_rate(obj),
+        "can_xpnl": can_xpnl(obj),
         "can_explode": can_explode(obj),
         "can_hints": can_hints(obj),
         "can_reins": can_reins(obj),

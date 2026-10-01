@@ -119,9 +119,17 @@ class Capability(BaseModel):
     # Gates the More group's Sharpen leaf, since `sharpen_df` is None until then.
     has_sharpen: bool = False
     can_pnl: bool = False
-    # Can this P&L be walked layer by layer? Gates the same action-row button in
-    # its second state, where it reads `Explode`. A `pnl` over a single
-    # aggregate, so False once exploded and False over a portfolio engine.
+    # Can the wrap write each ceded premium as a `rate` clause? `can_pnl` plus
+    # the installed library accepting `pnl_program(premium_style=)`, which is an
+    # upstream ask; the two rate menu items grey off this until it ships.
+    can_pnl_rate: bool = False
+    # Can one press produce the exploded P&L? A non-P&L answers when it can
+    # wrap and its engine is a single aggregate; a P&L answers through
+    # `can_explode`. Gates the xPnL menu item.
+    can_xpnl: bool = False
+    # Can this P&L be walked layer by layer? The explode route's own gate: a
+    # `pnl` over a single aggregate, so False once exploded and False over a
+    # portfolio engine.
     can_explode: bool = False
     # Can the object's realized grid be pinned into its own `hints{}`? Gates the
     # action row's Hints button. True for exactly an Aggregate and a Portfolio
@@ -347,11 +355,33 @@ class PnlProgramRequest(BaseModel):
     only when the ladder is off, which for this endpoint means a portfolio
     engine. See ``aggregate`` 1.0.0a306, ``dev/done/plan-pnl-reinsurance-pricing.md``.
 
-    **Every ceded premium is written as a ``deposit``**, a currency amount, and
-    the app has no say in the form. A ``rate`` quote is a fraction of the P&L
-    premium, and that premium is what the ladder is computing, so a rate would
-    be circular. The library ruled the split out rather than solve it.
+    **Ceded premiums are written as ``deposit`` amounts by default.**
+    ``premium_style='rate'`` asks the library to spell each priced layer's
+    premium as a ``rate`` of the P&L's stated gross premium instead. That is
+    not the circularity the ladder refuses on its *inputs* (a layer arriving
+    with a ``rate`` clause quotes a fraction of a premium the ladder has not
+    computed yet); here the ladder has finished and the rate is a respelling
+    of the resolved deposit. The keyword is an upstream ask, so the route
+    refuses ``'rate'`` with a 400 until the installed library's signature
+    accepts it; see ``capability.PNL_PREMIUM_STYLE_SUPPORTED``.
+
+    **``form`` and ``premium_style`` are the app's routing, not library
+    kwargs** (``premium_style`` becomes one when it ships). ``form='xpnl'``
+    runs the wrapped program through the same explode machinery the explode
+    route uses, so one press answers "the exploded P&L of what is in the box".
     """
+
+    form: Literal["pnl", "xpnl"] = Field(
+        "pnl",
+        description=("Which keyword leads the derived program: 'pnl' for the "
+                     "consolidated wrap, 'xpnl' to wrap and break the book out "
+                     "layer by layer. 'xpnl' refuses a portfolio engine."))
+    premium_style: Literal["deposit", "rate"] = Field(
+        "deposit",
+        description=("How each priced layer's premium is written: a 'deposit' "
+                     "amount, or a 'rate' of the P&L's stated gross premium. "
+                     "'rate' needs a library whose pnl_program accepts "
+                     "premium_style and is refused with a 400 otherwise."))
 
     loss_ratio: float = Field(
         0.70, gt=0, le=1,

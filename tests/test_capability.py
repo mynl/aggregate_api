@@ -57,7 +57,7 @@ def test_every_kind_carries_a_capability_block(client, label):
     cap = body["capability"]
     assert set(cap) == {"exhibits", "charts", "primary_chart", "has_premium",
                         "premium", "can_sharpen", "has_sharpen", "can_pnl",
-                        "can_explode",
+                        "can_pnl_rate", "can_xpnl", "can_explode",
                         "can_hints", "can_reins", "can_views", "reins_bases",
                         "can_price", "can_evaluate", "can_bounds",
                         "can_allocate", "can_natural_allocation",
@@ -139,6 +139,40 @@ def test_can_explode_is_a_pnl_that_has_not_been_exploded(client):
     assert body["kind"] == "pnl"
     assert body["capability"]["can_explode"] is False, \
         "the portfolio total hides the units the walk would step through"
+
+
+def test_can_xpnl_lights_the_one_press_route_to_an_exploded_pnl(client):
+    """The xPnL menu item's gate, over both shapes it serves.
+
+    A plain or reinsured aggregate answers True (wrap, then explode). A
+    portfolio answers False, because the library refuses to explode one: the
+    total hides the units the walk would step through. A P&L answers through
+    ``can_explode``, so a ``pnl`` over an aggregate is True and an ``xpnl``
+    is False, there being nothing left to do.
+    """
+    for label, expected in (("agg", True), ("agg_reins", True),
+                            ("port", False), ("sev", False),
+                            ("pnl", True), ("xpnl", False)):
+        _, body = _build(client, label)
+        assert body["capability"]["can_xpnl"] is expected, label
+
+
+def test_can_pnl_rate_is_honest_about_the_installed_library(client):
+    """The two rate menu items grey until `pnl_program` takes the keyword.
+
+    `can_pnl_rate` is `can_pnl` and the feature flag together, so for the
+    kinds that can wrap it must equal the flag, and for the rest it must be
+    False whatever the library ships.
+    """
+    from aggregate_api.capability import PNL_PREMIUM_STYLE_SUPPORTED
+
+    for label in ("agg", "port"):
+        _, body = _build(client, label)
+        assert body["capability"]["can_pnl_rate"] is \
+            PNL_PREMIUM_STYLE_SUPPORTED, label
+    for label in ("pnl", "sev"):
+        _, body = _build(client, label)
+        assert body["capability"]["can_pnl_rate"] is False, label
 
 
 @pytest.mark.parametrize("label", list(DECLS))

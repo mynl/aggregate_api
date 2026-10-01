@@ -242,6 +242,16 @@ function recordProgram(text) {
     renderHistoryNav();
 }
 
+// The program text that produced `state.id`, set beside `adoptBuild` at each
+// of its call sites and cleared with the object. It is what lets a derivation
+// read the **box** rather than trusting stale state: `state.kind` moves only
+// on a build, so after typing a new program without building, any control
+// that acted on `state.id` would act on an object the editor no longer shows.
+// The a182 plan's reset bug: PnL on program A, type program B, and the button
+// still said Explode and exploded A, replacing B. `applyPnl` compares the
+// editor against this and rebuilds first when they differ.
+let _builtDecl = null;
+
 // The two step buttons, which are the walk's only route on a touch device: an
 // iPad's on-screen keyboard has no arrow keys, so through a115 the readout
 // described a control the reader could not operate.
@@ -355,6 +365,7 @@ function adoptBuild(res) {
 function forgetBuild() {
     state.id = state.kind = state.name = state.mean = null;
     state.hasReins = false;
+    _builtDecl = null;
     forgetPricing();
     applyCapability(null);
 }
@@ -476,6 +487,7 @@ async function build() {
         if (res && res.kind === 'value') { renderValue(res); return; }
         adoptBuild(res);
         recordProgram(decl);
+        _builtDecl = decl;
         renderActionRow();
     } catch (err) {
         forgetBuild();
@@ -497,9 +509,49 @@ async function build() {
 const sharpenBtn = $('sharpen-btn');
 const hintsBtn = $('hints-btn');
 const pnlBtn = $('pnl-btn');
+const pnlCaret = $('pnl-caret');
+const pnlItems = Array.from(document.querySelectorAll('[data-pnl-form]'));
 const reformatBtn = $('reformat-btn');
 const gcnBtn = $('gcn-btn');
 const gcnCaret = $('gcn-caret');
+
+/** What each live PnL menu item offers, keyed `form` or `form-rate`. */
+const PNL_ITEM_TITLES = {
+    'pnl-rate': 'wrap in a P&L, each ceded premium written as a rate of the '
+        + 'gross premium',
+    'xpnl': 'the exploded P&L: wrapped if needed, then broken out layer by '
+        + 'layer, lowest attaching first',
+    'xpnl-rate': 'the exploded P&L, each ceded premium written as a rate of '
+        + 'the gross premium',
+};
+
+/**
+ * Why a dark PnL menu item is dark, as a sentence for its hover.
+ *
+ * The rate gap is named first because it is the one a reader can do nothing
+ * about from the box: the library ask has not shipped. The xPnL reasons read
+ * off the same facts the flags were computed from, so the sentence and the
+ * greying cannot disagree.
+ */
+function pnlItemWhy(wantsRate, isXpnl) {
+    if (state.kind === 'pnl') {
+        if (isXpnl && wantsRate) {
+            return 'already a P&L; xPnL explodes it as it stands';
+        }
+        if (!isXpnl) return 'already a P&L';
+        return 'already exploded, or built over a portfolio engine';
+    }
+    if (isXpnl && !can('canXpnl')) {
+        return state.kind === 'port'
+            ? 'the portfolio total hides its units, so there is nothing to explode'
+            : 'a P&L wraps an Aggregate or a Portfolio';
+    }
+    if (wantsRate && can('canPnl')) {
+        return 'needs a library whose pnl_program writes rate premiums; '
+            + 'this one does not yet';
+    }
+    return 'a P&L wraps an Aggregate or a Portfolio';
+}
 
 /** Grey the action-row buttons the current object cannot answer. */
 function renderActionRow() {
@@ -511,19 +563,28 @@ function renderActionRow() {
     };
     off(sharpenBtn, !can('canSharpen'));
     off(hintsBtn, !can('canHints'));
-    // One button, two steps of one story: wrap the object in a P&L, then break
-    // that P&L out layer by layer. The label moves with the object in the box,
-    // so the button never lies about what the press will do, and the way back
-    // from an exploded program is Ctrl+Up like any other derivation, which is
-    // why there is no third state.
-    const exploding = state.kind === 'pnl';
-    if (pnlBtn) {
-        pnlBtn.textContent = exploding ? 'Explode' : 'PnL';
-        pnlBtn.title = exploding
-            ? 'break this P&L out layer by layer, lowest attaching first'
-            : 'wrap this object in a P&L';
+    // The PnL split button. No label ever changes with state, per the house
+    // rule the old flip violated: through a182 one button read PnL or Explode
+    // off `state.kind`, and since the kind moves only on a build, typing a new
+    // program over a built P&L left it saying Explode over text it would
+    // destroy. Four fixed controls now, each gated by its own flag, and the
+    // press derives from the box (`applyPnl`).
+    const rateLive = can('canPnlRate');
+    const xpnlLive = can('canXpnl');
+    off(pnlBtn, !can('canPnl'));
+    // The caret lives while any menu item does. On a P&L the main button is
+    // dark (nothing wraps twice) while xPnL still answers through it.
+    off(pnlCaret, !(rateLive || xpnlLive));
+    for (const item of pnlItems) {
+        const wantsRate = item.dataset.pnlPremium === 'rate';
+        const isXpnl = item.dataset.pnlForm === 'xpnl';
+        const live = (!wantsRate || rateLive) && (!isXpnl || xpnlLive)
+            && (isXpnl || can('canPnl'));
+        off(item, !live);
+        item.title = live ? PNL_ITEM_TITLES[item.dataset.pnlForm
+            + (wantsRate ? '-rate' : '')]
+            : pnlItemWhy(wantsRate, isXpnl);
     }
-    off(pnlBtn, exploding ? !can('canExplode') : !can('canPnl'));
     // Both halves of the split button move together: a caret opening a menu
     // whose every item is refused would be worse than a dark caret.
     off(gcnBtn, !can('canViews'));
@@ -560,7 +621,11 @@ function renderActionRow() {
  * fetching one, which is why the gap read as arbitrary from the outside.
  */
 async function runDerivation(btn, busy, call, land) {
-    if (!state.id || btn.hasAttribute('disabled')) return;
+    // No disabled check on `btn` here: gating lives on whichever control was
+    // pressed, and a disabled control cannot be clicked at all. Since a183 the
+    // control and the busy button can differ: an xPnL menu press runs through
+    // `pnlBtn` for its busy label while `pnlBtn` itself is dark on a P&L.
+    if (!state.id) return;
     anchorEditor();                  // the scroll rule: a button under the box
     const label = btn.textContent;
     btn.disabled = true;
@@ -572,6 +637,7 @@ async function runDerivation(btn, busy, call, land) {
         editor.setText(res.program);
         recordProgram(res.program);
         adoptBuild(res);
+        _builtDecl = res.program.trim();
         renderActionRow();
         if (res.description) noteDerivation(res.description);
         if (land) showTab(land);
@@ -709,13 +775,55 @@ sharpenBtn?.addEventListener('click', () => runDerivation(
 hintsBtn?.addEventListener('click', () => runDerivation(
     hintsBtn, 'Pinning…', (id) => api.hints(id)));
 
-// Press one lands on Economics, where the P&L it just wrote is the thing to
-// look at. Press two stays where you are: you are already reading the P&L and
-// the exploded one answers in the same place, now layer by layer.
+/**
+ * The one handler behind all four PnL controls: wrap, rate wrap, or explode.
+ *
+ * **Derives from the box, not from stale state.** `state.kind` and `state.id`
+ * move only on a build, so after typing a new program without building, the
+ * old handler acted on the previous object: PnL on program A, type program B,
+ * press again, and B was replaced by A's exploded program. The fix is the GCN
+ * discipline: when the editor's text differs from `_builtDecl`, build it
+ * first through the ordinary path (empty box and failed build get the
+ * ordinary rendering and stop there), and only then derive from the fresh
+ * object.
+ *
+ * A wrap lands on Economics, where the P&L it wrote is the thing to look at;
+ * an explode of a P&L stays put, since the exploded book answers in the same
+ * place, layer by layer.
+ *
+ * @param {object} choice `{form, premiumStyle}` in wire spelling:
+ *   `form` 'pnl' or 'xpnl', `premiumStyle` 'deposit' or 'rate'.
+ */
+async function applyPnl({ form, premiumStyle }) {
+    // Close the menu before anything is disabled, never the other way round;
+    // see the Bootstrap `clearMenus` trap documented in `applyViews`.
+    bootstrap.Dropdown.getInstance(pnlCaret)?.hide();
+    const decl = editor.getText().trim();
+    if (!decl) { renderNothingToBuild(); return; }
+    if (decl !== (_builtDecl ?? '').trim()) {
+        await build();
+        if (!state.id) return;      // a failed build already rendered itself
+    }
+    if (state.kind === 'pnl') {
+        // The wrap items are dark for a P&L; the one live route is the
+        // existing explode, and rate has nothing to respell there.
+        if (form !== 'xpnl') return;
+        await runDerivation(pnlBtn, 'Exploding…', (id) => api.explode(id));
+        return;
+    }
+    await runDerivation(pnlBtn, 'Wrapping…',
+        (id) => api.pnl(id, { form, premium_style: premiumStyle }),
+        'economics');
+}
+
 pnlBtn?.addEventListener('click', () => (
-    state.kind === 'pnl'
-        ? runDerivation(pnlBtn, 'Exploding…', (id) => api.explode(id))
-        : runDerivation(pnlBtn, 'Wrapping…', (id) => api.pnl(id), 'economics')));
+    applyPnl({ form: 'pnl', premiumStyle: 'deposit' })));
+for (const item of pnlItems) {
+    item.addEventListener('click', () => applyPnl({
+        form: item.dataset.pnlForm,
+        premiumStyle: item.dataset.pnlPremium,
+    }));
+}
 
 /**
  * Rewrite the program in the box in canonical form.
@@ -815,6 +923,7 @@ async function applyViews(kw) {
         editor.setText(decl);
         adoptBuild(await api.build(decl, {}));
         recordProgram(decl);
+        _builtDecl = decl;
         noteDerivation(`Read as ${VIEW_LABEL[kw] || kw}.`);
         showTab('overview');
     } catch (err) {

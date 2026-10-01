@@ -642,6 +642,12 @@ export function capsFromResponse(capability, built = true) {
             canSharpen: Boolean(cap.can_sharpen),
             hasSharpen: Boolean(cap.has_sharpen),
             canPnl: Boolean(cap.can_pnl),
+            // The rate pair of the PnL menu: `can_pnl` plus a library whose
+            // `pnl_program` takes `premium_style`, which is an upstream ask.
+            canPnlRate: Boolean(cap.can_pnl_rate),
+            // The one-press route to an exploded P&L: wrap-and-explode for a
+            // single aggregate, plain explode for a P&L that still can.
+            canXpnl: Boolean(cap.can_xpnl),
             canExplode: Boolean(cap.can_explode),
             canHints: Boolean(cap.can_hints),
             canReins: Boolean(cap.can_reins),

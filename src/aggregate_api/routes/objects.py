@@ -113,7 +113,9 @@ from ..cache import (
     CacheEntry, ObjectCache, canonicalize_decl, object_id, qualified_object_id,
 )
 from ..bounds import run_allocation, run_envelope, run_pricing_bounds
-from ..capability import can_sharpen, capability_for, narrative_for
+from ..capability import (
+    PNL_PREMIUM_STYLE_SUPPORTED, can_sharpen, capability_for, narrative_for,
+)
 from ..config import Settings, get_settings
 from ..library import get_underwriter
 from ..library_notes import from_library
@@ -3256,6 +3258,14 @@ def post_pnl(
     cession raises, and it is the difference between the button writing a book
     with reasonable numbers in it and one whose reinsurance is free.
 
+    Two request fields route rather than pass through, since a183.
+    ``form='xpnl'`` runs the wrapped program through :func:`explode_program`,
+    so one press answers with the book broken out layer by layer; it refuses a
+    portfolio engine with the same sentence :func:`post_explode` uses.
+    ``premium_style='rate'`` asks for each priced layer's premium as a ``rate``
+    of the stated gross premium and is refused with a 400 until the installed
+    library's ``pnl_program`` accepts the keyword.
+
     Notes
     -----
     **A portfolio engine takes the old path, and that is the library's scope
@@ -3291,6 +3301,25 @@ def post_pnl(
             status_code=400,
             detail="a P&L wraps an Aggregate or a Portfolio")
 
+    # The two gates on the request's own fields, before any work. The explode
+    # refusal is `post_explode`'s sentence, so the two routes cannot disagree;
+    # the rate refusal is the api being honest about the installed library,
+    # whose `pnl_program` does not take `premium_style` until the upstream ask
+    # ships (see `capability.PNL_PREMIUM_STYLE_SUPPORTED`).
+    if req.form == "xpnl" and type(obj).__name__ == "Portfolio":
+        raise HTTPException(
+            status_code=400,
+            detail=("the portfolio total hides its units, so there is nothing "
+                    "to explode"))
+    style: dict = {}
+    if req.premium_style == "rate":
+        if not PNL_PREMIUM_STYLE_SUPPORTED:
+            raise HTTPException(
+                status_code=400,
+                detail=("premium_style='rate' needs an aggregate library whose "
+                        "pnl_program accepts it; this install's does not yet"))
+        style = {"premium_style": "rate"}
+
     ladder = {"net_combined_ratio": req.net_combined_ratio,
               "occ_combined_ratio": req.occ_combined_ratio,
               "agg_combined_ratio": req.agg_combined_ratio}
@@ -3301,11 +3330,22 @@ def post_pnl(
     try:
         program = obj.pnl_program(loss_ratio=req.loss_ratio,
                                   expense_ratio=req.expense_ratio,
-                                  **ladder)
+                                  **ladder, **style)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     program = collapse_program(program)
+    if req.form == "xpnl":
+        # The same transform press two applies, run here so one press answers
+        # "the exploded P&L of what is in the box". The peel rule is
+        # `post_explode`'s: walk the layers when the engine has reinsurance,
+        # write no clause otherwise.
+        try:
+            program = explode_program(
+                program,
+                peel="bottom-up" if _has_reinsurance(obj) else None)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     built = post_object(models.BuildRequest(decl=program), request,
                         settings, cache, audit, uw, sessions)
     return {"program": spread(program), "description": None, **built}

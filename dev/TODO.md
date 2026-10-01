@@ -6,6 +6,15 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[PnL-Dropdown]** DONE (`1.0.0a183`), plan
+  `dev/plan-a182-pricing-pnl-forms.md` part [pnl-dropdown]: the PnL split
+  button with fixed labels (PnL, and a caret with PnL (rate), xPnL,
+  xPnL (rate)), the stale-object reset bug fixed by deriving from the box,
+  `form` and `premium_style` on the pnl route, and the `can_pnl_rate` /
+  `can_xpnl` flags. The two rate items stay dark until the upstream ask ships
+  `pnl_program(premium_style=)` in `aggregate`; the api feature-detects the
+  signature, so the next editable sync lights them with no change here.
+
 - **[Evaluate-Auto]** DONE (`1.0.0a182`), plan
   `dev/plan-a182-pricing-pnl-forms.md` part [evaluate-auto]: Pricing / Evaluate
   on a P&L computes on arrival and the form band goes dormant (drawn, dead,
