@@ -203,3 +203,38 @@ test('a value-axis panel is unaffected by the ordinal ceiling', () => {
     const lay = documentLayout(d, 1200);
     assert.ok(lay.grids[0].width > 600, lay.grids[0].width);
 });
+
+// --- an explicitly untitled panel --------------------------------------------
+
+/** The spectrum with the panel title set to whatever is passed. */
+function titled(panelTitle) {
+    const d = doc();
+    d.title = 'Distortion spectrum: Capstone, gross base';
+    d.panels = [{ ...d.panels[0], title: panelTitle }];
+    return d;
+}
+
+test('an empty panel title draws no title', () => {
+    // `''` is a panel saying it has none, and it is the only way to say so.
+    // Testing truthiness collapsed it with null and fell through to the
+    // document, so an emitter that set `''` got back the heading it was
+    // dropping. `doc.title` cannot just be cleared instead: a saved PNG takes
+    // its file name from it.
+    const opt = chartdocToEcharts(titled(''), {});
+    assert.ok(opt, 'the document still realizes');
+    const text = JSON.stringify(opt.title || []);
+    assert.ok(!text.includes('Distortion spectrum'), text);
+});
+
+test('no panel title still inherits the document title', () => {
+    const opt = chartdocToEcharts(titled(null), {});
+    const text = JSON.stringify(opt.title || []);
+    assert.ok(text.includes('Distortion spectrum'), text);
+});
+
+test('a panel title still wins over the document', () => {
+    const opt = chartdocToEcharts(titled('Its own heading'), {});
+    const text = JSON.stringify(opt.title || []);
+    assert.ok(text.includes('Its own heading'), text);
+    assert.ok(!text.includes('Distortion spectrum'), text);
+});

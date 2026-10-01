@@ -1912,11 +1912,26 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
     };
 }
 
-/** The panel's heading; exchanged axes draw a different picture, so it is renamed. */
+/**
+ * The panel's heading; exchanged axes draw a different picture, so it is renamed.
+ *
+ * `null` and `''` mean different things on `Panel.title`, and the difference is
+ * the only way to ask for no heading at all. `null` is a panel with no title of
+ * its own, which takes the document's; `''` is a panel saying it has none.
+ * Testing truthiness collapsed the two, so an emitter that set `''` got the
+ * document title back: the very heading it was trying to drop. Clearing
+ * `doc.title` instead is not the answer, because other consumers read it (a
+ * saved PNG takes its file name from it).
+ */
 function panelTitle(doc, panel, inverted) {
-    const own = panel.title || doc.title || '';
+    const declaredNone = panel.title === '';
+    const own = panel.title == null ? (doc.title || '') : panel.title;
     if (!inverted) return own;
-    return panel.inverse_title || (own ? `${own}, inverted` : 'Inverted');
+    if (panel.inverse_title) return panel.inverse_title;
+    // A panel with no title keeps none when it is exchanged. Only a panel that
+    // never had one falls back to naming the exchange itself.
+    if (declaredNone) return '';
+    return own ? `${own}, inverted` : 'Inverted';
 }
 
 /**

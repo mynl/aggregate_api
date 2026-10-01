@@ -4,6 +4,13 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a189
+
+[Panel-No-Title] `panelTitle` reads an empty `Panel.title` as "this panel has no heading", where `null` still inherits the document's. Follows library `aggregate` `1.0.0a383`.
+
+- The two were collapsed by `panel.title || doc.title`, so an emitter that set `''` got the document title back, which is the heading it was trying to drop. Clearing `doc.title` instead is not available: `mount.js` takes a saved PNG's file name from it, and the 3-D path uses it as a series name.
+- An exchanged panel that declared no title keeps none, rather than falling back to naming the exchange. Only a panel that never had one still reads `Inverted`.
+
 ## 1.0.0a188
 
 [Lab-Chart-Lede] a Lab chart leaf prints its hint. `ledeFor` was wired into the exhibit loaders and never into a chart path, so a plugin that declared a hint on every leaf had it rendered on one of them: Table printed its line, Grid and Chart printed none. A plugin's leaf strings are the only prose it puts on the page, so dropping two of three is most of what it can say.
