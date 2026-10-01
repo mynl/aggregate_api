@@ -6,6 +6,13 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Evaluate-Targets]** DONE (`1.0.0a190`), author's tweak after kicking the
+  a186 tires: Evaluate offers the full CoC | LR | Premium switch (it passed
+  `targets: ['premium']` and drew a bare label), a CoC or LR resolving its
+  premium through the pentagon at the anchor before evaluating; a typed
+  Premium stays gross of expenses, and the help is the author's sentence
+  verbatim.
+
 - **[Expenses]** DONE (`1.0.0a186`), plan
   `dev/plan-a182-pricing-pnl-forms.md` part [expenses]: `expense_ratio` on the
   four pricing request bodies (a premium target reads as gross, the engine

@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a190
+
+[Evaluate-Targets] the Evaluate form takes the full CoC | LR | Premium switch. Author's ruling after kicking a186's tires: most of the time the premium is computed, not typed.
+
+- Through a189 Evaluate passed `targets: ['premium']` into the shared form, so the target drew as a bare Premium label beside the box. It now offers all three: a CoC or LR target resolves its premium through the pentagon at the anchor (the same question the preview line asks) and evaluates it; a typed Premium is read as gross of expenses, exactly as a186 defined.
+- The expense ratio plays no part on the CoC and LR paths: it translates a typed gross premium, and a computed premium is technical by construction.
+- The Evaluate help reads, verbatim: "Inputs to determine premium on gross, net of occurrence, or net basis, input assets or solvency p value, the cost of capital, loss ratio, or enter gross premium, and finally the expense ratio."
+- The expense box's default stays 0; empty or zero sends nothing.
+
 ## 1.0.0a189
 
 [Panel-No-Title] `panelTitle` reads an empty `Panel.title` as "this panel has no heading", where `null` still inherits the document's. Follows library `aggregate` `1.0.0a383`.

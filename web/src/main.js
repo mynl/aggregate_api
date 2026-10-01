@@ -3962,19 +3962,18 @@ const evaluateForm = createPricingForm($('evaluate-form'), {
     // distribution. The fuller gross versus net story overlaps Economics and
     // stays there.
     basisLabel: 'premium is',
-    // One question, so nothing to switch. The premium is the input and the
-    // stress it survives is the answer.
-    targets: ['premium'],
+    // The full target switch since a190 (author's ruling): most of the time
+    // the premium is COMPUTED rather than typed, so CoC and LR stand beside
+    // Premium. A CoC or LR target resolves its premium through the pentagon
+    // at the anchor, in `onSubmit` below; a typed Premium is gross of
+    // expenses. Through a189 this passed `targets: ['premium']` and the
+    // switch collapsed to a bare label.
     allowBlank: true,
     expense: true,
-    help: 'The other direction from Calibrate: the premium is the input, and '
-        + 'the panel reports, for each family, the distortion that values '
-        + 'its margin at zero (breakeven acceptability). The anchor fixes '
-        + 'the asset level the panel is solved at; blank means the unlimited '
-        + 'reading, which reports four families rather than five. The basis '
-        + 'names which premium is being input, and a non-zero expense ratio '
-        + 'reads it as gross. The line below previews the pentagon the '
-        + 'boxes imply.',
+    help: 'Inputs to determine premium on gross, net of occurrence, or net '
+        + 'basis, input assets or solvency p value, the cost of capital, '
+        + 'loss ratio, or enter gross premium, and finally the expense '
+        + 'ratio.',
     // A line in the band since a157, so the one Pricing leaf that had none is no
     // longer the exception. It says what the premium in the box implies at the
     // anchor beside it, which is the round trip the leaf exists to close. Goes
@@ -3983,24 +3982,51 @@ const evaluateForm = createPricingForm($('evaluate-form'), {
     // help text above at a184, and the gloss slot went with it.
     preview: true,
     context: formContext,
-    onSubmit: (fields) => {
+    onSubmit: async (fields) => {
+        if (!state.id) return;
         const body = {};
         if (state.kind !== 'pnl') {
-            // Required only where the object states none of its own. With one,
-            // an empty box means "as it stands", which is what the library does
-            // with no premium argument.
-            if (Number.isFinite(fields.premium)) body.premium = fields.premium;
-            else if (can('needsPremium')) return;
-            // Blank is not incomplete here. It is the library's unlimited
-            // reading, which solves over the whole distribution and reports
-            // four families rather than five, since `ccoc` needs an asset level.
+            // Blank anchor is not incomplete here. It is the library's
+            // unlimited reading, which solves over the whole distribution and
+            // reports four families rather than five, since `ccoc` needs an
+            // asset level.
             if (Number.isFinite(fields.p)) body.p = fields.p;
             if (Number.isFinite(fields.a)) body.a = fields.a;
             if (fields.basis) body.basis = fields.basis;
-            // The typed premium is gross when a ratio rides with it; the
-            // runner scales, this form holds no arithmetic.
-            if (Number.isFinite(fields.expense_ratio)) {
-                body.expense_ratio = fields.expense_ratio;
+            if (Number.isFinite(fields.coc) || Number.isFinite(fields.lr)) {
+                // A CoC or LR target asks to COMPUTE the premium: the pentagon
+                // resolves it at the anchor, the same question the preview
+                // line asks, and the evaluation runs at that technical
+                // premium. The expense ratio plays no part on this path: it
+                // translates a typed gross premium, and this one was never
+                // gross. No anchor means no premium to resolve, so the press
+                // waits like any incomplete form.
+                if (!('p' in body) && !('a' in body)) return;
+                try {
+                    const ask = {
+                        ...('a' in body ? { a: body.a } : { p: body.p }),
+                        ...(Number.isFinite(fields.coc)
+                            ? { coc: fields.coc } : { lr: fields.lr }),
+                        ...(body.basis ? { basis: body.basis } : {}),
+                    };
+                    const octet = await api.pricingPreview(state.id, ask);
+                    if (!Number.isFinite(octet?.premium)) return;
+                    body.premium = octet.premium;
+                } catch (err) {
+                    replacePane('pane-evaluate', errorNode(err));
+                    return;
+                }
+            } else if (Number.isFinite(fields.premium)) {
+                // A typed premium is gross of expenses; the runner scales it
+                // by (1 - e), this form holds no arithmetic.
+                body.premium = fields.premium;
+                if (Number.isFinite(fields.expense_ratio)) {
+                    body.expense_ratio = fields.expense_ratio;
+                }
+            } else if (can('needsPremium')) {
+                // A blank Premium target means "as it stands", which only an
+                // exposure stating its own consideration can answer.
+                return;
             }
         }
         runEvaluation(body);
