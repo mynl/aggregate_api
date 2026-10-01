@@ -31,7 +31,7 @@ globalThis.ResizeObserver = class { observe() {} disconnect() {} };
 if (!globalThis.navigator) globalThis.navigator = { userAgent: 'node' };
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 
-const { chartdocToEcharts, bandLayout, CHART_IR_VERSION } =
+const { chartdocToEcharts, bandStarts, CHART_IR_VERSION } =
     await import('../src/charts/chartdoc-to-echarts.js');
 
 /** The relativity page, cut to two positions and two readings. */
@@ -70,9 +70,9 @@ function doc(matrix = {}) {
 /** Realize the page, with the matrix fields overridden. */
 const option = (matrix = {}) => chartdocToEcharts(doc(matrix), {});
 
-/** The heatmap series the matrix panel produced. */
+/** The custom series the matrix panel produced. */
 function cells(opt) {
-    const series = (opt.series || []).find((s) => s.type === 'heatmap');
+    const series = (opt.series || []).find((s) => s.type === 'custom');
     return series ? series.data : [];
 }
 
@@ -113,28 +113,47 @@ test('rows read top to bottom, the order the document lists them in', () => {
     assert.equal(y.inverse, true);
 });
 
-test('a band gap is a blank category, not a coordinate offset', () => {
-    // ECharts spaces categories evenly, so the only honest way to open a gap is
-    // an empty category that carries no cell.
+test('a band gap costs pixels, not a whole category', () => {
+    // It used to be an empty category, which is the only gap a heatmap can
+    // open: it spent a full cell of width on a break and left a hole in the
+    // tick list. The custom series insets the rect instead.
     const opt = option();
     const x = Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis;
-    assert.deepEqual(x.data, ['gini ph', '', 'margin']);
-    // and every cell still lands on a real category
-    for (const cell of cells(opt)) assert.notEqual(x.data[cell.value[0]], '');
+    assert.deepEqual(x.data, ['gini ph', 'margin']);
+    assert.equal(cells(opt).find((d) => d.value[0] === 0).padL, 0);
+    assert.ok(cells(opt).find((d) => d.value[0] === 1).padL > 0,
+              'the cell after a band break is inset');
 });
 
-test('bandLayout inserts one blank per band boundary', () => {
-    assert.deepEqual(bandLayout(['a', 'b', 'c'], ['f', 'f', 'p']),
-                     { display: ['a', 'b', '', 'c'], at: [0, 1, 3] });
-    assert.deepEqual(bandLayout(['a', 'b'], []),
-                     { display: ['a', 'b'], at: [0, 1] });
+test('the row names wrap rather than being clipped', () => {
+    const opt = option();
+    const y = Array.isArray(opt.yAxis) ? opt.yAxis[0] : opt.yAxis;
+    assert.ok(y.axisLabel.width > 0);
+    assert.equal(y.axisLabel.overflow, 'break');
+});
+
+test('an unlabeled axis carries no name', () => {
+    // The plugin sends '' for the position axis: the row names are position
+    // names and saying so above them is a caption on a caption.
+    const d = doc();
+    d.axes = d.axes.map((a) => (a.id === 'y' ? { ...a, label: '' } : a));
+    const opt = chartdocToEcharts(d, {});
+    const y = Array.isArray(opt.yAxis) ? opt.yAxis[0] : opt.yAxis;
+    assert.equal(y.name, '');
+});
+
+test('bandStarts marks the first position of each band', () => {
+    assert.deepEqual([...bandStarts(['f', 'f', 'p'], 3)], [2]);
+    assert.deepEqual([...bandStarts(['a', 'b', 'c'], 3)], [1, 2]);
+    assert.deepEqual([...bandStarts([], 3)], []);
 });
 
 test('a cell carries its raw value and its annotation', () => {
     const data = cells(option());
     assert.equal(data.length, 4);
     const qsMargin = data.find((d) => d.value[2] === 0.4);
-    assert.equal(qsMargin.annotation, '2.9%');
+    assert.equal(qsMargin.note, '(2.9%)');
+    assert.equal(qsMargin.text, '0.40×');
 });
 
 test('a missing cell produces no data point at all', () => {
@@ -148,10 +167,10 @@ test('polarity flips which direction is colored favorably', () => {
     // 1.6 on the QS row is paying above the book: unfavorable, so red. The same
     // 1.6 on a book row would be an improvement: favorable, so green. One
     // matrix, two directions, and nothing in the numbers says so.
-    // Found by value, not by row index: `row_groups` inserts a blank row
-    // between the bands, so the QS row does not sit where it was listed.
+    // Found by value rather than by row index, so the case does not have to
+    // know how the bands are laid out.
     const at16 = (opt) => rgb(cells(opt)
-        .find((d) => d.value[2] === 1.6).itemStyle.color);
+        .find((d) => d.value[2] === 1.6).fill);
 
     const unfavorable = at16(option());
     assert.ok(unfavorable[0] > unfavorable[1], 'above center on a +1 row is red');
@@ -165,7 +184,7 @@ test('a cell inside the neutral band takes the neutral color', () => {
     // and must not be shaded as though it did.
     const neutral = cells(option())
         .filter((d) => d.value[1] === 0)
-        .map((d) => d.itemStyle.color);
+        .map((d) => d.fill);
     assert.equal(new Set(neutral).size, 1);
     assert.deepEqual(rgb(neutral[0]), [240, 239, 236]);
 });
@@ -178,14 +197,14 @@ test('the band is a hard stop rather than a gradient through the center', () => 
         values: [[1.0, 1.04], [1.6, 0.4]], neutral: 0.05, row_polarity: [1, 1],
     });
     const inside = cells(opt).filter((d) => d.value[1] === 0)
-        .map((d) => d.itemStyle.color);
+        .map((d) => d.fill);
     assert.equal(new Set(inside).size, 1, 'the band is not flat');
 });
 
 test('no center means no diverging color', () => {
     const opt = option({ center: null });
     for (const cell of cells(opt)) {
-        assert.deepEqual(rgb(cell.itemStyle.color), [240, 239, 236]);
+        assert.deepEqual(rgb(cell.fill), [240, 239, 236]);
     }
 });
 
@@ -194,7 +213,7 @@ test('dark cells take white text', () => {
     // luminance threshold leaves the mid greens unreadable either way.
     const deep = cells(option({ values: [[1.0, 1.0], [12.0, 0.4]] }))
         .find((d) => d.value[2] === 12.0);
-    assert.equal(deep.label.color, '#ffffff');
+    assert.equal(deep.ink, '#ffffff');
 });
 
 // --- the text ----------------------------------------------------------------
@@ -202,20 +221,16 @@ test('dark cells take white text', () => {
 test('a number is printed with a minus sign, never a hyphen', () => {
     const opt = option({ values: [[1.0, 1.0], [-2.5, 0.4]],
                          annotations: [['0.209', '7.3%'], ['-1.4%', '2.9%']] });
-    const series = opt.series.find((s) => s.type === 'heatmap');
     const cell = cells(opt).find((d) => d.value[2] === -2.5);
-    const text = series.label.formatter({ value: cell.value, data: cell });
-    assert.ok(text.includes('−2.50×'), text);
-    assert.ok(text.includes('(−1.4%)'), text);
-    assert.ok(!text.includes('-'), 'a hyphen reached a number');
+    assert.equal(cell.text, '−2.50×');
+    assert.equal(cell.note, '(−1.4%)');
+    assert.ok(!cell.text.includes('-') && !cell.note.includes('-'),
+              'a hyphen reached a number');
 });
 
-test('a cell with no annotation prints one line', () => {
+test('a cell with no annotation carries no second line', () => {
     const opt = option({ annotations: [] });
-    const series = opt.series.find((s) => s.type === 'heatmap');
-    const cell = cells(opt)[0];
-    const text = series.label.formatter({ value: cell.value, data: cell });
-    assert.ok(!text.includes('\n'), text);
+    for (const cell of cells(opt)) assert.equal(cell.note, '');
 });
 
 // --- a ratio that crossed zero -----------------------------------------------
@@ -227,7 +242,7 @@ test('a ratio through zero is dropped from the color, not from the page', () => 
     const opt = option({ values: [[1.0, 1.0], [-9.3, 0.4]] });
     const cell = cells(opt).find((d) => d.value[2] === -9.3);
     assert.ok(cell, 'the number must still be on the page');
-    assert.deepEqual(rgb(cell.itemStyle.color), [240, 239, 236]);
+    assert.deepEqual(rgb(cell.fill), [240, 239, 236]);
 });
 
 test('a center of zero keeps both directions', () => {
@@ -235,8 +250,8 @@ test('a center of zero keeps both directions', () => {
     // Polarity held at +1 so this isolates the center, not the flip.
     const opt = option({ center: 0, neutral: 0, row_polarity: [1, 1],
                          values: [[-2, 2], [1, -1]] });
-    const down = rgb(cells(opt).find((d) => d.value[2] === -2).itemStyle.color);
-    const up = rgb(cells(opt).find((d) => d.value[2] === 2).itemStyle.color);
+    const down = rgb(cells(opt).find((d) => d.value[2] === -2).fill);
+    const up = rgb(cells(opt).find((d) => d.value[2] === 2).fill);
     assert.notDeepEqual(down, up);
     assert.ok(down[1] > down[0], 'below a zero center is favorable');
 });

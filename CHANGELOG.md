@@ -4,6 +4,17 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a181
+
+[Matrix-Legibility] the matrix panel is drawn as a custom series, and an ordinal axis reads its own names. Follows library `aggregate` `1.0.0a381`. Author's review of the first Lab render.
+
+- **Cells are squarer.** A matrix now sizes off its own shape rather than the house panel aspect: the height is its row count times a cell about 0.62 as tall as it is wide, clamped to 180..620 px. The default height left the cells nearly three times wider than tall, which is a ribbon rather than a grid.
+- **The band gaps shrink from a whole cell to 13 px**, horizontally and vertically. They were empty categories, which is the only gap a `heatmap` can open: a full cell of width spent on a break, and a hole in the tick list. The panel is a `custom` series now, so each cell places its own rect and a break costs pixels.
+- **Row names wrap rather than clipping.** The y gutter widens to 86 px and the labels break across lines, because a position name is prose (`occ package`) where an axis tick is a number.
+- **An axis whose label is empty draws no name.** The plugin leaves the position axis unlabeled, the row names being position names already.
+- **An ordinal `xy` axis is ticked by `ChartAxis.categories`** and an atomic series across one is drawn as a marked line rather than a staircase. A step asserts the value holds across the gap between two named positions, and there is no gap. This is what lets the relativity plugin's distortion spectrum draw at all.
+- `bandLayout` is gone and `bandStarts` replaces it; both were exported for testing only.
+
 ## 1.0.0a180
 
 [Matrix-Renderer] the ECharts adapter reads chart IR version 4 and draws the new `matrix` panel kind. Follows library `aggregate` `1.0.0a379` and `a380`. Plan: `dev/plan-a179-lab-tab.md` section 8.

@@ -155,3 +155,41 @@ chart in the app and not only the unknown kind.
   `ir_version: 4`, panel kind `matrix`, eight rows and
   `row_polarity [-1, 1, 1, 1, 1, 1, 1, -1]`, through the **pre-existing**
   generic chart route.
+
+
+---
+
+## 9. [Matrix-Legibility], `1.0.0a181`
+
+The author's review of the first Lab render, which is the only way several of
+these could have been found: every test passed before and after.
+
+Cells too wide and too short, the band gaps overdone in both directions, the row
+names clipped, and an axis name nobody needed. Plus the spectrum chart arriving
+from plugin `0.3.0`, which needed an ordinal `xy` axis to read its own tick
+names and to draw as a trend rather than a staircase.
+
+### Divergences
+
+1. **The matrix moved from a `heatmap` to a `custom` series.** The band gap was
+   the forcing reason: a heatmap can only separate bands with an empty category,
+   which costs a whole cell and leaves a hole in the ticks. A custom series
+   places each rect, so the break is 13 px and the cells keep their room. It
+   also buys the two-line cell text without ECharts rich-text markup.
+2. **`panelLayout` gained a matrix branch** that returns early with its own
+   grid. A matrix's height is a property of its shape, which is the same
+   argument the tower branch already makes for its own; folding it into the
+   shared clamp would have meant a third meaning for `uniformW`.
+3. **`bandLayout` was removed, not deprecated.** It was exported for its tests
+   and nothing else consumed it.
+
+### Verification
+
+* `uv run --no-sync pytest` — **417 passed**.
+* `npm test` in `web/` — **219 passed**, 7 of them new (5 category axis, 2 more
+  matrix).
+* `node dev/scripts/check-nav.mjs` — clean.
+* End to end with `aggregate-relativity` 0.3.0: `/v1/meta` reports three leaves
+  labeled `Table`, `Grid` and `Chart`, and both
+  `GET /v1/objects/{id}/chart/relativity` (a `matrix` panel) and
+  `.../chart/relativity_spectrum` (an `xy` panel of 8 series) return 200.

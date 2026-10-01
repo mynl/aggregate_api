@@ -169,6 +169,20 @@ const CURVE_WIDTH = 2;
 // hit one at 96 and ran 68 pixels off the right edge. The fit binds, the
 // panels get thin, and `blockLabel` drops the lines that no longer fit, which
 // is the degradation the label arithmetic is there for.
+// A matrix is read cell by cell and each cell holds two lines of text, so its
+// height comes off its own shape rather than off the house panel aspect. The
+// target is a cell a little wider than tall: square wastes width on short
+// numbers, and the default panel height left them nearly three times as wide as
+// high, which is a ribbon rather than a grid.
+const MATRIX_CELL_ASPECT = 0.62;
+const MATRIX_MIN_H = 180;
+const MATRIX_MAX_H = 620;
+
+// The y gutter a matrix's row names wrap inside. Wider than the house
+// AXIS_LEFT, because a position name is prose ('occ package', 'gross book')
+// where an axis tick is a number.
+const MATRIX_LABEL_W = 86;
+
 const TOWER_MIN_H = 260;
 const TOWER_MAX_H = 420;
 
@@ -852,6 +866,27 @@ export function panelLayout(count, square, width, rightPad = 0, plan = null) {
     // Vertical chrome belonging to one panel, inside its footprint.
     const chrome = PAD_TOP + AXIS_BOTTOM;
     const uniformW = Math.max(wide ? 160 : 200, free(perRow) / perRow);
+    // A matrix's height is as many rows as it has, each about as tall as a cell
+    // is wide. Clamped, so a twenty row matrix does not run off the page and a
+    // two row one is still worth looking at.
+    if (plan && plan.matrix && plan.matrix.columns > 0) {
+        const cellW = (free(perRow) / perRow + MATRIX_LABEL_W - AXIS_LEFT)
+            / plan.matrix.columns;
+        const wanted = plan.matrix.rows * cellW * MATRIX_CELL_ASPECT;
+        const h = Math.max(MATRIX_MIN_H, Math.min(MATRIX_MAX_H, wanted));
+        const grids = [{
+            left: MATRIX_LABEL_W, top: PAD_TOP,
+            width: Math.max(160, w - MATRIX_LABEL_W - pad), height: h,
+        }];
+        return {
+            grids,
+            wide,
+            panelW: grids[0].width,
+            panelH: h,
+            footprint: chrome + h,
+            hostHeight: Math.round(PAD_TOP + h + AXIS_BOTTOM),
+        };
+    }
     const panelH = laid && laid.tall
         // Off the **host** width, not the panel's: a tower row's height is a
         // property of the picture rather than of how many panels share it, and
@@ -989,12 +1024,23 @@ export function documentLayout(doc, width) {
     const panels = (doc && doc.panels) || [];
     const square = panels.length > 0 && panels.every((p) => p.aspect === 'equal');
     const grid = panels.some((p) => p.kind === 'heatmap' || p.kind === 'surface');
-    const plan = panels.some((p) => p.kind === 'tower')
+    let plan = panels.some((p) => p.kind === 'tower')
         ? {
             ratios: panels.map((p) => (p.kind === 'tower' ? TOWER_WIDTH : CURVE_WIDTH)),
             tall: true,
         }
         : null;
+    // A matrix sizes off its own shape: a panel of 8 rows and 7 columns wants a
+    // different height from one of 3 and 12, and the house aspect knows neither.
+    const matrix = panels.find((p) => p.kind === 'matrix');
+    if (matrix && !plan) {
+        const m = ((doc && doc.series) || [])
+            .find((e) => e.panel_id === matrix.id && e.matrix);
+        if (m && m.matrix.rows && m.matrix.columns) {
+            plan = { matrix: { rows: m.matrix.rows.length,
+                               columns: m.matrix.columns.length } };
+        }
+    }
     return panelLayout(panels.length, square, width, grid ? COLORBAR_W : 0, plan);
 }
 
@@ -1030,6 +1076,12 @@ function atomsInView(x, window) {
  * @returns {'stem'|'step-mid'|'step-pre'|'step-post'|'line'}
  */
 function drawingFor(support, xAxis, yAxis, seen) {
+    // An **ordinal** x axis first, because none of the readings below applies
+    // to one. A step between two named things asserts that the value holds
+    // across the gap between them, and there is no gap: nothing lives between
+    // `ph` and `wang` for a level to hold over. What a reader wants across
+    // ordered categories is the trend, so the points are marked and joined.
+    if (xAxis && xAxis.kind === 'category') return 'line';
     if (support === 'continuous') return 'line';
     if (yAxis.unit === 'probability') return 'step-post';
     if (xAxis.unit === 'probability' || xAxis.unit === 'return_period') return 'step-pre';
@@ -1185,6 +1237,19 @@ function niceWindow(min, max, target = 5) {
  * lattice again, which is the whole thing this is for.
  */
 function axisOption(axis, gridIndex, { scale, window, floor, formatter, nameGap }) {
+    // An ordinal axis is ticked with what its positions **are**. Without the
+    // names the ticks read 0, 1, 2, which places every series correctly and
+    // tells the reader nothing about what they are looking at. A category axis
+    // takes no window, no floor and no nice-ing: there is nothing between two
+    // positions to zoom into.
+    if (axis.kind === 'category' && axis.categories && axis.categories.length) {
+        return axisStyle({
+            type: 'category', gridIndex, data: [...axis.categories],
+            name: axis.label || '',
+            boundaryGap: false,
+            ...(nameGap == null ? {} : { nameGap }),
+        });
+    }
     const isLog = scale === 'log';
     let [min, max] = window || [];
     if (isLog && min != null && min <= 0) min = floor == null ? undefined : floor;
@@ -2148,30 +2213,29 @@ function luma([r, g, b]) {
     return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
 }
 
+/** Cell separation inside a band, in pixels. A hairline, not a gutter. */
+const MATRIX_CELL_GAP = 3;
+
+/** Extra separation at a band boundary, in pixels, on top of the cell gap. */
+const MATRIX_BAND_GAP = 13;
+
+/** Inset from the cell edge to its text, so a long number never touches it. */
+const MATRIX_TEXT_PAD = 4;
+
 /**
- * Lay a banded axis out, inserting a blank category between bands.
+ * Where each band begins, as indices into `groups`.
  *
- * ECharts spaces categories evenly, so a gap between two bands is an empty
- * category rather than a coordinate offset. The blank carries no cell, so it
- * draws as space.
- *
- * @param {Array<string>} labels the band members, in order.
- * @param {Array<string>} groups one group name per label, or empty for none.
- * @returns {{display: Array<string>, at: Array<number>}} the axis' categories,
- *   and where each original label ended up in them.
+ * @param {Array<string>} groups one group name per position, or empty.
+ * @param {number} count how many positions there are.
+ * @returns {Set<number>} the indices that start a new band, 0 excluded.
  */
-export function bandLayout(labels, groups) {
-    if (!groups || !groups.length) {
-        return { display: [...labels], at: labels.map((_, i) => i) };
+export function bandStarts(groups, count) {
+    const starts = new Set();
+    if (!groups || !groups.length) return starts;
+    for (let i = 1; i < count; i++) {
+        if (groups[i] !== groups[i - 1]) starts.add(i);
     }
-    const display = [];
-    const at = [];
-    labels.forEach((label, i) => {
-        if (i > 0 && groups[i] !== groups[i - 1]) display.push('');
-        at.push(display.length);
-        display.push(label);
-    });
-    return { display, at };
+    return starts;
 }
 
 /**
@@ -2185,6 +2249,12 @@ export function bandLayout(labels, groups) {
  *
  * Notes
  * -----
+ * A `custom` series rather than a `heatmap`, and the gaps are why. ECharts
+ * spaces categories evenly, so a heatmap can only separate two bands by an
+ * empty category, which costs a whole cell of width and leaves a hole in the
+ * tick list. A custom series places each rect itself, so a band break is a few
+ * pixels and the cells keep their room.
+ *
  * The number printed in a cell is the **raw value** and the color is the
  * polarity-applied departure. Keeping those apart is the point: a row declared
  * with polarity -1 shows the same multiple as its neighbors and colors it the
@@ -2206,8 +2276,6 @@ function matrixPanel(doc, panel, i, axes) {
     const center = (m.center === undefined || m.center === null) ? null : m.center;
     const neutral = m.neutral || 0;
 
-    // The signed departure the color reads, and its amplitude.
-    //
     // A non-zero center means the values are **ratios**, and a ratio that has
     // crossed zero is off the scale rather than far along it: a layer whose
     // diversified cost of capital went negative has a ratio near -9 against a
@@ -2227,8 +2295,11 @@ function matrixPanel(doc, panel, i, axes) {
         }
     }
 
-    const cols = bandLayout(columns, m.column_groups);
-    const rws = bandLayout(rows, m.row_groups);
+    const colStarts = bandStarts(m.column_groups, columns.length);
+    const rowStarts = bandStarts(m.row_groups, rows.length);
+
+    // A minus sign, not a hyphen: these are numbers being read.
+    const minus = (text) => String(text).replace(/-/g, '−');
 
     const data = [];
     values.forEach((row, r) => {
@@ -2237,69 +2308,102 @@ function matrixPanel(doc, panel, i, axes) {
             const rgb = matrixColor(signed[r][c], amplitude, neutral);
             const dark = luma(rgb) <= MATRIX_DARK_TEXT_LUMA;
             data.push({
-                value: [cols.at[c], rws.at[r], v],
-                // The annotation rides on the point so the label formatter can
-                // reach it without a second lookup keyed on coordinates.
-                annotation: (annotations[r] && annotations[r][c]) || '',
-                itemStyle: { color: `rgb(${rgb.join(',')})` },
-                label: {
-                    color: dark ? '#ffffff' : '#0b0b0b',
-                    // The faint line is the same ink at reduced opacity, which
-                    // reads on both a dark cell and a pale one.
-                    rich: {
-                        v: { fontSize: 12, color: dark ? '#ffffff' : '#0b0b0b',
-                             lineHeight: 15 },
-                        a: { fontSize: 9, opacity: 0.75, lineHeight: 12,
-                             color: dark ? '#ffffff' : '#52514e' },
-                    },
-                },
+                value: [c, r, v],
+                fill: `rgb(${rgb.join(',')})`,
+                ink: dark ? '#ffffff' : '#0b0b0b',
+                faint: dark ? 'rgba(255,255,255,0.78)' : '#52514e',
+                text: `${minus(Number(v).toFixed(2))}×`,
+                note: (annotations[r] && annotations[r][c])
+                    ? `(${minus(annotations[r][c])})` : '',
+                // Which sides face a band break, so the rect is inset there and
+                // the break reads as space rather than as a line.
+                padL: colStarts.has(c) ? MATRIX_BAND_GAP : 0,
+                padT: rowStarts.has(r) ? MATRIX_BAND_GAP : 0,
             });
         });
     });
 
-    // A minus sign, not a hyphen: these are numbers being read.
-    const minus = (text) => String(text).replace(/-/g, '−');
+    const renderItem = (params, api) => {
+        const [cx, cy] = api.coord([api.value(0), api.value(1)]);
+        const size = api.size([1, 1]);
+        const d = params.data || {};
+        const padL = (d.padL || 0);
+        const padT = (d.padT || 0);
+        const x = cx - size[0] / 2 + MATRIX_CELL_GAP / 2 + padL;
+        const y = cy - size[1] / 2 + MATRIX_CELL_GAP / 2 + padT;
+        const w = Math.max(size[0] - MATRIX_CELL_GAP - padL, 1);
+        const h = Math.max(size[1] - MATRIX_CELL_GAP - padT, 1);
+        const midX = x + w / 2;
+        const children = [{
+            type: 'rect',
+            shape: { x, y, width: w, height: h, r: 2 },
+            style: { fill: d.fill },
+            silent: true,
+        }];
+        // Two lines stacked about the middle when there is an annotation, one
+        // line centered when there is not.
+        const room = h - 2 * MATRIX_TEXT_PAD;
+        const value = Math.min(13, Math.max(9, room * 0.34));
+        if (d.note) {
+            children.push({
+                type: 'text', silent: true,
+                style: { text: d.text, x: midX, y: y + h / 2 - value * 0.18,
+                         textAlign: 'center', textVerticalAlign: 'bottom',
+                         fill: d.ink, fontSize: value },
+            }, {
+                type: 'text', silent: true,
+                style: { text: d.note, x: midX, y: y + h / 2 + value * 0.22,
+                         textAlign: 'center', textVerticalAlign: 'top',
+                         fill: d.faint, fontSize: Math.max(8, value * 0.72) },
+            });
+        } else {
+            children.push({
+                type: 'text', silent: true,
+                style: { text: d.text, x: midX, y: y + h / 2,
+                         textAlign: 'center', textVerticalAlign: 'middle',
+                         fill: d.ink, fontSize: value },
+            });
+        }
+        return { type: 'group', children };
+    };
+
+    const bare = {
+        splitLine: { show: false }, axisTick: { show: false },
+        axisLine: { show: false },
+    };
     return {
         series: [{
-            type: 'heatmap', name: s.name, data,
+            type: 'custom', name: s.name, data, renderItem,
             xAxisIndex: i, yAxisIndex: i,
-            emphasis: { disabled: true },
-            label: {
-                show: true,
-                formatter: (p) => {
-                    const value = `{v|${minus(Number(p.value[2]).toFixed(2))}×}`;
-                    const note = p.data.annotation
-                        ? `\n{a|(${minus(p.data.annotation)})}` : '';
-                    return value + note;
-                },
-            },
-            itemStyle: { borderColor: '#ffffff', borderWidth: 2 },
         }],
         legend: [],
         xAxis: axisStyle({
             type: 'category', gridIndex: i,
             name: (axes[panel.x_axis] || {}).label || '',
-            data: cols.display, splitLine: { show: false },
-            axisTick: { show: false }, axisLine: { show: false },
-            axisLabel: { fontSize: 10, color: '#52514e' },
+            data: columns, ...bare,
+            axisLabel: { fontSize: 11, color: '#52514e' },
         }),
         yAxis: axisStyle({
             type: 'category', gridIndex: i,
             name: (axes[panel.y_axis] || {}).label || '',
             // Rows read top to bottom, the order the document lists them in.
             inverse: true,
-            data: rws.display, splitLine: { show: false },
-            axisTick: { show: false }, axisLine: { show: false },
+            data: rows, ...bare,
             nameGap: 46,
-            axisLabel: { fontSize: 10, color: '#52514e' },
+            axisLabel: {
+                fontSize: 11, color: '#52514e',
+                // A position's name is prose ('occ package', 'gross book') and
+                // the gutter is narrow, so it wraps rather than being clipped
+                // to something the reader has to guess at.
+                width: MATRIX_LABEL_W, overflow: 'break', lineHeight: 13,
+            },
         }),
         tooltip: {
             trigger: 'item',
             formatter: (p) => {
                 const zLabel = (axes[panel.z_axis] || {}).label || 'value';
-                const note = p.data.annotation
-                    ? `<br>${minus(p.data.annotation)}` : '';
-                return `${rws.display[p.value[1]]}, ${cols.display[p.value[0]]}`
+                const note = p.data.note ? `<br>${p.data.note}` : '';
+                return `${rows[p.value[1]]}, ${columns[p.value[0]]}`
                     + `<br>${zLabel} <b>${minus(Number(p.value[2]).toFixed(3))}</b>`
                     + note;
             },

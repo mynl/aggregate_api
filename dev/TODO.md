@@ -6,6 +6,12 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Matrix-Legibility]** DONE (`1.0.0a181`), plan `dev/plan-a179-lab-tab.md`
+  section 9: the matrix is a `custom` series with pixel band gaps and its own
+  height, row names wrap, an empty axis label draws no name, and an ordinal `xy`
+  axis reads `ChartAxis.categories` and draws as a trend. From the author's
+  review of the first Lab render.
+
 - **[Matrix-Renderer]** DONE (`1.0.0a180`), plan `dev/plan-a179-lab-tab.md`
   section 8: the ECharts adapter reads chart IR version 4 and draws the `matrix`
   panel kind. Required for any build running library `a379` or later, since the
