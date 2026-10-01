@@ -4,6 +4,13 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a185
+
+[Matrix-Blank-Fix] the matrix panel draws its cells again. A `a181` regression: the Lab Grid leaf rendered its axes and nothing else.
+
+- **Cause.** The custom series' `renderItem` read each cell's fill and text off `params.data`. ECharts does not put the data item on the renderItem params (the documented set is `dataIndex`, `seriesIndex`, `coordSys` and friends), so every rect drew with `fill: undefined` and every label with no text. The cells are read off the closure by `params.dataIndex` now.
+- **Why the tests missed it.** They asserted the series *data*, which was correct throughout, and never called `renderItem`. Three cases now do, with a params object that deliberately carries no `data` key, so the panel is checked at the point where it actually draws.
+
 ## 1.0.0a184
 
 [Sentence-Forms] the pricing forms read as one sentence, the Quick Re idiom. Plan: `dev/plan-a182-pricing-pnl-forms.md` part [sentence-forms].

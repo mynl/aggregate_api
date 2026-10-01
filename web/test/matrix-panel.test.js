@@ -255,3 +255,52 @@ test('a center of zero keeps both directions', () => {
     assert.notDeepEqual(down, up);
     assert.ok(down[1] > down[0], 'below a zero center is favorable');
 });
+
+// --- what renderItem actually receives ---------------------------------------
+
+/** A stub of the ECharts custom-series api, for one cell. */
+function renderStub(opt, dataIndex) {
+    const series = opt.series.find((s) => s.type === 'custom');
+    const cell = series.data[dataIndex];
+    const api = {
+        coord: ([x, y]) => [100 + x * 80, 50 + y * 40],
+        size: () => [80, 40],
+        value: (i) => cell.value[i],
+    };
+    // **No `data` key**, deliberately. ECharts does not put the data item on
+    // the renderItem params: the documented set is dataIndex, seriesIndex,
+    // coordSys and friends. Reading `params.data` there yields undefined.
+    return series.renderItem({ dataIndex, seriesIndex: 0 }, api);
+}
+
+test('renderItem paints a filled rect with its text', () => {
+    // The regression that shipped at a181 and blanked the panel: every cell
+    // read its fill and text off `params.data`, so the rects came out with no
+    // fill and the labels with no text. What reached the page was the axes and
+    // nothing else, and every data-level assertion above still passed, because
+    // none of them called renderItem.
+    const out = renderStub(option(), 0);
+    const rect = out.children.find((c) => c.type === 'rect');
+    assert.ok(rect, 'a rect is drawn');
+    assert.match(rect.style.fill, /^rgb\(/, 'the rect is filled');
+    const texts = out.children.filter((c) => c.type === 'text')
+        .map((c) => c.style.text);
+    assert.ok(texts.length >= 1);
+    for (const t of texts) assert.ok(t, 'every text child carries text');
+    assert.ok(texts.some((t) => t.endsWith('×')), texts);
+});
+
+test('renderItem reads the cell its index names, not the first one', () => {
+    const opt = option();
+    const cells_ = opt.series.find((s) => s.type === 'custom').data;
+    const last = cells_.length - 1;
+    const out = renderStub(opt, last);
+    const texts = out.children.filter((c) => c.type === 'text')
+        .map((c) => c.style.text);
+    assert.ok(texts.includes(cells_[last].text), texts);
+});
+
+test('a cell with no annotation renders one text child', () => {
+    const out = renderStub(option({ annotations: [] }), 0);
+    assert.equal(out.children.filter((c) => c.type === 'text').length, 1);
+});

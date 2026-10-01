@@ -2326,7 +2326,12 @@ function matrixPanel(doc, panel, i, axes) {
     const renderItem = (params, api) => {
         const [cx, cy] = api.coord([api.value(0), api.value(1)]);
         const size = api.size([1, 1]);
-        const d = params.data || {};
+        // Off the closure by index, **not** off `params.data`. ECharts does not
+        // put the data item on the renderItem params (the documented set is
+        // dataIndex, seriesIndex, coordSys and friends), so reading it there
+        // yields undefined: every rect drew with no fill and every label with
+        // no text, which is a panel of axes and nothing else.
+        const d = data[params.dataIndex] || {};
         const padL = (d.padL || 0);
         const padT = (d.padT || 0);
         const x = cx - size[0] / 2 + MATRIX_CELL_GAP / 2 + padL;
