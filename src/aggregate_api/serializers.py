@@ -63,6 +63,98 @@ def _safe(value: Any) -> Any:
     return str(value)
 
 
+def _spec_value(value: Any) -> Any:
+    """Coerce one spec value to a JSON-native one, recursively.
+
+    Parameters
+    ----------
+    value : Any
+        A value out of a parser spec, or any value nested inside one.
+
+    Returns
+    -------
+    Any
+        ``None``, a ``str``, an ``int``, a finite ``float``, a ``list``, or a
+        ``dict`` with string keys. A non-finite float becomes the string
+        ``"inf"``, ``"-inf"`` or ``"nan"``.
+
+    Notes
+    -----
+    See :func:`spec_to_payload` for why the non-finite cases are strings rather
+    than ``None``. The recursion has to cover dicts as well as lists: a ``port``
+    spec carries its unit list on a nested ``spec`` key as
+    ``[("agg", "A", {...}), ...]``, so a dict appears three levels down.
+    """
+    if value is None:
+        return None
+    if isinstance(value, np.generic):
+        # numpy scalar, including ``np.bool_`` and ``np.str_``, to its native
+        # Python twin before the type tests below.
+        value = value.item()
+    if isinstance(value, float):
+        if math.isnan(value):
+            return "nan"
+        if math.isinf(value):
+            return "inf" if value > 0 else "-inf"
+        # ``aggregate.parser._PercentNumber`` is a float subclass carrying the
+        # memory of a trailing ``%``. Hand back the plain float so nothing
+        # downstream has to serialize a type it does not know.
+        return float(value)
+    if isinstance(value, np.ndarray):
+        # 0-d arrays return a scalar from ``.tolist()``, not a list.
+        as_list = value.tolist()
+        if isinstance(as_list, list):
+            return [_spec_value(v) for v in as_list]
+        return _spec_value(as_list)
+    if isinstance(value, (list, tuple)):
+        # Tuples become arrays, which is the right wire form: a reinsurance
+        # layer reads as a three-element array, not as an object.
+        return [_spec_value(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _spec_value(v) for k, v in value.items()}
+    if isinstance(value, (str, bool, int)):
+        return value
+    return str(value)
+
+
+def spec_to_payload(spec: dict) -> dict:
+    """Coerce a parser spec to a JSON-safe dict, keeping an unlimited limit readable.
+
+    Parameters
+    ----------
+    spec : dict
+        The third member of the ``(kind, name, spec)`` triple
+        ``aggregate.build.parser.parse`` returns: the transformer's own output,
+        whose values are floats, strings, ``None``, numpy arrays, and nested
+        lists, tuples and dicts of those.
+
+    Returns
+    -------
+    dict
+        The same keys, every value JSON-native, with a non-finite float as the
+        string ``"inf"``, ``"-inf"`` or ``"nan"``.
+
+    Notes
+    -----
+    **Why this is not :func:`_safe`, and must not be "fixed" into a call to
+    it.** ``_safe`` sends a non-finite float to ``None``, which is right for a
+    DataFrame cell, where a non-finite number is a missing one. In a spec it
+    destroys meaning. Position 1 of a reinsurance triple is a limit and a limit
+    is never absent, so ``agg_reins: [[0.2, null, 0.0]]`` cannot be told apart
+    from a limit the program failed to state, and ``None`` loses the sign that
+    separates ``inf`` from ``-inf``. The string form is also the spelling the
+    grammar itself accepts for an unlimited layer, so a caller round tripping a
+    limit back into DecL writes exactly what it read.
+
+    The coercion has to happen before the response is assembled rather than be
+    left to the serializer. Starlette's ``JSONResponse`` runs ``json.dumps``
+    with ``allow_nan=False``, so an unhandled ``inf`` does not ship bad JSON,
+    it **raises**, and the route answers 500. An ``inf`` is not an edge case
+    here: ``sev_ub`` is ``inf`` on the plainest one-line ``agg``.
+    """
+    return {str(key): _spec_value(value) for key, value in spec.items()}
+
+
 def reset_index_safe(df: pd.DataFrame) -> pd.DataFrame:
     """``df.reset_index()`` that tolerates duplicate names.
 

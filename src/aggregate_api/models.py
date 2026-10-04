@@ -906,6 +906,54 @@ class DeclFormatResponse(BaseModel):
     decl: str
 
 
+class DeclParseRequest(BaseModel):
+    decl: str
+
+
+class ParsedStatement(BaseModel):
+    """One statement of a program, as the parser understood it.
+
+    ``kind`` and ``name`` are the first two members of the
+    ``(kind, name, spec)`` triple ``aggregate``'s parser returns: the object
+    kind the statement declares (``agg``, ``sev``, ``port``, ``pnl``, ``xpnl``,
+    ``distortion``, and so on) and the name it declares it under.
+
+    Notes
+    -----
+    ``spec`` is deliberately an open ``dict``, not a mirrored schema. Its keys
+    are the **library's** vocabulary and they move when the grammar moves, so a
+    typed model here would be a second declaration of the transformer's output:
+    it would drift, and then it would start rejecting specs the library had
+    legitimately grown. The route's whole promise is "what the parser
+    understood, coerced to JSON".
+
+    Two coercions a reader has to know about. A tuple arrives as an array, so a
+    reinsurance layer reads as the three-element ``[share, limit, attach]`` and
+    not as an object. And a non-finite float arrives as the string ``"inf"``,
+    ``"-inf"`` or ``"nan"``, which is both the spelling the grammar accepts and
+    the only form that keeps an unlimited limit distinguishable from an absent
+    one. See :func:`aggregate_api.serializers.spec_to_payload`.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    kind: str
+    name: str
+    spec: dict[str, Any]
+
+
+class DeclParseResponse(BaseModel):
+    """``POST /v1/decl/parse`` -- the parser's answer as data.
+
+    One entry per statement, in source order. Nothing is built, cached or
+    audited on the way.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    statements: list[ParsedStatement]
+
+
 class LexToken(BaseModel):
     model_config = _RESPONSE_CFG
 

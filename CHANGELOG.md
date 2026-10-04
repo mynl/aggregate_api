@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a192
+
+[Decl-Parse] `POST /v1/decl/parse` returns what the DecL parser understood about a program as structured data, the `(kind, name, spec)` triple, one entry per statement. Requested by `aggregate-asp`, whose `[Program-Import]` step needs the structure of a pasted program and must not read it back out of text. Plan `dev/done/plan-a192-decl-parse.md`; no library change.
+
+- **The route joins the `/v1/decl/*` family** beside `complete`, `lex`, `format` and `grammar`, and like them it builds nothing: no object, no cache entry, no audit row, a parse rather than a convolution. Statements split on blank lines, so a program spread over several indented lines is one statement and two programs separated by an empty line are two.
+- **A non-finite float in a spec serializes as the string `"inf"`, `"-inf"` or `"nan"`**, not as `null`. A reinsurance limit is never absent, so `null` could not be told from a limit the program never stated, and it loses the sign. It is also the spelling the grammar accepts, so a caller round tripping a limit back into DecL writes what it read. New `serializers.spec_to_payload` does this; the DataFrame coercer `_safe`, which is right to send a non-finite cell to `null`, is deliberately not reused.
+- **`spec` is an open object, not a mirrored schema.** Its keys are the library's vocabulary and they move when the grammar moves. A tuple arrives as an array, so a layer reads as `[share, limit, attach]`; numpy arrays arrive as lists; a `port`'s nested unit triples are coerced all the way down.
+- **A parse failure is the structured error path**, HTTP 422 carrying the `aggregate.parser_errors` `ErrorReport` dict that `POST /v1/objects` already returns, plus one key, `statement_index`, naming which statement failed. A test verifies that is the only key the two shapes differ by, so they cannot drift apart. `source` is the failing statement rather than the whole program, because the column and caret are measured against what the parser was handed.
+- **`_every_statement_parses`, the gate in front of Reformat, is now expressed in terms of the shared preprocess-and-parse helper** instead of duplicating it. Behavior unchanged, including the a137 promise that a malformed program reformats to itself rather than coming back collapsed onto one line.
+
 ## 1.0.0a191
 
 [Punch-List] the author's 2026-10-01 punch list: the PnL rate items light, the P&L exhibits carry the net-of-occurrence row, and a handful of visual fixes. Companion releases: `aggregate` `1.0.0a386` (`pnl_program(premium_style=)`) and `1.0.0a387` (net-of-tier row on `economic_ratios_df` and the walk, `Margin ratio` column, insurer ratios without the legs block), `aggregate-relativity` `0.7.0` (the `net of occ` reference row).

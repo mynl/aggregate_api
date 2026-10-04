@@ -1,4 +1,7 @@
-"""DecL-helpers routes: completions, lex, and grammar export.
+"""DecL-helpers routes: the family that asks the grammar about text.
+
+None of these builds anything. They cost a parse, not a convolution, and
+they create no object and no cache entry.
 
 Routes
 ------
@@ -8,6 +11,12 @@ Routes
 * ``POST /v1/decl/lex``: accepts ``decl`` and returns the token stream,
   for client-side syntax highlighting that prefers authoritative tokens
   over a TextMate or language-server clone.
+* ``POST /v1/decl/parse``: accepts ``decl`` and returns the
+  ``(kind, name, spec)`` triple the parser understood, one entry per
+  statement. Added at a192 for an external client that needs the
+  structure of a program and must not read it back out of text.
+* ``POST /v1/decl/format``: accepts ``decl`` and returns the program
+  re-rendered canonically, echoing the input on any failure.
 * ``GET  /v1/decl/grammar``: serves ``decl.lark`` verbatim as
   ``text/plain``. Lets a future docs page embed the live grammar without a
   build-time include step.
@@ -17,14 +26,90 @@ from __future__ import annotations
 
 from importlib.resources import files
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
+
+from aggregate.parser_errors import format_error
 
 from .. import models
 from ..completion import complete, lex
+from ..serializers import spec_to_payload
 
 
 router = APIRouter()
+
+
+class _StatementParseError(Exception):
+    """A statement the parser refused, carrying its index in the program.
+
+    Parameters
+    ----------
+    index : int
+        Zero-based position of the failing statement in the preprocessed
+        program. A program that will not even split reports 0.
+    statement : str
+        The text actually handed to the parser, which is the preprocessed
+        statement, or the whole program when the split itself failed. This is
+        the right ``source`` for a report, because it is what the column and
+        caret are measured against.
+    cause : BaseException
+        What the parser raised. ``aggregate.parser_errors.format_error`` turns
+        it into the rich report.
+    """
+
+    def __init__(self, index: int, statement: str, cause: BaseException) -> None:
+        super().__init__(f"statement {index} did not parse")
+        self.index = index
+        self.statement = statement
+        self.cause = cause
+
+
+def _parse_statements(decl: str) -> list[tuple[str, str, dict]]:
+    """Split ``decl`` into statements and parse each one, in source order.
+
+    Parameters
+    ----------
+    decl : str
+        A DecL program, one statement or several.
+
+    Returns
+    -------
+    list of tuple
+        One ``(kind, name, spec)`` triple per statement, the parser's own
+        return value, untouched.
+
+    Raises
+    ------
+    _StatementParseError
+        On the first statement that will not parse, or when the program will
+        not split at all.
+
+    Notes
+    -----
+    The two library names are both public and both the ones the writer itself
+    uses, so this predicts the writer's behavior rather than guessing at it.
+    ``UnderwritingLexer.preprocess`` splits on **blank** lines, not on every
+    newline: a single newline plus indentation is a continuation and folds into
+    one space, which is how a program spread over five lines stays one
+    statement.
+
+    Each statement is parsed against ``aggregate.build`` alone, so a name a
+    statement declares is not in scope for the statements after it. See
+    :func:`_every_statement_parses`, which is where that costs something.
+    """
+    try:
+        from aggregate import build
+        from aggregate.parser import UnderwritingLexer
+        statements = UnderwritingLexer.preprocess(decl)
+    except Exception as exc:  # noqa: BLE001 (a program that will not even split)
+        raise _StatementParseError(0, decl, exc) from exc
+    parsed: list[tuple[str, str, dict]] = []
+    for index, statement in enumerate(statements):
+        try:
+            parsed.append(build.parser.parse(statement))
+        except Exception as exc:  # noqa: BLE001 (parse error, or unresolved name)
+            raise _StatementParseError(index, statement, exc) from exc
+    return parsed
 
 
 def _every_statement_parses(decl: str) -> bool:
@@ -76,16 +161,9 @@ def _every_statement_parses(decl: str) -> bool:
     rather than guarded here.
     """
     try:
-        from aggregate import build
-        from aggregate.parser import UnderwritingLexer
-        statements = UnderwritingLexer.preprocess(decl)
-    except Exception:  # noqa: BLE001 (a program that will not even split)
+        _parse_statements(decl)
+    except _StatementParseError:
         return False
-    for statement in statements:
-        try:
-            build.parser.parse(statement)
-        except Exception:  # noqa: BLE001 (parse error, or an unresolved name)
-            return False
     return True
 
 
@@ -174,6 +252,63 @@ def decl_format(req: models.DeclFormatRequest) -> dict:
     Best-effort: malformed input echoes back unchanged.
     """
     return {"decl": _format_decl(req.decl)}
+
+
+@router.post("/decl/parse", response_model=models.DeclParseResponse)
+def decl_parse(req: models.DeclParseRequest) -> dict:
+    """Return what the parser understood about ``req.decl``, as data.
+
+    One ``(kind, name, spec)`` entry per statement, in source order. Nothing is
+    built, nothing is cached, nothing is audited as a build: this is the
+    grammar answering a question about text, like its three siblings above, and
+    it costs a parse rather than a convolution.
+
+    Notes
+    -----
+    **The spec is the library's vocabulary**, served as an open object rather
+    than a mirrored schema, for the reason
+    :class:`~aggregate_api.models.ParsedStatement` gives. Two coercions a
+    client has to expect, both from
+    :func:`~aggregate_api.serializers.spec_to_payload`: a tuple arrives as an
+    array, so a reinsurance layer reads as ``[share, limit, attach]``; and a
+    non-finite float arrives as the string ``"inf"``, ``"-inf"`` or ``"nan"``,
+    which is the spelling the grammar accepts for an unlimited layer and the
+    only form that keeps an unlimited limit apart from an absent one. ``inf``
+    is not exotic: ``sev_ub`` carries it on the plainest one-line ``agg``.
+
+    **Statements are split on blank lines**, the rule
+    ``UnderwritingLexer.preprocess`` has always applied, so a program spread
+    over several indented lines is one statement and two programs separated by
+    an empty line are two.
+
+    **Each statement resolves against the default underwriter**, as
+    :func:`_every_statement_parses` and ``format_program`` both do, so a
+    ``sev.X`` or ``agg.X`` reference into the recipe base resolves and a
+    builtin reference resolves inline. The consequence worth stating: a program
+    whose second statement refers to a name its **first** statement declares
+    does not parse, because nothing here feeds the first statement's result
+    back into scope for the second.
+
+    **A parse failure is the structured error path**, not a 200 with an empty
+    list: HTTP 422 whose ``detail`` is the ``aggregate.parser_errors``
+    ``ErrorReport`` dict that ``POST /v1/objects`` already returns, with
+    ``line``, ``column``, ``source``, ``caret`` and ``suggestions``, plus one
+    added key, ``statement_index``, naming which statement failed. ``source``
+    is that statement rather than the whole program, because the column and the
+    caret are measured against what the parser was handed.
+    """
+    try:
+        parsed = _parse_statements(req.decl)
+    except _StatementParseError as exc:
+        detail = format_error(exc.statement, exc.cause).to_dict()
+        detail["statement_index"] = exc.index
+        raise HTTPException(status_code=422, detail=detail) from None
+    return {
+        "statements": [
+            {"kind": kind, "name": name, "spec": spec_to_payload(spec)}
+            for kind, name, spec in parsed
+        ]
+    }
 
 
 @router.get(

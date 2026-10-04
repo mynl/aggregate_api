@@ -6,6 +6,17 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Decl-Parse]** DONE (`1.0.0a192`), plan
+  `dev/done/plan-a192-decl-parse.md`: `POST /v1/decl/parse` returns the
+  `(kind, name, spec)` triple the parser understood, one entry per
+  statement, building nothing and caching nothing. Requested by
+  `aggregate-asp` for its `[Program-Import]` step, which reads the
+  structure of a pasted program rather than regexing it out of
+  `pprogram`. A non-finite float in a spec serializes as `"inf"` /
+  `"-inf"` / `"nan"` through the new `serializers.spec_to_payload`, and a
+  parse failure is the existing `ErrorReport` 422 plus a
+  `statement_index`. Detail in `CHANGELOG.md` a192.
+
 - **[Punch-List]** DONE (`1.0.0a191`), the author's 2026-10-01 punch list:
   the rate menu items light (upstream `pnl_program(premium_style=)` shipped as
   library a386), the net-of-occurrence subtotal reaches PnL Summary, Waterfall
