@@ -307,6 +307,103 @@ class ValueResponse(BaseModel):
     elapsed_ms: int
 
 
+class LayerRequest(BaseModel):
+    """One layer to quote, in the vocabulary the Quick Re row speaks.
+
+    The span is given as the two amounts it resolved to rather than as the
+    probabilities it was typed as: resolving a percentage is the quantiles
+    route's job and the row has already been there, so sending the probability
+    again would ask the server to redo a lookup whose answer the caller is
+    holding. ``limit`` admits no infinity through JSON, so an unlimited cover
+    is spelled by omitting it.
+    """
+
+    tier: Literal["occurrence", "aggregate"] = Field(
+        "occurrence",
+        description="Which distribution the layer is cut out of.",
+    )
+    attach: float = Field(..., ge=0.0, allow_inf_nan=False)
+    limit: float | None = Field(
+        None, gt=0.0, allow_inf_nan=False,
+        description="Width of the layer. Omit for an unlimited cover.",
+    )
+    share: float = Field(1.0, gt=0.0, le=1.0, allow_inf_nan=False)
+
+
+class LayerIndicationRequest(BaseModel):
+    """Body for ``POST /v1/objects/{id}/layers/indication``."""
+
+    layers: list[LayerRequest] = Field(
+        ..., min_length=1, max_length=64,
+        description="The layers to quote, answered in the order given.",
+    )
+    cede: float = Field(0.0, ge=0.0, lt=1.0)
+
+
+class LayerIndication(BaseModel):
+    """The no-build quote for one layer.
+
+    Every figure is a reading of the gross object's own distributions, so the
+    whole response costs no build and is cheap enough for a preview line that
+    recomposes on every settled keystroke.
+
+    ``premium`` is the indication itself. There is no second field for it: the
+    full press can only revise this number upward, never replace it with
+    something unrelated, so one number is the whole answer.
+
+    ``cv``, ``lol``, ``rol`` and ``loss_ratio`` are optional because a capacity
+    layer above the severity limit has no expected loss to divide by, and an
+    unlimited layer has no rate-on-line base. ``count`` is the expected number
+    of claims reaching the layer and is occurrence only: on the aggregate tier
+    the layer is pierced by the year's total, so a claim count to it means
+    nothing.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    tier: str
+    attach: float
+    # Null on an unlimited cover, the same way the request spells one.
+    limit: float | None = None
+    share: float
+    el: float
+    sd: float
+    cv: float | None = None
+    count: float | None = None
+    pr_attach: float
+    lol: float | None = None
+    floored: bool
+    premium: float
+    rol: float | None = None
+    spelling: str
+    cede: float
+    loss_ratio: float | None = None
+
+
+class LayerIndicationResponse(BaseModel):
+    """One indication per layer, in the order asked."""
+
+    model_config = _RESPONSE_CFG
+
+    indications: list[LayerIndication]
+
+
+class LayerQuote(LayerIndication):
+    """One layer's full quote, with the three measures behind it.
+
+    The components ride along rather than only the winner, because which
+    measure bound is the interesting part: the dual transform loads the body of
+    a distribution and binds low in a tower, the proportional hazard transform
+    loads the tail and binds high. ``binds`` is ``'sd'``, ``'ph'`` or
+    ``'dual'``.
+    """
+
+    sd_load: float
+    ph: float
+    dual: float
+    binds: str
+
+
 class DerivedResponse(BuildResponse):
     """A derivation's result: the program that made it, and the object.
 
@@ -329,6 +426,14 @@ class DerivedResponse(BuildResponse):
         description=(
             "What the derivation did, when it has something to say. Sharpen "
             "fills it with the probe's verdict; the others leave it empty."
+        ),
+    )
+    quotes: list[LayerQuote] | None = Field(
+        None,
+        description=(
+            "The per-layer quote behind a priced cession, in the order the "
+            "clause spells it. Only a cession asked to price carries this; "
+            "every other derivation leaves it empty."
         ),
     )
 
@@ -488,6 +593,17 @@ class ReinsProgramRequest(BaseModel):
         ...,
         description=("A cession clause, or one per tier: "
                      "'occurrence net of 500 xs 500'."),
+    )
+    price: bool = Field(
+        False,
+        description=("Quote every layer and write the premium into the clause, "
+                     "as a 'deposit' or a 'rol'. Costs one small auxiliary "
+                     "build per layer."),
+    )
+    cede: float = Field(
+        0.0, ge=0.0, lt=1.0,
+        description=("Ceding commission. The quote is the reinsurer's net, so "
+                     "the written premium is grossed up by 1 / (1 - cede)."),
     )
 
 

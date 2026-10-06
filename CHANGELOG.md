@@ -4,6 +4,20 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a197
+
+[Layer-Pricing] **Quick Re quotes the layers it writes.** Plan `dev/done/plan-a197-layer-pricing.md`. The row wrote coverage and no price; it now writes one deterministic quote per layer, spelled `deposit` or `rol` in the clause, so the program that lands in the editor is a quote sheet. The preview line gains a live expected loss and a live indication, with no build.
+
+- **One method, no options.** Per layer: the standard deviation load `el + 0.3 sd` against a `ph 0.7` price and a `dual 1.8` price, take the largest, floor at a 1% rate on line, gross up for any ceding commission, round to three significant figures. Nothing in the UI reaches a parameter; the constants are one block in the new `aggregate_api/layer_pricing.py`.
+- **The attachment ladder is a theorem, not a clamp.** `LR = 1 / (1 + 0.3 cv)` and a layer hit with annual probability `p` always has `cv >= sqrt((1 - p) / p)`, so the loss ratio cannot rise as the attachment falls. On the worked book a six-layer tower quotes 85.6% down to 23.6% with a monotone rate on line and no clamp firing. The retired `aggregate-asp` experiment's three post hoc clamps (margin-monotone, aggregate-over-occurrence, minimum rate on line) are therefore two fewer: only the floor is kept, and it is the end of the ladder rather than a patch on it.
+- **A layer's annual moments are closed form**, off the gross object with no build, which is what lets the form quote as you type. Measured against the engine's own per-layer figures from `reins_stats_df`, which reach them by FFT: agreement to 5e-11 relative on the mean and 8e-8 on the cv, for Poisson and for a mixed frequency alike.
+- **`POST /v1/objects/{id}/layers/indication`**, a list of layers in and one no-build quote each out. The press can only revise those numbers **upward**, never down, since it is a maximum over the same load and the same moments, which is what makes showing an indication on the form honest.
+- **`POST /v1/objects/{id}/reins` gains `price` and `cede`.** The unpriced path is untouched and still the default, so the route is usable both ways; a priced press brings the per-layer arithmetic back in `quotes`. The clause is recomposed from the layers the **library** read back off the spec, not from the caller's string, so a loosely spelled placement cannot diverge from what was priced.
+- **The quote table sits under the Quick Re row**, not in the pane: `sd_load`, `ph` and `dual` side by side with which of the three bound. Watch `dual` bind low in a tower and `ph` bind high, the dual transform loading the body of a distribution and the proportional hazard transform the tail. It is under the row because the rows belong to the press and not to the object, so a sub-tab leaf would go on showing the previous book's quote after a switch.
+- **No aggregate surcharge, deliberately.** An aggregate cover already costs more per unit of expected loss than the occurrence layer at the same percentile pair, which is the reading the Quick Re percentage boxes give, because at equal percentiles it is a genuinely rare event and its cv says so.
+
+A priced `agg` reports `IgnoredDecLClauseWarning` in its build notes: a plain `agg` has no premium context, so the price only bites inside a `pnl` or an `xpnl`. The program text keeps the full declaration and `pnl_program` inlines it, so PnL is one press away and the warning is accurate rather than noise to suppress.
+
 ## 1.0.0a196
 
 [PnL-Pentagon] **the figure itself**: `PnL / Pentagon` draws gross, ceded and net on one picture, at a solvency level picked from a strip of mini pentagons. Plan `dev/done/plan-a195-pnl-pentagon.md`, the second and last bump here; a195 was the route and the flag.

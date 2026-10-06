@@ -318,8 +318,14 @@ and the standing REMINDER below about what is worth plotting.
         shim.
       - `alloc`, the per-unit allocation tables a reinsured portfolio silently
         loses, same keyword.
-      - `cession`, pricing a cession with a distortion; the library has no glue
-        between reinsurance and distortions at all.
+      - ~~`cession`, pricing a cession with a distortion; the library has no
+        glue between reinsurance and distortions at all.~~ **Done at a197**,
+        `dev/done/plan-a197-layer-pricing.md`. The glue arrived in the meantime
+        and then turned out not to be needed: `Aggregate.reins_price_df` prices
+        gross / ceded / net and not the layers, so the quote distorts each
+        layer's own annual distribution, reached by building the one-layer
+        `ceded to` program `reins_program` renders. Quick Re now writes a
+        `deposit` or a `rol` on every layer it cedes.
       - ~~`replot`, the Reinsurance Plot leaf on a reinsured **portfolio**,
         which greys because `chart_reins` is registered for `Aggregate`
         alone.~~ **Answered, not fixed.** Library a244 rewrote `chart_reins`

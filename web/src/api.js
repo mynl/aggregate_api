@@ -174,6 +174,26 @@ export const api = {
         _json('GET',
               `/v1/objects/${id}/quantiles?p=${ps.join(',')}&basis=${basis}`),
     /**
+     * What a list of layers would be quoted at, with no build.
+     *
+     * The other half of the Quick Re preview line: the clause says what the row
+     * would write, this says what that coverage costs. Cheap enough to sit on a
+     * settled keystroke, because every figure is a reading of the already built
+     * gross object's own survival curves rather than anything new.
+     *
+     * The press can only revise these numbers **upward**, which is why the line
+     * labels the figure an indication: the full quote is a maximum that
+     * includes this same standard deviation load.
+     *
+     * @param {string} id the gross object.
+     * @param {Array<{tier: string, attach: number, limit?: number,
+     *   share?: number}>} layers answered in the order given. Omit `limit` for
+     *   an unlimited cover, which JSON cannot spell as an infinity.
+     * @param {number} [cede] ceding commission, grossing the quote up.
+     */
+    layerIndication: (id, layers, cede = 0) =>
+        _json('POST', `/v1/objects/${id}/layers/indication`, { layers, cede }),
+    /**
      * Any named frame as a `FrameResponse`, by its route name.
      *
      * Generic despite where it started: the reinsurance frames were the first
@@ -273,7 +293,21 @@ export const api = {
     hints:        (id)              => _json('POST', `/v1/objects/${id}/hints`, {}),
     pnl:          (id, body = {})   => _json('POST', `/v1/objects/${id}/pnl`, body),
     explode:      (id)              => _json('POST', `/v1/objects/${id}/explode`, {}),
-    reins:        (id, cession)     => _json('POST', `/v1/objects/${id}/reins`, { cession }),
+    /**
+     * Cede a layer, or a tower, and optionally quote every layer of it.
+     *
+     * With `price` set the clause comes back carrying a `deposit` or a `rol` on
+     * every layer, so the program that lands in the editor is a quote sheet,
+     * and the response carries the per-layer arithmetic in `quotes`. Costs one
+     * small auxiliary build per layer, which is why it is a flag rather than
+     * always on.
+     *
+     * @param {string} id the gross object.
+     * @param {string|string[]} cession the clause, or one per tier.
+     * @param {{price?: boolean, cede?: number}} [opts]
+     */
+    reins:        (id, cession, { price = false, cede = 0 } = {}) =>
+        _json('POST', `/v1/objects/${id}/reins`, { cession, price, cede }),
 
     // DecL editor support
     complete:     (decl, cursor)    => _json('POST', '/v1/decl/complete', { decl, cursor }),

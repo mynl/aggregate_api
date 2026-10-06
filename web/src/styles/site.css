@@ -1178,6 +1178,22 @@ header .navbar { min-height: 56px; }
 .reins-preview {
     font-family: var(--mono); min-height: 1.2em;
     transition: opacity .12s;
+    /* Two lines since a197: the clause, then what the layer costs. `pre-line`
+       rather than a `<br>` because the line is written as text and a newline in
+       it is the honest way to say "second line"; the reading still wraps on a
+       narrow screen, which `pre` would not. The indent on the continuation is a
+       ` ` run in the string itself, a figure space, so it lines up under
+       the clause in the mono face. */
+    white-space: pre-line;
+}
+/* The last priced press, layer by layer. Inside the entry box rather than in the
+   pane, because the rows belong to the press and not to the object; see the
+   comment on `#qr-quotes` in `index.html`. Capped and scrolled so a ten layer
+   tower cannot push the output pane off the fold. */
+.qr-quotes { margin: .6rem 0 0; max-width: 100%; overflow-x: auto; }
+.qr-quotes .qr-quotes-title {
+    font-size: var(--fs-meta); color: var(--mut); line-height: 1.45;
+    margin: 0 0 .25rem;
 }
 /* Waiting on a quantile the object has not been asked for yet. The last good
    reading stays put and says it is not current, rather than blanking and

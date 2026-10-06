@@ -2740,6 +2740,10 @@ function renderReinsEntry() {
     } else if (!off && note) {
         note.remove();
     }
+    // An object that cannot cede cannot have been quoted, so the quote table
+    // goes with the row rather than sitting there describing a book nobody is
+    // looking at any more. A priced press renders it again straight after.
+    if (off) renderQuoteTable(null);
     // The preview reads the object, so it is redrawn whenever the object moves.
     // This runs on every adopted build (through `applyCapability`), which is
     // also what makes the row show its defaults resolved against the new book
@@ -2767,6 +2771,14 @@ const towerBtn = $('tower-btn');
 // 2026-10-06: it names the bottom and the top of the program, which is what you
 // want to see while you are choosing them. Tower's own clause is read where
 // every cession is read, in the program box above.
+//
+// **The row quotes what it writes, since a197.** The preview's second line says
+// what the layer costs, live and with no build, and both buttons press with
+// `price: true`, so every layer leaves with a `deposit` or a `rol` and the
+// program in the editor is a quote sheet. The per-layer arithmetic behind it
+// lands in the table under the row. The method is one deterministic quote per
+// layer with no options anywhere in the UI; it lives in
+// `aggregate_api/layer_pricing.py`, and its constants live there too.
 
 const QR_FIELDS = ['qr-share', 'qr-attach', 'qr-detach'];
 const QR_DEFAULTS = { 'qr-share': '100%', 'qr-attach': '50%', 'qr-detach': '95%' };
@@ -2969,15 +2981,48 @@ function placementHead(share) {
 }
 
 /**
+ * One span as a DecL cession clause, one layer.
+ *
+ * Split out from `composeCession` at a197 so the preview line can write the
+ * clause and ask for the layer's price off **one** reading of the boxes. Going
+ * through `composeCession` twice would resolve the span twice, and the second
+ * reading could differ from the first if a box moved in between, which is
+ * exactly the lie the preview's stale-ticket guard exists to prevent.
+ *
+ * @param {{attachAmount: number, detachAmount: number,
+ *   share: ({kind: 'p'|'amount', value: number} | null), basis: string}} span
+ * @returns {string} `occurrence net of 5000 xs 2500`.
+ */
+function clauseFromSpan({ attachAmount, detachAmount, share, basis }) {
+    const layer = `${layerNumber(detachAmount - attachAmount)} xs `
+        + `${layerNumber(attachAmount)}`;
+    return `${basis} net of ${placementHead(share)}${layer}`;
+}
+
+/**
+ * The span's placed share as a fraction, which is what pricing takes.
+ *
+ * The box admits a percentage or an absolute amount of cover, and the grammar
+ * reads the second as `amount / limit`, so the same division is done here
+ * rather than a share in currency being sent to a route that has no reading
+ * for one. An empty box is a whole-layer placement.
+ *
+ * @param {{kind: 'p'|'amount', value: number} | null} share
+ * @param {number} limit the layer's width, which an amount is a fraction of.
+ * @returns {number}
+ */
+function shareFraction(share, limit) {
+    if (!share) return 1;
+    return share.kind === 'amount' ? share.value / limit : share.value;
+}
+
+/**
  * Turn the row into a DecL cession clause, one layer.
  *
  * @returns {Promise<string>} `occurrence net of 5000 xs 2500`, ready to cede.
  */
 async function composeCession() {
-    const { attachAmount, detachAmount, share, basis } = await resolveSpan();
-    const layer = `${layerNumber(detachAmount - attachAmount)} xs `
-        + `${layerNumber(attachAmount)}`;
-    return `${basis} net of ${placementHead(share)}${layer}`;
+    return clauseFromSpan(await resolveSpan());
 }
 
 /**
@@ -3057,6 +3102,19 @@ async function composeTower() {
  * this whole round has been about. Dimming keeps the last good reading on screen
  * and says it is not current yet; blanking would make the line flicker on every
  * keystroke. Cached probabilities resolve without a round trip and never dim.
+ *
+ * **Two lines since a197**, the clause and then what that coverage costs, so an
+ * attachment is chosen against a price rather than against nothing. The second
+ * line is a second round trip on the same keystroke and it rides the same
+ * ticket, the same debounce and the same dimming, because it is the same
+ * question asked once. It costs no build: every figure is a reading of the
+ * already built gross object's own survival curves.
+ *
+ * The price is labeled an **indication**, which is exact rather than hedging.
+ * The press takes the maximum of this same standard deviation load and two
+ * distortion prices, so it can revise the number upward and never down. A
+ * failure on the second line leaves the first standing: the clause is still
+ * true, and the row's job is to write a clause.
  */
 let _previewTicket = 0;
 async function renderCessionPreview() {
@@ -3078,10 +3136,48 @@ async function renderCessionPreview() {
         node.classList.remove('is-pending');
     };
     try {
-        settle(`Preview: ${await composeCession()}`);
+        const span = await resolveSpan();
+        const clause = clauseFromSpan(span);
+        settle(`Preview: ${clause}\n${await indicationLine(span)}`);
     } catch (err) {
         settle(err.message);
     }
+}
+
+/**
+ * What the span's layer costs, as the preview's second line.
+ *
+ * Returns the empty string on any failure, so a route that declined leaves the
+ * clause on screen on its own rather than replacing a correct reading with an
+ * error about pricing. The leading run of spaces is a hanging indent under the
+ * clause above, which lines up because the line is set in the mono face.
+ *
+ * @param {{attachAmount: number, detachAmount: number,
+ *   share: ({kind: 'p'|'amount', value: number} | null), basis: string}} span
+ * @returns {Promise<string>}
+ */
+async function indicationLine(span) {
+    const limit = span.detachAmount - span.attachAmount;
+    const layer = {
+        tier: span.basis,
+        attach: span.attachAmount,
+        limit,
+        share: shareFraction(span.share, limit),
+    };
+    let row;
+    try {
+        ({ indications: [row] } = await api.layerIndication(state.id, [layer]));
+    } catch { return ''; }
+    if (!row) return '';
+    const parts = [`EL ${fmt(Number(row.el.toPrecision(3)))}`];
+    if (row.lol !== null) parts.push(`lol ${percent(row.lol)}`);
+    if (row.count !== null) parts.push(`${row.count.toPrecision(2)} claims`);
+    if (row.cv !== null) parts.push(`cv ${row.cv.toPrecision(3)}`);
+    parts.push(`indication ${fmt(row.premium)}`);
+    if (row.loss_ratio !== null) {
+        parts[parts.length - 1] += ` (LR ${percent(row.loss_ratio)})`;
+    }
+    return `         ${parts.join(', ')}`;
 }
 
 const previewSoon = debounce(renderCessionPreview, 350);
@@ -3109,7 +3205,55 @@ function clearCessionDraft() {
         const node = $(id);
         if (node) node.value = QR_DEFAULTS[id];
     }
+    renderQuoteTable(null);
     renderCessionPreview();
+}
+
+/**
+ * The last priced press, layer by layer, under the row that wrote it.
+ *
+ * Seven columns and the story is in three of them: `sd_load`, `ph` and `dual`
+ * side by side, with `binds` saying which won. Watch `dual` bind low in a tower
+ * and `ph` bind high, which is the method working rather than a coincidence:
+ * the dual transform loads the body of a distribution and the proportional
+ * hazard transform loads the tail.
+ *
+ * Here rather than as a sub-tab leaf, which is the author's ruling of
+ * 2026-10-06: these rows belong to the press and not to the object, so a leaf
+ * keyed to the object would go on showing the previous book's quote after a
+ * switch. Cleared by `clearCessionDraft`, which runs wherever the editor's
+ * program is replaced, for the same reason the boxes are.
+ *
+ * @param {Array<object>|null} rows the response's `quotes`, or null to empty.
+ */
+function renderQuoteTable(rows) {
+    const host = $('qr-quotes');
+    if (!host) return;
+    clearGrids('qr-quotes');
+    empty(host);
+    host.classList.toggle('d-none', !rows || !rows.length);
+    if (!rows || !rows.length) return;
+    host.appendChild(el('p', { className: 'qr-quotes-title' },
+                        'Last quote, layer by layer'));
+    const mount = el('div');
+    host.appendChild(mount);
+    mountGrid('qr-quotes', mount, {
+        columns: ['layer', 'el', 'cv', 'sd_load', 'ph', 'dual', 'binds',
+                  'premium', 'rol', 'LR'],
+        rows: rows.map((row) => [
+            `${row.limit === null ? 'inf' : fmt(row.limit)} xs ${fmt(row.attach)}`
+                + (row.share === 1 ? '' : ` @ ${percent(row.share)}`),
+            money(row.el),
+            row.cv === null ? '' : row.cv.toPrecision(3),
+            money(row.sd_load),
+            money(row.ph),
+            money(row.dual),
+            row.binds,
+            money(row.premium),
+            row.rol === null ? '' : percent(row.rol),
+            row.loss_ratio === null ? '' : percent(row.loss_ratio),
+        ]),
+    });
 }
 
 /**
@@ -3118,6 +3262,18 @@ function clearCessionDraft() {
  * Both buttons come through here, so busy state, the refusal in the preview
  * line, the derivation and the rebuild are the same for a layer and for a
  * stack. The only difference between them is which composer they carry.
+ *
+ * **Both press with `price: true` since a197**, so the program that lands in
+ * the editor is a quote sheet: a `deposit` or a `rol` on every layer, and the
+ * per-layer arithmetic in the table under the row. There is no unpriced button
+ * and no switch, which is the plan's "one method, no options"; the route keeps
+ * the unpriced path for its own sake and an unpriced cession is still typed
+ * upstairs like any other program.
+ *
+ * The quotes are caught out of the response here rather than inside
+ * `runDerivation`, which deliberately knows nothing about any one derivation's
+ * payload. A press that threw leaves `quotes` null and the table empties, which
+ * is right: there is no quote.
  *
  * @param {HTMLElement} button the pressed button, which `runDerivation` busies.
  * @param {() => Promise<string>} compose `composeCession` or `composeTower`.
@@ -3132,8 +3288,13 @@ async function cedeWith(button, compose) {
         if (node) node.textContent = err.message;
         return;
     }
-    await runDerivation(button, 'Ceding…', (id) => api.reins(id, cession),
-        'reinsurance');
+    let quotes = null;
+    await runDerivation(button, 'Ceding…', async (id) => {
+        const res = await api.reins(id, cession, { price: true });
+        quotes = res.quotes;
+        return res;
+    }, 'reinsurance');
+    renderQuoteTable(quotes);
     // Back to the single-layer reading of the span, which is what this line
     // always shows. See the section comment.
     renderCessionPreview();

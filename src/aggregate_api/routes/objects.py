@@ -33,7 +33,10 @@ The /v1/objects/* family covers everything object-shaped:
 * ``POST   /v1/objects/{id}/pnl``         -- wrap the object in a P&L. Derivation.
 * ``POST   /v1/objects/{id}/explode``     -- the same P&L walked layer by layer,
   ``pnl`` to ``xpnl``. Derivation.
-* ``POST   /v1/objects/{id}/reins``       -- cede a layer. Derivation.
+* ``POST   /v1/objects/{id}/reins``       -- cede a layer, optionally quoting
+  every layer and writing the premium into the clause. Derivation.
+* ``POST   /v1/objects/{id}/layers/indication`` -- the no-build quote for a list
+  of layers, for the Quick Re preview line.
 * ``POST   /v1/objects/{id}/pnl/pentagon``      -- the ledger as a pentagon,
   one frame per solvency level, for the ``PnL / Pentagon`` figure.
 * ``POST   /v1/objects/{id}/pricing/preview``   -- the pentagon as scalars.
@@ -119,6 +122,7 @@ from ..capability import (
     PNL_PREMIUM_STYLE_SUPPORTED, can_sharpen, capability_for, narrative_for,
 )
 from ..config import Settings, get_settings
+from ..layer_pricing import indication as layer_indication, price_clause
 from ..library import get_underwriter
 from ..library_notes import from_library
 from ..net import client_address
@@ -3460,6 +3464,61 @@ def post_reins(
     clause, and an occurrence cession joined to an ``approximate`` clause, which
     the parser rejects, so returning the text would hand back something that
     cannot build.
+
+    **``price`` writes a quote into every layer**, as a ``deposit`` or a
+    ``rol``, and brings the per-layer arithmetic back in ``quotes``. The two
+    paths meet at the same place: pricing rewrites the clause and everything
+    after it is unchanged, so the route stays usable both ways and an unpriced
+    cession costs exactly what it always did. See
+    :mod:`aggregate_api.layer_pricing` for the method and the constants.
+    """
+    obj = entry.obj
+    if not hasattr(obj, "reins_program"):
+        raise HTTPException(
+            status_code=400,
+            detail="a cession applies to an Aggregate")
+    cession, quotes = req.cession, None
+    if req.price:
+        try:
+            cession, quotes = price_clause(uw, obj, cession, cede=req.cede)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        program = obj.reins_program(cession)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    program = collapse_program(program)
+    built = post_object(models.BuildRequest(decl=program), request,
+                        settings, cache, audit, uw, sessions)
+    return {"program": spread(program), "description": None,
+            "quotes": quotes, **built}
+
+
+@router.post("/objects/{oid}/layers/indication",
+             response_model=models.LayerIndicationResponse)
+def post_layer_indication(
+    oid: str,
+    req: models.LayerIndicationRequest,
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """What a list of layers would be quoted at, with no build.
+
+    The Quick Re preview line's other half. The clause it shows says what the
+    row would write; this says what that coverage costs, so the reader is
+    choosing an attachment against a price rather than against nothing.
+
+    Notes
+    -----
+    **No build, which is why this can sit on a keystroke.** Every figure is a
+    reading of the already built gross object's own severity and aggregate
+    survival curves, so the whole response is arithmetic over the lattice. The
+    full press costs one small auxiliary build per layer and can only revise
+    these numbers *upward*, which is what makes showing them honest; the
+    reasoning is on :func:`aggregate_api.layer_pricing.indication`.
+
+    A layer the library would refuse is a 422 rather than a server fault, on the
+    same reading as the cession route: it is a statement about the program.
     """
     obj = entry.obj
     if not hasattr(obj, "reins_program"):
@@ -3467,14 +3526,16 @@ def post_reins(
             status_code=400,
             detail="a cession applies to an Aggregate")
     try:
-        program = obj.reins_program(req.cession)
-    except ValueError as exc:
+        rows = [
+            layer_indication(
+                obj, layer.tier, layer.attach,
+                layer.limit if layer.limit is not None else math.inf,
+                layer.share, cede=req.cede)
+            for layer in req.layers
+        ]
+    except (ValueError, IndexError, KeyError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    program = collapse_program(program)
-    built = post_object(models.BuildRequest(decl=program), request,
-                        settings, cache, audit, uw, sessions)
-    return {"program": spread(program), "description": None, **built}
+    return {"indications": rows}
 
 
 @router.get("/objects/{oid}/narrative", response_model=models.NarrativeResponse)
