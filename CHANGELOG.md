@@ -4,6 +4,19 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a193
+
+[Tower-Generator] the Quick Re row takes a second button, **Tower**, that lays one wide attach-to-detach span out as a stack of quote-sheet-rounded layers with a climbing placement ladder, and cedes the whole stack as one clause. Plan `dev/done/plan-a193-quick-re-tower.md`; no library change, no new route, SPA only.
+
+- **One press, a whole program.** Tower snaps the attachment to the nearest quote-sheet number, then roughly doubles (snap the previous bound times 2.1, floored at times 1.5 so the snap always advances) until it reaches the detachment, capped at nine layers. A ground-up span starts at a sixty-fourth of the detachment and keeps a first layer running from zero. Every bound is a number an underwriter would write on a slip. The top bound reaches the detachment **or the first round number above it**, so a stack asked for 10,000 may top out at 15,000: the detachment reads as "reach at least this high", which is the price of keeping every bound round.
+- **The share box places the bottom layer and the ladder climbs from there** to `max(share, 95%)` at the top, never falling as the attachment rises. A `60%` box over six layers gives 60, 67, 74, 81, 88, 95; `100%` places the program whole and writes no placement at all. Intermediate values are rounded to the whole percent, because a ladder of 68.75% is arithmetic showing through rather than an underwriting judgment. A single layer keeps the box as typed.
+- **Every layer is named**, `Occ 1` up from the lowest attaching layer (`Agg 1` on the aggregate tier). The names are load bearing downstream: they become the `Step` labels on the P&L ledger, the ratio sheet and the waterfall, so an unnamed stack produces a ledger nobody can read.
+- **Add re is unchanged**, with one exception: the attachment box now reads a bare `0`, so a ground-up cover can be asked for. It used to refuse `0` as unreadable, which also put Tower's ground-up stack out of reach. A zero share and a zero detachment still say nothing, `0%` is still unreadable, and `0 xs 0` is still refused for having no width.
+- **Tower refuses a share given in currency.** `2500 po` places an absolute amount of cover, which means something on one layer and nothing across six of different limits. Add re still takes it.
+- **The preview line stays on the single-layer reading of the span**, which names the bottom and the top of the program: that is what you want to see while choosing them, and Tower's own clause is read in the program box above, where every cession is read. Refusals from either button still land in the line.
+- Tower cedes rather than replacing, exactly as Add re does, so a second press adds a tier's worth of layers on top of the first. Expect one press; a second thought is edited in the program box, which is what it is there for.
+- The 2026-10-06 reversal of the row's "ONE layer, deliberately" ruling is written into the comment beside it. A generated stack is not a second hand-typed layer, and typing a six-layer tower by hand is the thing that stops a reader exploring a program. New `web/src/tower.js` holds the arithmetic (`snap125`, `generateTower`, `shareLadder`), ported from the `aggregate-asp` experiment except for the ladder, which aSP walks the other way.
+
 ## 1.0.0a192
 
 [Decl-Parse] `POST /v1/decl/parse` returns what the DecL parser understood about a program as structured data, the `(kind, name, spec)` triple, one entry per statement. Requested by `aggregate-asp`, whose `[Program-Import]` step needs the structure of a pasted program and must not read it back out of text. Plan `dev/done/plan-a192-decl-parse.md`; no library change.

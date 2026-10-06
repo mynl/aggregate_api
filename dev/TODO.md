@@ -6,6 +6,16 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Tower-Generator]** DONE (`1.0.0a193`), plan
+  `dev/done/plan-a193-quick-re-tower.md`: the Quick Re row takes a second
+  button, Tower, that lays one span out as a stack of quote-sheet-rounded
+  layers with a climbing placement ladder, names them `Occ 1` up, and cedes the
+  stack as one clause. Reverses the row's own "ONE layer, deliberately" ruling,
+  on the author's reversal of 2026-10-06. The arithmetic is new
+  `web/src/tower.js`, ported from `aggregate-asp` except for the ladder, which
+  aSP walks downward. The attachment box now reads a bare `0`, which Add re
+  gains too. SPA only, no library change. Detail in `CHANGELOG.md` a193.
+
 - **[Decl-Parse]** DONE (`1.0.0a192`), plan
   `dev/done/plan-a192-decl-parse.md`: `POST /v1/decl/parse` returns the
   `(kind, name, spec)` triple the parser understood, one entry per

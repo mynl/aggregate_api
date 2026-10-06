@@ -488,12 +488,21 @@
                      where you adjust it. That box is a full editor with real
                      completion, so a second, worse one beside it earned nothing.
 
-                     ONE layer, deliberately. Multi-layer programs are typed
-                     upstairs, which is what that box is for. This is demo sugar
-                     and is worth having only while it stays small; a second
-                     layer here means it has failed. Two *tiers* is different and
-                     is supported: cede on Occ, then switch to Agg and cede
-                     again, each clause authoritative for its own tier.
+                     ONE layer, or ONE generated stack, and nothing else. The
+                     row read one layer only through a192, on the reasoning that
+                     a second layer here meant the sugar had failed. The author
+                     reversed that on 2026-10-06: a generated stack is not a
+                     second hand-typed layer, it is one press producing the
+                     structure an underwriter would have written over that span,
+                     and the arithmetic of it (double, snap to a quote-sheet
+                     number, step the share up) is mechanical. Typing a six
+                     layer tower by hand is the thing that stops a reader from
+                     exploring a program. So Add re writes the span as one layer
+                     and Tower writes it as a stack; a multi-layer program that
+                     is not a stack is still typed upstairs, which is what that
+                     box is for. Two *tiers* is different again and is supported
+                     either way: cede on Occ, then switch to Agg and cede again,
+                     each clause authoritative for its own tier.
 
                      Attach and detach each take ONE field with two readings:
                      `50%` is a probability and a bare number is currency, so
@@ -513,10 +522,11 @@
                      an amount; `so` and `of` were retired upstream at
                      1.0.0a249, so `po` is now the one placement keyword and the
                      `%` is what tells it a share from an amount. The row says
-                     the one thing in English and `composeCession` writes the
+                     the one thing in English and `placementHead` writes the
                      token. Do not "fix" this back into sync with the clause.
 
-                     See `composeCession` in main.js. -->
+                     See `resolveSpan`, `composeCession` and `composeTower` in
+                     main.js. -->
                 <!-- The control band, one enclosure per group: the ask gets a
                      ground and a hairline and the answer sits plain underneath.
                      A wrapper rather than a class on `#reins-entry`, which
@@ -551,18 +561,30 @@
                                aria-label="detachment">
                         <span class="qr-op">detach</span>
                         <button id="reins-btn" class="btn btn-primary btn-sm">Add re</button>
+                        <!-- Outline, so Add re keeps the primary: one layer is
+                             still the ordinary press and the stack is the one
+                             you reach for deliberately. -->
+                        <button id="tower-btn" class="btn btn-outline-primary btn-sm">Tower</button>
                         <!-- Both hint paragraphs folded into one tooltip, per the
                              author: the row explains itself on demand rather than
                              carrying two paragraphs nobody reads twice. -->
                         <button type="button" class="qr-help" id="qr-help"
                                 data-bs-toggle="tooltip" data-bs-placement="top"
                                 aria-label="how Quick Re reads these boxes"
-                                title="A percentage is read as a probability, so attach 50% attaches at the median and detach 95% reaches the 95th percentile; a plain number is an amount, and the two mix freely. Quantiles are rounded to three figures, because a layer is something you write down. One clause per tier: the clause is folded into the program above, so an occurrence cession lands before the frequency clause and an aggregate one after it. Edit more complex structures directly in the program edit box.">?</button>
+                                title="A percentage is read as a probability, so attach 50% attaches at the median and detach 95% reaches the 95th percentile; a plain number is an amount, and the two mix freely. Quantiles are rounded to three figures, because a layer is something you write down. One clause per tier: the clause is folded into the program above, so an occurrence cession lands before the frequency clause and an aggregate one after it. Tower lays the same span out as a stack of roughly doubling layers, named Occ 1 upward, every bound snapped to a quote-sheet number, so the top of the stack reaches the detachment or the first round number above it; the share box places the bottom layer and the ladder steps up from there to 95%, since shares never fall as the attachment rises. Edit more complex structures directly in the program edit box.">?</button>
                     </div>
-                    <!-- The clause this row will write, kept current as you type.
+                    <!-- The clause Add re will write, kept current as you type.
                          Debounced, because a percentage costs a quantile lookup.
                          Populated from the defaults before anything is touched,
-                         so the row says what it does without being used. -->
+                         so the row says what it does without being used.
+
+                         It stays on the single-layer reading even though Tower
+                         sits beside it, which is the author's ruling: the one
+                         layer names the bottom and the top of the program, which
+                         is what you want to see while you are choosing them.
+                         Tower's own clause is read where every cession is read,
+                         in the program box above. Refusals from either button
+                         still land here. -->
                     <p class="reins-entry-hint reins-preview" id="qr-preview"></p>
                 </div>
                 </div><!-- /.control-band. Left at the wrapper's own indent

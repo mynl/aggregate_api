@@ -42,6 +42,7 @@ import {
     whyLeaf,
     whyGroup,
 } from './nav.js';
+import { generateTower, shareLadder } from './tower.js';
 import * as history from './history.js';
 import { anchorEditor, anchorNav, anchorNavSettled } from './scroll.js';
 import { $, el, empty, replaceChildren } from './utils/dom.js';
@@ -2692,20 +2693,25 @@ function renderReinsEntry() {
 }
 
 const reinsBtn = $('reins-btn');
+const towerBtn = $('tower-btn');
 
 // ----------------------------------------------------------------------
-// Quick Re: one row, one layer, straight into the editor
+// Quick Re: one span, one layer or one stack, straight into the editor
 // ----------------------------------------------------------------------
 //
-// Three boxes, a tier switch and a button. There is no text box holding the
+// Three boxes, a tier switch and two buttons. There is no text box holding the
 // clause, and its removal is the point of a68: through a67 this row wrote a
 // clause into a local input which was then ceded, so the same string was
-// carried twice before anything happened. Now Add re composes and cedes, and
+// carried twice before anything happened. Now the buttons compose and cede, and
 // the program that comes back is where the clause is read and edited. The
 // editor upstairs is that box, and it has real completion.
 //
 // The clause is still shown before it is applied, in the preview line under the
-// row, which is what the local box was actually providing.
+// row, which is what the local box was actually providing. The preview always
+// shows the single-layer reading of the span, which is the author's ruling of
+// 2026-10-06: it names the bottom and the top of the program, which is what you
+// want to see while you are choosing them. Tower's own clause is read where
+// every cession is read, in the program box above.
 
 const QR_FIELDS = ['qr-share', 'qr-attach', 'qr-detach'];
 const QR_DEFAULTS = { 'qr-share': '100%', 'qr-attach': '50%', 'qr-detach': '95%' };
@@ -2717,10 +2723,19 @@ const QR_DEFAULTS = { 'qr-share': '100%', 'qr-attach': '50%', 'qr-detach': '95%'
  * rather than a pair. `50%` is a probability and `500` is currency, so there is
  * no mode to be in and no second set of boxes to keep in step with the first.
  *
+ * `allowZero` is for the attachment box alone, and a bare `0` is the only thing
+ * it admits. A ground-up cover is a real program and Tower's ground-up stack
+ * cannot be asked for without it, so the box takes it; `0 xs 0` is still refused
+ * downstream by the width test. A zero share and a zero detachment say nothing,
+ * so they stay unreadable, and `0%` stays unreadable everywhere, because a
+ * probability of zero is not where a ground-up cover comes from.
+ *
+ * @param {string} text the box as typed.
+ * @param {{allowZero?: boolean}} [opts] admit a bare `0` as an amount.
  * @returns {{kind: 'p'|'amount', value: number} | null} null when empty or
  *   unreadable, which the caller reports rather than guessing at.
  */
-function readLayerField(text) {
+function readLayerField(text, { allowZero = false } = {}) {
     const s = String(text || '').trim().replace(/,/g, '');
     if (!s) return null;
     const pct = s.endsWith('%');
@@ -2730,7 +2745,7 @@ function readLayerField(text) {
         const p = n / 100;
         return p > 0 && p < 1 ? { kind: 'p', value: p } : null;
     }
-    return n > 0 ? { kind: 'amount', value: n } : null;
+    return n > 0 || (allowZero && n === 0) ? { kind: 'amount', value: n } : null;
 }
 
 /** Trim a number for a program someone will read: no trailing `.0`. */
@@ -2799,7 +2814,11 @@ function qrBasis() {
 const _quantileCache = new Map();
 
 /**
- * Turn the row into a DecL cession clause.
+ * Read the three boxes into amounts on the loss axis.
+ *
+ * The one place the row's fields are interpreted, so **Add re** and **Tower**
+ * cannot drift in how they read them. Factored out of `composeCession` at a193,
+ * when the second button arrived.
  *
  * Resolves each field on its own, so mixing is legal and needs no special case:
  * `attach 50% detach 1000000` is a currency detachment over a median attachment.
@@ -2811,35 +2830,21 @@ const _quantileCache = new Map();
  * detachment probability and a bare number was a width, so one box meant two
  * different things depending on how it was typed.
  *
- * The **share** box takes the same dual reading, and both readings now emit
- * `po`: `50% po 5000 xs 2500` is half the layer and `2500 po 5000 xs 2500` is
- * an absolute amount of it, the share following as `amount / limit`. The `%` is
- * the whole difference, which is why the box can keep taking either. A
- * whole-layer share emits no head at all, since `100% po` is a clause saying
- * nothing.
+ * The **share** box takes the same dual reading and is returned unresolved, as
+ * the field it was read from, because the two actions place it differently: one
+ * layer takes it as written and a stack takes it as the bottom of a ladder.
  *
- * **`po` is the only placement keyword left.** `so` (share of) and `of` were
- * retired upstream at `aggregate` 1.0.0a249, which computed the identical tuple
- * for all three: `so` is an ordinary English word and a poor reserved word, and
- * `of` forked the Earley parse against the `net of` in front of it. This row
- * went on writing `so` over a percentage until a93, so every Quick Re add with
- * a share in the box came back a parse error. Emitting the percentage literal
- * is what carries the share reading now; do not "simplify" it to the fraction,
- * which the grammar would read as an amount.
- *
- * The label on the row says `part of` in both cases and does not track the
- * token. That is the author's ruling, not drift: one fixed English phrase reads
- * better than a two-letter token, and the preview line below the row is where
- * the clause itself is shown.
- *
- * @returns {Promise<string>} `occurrence net of 5000 xs 2500`, ready to cede.
+ * @returns {Promise<{attachAmount: number, detachAmount: number,
+ *   share: ({kind: 'p'|'amount', value: number} | null), basis: string}>}
+ * @throws {Error} on an unreadable box, or on a span with no width, in the
+ *   amounts it resolved. See `layerRefusal`.
  */
-async function composeCession() {
+async function resolveSpan() {
     // The text as typed is kept, not just what it parsed to: a refusal quotes
     // the reader's own `50%` back at them rather than the 0.5 it became.
     const attachText = $('qr-attach').value;
     const detachText = $('qr-detach').value;
-    const attach = readLayerField(attachText);
+    const attach = readLayerField(attachText, { allowZero: true });
     const detach = readLayerField(detachText);
     if (!attach || !detach) throw new Error('attach and detach are both needed');
     const share = readLayerField($('qr-share').value);
@@ -2868,18 +2873,110 @@ async function composeCession() {
         throw new Error(
             layerRefusal(attachText, detachText, attachAmount, detachAmount));
     }
+    return { attachAmount, detachAmount, share, basis };
+}
+
+/**
+ * The placement in front of a layer, or nothing at all.
+ *
+ * Both readings emit `po`: `50% po 5000 xs 2500` is half the layer and
+ * `2500 po 5000 xs 2500` is an absolute amount of it, the share following as
+ * `amount / limit`. The `%` is the whole difference, which is why the box can
+ * keep taking either. A whole-layer share emits no head, since `100% po` is a
+ * clause saying nothing.
+ *
+ * **`po` is the only placement keyword left.** `so` (share of) and `of` were
+ * retired upstream at `aggregate` 1.0.0a249, which computed the identical tuple
+ * for all three: `so` is an ordinary English word and a poor reserved word, and
+ * `of` forked the Earley parse against the `net of` in front of it. This row
+ * went on writing `so` over a percentage until a93, so every Quick Re add with
+ * a share in the box came back a parse error. Emitting the percentage literal
+ * is what carries the share reading now; do not "simplify" it to the fraction,
+ * which the grammar would read as an amount.
+ *
+ * The label on the row says `placed` in both cases and does not track the
+ * token. That is the author's ruling, not drift: one fixed English phrase reads
+ * better than a two-letter token, and the preview line below the row is where
+ * the clause itself is shown.
+ *
+ * @param {{kind: 'p'|'amount', value: number} | null} share
+ * @returns {string} `95% po `, `2500 po `, or the empty string.
+ */
+function placementHead(share) {
+    if (!share) return '';
+    if (share.kind === 'amount') return `${layerNumber(share.value)} po `;
+    // The percentage as written, because the `%` is what tells the grammar this
+    // is a share and not an amount of cover.
+    if (Math.abs(share.value - 1) > 1e-9) {
+        return `${layerNumber(share.value * 100)}% po `;
+    }
+    return '';
+}
+
+/**
+ * Turn the row into a DecL cession clause, one layer.
+ *
+ * @returns {Promise<string>} `occurrence net of 5000 xs 2500`, ready to cede.
+ */
+async function composeCession() {
+    const { attachAmount, detachAmount, share, basis } = await resolveSpan();
     const layer = `${layerNumber(detachAmount - attachAmount)} xs `
         + `${layerNumber(attachAmount)}`;
+    return `${basis} net of ${placementHead(share)}${layer}`;
+}
 
-    let head = '';
-    if (share && share.kind === 'p' && Math.abs(share.value - 1) > 1e-9) {
-        // The percentage as written, because the `%` is what tells the grammar
-        // this is a share and not an amount of cover.
-        head = `${layerNumber(share.value * 100)}% po `;
-    } else if (share && share.kind === 'amount') {
-        head = `${layerNumber(share.value)} po `;
+/**
+ * Turn the row into one DecL cession clause holding a whole tower.
+ *
+ * Stack and Round, the author's reversal of 2026-10-06. The row used to write
+ * one layer deliberately; it now writes one layer or one *generated stack*, and
+ * nothing else. A generated stack is not a second hand-typed layer, it is one
+ * press producing the structure an underwriter would have written over that
+ * span, and the arithmetic of it (double, snap to a quote-sheet number, step the
+ * share up) is mechanical. Multi-layer programs that are not a stack are still
+ * typed upstairs.
+ *
+ * The span, the placement and the refusals are `resolveSpan`'s, unchanged. What
+ * this adds is `generateTower` for the bounds and `shareLadder` for the
+ * placements, and one `as "Occ 1"` per layer.
+ *
+ * **The names are load bearing**, which is why there is no option to omit them:
+ * they become the `Step` labels on every P&L exhibit, so an unnamed stack
+ * produces a ledger nobody can read. `Occ 1` is the lowest attaching layer,
+ * counting up, which is the author's ruling and matches the hand-typed demo
+ * programs. The prefix follows the tier, so an aggregate stack is `Agg 1` up.
+ *
+ * Two edges the generator leaves to this function. A span too narrow to stack
+ * yields no bounds at all, and one layer over the span as asked for is the
+ * honest answer there rather than a refusal or an empty clause. And a share in
+ * **currency** is refused: the ladder steps a fraction up the stack, and an
+ * absolute amount of cover means nothing across layers of different limits.
+ *
+ * This cedes like Add re rather than replacing what is there, so pressing it on
+ * an already ceded object adds a tier's worth of layers. The author's ruling:
+ * expect one press, and the program box above is where a second thought is
+ * edited. That is what it is there for.
+ *
+ * @returns {Promise<string>} `occurrence net of 95% po 1000 xs 1000 as "Occ 1"
+ *   and ...`, ready to cede.
+ */
+async function composeTower() {
+    const { attachAmount, detachAmount, share, basis } = await resolveSpan();
+    if (share && share.kind === 'amount') {
+        throw new Error(`Tower needs the share as a percentage: ${layerNumber(share.value)} `
+            + 'is an amount of cover, which means something on one layer only');
     }
-    return `${basis} net of ${head}${layer}`;
+    let layers = generateTower(attachAmount, detachAmount);
+    if (!layers.length) {
+        layers = [{ attach: attachAmount, limit: detachAmount - attachAmount }];
+    }
+    const shares = shareLadder(share ? share.value : 1, layers.length);
+    const prefix = basis === 'aggregate' ? 'Agg' : 'Occ';
+    const clauses = layers.map((layer, i) =>
+        placementHead({ kind: 'p', value: shares[i] })
+        + `${layerNumber(layer.limit)} xs ${layerNumber(layer.attach)} `
+        + `as "${prefix} ${i + 1}"`);
+    return `${basis} net of ${clauses.join(' and ')}`;
 }
 
 /**
@@ -2960,23 +3057,45 @@ function clearCessionDraft() {
     renderCessionPreview();
 }
 
-/** Compose the clause and cede it, in one press. */
-async function cede() {
-    if (!state.id || !can('canReins') || reinsBtn.hasAttribute('disabled')) return;
+/**
+ * Compose a clause and cede it, in one press.
+ *
+ * Both buttons come through here, so busy state, the refusal in the preview
+ * line, the derivation and the rebuild are the same for a layer and for a
+ * stack. The only difference between them is which composer they carry.
+ *
+ * @param {HTMLElement} button the pressed button, which `runDerivation` busies.
+ * @param {() => Promise<string>} compose `composeCession` or `composeTower`.
+ */
+async function cedeWith(button, compose) {
+    if (!state.id || !can('canReins') || !button || button.hasAttribute('disabled')) return;
     let cession;
     try {
-        cession = await composeCession();
+        cession = await compose();
     } catch (err) {
         const node = $('qr-preview');
         if (node) node.textContent = err.message;
         return;
     }
-    await runDerivation(reinsBtn, 'Ceding…', (id) => api.reins(id, cession),
+    await runDerivation(button, 'Ceding…', (id) => api.reins(id, cession),
         'reinsurance');
+    // Back to the single-layer reading of the span, which is what this line
+    // always shows. See the section comment.
     renderCessionPreview();
 }
 
+/** One layer over the span, exactly as the boxes read. */
+function cede() {
+    return cedeWith(reinsBtn, composeCession);
+}
+
+/** The span laid out as a stack of quote-sheet layers. */
+function cedeTower() {
+    return cedeWith(towerBtn, composeTower);
+}
+
 reinsBtn?.addEventListener('click', cede);
+towerBtn?.addEventListener('click', cedeTower);
 
 // Enter anywhere in the row cedes, which is the shortcut the text box used to
 // carry and the one thing about it worth keeping.
