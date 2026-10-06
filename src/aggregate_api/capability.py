@@ -38,7 +38,7 @@ import inspect
 from typing import Any
 
 import numpy as np
-from aggregate import Aggregate, Portfolio
+from aggregate import Aggregate, PnL, Portfolio
 from aggregate import charts as agg_charts
 from aggregate import exhibits as agg_exhibits
 
@@ -404,6 +404,47 @@ def can_pnl_rate(obj: Any) -> bool:
     return PNL_PREMIUM_STYLE_SUPPORTED and can_pnl(obj)
 
 
+#: Does the installed library's ``PnL`` serve ``pentagon_df``?
+#:
+#: Feature-detected once at import, for the same reason
+#: :data:`PNL_PREMIUM_STYLE_SUPPORTED` is: the frame is an upstream ask that
+#: landed in ``aggregate`` 1.0.0a393, so a fresh checkout can carry a library
+#: without it. While this is False the Pentagon leaf greys with a why and the
+#: route refuses with a 400, rather than the press producing a traceback.
+PNL_PENTAGON_SUPPORTED = hasattr(PnL, "pentagon_df")
+
+
+def can_pnl_pentagon(obj: Any) -> bool:
+    """Can this object answer the Pentagon figure?
+
+    Consumer: the ``PnL / Pentagon`` leaf, which is a picture this app draws
+    rather than a library document, so it gates on a flag rather than on the
+    exhibit list. That is the third of the three gating kinds this module's
+    header names.
+
+    Two conditions. The object is a :class:`~aggregate.PnL`, which is the only
+    kind carrying a ledger to read as a pentagon; and the installed library
+    serves the frame at all (:data:`PNL_PENTAGON_SUPPORTED`). The second is
+    what earns the flag its place beside ``kind``, which already rides on the
+    build response and would otherwise say the first half on its own.
+
+    A single-group P&L answers. It has no cession, so the figure draws one
+    pentagon with nothing left over, which is the honest picture of a book with
+    no program rather than a reason to grey the leaf. A hand-built kernel P&L
+    answers too: its rows carry distributions, so the capital is a real
+    quantile, and the frame asks nothing of the stochastic engine it lacks.
+
+    Parameters
+    ----------
+    obj : Any
+
+    Returns
+    -------
+    bool
+    """
+    return PNL_PENTAGON_SUPPORTED and isinstance(obj, PnL)
+
+
 def can_xpnl(obj: Any) -> bool:
     """Can this object end up exploded, layer by layer, from one press?
 
@@ -766,6 +807,7 @@ def capability_for(obj: Any) -> dict:
         "has_sharpen": has_sharpen(obj),
         "can_pnl": can_pnl(obj),
         "can_pnl_rate": can_pnl_rate(obj),
+        "can_pnl_pentagon": can_pnl_pentagon(obj),
         "can_xpnl": can_xpnl(obj),
         "can_explode": can_explode(obj),
         "can_hints": can_hints(obj),

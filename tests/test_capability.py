@@ -57,7 +57,8 @@ def test_every_kind_carries_a_capability_block(client, label):
     cap = body["capability"]
     assert set(cap) == {"exhibits", "charts", "primary_chart", "has_premium",
                         "premium", "can_sharpen", "has_sharpen", "can_pnl",
-                        "can_pnl_rate", "can_xpnl", "can_explode",
+                        "can_pnl_rate", "can_pnl_pentagon",
+                        "can_xpnl", "can_explode",
                         "can_hints", "can_reins", "can_views", "reins_bases",
                         "can_price", "can_evaluate", "can_bounds",
                         "can_allocate", "can_natural_allocation",

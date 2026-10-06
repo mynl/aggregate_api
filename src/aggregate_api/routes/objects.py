@@ -34,6 +34,8 @@ The /v1/objects/* family covers everything object-shaped:
 * ``POST   /v1/objects/{id}/explode``     -- the same P&L walked layer by layer,
   ``pnl`` to ``xpnl``. Derivation.
 * ``POST   /v1/objects/{id}/reins``       -- cede a layer. Derivation.
+* ``POST   /v1/objects/{id}/pnl/pentagon``      -- the ledger as a pentagon,
+  one frame per solvency level, for the ``PnL / Pentagon`` figure.
 * ``POST   /v1/objects/{id}/pricing/preview``   -- the pentagon as scalars.
 * ``POST   /v1/objects/{id}/pricing/calibrate`` -- the ``pricing.calibrate`` and
   ``pricing.stand_alone`` exhibit envelopes, both perspectives.
@@ -122,6 +124,7 @@ from ..library_notes import from_library
 from ..net import client_address
 from ..sessions import SESSION_HEADER, SessionRegistry, normalize_session_id
 from .. import status as status_state
+from ..pnl import run_pnl_pentagon
 from ..pricing import (
     run_calibration, run_evaluation, run_natural_allocation,
     run_pricing_preview, run_ruin,
@@ -3781,6 +3784,28 @@ def post_pricing_preview(
                                    lr=req.lr, premium=req.premium,
                                    basis=req.basis,
                                    expense_ratio=req.expense_ratio)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/objects/{oid}/pnl/pentagon",
+             response_model=models.PnLPentagonResponse)
+def post_pnl_pentagon(
+    oid: str,
+    req: models.PnLPentagonRequest,
+    entry: CacheEntry = Depends(_locked_entry),
+) -> dict:
+    """The ledger as a pentagon, at each level of the leaf's strip.
+
+    A route rather than an exhibit, because the level is a form input and the
+    exhibit route takes only a perspective. The figure it feeds is a bespoke SVG
+    the app draws, so there is no library document to serve here, only the
+    numbers it draws from.
+
+    See :func:`aggregate_api.pnl.run_pnl_pentagon`.
+    """
+    try:
+        return run_pnl_pentagon(entry.obj, periods=req.periods)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

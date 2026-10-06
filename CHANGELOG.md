@@ -4,6 +4,18 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a195
+
+[PnL-Pentagon] **the api side of the Pentagon figure**: one route, one capability flag, and the library frame behind them. Plan `dev/plan-a195-pnl-pentagon.md`, phase one of two here. The figure itself lands next; this bump is everything the browser will ask for.
+
+- **`POST /v1/objects/{id}/pnl/pentagon`** serves `PnL.pentagon_df` as one frame per solvency level, with `Step` as the first column. The amounts are the ledger's own and the ratios are fractions: nothing is formatted, the browser owning presentation as it does for every table in the app. A route rather than an exhibit, because the level is a form input and the exhibit route takes only a perspective.
+- **Every level in one answer**, which is what the leaf's control needs. The strip is six mini pentagons, each labeled with the assets its level implies, so the reader picks from figures they can already see. Serving one level and re-asking on each press would leave the strip unable to label itself. The six defaults are `100, 200, 250, 500, 1000, 2000` and they live in `aggregate_api.pnl`, so the strip renders whatever the response says and a change needs no matching edit in the browser.
+- **`can_pnl_pentagon`** on the capability block: a P&L, plus a library serving `pentagon_df`. A flag rather than an exhibit gate, because the figure is a bespoke SVG this app draws rather than a library document. A P&L with no program answers too, drawing one pentagon with nothing left over, which is the honest picture of a book with no cession.
+- **Two refusals, each a sentence.** A non-P&L gets a 400 saying to wrap it with the PnL button first; a return period at or below 1 gets the library's own guard verbatim. The request model bounds the level list at twelve, so one press cannot ask for a thousand frames.
+- **The runner has its own module, `aggregate_api/pnl.py`**, rather than joining the four in `pricing.py`. That file opens by saying there is no pandas in it and that this is the point of it, every runner there handing back exhibit envelopes or scalars; this one serializes a frame.
+
+Library `a392` and `a393`, both required. `a393` [PnL-Pentagon] adds `PnL.pentagon_df(t=None)`, whose capital is the **marginal** quantile of each block's own result at the chosen level, two-sided by role, with the cession the difference. That is the author's ruling of 2026-10-06 and it is what makes every level available: the conditional capital bases of `waterfall_df` are confined to the one rung of `PERCENTILE_LADDER` that reaches the tail, so the Waterfall leaf cannot take the same strip yet and becomes its own plan. `a392` [Delta-Row-Marked] is the fix behind the figure's one dot: a stitched tower's impact row used to print a **negative standard deviation** on PnL / Ledger, that row being a difference of two positions riding different marginals, and the ledger sheets now mark it so the exhibit can blank it and the pentagon can decline the cession's spread rather than guess at it.
+
 ## 1.0.0a194
 
 [PnL-Exhibits] the Overview group describes the **book** and the PnL group describes the **ledger**, with no overlap, and PnL gains a fourth leaf, **Tail**. Plan `dev/done/plan-a194-pnl-exhibits.md`. Most of the work is upstream, in library `a388` through `a391`; the app side is one new leaf, one loader, four label and hint edits, and the navigation gate brought back to green. No new route: capability is a passthrough of `available_exhibits`, so the new exhibit arrives on its own.

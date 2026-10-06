@@ -12,7 +12,7 @@ resolution-markers = [
 
 [[package]]
 name = "aggregate"
-version = "1.0.0a391"
+version = "1.0.0a393"
 source = { editable = "../../worktrees/aggregate_REFACTOR" }
 dependencies = [
     { name = "greater-tables" },
@@ -69,7 +69,7 @@ provides-extras = ["dev", "notebook", "numba", "massive", "viz", "all"]
 
 [[package]]
 name = "aggregate-api"
-version = "1.0.0a194"
+version = "1.0.0a195"
 source = { editable = "." }
 dependencies = [
     { name = "aggregate" },

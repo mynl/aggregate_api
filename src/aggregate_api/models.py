@@ -123,6 +123,11 @@ class Capability(BaseModel):
     # the installed library accepting `pnl_program(premium_style=)`, which is an
     # upstream ask; the two rate menu items grey off this until it ships.
     can_pnl_rate: bool = False
+    # Can the Pentagon figure be drawn? A P&L, plus a library serving
+    # `pentagon_df`, which landed upstream at 1.0.0a393. A flag rather than an
+    # exhibit gate because the figure is a bespoke SVG this app draws, not a
+    # library document.
+    can_pnl_pentagon: bool = False
     # Can one press produce the exploded P&L? A non-P&L answers when it can
     # wrap and its engine is a single aggregate; a P&L answers through
     # `can_explode`. Gates the xPnL menu item.
@@ -659,6 +664,52 @@ class PricingPreviewResponse(BaseModel):
     coc: float | None = None
     gross_premium: float | None = None
     net_of_expense_premium: float | None = None
+
+
+class PnLPentagonRequest(BaseModel):
+    """Body for ``POST /v1/objects/{id}/pnl/pentagon``.
+
+    One field, and it is a **list**, which is the whole shape of the request.
+    The Pentagon leaf's control is a strip of mini pentagons, one per solvency
+    level, each labeled with the assets that level implies, and the reader picks
+    from what they can already see. So the answer has to carry every level at
+    once: serving one and re-asking on each press would mean the strip could
+    not label itself until the reader had pressed all six.
+    """
+
+    periods: list[float] | None = Field(
+        None, min_length=1, max_length=12,
+        description=("Return periods to answer at, so the 1-in-t state fixes "
+                     "capital on each. Defaults to the strip's own six. Each "
+                     "must exceed 1."))
+
+
+class PnLPentagonLevel(BaseModel):
+    """One solvency level's pentagon: the level, and the frame struck at it."""
+
+    model_config = _RESPONSE_CFG
+
+    t: float
+    frame: FrameResponse
+
+
+class PnLPentagonResponse(BaseModel):
+    """``POST /v1/objects/{id}/pnl/pentagon`` -- the ledger as a pentagon.
+
+    One entry per requested level, in the order asked for, so the first is the
+    strip's default. Each frame is ``PnL.pentagon_df`` with its index reset, so
+    ``Step`` is the first column: the figure picks ``Gross``, ``Ceded`` and
+    ``All`` and ignores the rest, which are the ledger's own steps and are what
+    a future stepper would walk.
+
+    The amounts are in the object's own currency units and the ratios are
+    fractions. Nothing here is formatted: the browser owns presentation, as it
+    does for every table in the app.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    levels: list[PnLPentagonLevel]
 
 
 class PricingCalibrateRequest(BaseModel):

@@ -6,6 +6,19 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[PnL-Pentagon]** IN PROGRESS (`1.0.0a195`), plan
+  `dev/plan-a195-pnl-pentagon.md`: the PnL group gains a **Pentagon** leaf
+  drawing gross, ceded and net as one figure, at a solvency level the reader
+  picks from a strip of six mini pentagons. `a195` is the api half: the
+  `POST /v1/objects/{id}/pnl/pentagon` route serving one frame per level, the
+  `can_pnl_pentagon` flag, and the runner in its own `aggregate_api/pnl.py`.
+  Library `a392` ([Delta-Row-Marked], the stitched impact row stops printing a
+  negative standard deviation) and `a393` ([PnL-Pentagon], `PnL.pentagon_df`).
+  The figure, the leaf and the strip are the next bump. **Not in this plan,
+  after the author's ruling at review:** the Waterfall leaf gaining the same
+  strip, which needs the library's conditional capital bases parametrized off
+  `PERCENTILE_LADDER` first, and is its own upstream plan.
+
 - **[PnL-Exhibits]** DONE (`1.0.0a194`), plan
   `dev/done/plan-a194-pnl-exhibits.md`: the Overview group becomes uniformly the
   wrapped book and the PnL group uniformly the ledger, which gains a **Tail**
