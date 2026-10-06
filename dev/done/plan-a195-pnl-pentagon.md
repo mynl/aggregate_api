@@ -464,3 +464,49 @@ Four divergences:
 - **Released capital is not monotone in the level.** Found by a test assertion that was wrong rather than by the code being wrong. Every cover in the test peel is bounded, so far enough into the tail the program is exhausted and the net capital grows almost as fast as the gross: the cession releases 956 at 1-in-100 and only 908 at 1-in-2000, and the cost of relief rises rather than falls. Pinned in `test_an_exhausted_program_releases_less_capital_further_out`. It matters for the strip, whose whole point is seeing all six at once, and the note under the figure should not promise that the figures grow with the level.
 
 `dev/FEATURES.csv` gained a `pentagon_df` row by hand, the file being curated rather than generated; `dev/regen_features.py` audits clean. Upstream `dev/TODO.md` was **not** touched: it carries uncommitted work of the author's and has no tracked item for this plan, which the API repo owns.
+
+### Here, landed
+
+**`1.0.0a195` [PnL-Pentagon]**, commit `33dc85f`. The route, the models, the capability flag and the runner, with `tests/test_pnl_pentagon_route.py`, 13 cases. Both gates green, 452 pytest and 247 node. `web/` did not move, so the SPA was not rebuilt at this bump.
+
+Three divergences:
+
+- **The route serves every level in one call**, where the plan has it take one `p` and the strip re-ask on each press. The strip labels each mini pentagon with the assets its level implies, which is the whole reason it is a strip and not a dropdown, so it cannot label itself until every level is in hand. One POST is also strictly less work than six. Acceptance 5 still reads the same from the outside: pressing a level moves every assets, capital, P:Q and CoC figure, it just moves them without a round trip.
+- **The level is `t`, a return period, end to end**, not the plan's `p`. One unit, one name, no conversion to get wrong, and the strip already speaks in return periods.
+- **The runner is a new `src/aggregate_api/pnl.py`**, the plan's second option, rather than joining the four in `pricing.py`. That file opens by saying there is no pandas in it and that this is the point of it; every runner there hands back an exhibit envelope or scalars, and this one serializes a frame.
+
+One plan claim did not survive contact. **`can_pnl_pentagon` cannot be "a P&L whose walk carries a diversified net capital column"**, which is what the plan's [capability] step specifies: that was the right gate for conditional capital and is the wrong one for a marginal quantile, which every P&L can answer. It is a P&L plus a library serving `pentagon_df`, feature-detected at import the way `PNL_PREMIUM_STYLE_SUPPORTED` is. A plain P&L is therefore **live**, against acceptance 8's implication: it has no cession, so the figure draws one pentagon with nothing left over, which is the honest picture of a book with no program rather than a reason to grey the leaf. A kernel P&L is live too, its rows carrying distributions.
+
+**`1.0.0a196` [PnL-Pentagon]**. `web/src/charts/pentagon.js`, the leaf, the strip, the note and the CSS, with `web/test/pentagon.test.js`, 25 cases. All three gates green, 452 pytest, 273 node, `check-nav.mjs` clean. SPA rebuilt.
+
+Five divergences, three of them found by looking at the figure in a browser rather than by reading the plan:
+
+- **No dark palette.** The plan asks for tokens that work in both the light and dark palettes. This app has no dark palette: there is no `data-bs-theme` and no `prefers-color-scheme` anywhere in `site.css`. A second set of tokens would be dead weight and would be stale by the time a dark build arrived. The three colors are declared as custom properties so that there is one place to redefine them when one does.
+- **Colors come from `site.css`, not from `charts/theme.js`.** The plan names that module, which is the ECharts theme: a registry of chart pieces and the matplotlib cycle fetched from `/v1/meta/style`. The pentagon is an SVG with no ECharts in it, and the palette it wants is the app's own `--ink`, `--mut`, `--line` and `--bad`, which `site.css` already defines.
+- **The viewBox is cropped.** aSP draws inside `0 0 1000 700`, which suited its fixed desktop card. Measured against the live figure here the content runs x 255 to 796 and y 89 to 624, so 46% of the width and 24% of the height was empty, and on a narrow screen that is dead scroll. Now `235 78 620 580`, derived from the geometry rather than measured at draw time, which would mean rendering twice.
+- **Narrow screens pan rather than shrink.** The plan asks for a figure legible at 390 px. Scaled to fit, a 12.5 unit label renders at under 5 px, which is not legible at any definition. The figure keeps a 600 px floor inside its own `overflow-x: auto` box instead, so at a 390 px column the labels render at **12.1 px** and the box scrolls while the page does not. Verified in Chrome against the real leaf.
+- **The strip wraps on its own box, not on the viewport.** A `max-width` media query was the first cut and it is wrong: the pane is narrower than the window by the gutters and the tab indent, so a leaf squeezed for any other reason would still be laid out for a phone that is not there. `repeat(auto-fit, minmax(96px, 1fr))` needs no query and was measured at six across wide and three across in a 390 px column.
+
+Smaller, recorded in the code: the class names take a `pent-` prefix, these being global rules over a bespoke SVG; a node whose gross amount vanishes draws neutral with no percentage, which the expense node reaches on a program whose only expense is a ceding commission; and `radiusFor` gained an upper clamp, found by a test, so a disc can never exceed the cap whatever it is handed.
+
+### Verified in the browser, 2026-10-06
+
+Against `xpnl PentDemo ... peel top-down`, the plan's acceptance case, at `api 1.0.0a196` and `agg 1.0.0a393`:
+
+1. The leaf draws with the strip above it, opening on 1-in-100.
+2. Gross reads `P 1,000.00  L 700.01  M 299.99  SD 591.61` and net reads `860.00 / 338.78 / 533.22 / 346.28`, which is `PnL / Summary`'s Gross and All rows to the last printed figure. Ceded is the difference.
+3. `Q` on the gross row is 1,820.00, which is `PnL / Waterfall`'s `Capital standalone` and `Capital gross` on its Gross row; `Q` on the net row is 864.00, its `Capital net` on the closing row. `CoC` matches at 16.5%.
+4. The identities hold on screen: `1,000 + 1,820 = 2,820`, `1,000 - 700.01 = 299.99`, `299.99 / 1,820 = 16.5%`, `1,000 / 1,820 = 0.55:1`.
+5. Pressing 1-in-250 moves assets to 3,640 and 2,560, capital to 2,640 and 1,688, CoC to 11.4% and 31.6%, and P:Q to 0.38:1 and 0.51:1, and moves no loss, expense, premium, margin, SD or CV figure at all.
+6. The ceded SD and CV print a dot.
+7. The note names the colors, the mark and the notional capital.
+8. Dark on a plain `agg` and a `port`, live on both P&L kinds, which `check-nav.mjs` also asserts.
+9. Legible at 390 px, by panning: 12.1 px labels in a box that scrolls while the page does not.
+10. `uv run pytest` 452 passed, `npm test` 273 passed, `check-nav.mjs` clean.
+
+A reading the figure made visible that the plan did not anticipate: **released capital is not monotone in the solvency level.** Every cover in this program is bounded, so far enough into the tail it is exhausted and the net capital grows almost as fast as the gross. The cession releases 956 at 1-in-100 and 952 at 1-in-250, and the cost of relief rises rather than falls. The capital node's tooltip says so, and it is pinned upstream.
+
+### Left for the author
+
+- **Q5, the Waterfall strip**, is an upstream plan. `_scenario_ladder` and `_gross_scenario_ladder` take a q list easily, but `_palm_scenario_ladder` is build time with its anchors computed against `PERCENTILE_LADDER` at `_pnl_builders.py:1584`, and that is the piece to design.
+- **Q6, the aSP memo.** `aggregate-asp`'s `README.md` should record what moved (Stack and Round at a193, the pricing walk at a194, the Pentagon here) and what died (the draggable Lee panels, the DecL emitter), so the two repos do not both grow a pricing walk. Not done here: it is a different repository and nothing in this plan's scope touches it.

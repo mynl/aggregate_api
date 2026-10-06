@@ -4,6 +4,19 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a196
+
+[PnL-Pentagon] **the figure itself**: `PnL / Pentagon` draws gross, ceded and net on one picture, at a solvency level picked from a strip of mini pentagons. Plan `dev/done/plan-a195-pnl-pentagon.md`, the second and last bump here; a195 was the route and the flag.
+
+- **One figure carries the whole report.** Seven nodes and three chips: assets, loss and its CV, capital, margin and its standard deviation, technical premium, expenses and the expense ratio, written premium with its combined ratio and the cv of that, then CoC, TLR with LR, and P:Q. Every node is a disc whose **area** is the gross amount with a wedge cut for the net share, so the cession is literally the part left over. One color convention throughout: ink gross, red ceded, blue net.
+- **Ported from `aggregate-asp`**, the retired experiment where the figure was designed, and ported as a figure rather than rewritten: the vertex order, the spring on the one statistical edge (assets to loss, which is the link the solvency standard stretches, while the identities draw straight), the call-out rule for a sector too thin to hold its own percentage, the label stacks and the chips all come across as they were.
+- **The browser owns the geometry and nothing else.** `web/src/charts/pentagon.js` holds no economics: every amount and ratio it prints is a column of `PnL.pentagon_df`. That is the plan's governing principle, and it constrains the next bespoke figure rather than licensing it. aSP's actual sin was solving the economics client side and that does not come across. The markup is built as a string, so the whole drawing is checkable with no DOM: 25 cases in `web/test/pentagon.test.js`.
+- **The level strip, not a dropdown.** Six mini pentagons, each labeled with the net assets its level implies, so you pick from figures you can already see. A select would show one at a time and make the leaf worse than the thing it replaced. Every level arrives in one POST, so pressing one is a redraw rather than a re-ask, and the strip wraps on the width of its own box rather than the window's.
+- **A dot where the ledger declined.** The cession's standard deviation and CV have no joint to come from on a stitched ledger, so they print a dot rather than the negative standard deviation that reached `PnL / Ledger` before library a392. A node with no gross amount to split, which is an expense node on a program whose only expense is a ceding commission, draws neutral rather than reading "100% ceded" of nothing.
+- **The note says the three things the picture cannot.** What the colors are, that `**` marks the one figure you set, and that the capital is notional.
+
+Needs library `a393` for `PnL.pentagon_df`. **Not in this plan, after the author's ruling at review:** the Waterfall leaf gaining the same strip. Its capital bases are conditional means confined to the one tail rung of `PERCENTILE_LADDER`, so parametrizing them is its own upstream plan.
+
 ## 1.0.0a195
 
 [PnL-Pentagon] **the api side of the Pentagon figure**: one route, one capability flag, and the library frame behind them. Plan `dev/plan-a195-pnl-pentagon.md`, phase one of two here. The figure itself lands next; this bump is everything the browser will ask for.

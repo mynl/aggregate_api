@@ -87,6 +87,12 @@ const EXPECTED = {
     // leaves rather than one leaf that changes meaning with the object. Every
     // P&L has a closing margin, so the row is both kinds, unlike Waterfall.
     'economics:tail': ['pnl', 'xpnl'],
+    // New at a195: the group's one picture, gated on `can_pnl_pentagon`, which
+    // is the only flag in this group. Both kinds, unlike Waterfall: a plain
+    // P&L has no cession, so the figure draws one pentagon with nothing left
+    // over, which is the honest picture of a book with no program rather than
+    // a reason to grey the leaf.
+    'economics:pentagon': ['pnl', 'xpnl'],
     // The whole Re row lights for a reinsured P&L since library a367
     // ([PnL-Reins-Passthrough], the author's 2026-09-29 ruling superseding
     // 2026-09-25's "Diagram and nothing else"): `chart_structure`,

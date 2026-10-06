@@ -307,6 +307,19 @@ export const NAV_GROUPS = {
                 hint: 'VaR and xsVaR on the closing margin by return period, '
                     + 'read as a payoff: the adverse tail is the low one',
             },
+            // The group's one picture, and the only leaf here gated on a flag
+            // rather than on an exhibit: the figure is a bespoke SVG this app
+            // draws, not a library document. Last in the row because it is the
+            // whole report at a glance, read after the four tables it draws
+            // from rather than before them.
+            pentagon: {
+                label: 'Pentagon',
+                flag: 'canPnlPentagon',
+                why: 'a P&L only',
+                hint: 'gross, ceded and net on one figure: assets, loss, '
+                    + 'capital, margin, premium and the ratios between them, '
+                    + 'at a solvency level you pick',
+            },
         },
     },
     bounds: {
@@ -663,6 +676,10 @@ export function capsFromResponse(capability, built = true) {
             // The rate pair of the PnL menu: `can_pnl` plus a library whose
             // `pnl_program` takes `premium_style`, which is an upstream ask.
             canPnlRate: Boolean(cap.can_pnl_rate),
+            // The PnL group's Pentagon leaf: a P&L, plus a library serving
+            // `pentagon_df`. Not derivable from `kind` alone, which is why it
+            // is a flag and not a kind test here.
+            canPnlPentagon: Boolean(cap.can_pnl_pentagon),
             // The one-press route to an exploded P&L: wrap-and-explode for a
             // single aggregate, plain explode for a P&L that still can.
             canXpnl: Boolean(cap.can_xpnl),

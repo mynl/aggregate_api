@@ -183,6 +183,17 @@ export const api = {
      */
     frameOf:      (id, which, p = {}) => _json('GET', `/v1/objects/${id}/${which}?${qs(p)}`),
 
+    /**
+     * The ledger as a pentagon, at every level the figure's strip shows.
+     *
+     * One POST for all six, because the strip labels each mini pentagon with
+     * the assets its level implies: a reader picks from figures they can
+     * already see, so pressing a level is a redraw rather than a re-ask. The
+     * api owns the default list, so the strip renders whatever comes back.
+     */
+    pnlPentagon: (id, body = {}) =>
+        _json('POST', `/v1/objects/${id}/pnl/pentagon`, body),
+
     // Pricing.
     //
     // Four routes, and three of them answer with exhibit envelopes rather than
