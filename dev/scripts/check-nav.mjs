@@ -59,7 +59,14 @@ const caps = Object.fromEntries(
 const EXPECTED = {
     'overview:plot': ['agg', 'agg_reins', 'port', 'sev', 'distortion', 'bvagg', 'pnl', 'xpnl'],
     'overview:summary': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl'],
-    'overview:tail': ['agg', 'agg_reins', 'port'],
+    // A P&L joined this row at library a388 ([Overview-Engine]), where the
+    // generic `tail` exhibit stopped serving the ledger's closing margin and
+    // started serving the **wrapped book's** ladder, which is what the other
+    // four Overview leaves already described. So the row is now identical to
+    // Summary's, Validation's and Stats's, and that identity is the point: the
+    // whole group describes one object. The ledger's own ladder is
+    // `economics:tail`, below.
+    'overview:tail': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl'],
     // Moved out of More at a55: it is the verdict on what the three leaves above
     // it just showed, so it belongs beside them rather than in the specialist
     // menu. The live set is unchanged by the move, which is the point of
@@ -73,17 +80,27 @@ const EXPECTED = {
     'economics:ledger': ['pnl', 'xpnl'],
     'economics:ratios': ['pnl', 'xpnl'],
     'economics:waterfall': ['xpnl'],
-    // The one leaf in this group with a wider gate than the rest, and the row
-    // that says so. `chart_structure` is registered for `PnL` as well as
-    // `Aggregate`, so a reinsured P&L lights Diagram; `chart_reins` and the
-    // `reins` exhibit are an aggregate's alone, so it lights nothing else
-    // here. That makes the Re group live for a P&L for the first time, which
-    // is checked below rather than being left to the grid.
+    // New at library a388 ([Overview-Engine]): the closing margin's return
+    // period ladder, which `overview:tail` served until that bump handed the
+    // generic name to the wrapped book. It is a payoff read off the low rungs
+    // where the book's ladder is a loss read off the high ones, so they are two
+    // leaves rather than one leaf that changes meaning with the object. Every
+    // P&L has a closing margin, so the row is both kinds, unlike Waterfall.
+    'economics:tail': ['pnl', 'xpnl'],
+    // The whole Re row lights for a reinsured P&L since library a367
+    // ([PnL-Reins-Passthrough], the author's 2026-09-29 ruling superseding
+    // 2026-09-25's "Diagram and nothing else"): `chart_structure`,
+    // `chart_reins` and the `reins` exhibit all serve a `PnL` through its
+    // wrapped engine. `nav.js` was updated for that ruling and this table was
+    // not, which is why these five rows read `agg_reins` alone until a194.
+    // Plot stays dark on a reinsured *portfolio*, library a244's decision: a
+    // book's units cede on different stages, and an `xpnl` wraps a single
+    // aggregate, which is why the objection does not carry to a P&L.
     'reinsurance:diagram': ['agg_reins', 'xpnl'],
-    'reinsurance:summary': ['agg_reins'],
-    'reinsurance:stats': ['agg_reins'],
-    'reinsurance:density': ['agg_reins'],
-    'reinsurance:plot': ['agg_reins'],
+    'reinsurance:summary': ['agg_reins', 'xpnl'],
+    'reinsurance:stats': ['agg_reins', 'xpnl'],
+    'reinsurance:density': ['agg_reins', 'xpnl'],
+    'reinsurance:plot': ['agg_reins', 'xpnl'],
     // Calibrate and Stand-alone gate together on `canPrice`: they are two
     // readings of one calibration and one press fills both, so a live Calibrate
     // with a dark Stand-alone would be a promise the pane cannot keep.
@@ -95,11 +112,12 @@ const EXPECTED = {
     // the narrower gate is the point of the split.
     'pricing:allocate': ['agg_reins', 'port'],
     // Plot is a chart leaf and lights from `kappa`, which the library registers
-    // against the same two shapes: a book, whose unit curves the overview plot
-    // already draws on its right hand side, and an occurrence program, whose
-    // band chart is its own emitter. So this row equals the one above it, and
-    // that agreement is the assertion rather than a coincidence.
-    'pricing:plot': ['agg_reins', 'port'],
+    // against a book, whose unit curves the overview plot already draws on its
+    // right hand side, and an occurrence program, whose band chart is its own
+    // emitter. A reinsured P&L is an occurrence program seen through its
+    // wrapped engine, so it lights too, which is why this row is Allocate's
+    // set plus `xpnl` rather than equal to it.
+    'pricing:plot': ['agg_reins', 'port', 'xpnl'],
     'pricing:evaluate': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl'],
     // Pr Ruin is a chart leaf and lights from `ruin`, whose predicate is the
     // library's frequency test: Poisson or renewal, on an aggregate alone.
@@ -108,10 +126,13 @@ const EXPECTED = {
     // claim-count process of its own.
     'pricing:ruin': ['agg', 'agg_reins'],
     // Bounds takes an Aggregate or a Portfolio, which is the library's own
-    // accepted set; allocation needs the per-unit conditional expectations only
-    // a portfolio's density frame carries.
-    'bounds:bounds': ['agg', 'agg_reins', 'port'],
-    'bounds:pricing': ['agg', 'agg_reins', 'port'],
+    // accepted set, and since a191 a P&L too: the `can_bounds` flag reaches
+    // through to the wrapped engine and the pane auto-computes at the ledger
+    // premium. Allocation is the narrower gate, needing the per-unit
+    // conditional expectations only a portfolio's density frame carries, so it
+    // stays a portfolio's alone.
+    'bounds:bounds': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl'],
+    'bounds:pricing': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl'],
     'bounds:allocation': ['port'],
     'more:density': ['agg', 'agg_reins', 'port', 'sev', 'distortion', 'bvagg', 'pnl', 'xpnl'],
     // Same set as overview:tail, and for the same reason: both need a full loss
@@ -200,12 +221,17 @@ for (const k of ['port', 'pnl', 'sev', 'distortion', 'bvagg']) {
         findings.push(`reinsurance: ${k} cannot cede, so the group should be dark`);
     }
 }
-// A reinsured P&L is the exception to the line above, and it arrived with the
-// Diagram leaf at a153: `chart_structure` takes a `PnL`, so the group is live
-// there with Diagram its only lit leaf. Worth asserting both halves. The one
-// that would go wrong quietly is the second: gating Diagram on `canReins`
-// instead of on its chart would leave the group live and every leaf dark, an
-// empty pane over an entry box that greys itself.
+// A reinsured P&L is the exception to the line above. It arrived with the
+// Diagram leaf at a153, `chart_structure` taking a `PnL`, and library a367
+// ([PnL-Reins-Passthrough]) widened it to the whole row: `chart_reins` and the
+// `reins` exhibit serve a `PnL` through its wrapped engine too. Worth asserting
+// all three halves. The one that would go wrong quietly is the second: gating
+// Diagram on `canReins` instead of on its chart would leave the group live and
+// every leaf dark, an empty pane over an entry box that greys itself.
+//
+// The loop below used to assert the opposite, that Plot and the three tables
+// are an aggregate's and not a P&L's. That was true until a367 and was left
+// behind by it; it is inverted here at a194.
 if (caps.xpnl) {
     if (!groupAvailable(caps.xpnl, 'reinsurance')) {
         findings.push('reinsurance: a reinsured P&L should reach its Diagram');
@@ -214,8 +240,9 @@ if (caps.xpnl) {
         findings.push('reinsurance: a reinsured P&L should land on Diagram');
     }
     for (const key of ['plot', 'summary', 'stats', 'density']) {
-        if (leafAvailable(caps.xpnl, 'reinsurance', key)) {
-            findings.push(`reinsurance: ${key} is an aggregate's, not a P&L's`);
+        if (!leafAvailable(caps.xpnl, 'reinsurance', key)) {
+            findings.push(`reinsurance: ${key} serves a P&L through its engine `
+                + 'since library a367, so it should be lit');
         }
     }
 }

@@ -103,10 +103,16 @@ export const NAV_GROUPS = {
                 why: 'needs computed moments',
                 hint: 'frequency / severity / aggregate moments; raw moment rows are dropped',
             },
+            // On a P&L this is the *wrapped book's* ladder, not the ledger's
+            // (library a388, [Overview-Engine]): every leaf in this group now
+            // describes one object, the book, and the ledger's own readings are
+            // the PnL group. The closing margin's ladder is a payoff read off
+            // the other half of the rungs, so it is PnL > Tail, a different
+            // leaf rather than the same one changing meaning with the object.
             tail: {
                 label: 'Tail',
                 exhibit: 'tail',
-                why: 'needs a full loss distribution: an aggregate, a portfolio, or a P&L over its closing margin',
+                why: 'needs a full loss distribution: an aggregate, a portfolio, or the book under a P&L',
                 hint: 'VaR, TVaR and xsVaR by return period',
             },
         },
@@ -263,32 +269,43 @@ export const NAV_GROUPS = {
         // state and any link already shared.
         label: 'PnL',
         // Order is the reading order: the sheet first, then the walk across
-        // the tower, then the line by line ledger a reader drops into last.
-        // `activeLeaf` falls back to the first live leaf, so a freshly built
-        // P&L opens on Summary. The keys are unchanged: they are in
-        // `data-tab`, the pane ids, `LOADERS`, the stored per-object view
-        // state and any link already shared, so `ratios` stays `ratios`
-        // though its label now reads Summary.
+        // the tower, then the line by line ledger a reader drops into, then
+        // the closing margin's own tail last. `activeLeaf` falls back to the
+        // first live leaf, so a freshly built P&L opens on Summary. The keys
+        // are unchanged: they are in `data-tab`, the pane ids, `LOADERS`, the
+        // stored per-object view state and any link already shared, so
+        // `ratios` stays `ratios` though its label now reads Summary.
         leaves: {
             ratios: {
                 label: 'Summary',
                 exhibit: 'economic_ratios',
                 why: 'a P&L only',
-                hint: 'expected premium, loss, expense and margins, and '
-                    + 'corresponding ratios',
+                hint: 'premium, loss, expense, margin and its standard '
+                    + 'deviation, with the ratios, one row per block',
             },
             waterfall: {
                 label: 'Waterfall',
                 exhibit: 'economic_waterfall',
                 why: 'a P&L tower only',
-                hint: 'the margin (M) and standalone and diversified 1-in-100 '
-                    + 'margin across the tower',
+                hint: 'what each step of the tower spends and earns, then '
+                    + 'three capital bases and the cost of each',
             },
             ledger: {
                 label: 'Ledger',
                 exhibit: 'economic',
                 why: 'a P&L only',
                 hint: 'the P&L, line by line',
+            },
+            // The ledger's own tail, which Overview > Tail served until
+            // library a388 handed that leaf to the wrapped book. Last in the
+            // row because it is the longest look at the one number the three
+            // leaves above it build up to, the closing margin.
+            tail: {
+                label: 'Tail',
+                exhibit: 'economic_tail',
+                why: 'a P&L only',
+                hint: 'VaR and xsVaR on the closing margin by return period, '
+                    + 'read as a payoff: the adverse tail is the low one',
             },
         },
     },

@@ -1479,6 +1479,11 @@ const LOADERS = {
         ['economics', 'ratios']),
     'economics:waterfall': () => loadExhibitLeaf('pane-economics', 'economic_waterfall',
         ['economics', 'waterfall']),
+    // The closing margin's return period ladder (library a388). Both halves of
+    // the key matter: the pane id decides where the table draws and the
+    // reading-map key decides where its reading is filed.
+    'economics:tail': () => loadExhibitLeaf('pane-economics', 'economic_tail',
+        ['economics', 'tail']),
 
     // The `reins` exhibit's first block, the layering analysis, in the
     // library's own orientation. Under Summary since a151: it is the leaf's
@@ -2376,17 +2381,20 @@ function ledeFor(group, key) {
 /**
  * One library exhibit in a pane, as its envelope.
  *
- * The generic leaf loader for Economics, More's Dependency and More's Tail
- * behavior. It takes the exhibit route rather than the frame route for two
- * reasons. Some of these exhibits have no frame behind them at all:
- * `economic_waterfall` and `dependency` are built by the library and reachable
- * only this way. And where both exist the envelope is the richer one, since the
- * library owns the business translation and ships each block with its own
- * caption.
+ * The generic leaf loader for PnL, More's Dependency and More's Tail behavior.
+ * It takes the exhibit route rather than the frame route because the envelope is
+ * the richer one: the library owns the business translation and ships each block
+ * with its own caption, its row emphasis and its column readings. Several of
+ * these exhibits also restructure under the insurer perspective, dropping or
+ * splitting columns, and the frame route serves the frame rather than that
+ * reading.
  *
  * An exhibit is one or more blocks, each a table document, so a pane may hold
- * several tables. `economic_ratios` is the reason: its insurer framing splits
- * into pure-unit blocks rather than one frame with mixed measures.
+ * several tables. `economic_waterfall` is the reason: its insurer framing splits
+ * the merged walk after `MSD`, into what each step spends and earns and then the
+ * three capital bases with the cost of each (library a390). `economic_ratios`
+ * used to be the example and is now one block, the library having reversed the
+ * one-unit rule for it at a389: a walk is read across a row.
  *
  * @param {[string, string]} leaf `[group, key]`, for the lede.
  * @param {number} [block] draw only this block of the exhibit, by index. For

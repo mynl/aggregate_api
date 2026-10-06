@@ -6,6 +6,20 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[PnL-Exhibits]** DONE (`1.0.0a194`), plan
+  `dev/done/plan-a194-pnl-exhibits.md`: the Overview group becomes uniformly the
+  wrapped book and the PnL group uniformly the ledger, which gains a **Tail**
+  leaf for the closing margin's ladder. PnL Summary draws one table read across
+  a row, PnL Waterfall's second table is three capital bases with the cost of
+  each (every capital figure the negative of a193's, reading as capital rather
+  than as the margin in the bad state), and PnL Ledger inherits `Skew`. The P&L
+  summary card loses its leaf; nothing it carried is unreachable. Library
+  `a388`-`a391` ([Overview-Engine], [PnL-Summary-One-Table],
+  [Waterfall-Capital], [Ledger-Skew]). `check-nav.mjs`'s `EXPECTED` table
+  brought current, having fallen eleven findings behind the library. Detail in
+  `CHANGELOG.md` a194 and the four library entries. **Next:** a195, the PnL
+  pentagon, which depends on this bump's column rename.
+
 - **[Tower-Generator]** DONE (`1.0.0a193`), plan
   `dev/done/plan-a193-quick-re-tower.md`: the Quick Re row takes a second
   button, Tower, that lays one span out as a stack of quote-sheet-rounded

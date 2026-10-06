@@ -4,6 +4,17 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a194
+
+[PnL-Exhibits] the Overview group describes the **book** and the PnL group describes the **ledger**, with no overlap, and PnL gains a fourth leaf, **Tail**. Plan `dev/done/plan-a194-pnl-exhibits.md`. Most of the work is upstream, in library `a388` through `a391`; the app side is one new leaf, one loader, four label and hint edits, and the navigation gate brought back to green. No new route: capability is a passthrough of `available_exhibits`, so the new exhibit arrives on its own.
+
+- **Overview is now uniformly the engine's view of the wrapped book.** Plot, Validation and Stats already looked through to it; Summary and Tail now do too, so a reader moving along the row reads one object throughout rather than changing subject twice without being told. Overview / Tail's `why` says "the book under a P&L" instead of claiming the closing margin.
+- **PnL is now uniformly the ledger**, and gains **Tail**, the closing margin's return period ladder that Overview / Tail used to serve. It is last in the row, being the longest look at the one number the three leaves above it build up to. A payoff, so the adverse tail is the low one, and the insurer view drops `TVaR`, which the library computes above a rung where a payoff is read below it.
+- **PnL / Summary draws one table, not two**: premium, loss, expense, margin, the margin's standard deviation, and the three plain ratios, one row per block, read across. The expected-ratio columns and the two share columns moved to the Raw toggle, which is what that toggle is for.
+- **PnL / Waterfall's second table is now three capital bases beside the cost of each**, where it used to be every ratio in the walk. The split is by question rather than by unit, and every capital figure is the negative of what a193 printed: the columns read as capital held, or released on a ceded row, rather than as the margin in the bad state. Both captions say the capital is notional.
+- **PnL / Ledger carries `Skew`** beside `CV`, the P&L's own summary card having lost its leaf.
+- **`dev/scripts/check-nav.mjs` is green again.** Its `EXPECTED` table had fallen eleven findings behind the library: the whole Re row lights for a reinsured P&L since library `a367`, Pricing / Plot with it, and Bounds has taken a P&L since `a191`. Four assertions that Plot and the three Re tables are "an aggregate's, not a P&L's" were true until `a367` and are now inverted.
+
 ## 1.0.0a193
 
 [Tower-Generator] the Quick Re row takes a second button, **Tower**, that lays one wide attach-to-detach span out as a stack of quote-sheet-rounded layers with a climbing placement ladder, and cedes the whole stack as one clause. Plan `dev/done/plan-a193-quick-re-tower.md`; no library change, no new route, SPA only.
