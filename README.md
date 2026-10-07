@@ -11,9 +11,12 @@ CodeMirror 6 DecL workbench that runs against it. A single `aggregate-api`
 process serves both the web UI (at `/`) and the JSON endpoints (under `/v1`)
 same-origin.
 
-> **Status:** private side project, early alpha. Extracted from the `aggregate`
-> repo so the library can ship without it. See [CHANGELOG.md](CHANGELOG.md) for
-> what has landed and [dev/TODO.md](dev/TODO.md) for the roadmap.
+> **Status:** 1.0.0, the first public release. Extracted from the `aggregate`
+> repo so the library can ship without it. The package is installable and
+> supported; the `/v1` surface is not yet a frozen interface, and the caveat at
+> the end of [Running headless](#running-headless) says why. See
+> [CHANGELOG.md](CHANGELOG.md) for what has landed and
+> [dev/TODO.md](dev/TODO.md) for the roadmap.
 
 ## What's inside
 
@@ -49,43 +52,75 @@ Which one you get is a page-wide preference in the header menu. Large frames (th
 densities) skip the document entirely and go to the grid, which is the honest
 instrument for them.
 
-## Install and run
+## Install
 
-Requires Python ≥ 3.13, [`uv`](https://docs.astral.sh/uv/), and Node for the web
-build.
-
-**Two dependencies are local checkouts**, not PyPI installs, and both are wired
-through `[tool.uv.sources]` in `pyproject.toml`: `aggregate` (the api uses
-`1.0.0a` internals that are not published) and `greater-tables` (the table
-engine, publishing as 6.0).
-
-> **Watch out for `greater-tables`.** The name is currently two different
-> packages. PyPI's `greater-tables` 5.3 is the previous generation and shares the
-> `greater_tables` import name, so a plain `pip install greater-tables` gets the
-> wrong one and the service dies at import. `uv sync` reads the path source and
-> does the right thing. Once 6.0 is published, pin it explicitly: pip ignores
-> pre-releases unless asked. `tests/test_meta.py` asserts the right generation is
-> installed.
+Requires Python ≥ 3.13. Nothing else: `aggregate` ≥ 1.0.1 and
+`greater-tables` ≥ 6.0.0 come from PyPI with it.
 
 ```
-uv sync --extra dev
-uv run aggregate-api --port 8001 --reload
+pip install aggregate_api
+aggregate-api --port 8001
 ```
 
 Then open http://127.0.0.1:8001/ for the app, or http://127.0.0.1:8001/docs for
 the api.
 
-Build the web bundle (served by the backend at `/`):
+> **Install the wheel, not the repository.** The web bundle is 2.5 MB of
+> generated Vite output and is deliberately not in git, so it reaches you in the
+> built distribution and only there. `pip install git+https://github.com/mynl/aggregate_api`
+> installs a working api whose `/` returns 404, which is a reasonable thing to
+> want if you are putting your own front end in front of the engine, and a
+> baffling one otherwise. The wheel and sdist are also attached to each
+> [GitHub release](https://github.com/mynl/aggregate_api/releases).
+
+One footnote, which the pins above handle for you and which bites anyone
+installing the table engine on its own: PyPI's `greater-tables` 5.3 is a
+previous generation sharing the `greater_tables` import name, so a bare
+`pip install greater-tables` can get a package with no `build`, `canonical_json`
+or `IR_VERSION`, which fails at import rather than at install. This package pins
+`>=6.0.0` and `tests/test_meta.py` asserts the right generation is present.
+
+## Develop
+
+Needs [`uv`](https://docs.astral.sh/uv/) and Node for the web build. A fresh
+clone syncs with nothing checked out beside it.
 
 ```
-.\scripts\build-web.ps1      # Windows
-./scripts/build-web.sh       # Unix
+git clone https://github.com/mynl/aggregate_api
+cd aggregate_api
+uv sync --extra dev
+.\scripts\build-web.ps1          # Windows; ./scripts/build-web.sh on Unix
+uv run aggregate-api --port 8001 --reload
 ```
 
-Run the tests:
+`build-web` drops the bundle into `src/aggregate_api/static/`, which the FastAPI
+`StaticFiles` mount serves at `/`. Until it has run once, `/` has nothing to
+serve. For hot reload with a Vite dev server proxying `/v1` to `:8000`, use
+`cd web; npm install; npm run dev` instead.
+
+To develop against a local checkout of `aggregate` or `greater-tables` rather
+than the released build, install it editable over the synced environment:
 
 ```
-uv run pytest
+uv pip install -e ../aggregate               # or wherever the checkout is
+```
+
+The next `uv sync` silently reinstalls the released build, so `uv run --no-sync`
+is the way to work in between.
+
+Run the tests. There are two suites and both are the gate:
+
+```
+uv run pytest           # 490 tests, FastAPI TestClient, no live server needed
+cd web; npm test        # 277 tests, node --test over web/test/
+```
+
+Rehearse a release, which is a stronger check than either suite because it
+builds the distributions and runs everything against the installed wheel in a
+clean environment:
+
+```
+.\scripts\release-check.ps1
 ```
 
 ### Running headless

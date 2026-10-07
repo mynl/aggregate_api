@@ -1,6 +1,6 @@
 ---
 name: version-bump
-description: Bump the aggregate_api 1.0.0a version and commit it as one batch:
+description: Bump the aggregate_api version and commit it as one batch:
   both test suites run (pytest and the web JS suite), pyproject.toml, uv.lock,
   the CHANGELOG section, dev/TODO.md, the plan doc moved to dev/done/, a
   one-line commit, the SPA rebuild that stops the page being older than the
@@ -75,8 +75,12 @@ Two environment traps while doing this:
 One commit carrying the whole batch:
 
 - Source and tests.
-- `pyproject.toml`, the `version = "1.0.0a*"` line. Read the current value, do
-  not assume it. Recent history: `1.0.0a112`.
+- `pyproject.toml`, the `version` line. Read the current value, do not assume it.
+
+  **The scheme changed at 1.0.0**, which shipped on 2026-10-07. Through
+  `1.0.0a202` a bump was one more alpha serial. Released, it is SemVer per the
+  house rules: a feature or behavior change takes the minor (1.0.0 to 1.1.0 to
+  1.2.0), a fix takes the patch. Do not crawl, and do not go back to serials.
 - `uv.lock`.
 - `CHANGELOG.md`, a new `## <version>` section at the top, newest first.
 - `dev/TODO.md`, tick the matching entry.
@@ -112,11 +116,11 @@ when that material changes.
 ## 6. Commit, one line
 
 ```
-[a113] terse summary of what landed
+[1.1.0] terse summary of what landed
 ```
 
 The subject should not restate the CHANGELOG section. Real examples from this
-history:
+history, from the alpha line that ran to a202:
 
 ```
 [a112] private status page at /v1/status, and a real client address
@@ -125,7 +129,8 @@ history:
 ```
 
 Note the format differs from LIB, which uses `[Descriptive-Label] aNNN: summary`.
-Here the bracket holds the version alone.
+Here the bracket holds the version alone, and since 1.0.0 that is the release
+number rather than an alpha serial.
 
 Stage deliberately, by path. Do not `git add -A` over a tree holding the
 author's uncommitted work.
@@ -174,12 +179,30 @@ uv sync --extra dev
 `version` is read with `importlib.metadata.version`, which returns what was
 recorded when the editable install was built, not what `pyproject.toml` says
 now. Bump the version and the running server keeps reporting the old one in
-`/v1/health`, `/v1/meta` and the About panel. The same trap applies to
-`aggregate_version` when the sibling LIB checkout moves, so re-sync after a LIB
-bump too, not only after one here.
+`/v1/health`, `/v1/meta` and the About panel.
 
 This step is easy to skip because nothing fails. It just reports a stale number
 until someone notices.
+
+**Since 1.0.0, `uv sync` also replaces an editable `aggregate` with the released
+build**, because the path source is gone. So a re-sync in the middle of library
+co-development silently drops the worktree install and `/v1/meta` starts
+reporting the PyPI version. Put it back with
+`uv pip install -e V:/worktrees/aggregate_REFACTOR`, and say so in the report
+rather than leaving the author to find out from `aggregate_version`.
+
+## 8a. If this bump is a release
+
+A release is more than a bump. Run `.\scripts\release-check.ps1`, which is the
+only gate that sees what an installer receives: it builds the distributions,
+asserts the wheel carries the whole web bundle, installs it into a clean
+environment where nothing in this tree can reach the resolution, runs the suite
+against the installed package, then serves the app and fetches every asset.
+Three defects shipped past both suites before 1.0.0 because the suites read the
+working tree in place.
+
+Publishing, tagging and the GitHub release are the **author's**, never yours.
+`V:\dev\RELEASE-PROCESS.md` is the checklist for both repositories.
 
 ## 9. Never
 

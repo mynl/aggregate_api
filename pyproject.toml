@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aggregate_api"
-version = "1.0.0a202"
+version = "1.0.0"
 description = "aggregate Loss Lab (aLL): FastAPI service and single-page web app for the aggregate actuarial library."
 readme = "README.md"
 authors = [
@@ -13,8 +13,24 @@ authors = [
 maintainers = [
     {name = "Stephen J. Mildenhall", email = "steve@convexrisk.com"},
 ]
+keywords = [
+    "actuarial",
+    "insurance",
+    "reinsurance",
+    "risk",
+    "aggregate loss",
+    "compound distribution",
+    "FFT",
+    "pricing",
+    "DecL",
+]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    # Beta rather than Production/Stable at 1.0.0, deliberately. The package is
+    # installable and supported; the `/v1` surface still follows what the
+    # bundled web app needs, so it is not a frozen interface. The library can
+    # claim Production/Stable because its API promise is in force; this cannot
+    # yet.
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Financial and Insurance Industry",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.13",
@@ -24,12 +40,25 @@ classifiers = [
     "Framework :: FastAPI",
 ]
 dependencies = [
-    # The library this service wraps. The api uses recent internals
-    # (aggregate.parser_errors, aggregate.parser._PARSER) that are only
-    # present in the in-development 1.0.0a line -- see [tool.uv.sources]
-    # below and dev/plan-0001-bootstrap-standalone.md for how the local
-    # editable source is wired during co-development.
-    "aggregate",
+    # The library this service wraps. An ordinary registry dependency since
+    # 1.0.0 of this package: `aggregate` 1.0.1 published on 2026-10-07 and the
+    # internals the api imports (`parser_errors`, `parser._PARSER`, `charts`,
+    # `exhibits`, `plugins`, `bounds`, `decl_writer`, `constants`) are all in
+    # it. Before that the whole 1.0.0a line was unpublished and this had to be
+    # an editable path source; see dev/done/plan-1.0.0-release.md.
+    #
+    # The floor is 1.0.1 and not 1.0.0 because 1.0.0 is not on PyPI at all:
+    # the library's own 1.0.1 was a packaging fix, "the wheel ships
+    # aggregate.charts, .plots and .exhibits", and the api imports two of those
+    # three. A bare `aggregate` would also let a resolver reach 0.30.1, the
+    # newest of the old line, which has none of these modules and fails at
+    # import rather than at install.
+    #
+    # The ceiling is caution about two private names, `parser._PARSER` and
+    # `parser_errors._TERMINAL_LABELS`. The library's API promise covers its
+    # public surface, and a major is exactly where a private name moves.
+    # Re-check both at each library minor rather than trusting the range.
+    "aggregate>=1.0.1,<2",
     # Static tables (the author's own package). The api asks it for a semantic
     # table document (the IR), never for markup: the browser owns geometry. The
     # same install also ships the walker that renders that IR, which is what
@@ -58,7 +87,11 @@ license = "BSD-3-Clause"
 requires-python = ">=3.13"
 
 [project.urls]
+Homepage = "https://github.com/mynl/aggregate_api"
 "Source Code" = "https://github.com/mynl/aggregate_api"
+Documentation = "https://github.com/mynl/aggregate_api#readme"
+Changelog = "https://github.com/mynl/aggregate_api/blob/main/CHANGELOG.md"
+Issues = "https://github.com/mynl/aggregate_api/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -82,35 +115,40 @@ status = ["psutil>=5.9"]
 aggregate-api = "aggregate_api.__main__:main"
 
 # ---------------------------------------------------------------------------
-# uv source override for co-development.
+# There is deliberately no `[tool.uv.sources]` table.
 #
-# `aggregate` 1.0.0a* is not published to PyPI: the newest release there is
-# 0.30.1, and the api depends on internals (`parser_errors`, `parser._PARSER`)
-# that exist only in the local working tree. So this one has to stay, and a
-# clone of this repo needs `aggregate_REFACTOR` checked out beside it before
-# `uv sync` can succeed. Edit the path to match your checkout; plan-0001
-# settles the canonical path for this machine.
+# It held an editable path source for `aggregate` through 1.0.0a202, because the
+# whole 1.0.0a line was unpublished, and one for `greater-tables` through a53.
+# Both dependencies are on PyPI now, so a fresh clone syncs with nothing checked
+# out beside it.
 #
-# `greater-tables` **left this table at a53**, when 6.0.0 shipped to PyPI. It
-# is a plain registry dependency now.
+# The table has to go rather than merely being unused, because uv honors it when
+# this project is installed *as a git dependency* and resolves the relative path
+# inside the git repository:
 #
-# To go back to an editable greater-tables for a session of co-development,
+#     uv pip install git+https://github.com/mynl/aggregate_api
+#     x Failed to download and build `aggregate @ git+...#subdirectory=..\..\worktrees\aggregate_REFACTOR`
+#       The source distribution has no subdirectory `..\..\worktrees\aggregate_REFACTOR`
+#
+# So the table did not just fail to help an outside installer, it was fatal to
+# one. pip never saw it, which is why the failure was uv-only and invisible here.
+#
+# To co-develop either dependency against a local checkout for a session,
 # without editing this file:
 #
-#     uv sync --extra dev                                  # PyPI, the default
-#     uv pip install -e c:/s/ai/greatest-tables            # swap in the local
+#     uv sync --extra dev                                   # PyPI, the default
+#     uv pip install -e V:/worktrees/aggregate_REFACTOR     # swap in the library
+#     uv pip install -e c:/s/ai/greatest-tables             # swap in the tables
 #
-# The checkout folder is still named `greatest-tables` after the working name
-# it carried for a day; that is deliberate and the path above is correct.
+# The tables checkout folder is still named `greatest-tables` after the working
+# name it carried for a day; that is deliberate and the path above is correct.
 #
-# Note the swap lasts until the next `uv sync`, which reinstalls from the lock
-# and silently puts 6.0.0 back. That matters here because the release workflow
-# runs `uv sync` on every version bump, so a bump in the middle of GT work will
-# drop the editable install without saying so. `uv run --no-sync` is the way to
-# work in between, and it is what this repo uses anyway.
+# Either swap lasts until the next `uv sync`, which reinstalls from the lock and
+# silently puts the released build back without saying so. That matters because
+# the release workflow runs `uv sync` on every version bump, so a bump in the
+# middle of co-development drops the editable install. `uv run --no-sync` is the
+# way to work in between, and it is what this repo uses anyway.
 # ---------------------------------------------------------------------------
-[tool.uv.sources]
-aggregate = { path = "../../worktrees/aggregate_REFACTOR", editable = true }
 
 [tool.setuptools]
 include-package-data = true
@@ -121,12 +159,20 @@ packages = ["aggregate_api", "aggregate_api.routes"]
 # The built SPA bundle (index.html + assets/) is dropped here by the web
 # build and is gitignored; the committed icons/webmanifest ship too.
 #
+# **`static/assets/*` is a separate entry and must stay one.** A package_data
+# glob matches files in one directory and does not recurse, so `static/*` alone
+# shipped `index.html` and left every script and stylesheet it loads behind.
+# The installed app then served a 200 for `/` and a 404 for all thirteen
+# assets: the shell painted and nothing ran. `static/**/*` would also work, and
+# is not used here because it would sweep in `static/dev/`, which holds
+# development instruments that have no business in a release.
+#
 # `status_page.html` is the operator's page, served by routes/status.py straight
 # out of the package. Deliberately not under `static/`: the web build wipes that
 # directory on every run, so a copy there would be deleted by the next deploy,
 # and a status page whose delivery depends on the pipeline it reports on cannot
 # report on that pipeline failing.
-aggregate_api = ["static/*", "status_page.html"]
+aggregate_api = ["static/*", "static/assets/*", "status_page.html"]
 
 [tool.ruff]
 line-length = 100

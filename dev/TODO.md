@@ -6,6 +6,29 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Release-1.0.0]** DONE (`1.0.0`), plan `dev/done/plan-1.0.0-release.md`. The
+  first public release, timed with the library's 1.0.1 on 2026-10-07. Three
+  packaging defects meant no installation route delivered a working app, and all
+  three were invisible to both suites because both read the working tree in
+  place. Detail in `CHANGELOG.md` 1.0.0.
+  - [x] `[tool.uv.sources]` removed, `aggregate>=1.0.1,<2` pinned. The table was
+    fatal to `uv pip install git+...`, not merely unhelpful: uv honors it for a
+    git-installed project and looked for the sibling worktree inside the repo.
+  - [x] `package-data` carries `static/assets/*`. A `package_data` glob does not
+    recurse, so the wheel shipped `index.html` and none of the thirteen files it
+    loads: 200 for `/`, 404 for every asset.
+  - [x] `scripts/release-check.ps1`, the rehearsal that found all of it. Builds,
+    inspects the wheel, installs into a clean environment, runs the suite
+    against the installed package, serves the app and fetches every asset.
+  - [x] `test_health_needs_no_thread_token` stopped walking `app.routes`, which
+    FastAPI 0.142 no longer flattens, so it passed on the locked pins and failed
+    on the ones a fresh install resolves. `tests/test_packaging.py` added.
+  - [x] PyPI metadata, `Development Status :: 4 - Beta`, README install section
+    rewritten around `pip install aggregate_api`.
+  - [ ] **Author's, not yet done:** `uv publish`, `git tag -a v1.0.0` (this repo
+    has no tags at all), the GitHub release with the distributions attached. See
+    `V:\dev\RELEASE-PROCESS.md`.
+
 - **[Punch-List-Oct-07]** DONE (`1.0.0a198` to `1.0.0a200`), plan
   `dev/done/plan-a198-punch-list.md` with its execution notes beside it. The
   author's 2026-10-07 punch list after kicking the a197 tires: six items landing

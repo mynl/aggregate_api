@@ -12,8 +12,8 @@ resolution-markers = [
 
 [[package]]
 name = "aggregate"
-version = "1.0.0a401"
-source = { editable = "../../worktrees/aggregate_REFACTOR" }
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "greater-tables" },
     { name = "ipython" },
@@ -25,50 +25,14 @@ dependencies = [
     { name = "pyyaml" },
     { name = "scipy" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "aggregate", extras = ["notebook", "numba", "massive", "viz"], marker = "extra == 'all'" },
-    { name = "attrs", marker = "extra == 'notebook'" },
-    { name = "bokeh", marker = "extra == 'viz'" },
-    { name = "datashader", marker = "extra == 'viz'" },
-    { name = "docutils", marker = "extra == 'dev'", specifier = ">=0.20,<0.22" },
-    { name = "greater-tables", specifier = ">=6" },
-    { name = "holoviews", marker = "extra == 'viz'" },
-    { name = "ipython" },
-    { name = "ipython-autotime", marker = "extra == 'notebook'" },
-    { name = "ipywidgets", marker = "extra == 'notebook'" },
-    { name = "jupyter-sphinx", marker = "extra == 'dev'", specifier = ">=0.5.3" },
-    { name = "jupyterlab", marker = "extra == 'notebook'" },
-    { name = "jupytext", marker = "extra == 'notebook'" },
-    { name = "lark", specifier = ">=1.1" },
-    { name = "matplotlib", specifier = ">=3.5" },
-    { name = "myst-parser", marker = "extra == 'dev'", specifier = ">=2.0" },
-    { name = "nbsphinx", marker = "extra == 'dev'", specifier = ">=0.9.4" },
-    { name = "numba", marker = "extra == 'numba'" },
-    { name = "numpy", specifier = ">=2.0" },
-    { name = "pandas", specifier = ">=2.2" },
-    { name = "pickleshare", marker = "extra == 'dev'" },
-    { name = "pyarrow", marker = "extra == 'dev'", specifier = ">=15" },
-    { name = "pygments" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7" },
-    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
-    { name = "scipy", specifier = ">=1.11" },
-    { name = "sphinx", marker = "extra == 'dev'", specifier = ">=8.1,<9" },
-    { name = "sphinx-copybutton", marker = "extra == 'dev'", specifier = ">=0.5" },
-    { name = "sphinx-multitoc-numbering", marker = "extra == 'dev'" },
-    { name = "sphinx-rtd-theme", marker = "extra == 'dev'", specifier = ">=2.0" },
-    { name = "sphinx-toggleprompt", marker = "extra == 'dev'", specifier = ">=0.6" },
-    { name = "sphinxcontrib-bibtex", marker = "extra == 'dev'" },
-    { name = "zarr", marker = "extra == 'massive'", specifier = ">=3" },
+sdist = { url = "https://files.pythonhosted.org/packages/31/18/8574f1fd7fc15d58a0d7ad8a2d0d933521d2125fb5fb8d2a559c8b770c44/aggregate-1.0.1.tar.gz", hash = "sha256:0a03fdd6ad1d82af950870a1b8a77b45f49bf5e69ed44b120c384bff228135ab", size = 1717707, upload-time = "2026-10-07T15:11:02.735Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/69/2f/519e23ae30ae2b439b58c9133e3bac37f8a4e0c72c4ad4e26968203ad75d/aggregate-1.0.1-py3-none-any.whl", hash = "sha256:5fd348bb9ace31fc05ba0cc61cf64d663851535b823951270db168892d7b5800", size = 1249522, upload-time = "2026-10-07T15:11:01.28Z" },
 ]
-provides-extras = ["dev", "notebook", "numba", "massive", "viz", "all"]
 
 [[package]]
 name = "aggregate-api"
-version = "1.0.0a201"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "aggregate" },
@@ -91,7 +55,7 @@ status = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aggregate", editable = "../../worktrees/aggregate_REFACTOR" },
+    { name = "aggregate", specifier = ">=1.0.1,<2" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "greater-tables", specifier = ">=6.0.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },

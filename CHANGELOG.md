@@ -4,6 +4,66 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0
+
+[First-Release] **the first release anybody else can install**, timed with the
+`aggregate` library's 1.0.1. Plan `dev/done/plan-1.0.0-release.md`. The version
+number is the smallest part of it: three packaging defects meant that until now
+**no installation route delivered a working application**, and all three were
+invisible to both test suites because both read the working tree in place.
+
+- **Every dependency is a registry dependency.** `aggregate` 1.0.1 published on
+  2026-10-07, which was the one blocker: the whole `1.0.0a` line was
+  unpublished, and the api imports `parser_errors`, `parser._PARSER`, `charts`,
+  `exhibits`, `plugins`, `bounds`, `decl_writer` and `constants` from it. The
+  editable path source in `[tool.uv.sources]` is gone and a fresh clone syncs
+  with nothing checked out beside it. The pin is `aggregate>=1.0.1,<2`: the
+  floor because 1.0.0 is not on PyPI at all (the library's own 1.0.1 was the
+  packaging fix that put `aggregate.charts` and `.exhibits` in the wheel) and
+  because a bare requirement let a resolver reach 0.30.1, which has none of
+  these modules; the ceiling because two of the imported names are private.
+- **The path source was fatal to a `uv` install, not merely unhelpful.** uv
+  honors `[tool.uv.sources]` when the project is installed as a git dependency
+  and resolves the relative path inside the git repository, so
+  `uv pip install git+https://github.com/mynl/aggregate_api` failed looking for
+  a subdirectory named `..\..\worktrees\aggregate_REFACTOR`. pip never read the
+  table, which is why the failure was uv-only and invisible here.
+- **The wheel carries the whole web bundle.** `package-data` read `static/*`,
+  and a `package_data` glob matches one directory without recursing, so the
+  distribution shipped `index.html` and none of the thirteen scripts and
+  stylesheets it loads. The installed app answered 200 for `/` and 404 for every
+  asset: a painted shell that did nothing. `static/assets/*` is its own entry
+  now, and `scripts/release-check.ps1` fails the release if it stops being one.
+- **`scripts/release-check.ps1`**, the rehearsal that found all of the above.
+  Builds the sdist and wheel, asserts the wheel carries `index.html`,
+  `status_page.html` and every asset the page references, installs it into a
+  throwaway environment where nothing in this tree can reach the resolution, runs
+  the full suite against the installed package, then serves the app and fetches
+  every file it loads. This, not `uv run pytest`, is the gate on a release.
+- **One test passed on the locked pins and failed on the ones a fresh install
+  resolves.** `test_health_needs_no_thread_token` asserted `/v1/health` was
+  mounted by walking `app.routes` for a matching `.path`. FastAPI 0.142 wraps an
+  included router in an `_IncludedRouter` whose `path` is `None`, so the walk
+  found nothing and failed a correctly mounted route. It reads the meta router's
+  own route list now, and makes a live request besides, so a further shape
+  change cannot make it pass vacuously.
+- **`tests/test_packaging.py`**, three tests: every local file the built
+  `index.html` and `lite.html` load exists on disk, and `package-data` still
+  names the asset directory. The first catches a stale or half-built bundle,
+  which Vite's content-hashed filenames make easy to produce.
+- **PyPI metadata**: `keywords` for search, and `Homepage`, `Documentation`,
+  `Changelog` and `Issues` for the sidebar. The classifier moves to
+  `Development Status :: 4 - Beta` rather than `5 - Production/Stable`. 1.0.0
+  here means installable and supported, not a frozen interface: the `/v1`
+  surface still follows what the bundled web app needs.
+
+Measured against the built 1.0.0 wheel in a clean Python 3.13 environment with
+`aggregate` 1.0.1, `greater-tables` 6.0.0, FastAPI 0.142.2 and Starlette 1.7.0
+all from PyPI: 490 tests pass, `GET /` and all fourteen files it references
+answer 200, and `/v1/meta` reports `1.0.0`. The web suite is 277 tests. Nothing
+in the service's behavior changed, so a deployment that was working keeps
+working; this release is about what reaches somebody who did not build it.
+
 ## 1.0.0a202
 
 [Entry-Lock-Async] **a201 stopped the server dying and left it refusing most of the room.** Plan `dev/plan-demo-load.md` item 0, part 2 of three. The bounded wait was necessary and not sufficient.

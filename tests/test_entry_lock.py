@@ -128,6 +128,17 @@ def test_health_needs_no_thread_token(client):
     cannot do: a sync route or a sync dependency would reintroduce the token
     requirement, and this is the route somebody hits to ask whether the server
     is alive at exactly the moment it is not.
+
+    Notes
+    -----
+    The structural half reads ``meta_routes.router.routes``, the router's own
+    list, rather than the application's. ``app.routes`` was flat through FastAPI
+    0.136, so matching an included route on ``.path`` worked; 0.142 wraps each
+    included router in an ``_IncludedRouter`` whose ``path`` is ``None``, and the
+    match silently found nothing and failed the test on a correctly mounted
+    route. The router's list is the thing this test is actually about and has
+    not moved. The live request below covers what the introspection is standing
+    in for, so a third shape change cannot make this pass vacuously.
     """
     import inspect
 
@@ -136,10 +147,14 @@ def test_health_needs_no_thread_token(client):
     assert inspect.iscoroutinefunction(meta_routes.health)
     assert inspect.iscoroutinefunction(meta_routes.meta)
 
-    for route in ("/v1/health", "/v1/meta"):
-        found = [r for r in client.app.routes if getattr(r, "path", None) == route]
-        assert found, f"{route} is not mounted"
+    for path in ("/health", "/meta"):
+        found = [r for r in meta_routes.router.routes if getattr(r, "path", None) == path]
+        assert found, f"{path} is not on the meta router"
         assert not found[0].dependant.dependencies, (
-            f"{route} grew a dependency; a sync one needs a thread token and "
+            f"{path} grew a dependency; a sync one needs a thread token and "
             "would make it unreachable under exhaustion"
         )
+
+    response = client.get("/v1/health")
+    assert response.status_code == 200, response.text
+    assert response.json()["ok"] is True

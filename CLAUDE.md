@@ -11,12 +11,14 @@ It exposes `build()`, the live `Aggregate` / `Portfolio` objects, plotting,
 pricing, and DecL helpers (completion, lexing, grammar) over HTTP/JSON, and
 ships a Bootstrap 5 + CodeMirror 6 DecL playground that talks to that service.
 
-This is a **private side project**. It was originally built inside the
-`aggregate` repo, then extracted because it was a distraction from the core
-library and should ship separately. The goal here is to keep it alive, learn
-from it, and develop it further at a relaxed pace.
+This is a **side project**, released but not staffed. It was originally built
+inside the `aggregate` repo, then extracted because it was a distraction from
+the core library and should ship separately. The goal here is to keep it alive,
+learn from it, and develop it further at a relaxed pace. Published as 1.0.0 on
+2026-10-07, alongside the library's 1.0.1.
 
-Author: Stephen J. Mildenhall. Private repo: https://github.com/mynl/aggregate_api.
+Author: Stephen J. Mildenhall. Public repo:
+https://github.com/mynl/aggregate_api. On PyPI as `aggregate_api`.
 
 ## Relationship to `aggregate`
 
@@ -38,14 +40,35 @@ This package **depends on** `aggregate`; it does not vendor it. The api imports:
 This list is not the whole surface. `T:/worktrees/CLAUDE.md` carries the audited
 one, including the three tolerated private names.
 
-`aggregate.parser_errors` is recent and lives only in the in-development
-`1.0.0a` line (PyPI stops at 0.30.1). So `aggregate` is the one dependency that
-**must** be an editable path source: a clone of this repo needs
-`aggregate_REFACTOR` checked out beside it before `uv sync` can succeed. See
-`[tool.uv.sources]` in `pyproject.toml` and
-`dev/done/plan-0001-bootstrap-standalone.md`. Do **not** copy library internals into
-this repo; depend on them and, if something is missing or awkward to import,
-raise it as an upstream change in `aggregate`.
+`aggregate` **stopped being a path source at 1.0.0 of this package.** Through
+`1.0.0a202` it had to be one: `parser_errors` and the rest lived only in the
+in-development `1.0.0a` line and PyPI stopped at 0.30.1, so a clone needed
+`aggregate_REFACTOR` checked out beside it before `uv sync` could succeed. The
+library published 1.0.1 on 2026-10-07 and that ended. There is no
+`[tool.uv.sources]` table any more, and a fresh clone syncs with nothing beside
+it. The pin is `aggregate>=1.0.1,<2`; `dev/done/plan-1.0.0-release.md` explains
+both bounds, and the comment where the table used to sit explains why removing
+it was necessary rather than merely tidy.
+
+**Consequence for co-development, and it is easy to trip over.** `uv sync` now
+installs the *released* library, so working against the sibling worktree is an
+explicit extra step and any `uv sync`, including the one every version bump
+runs, silently undoes it:
+
+```
+uv pip install -e V:/worktrees/aggregate_REFACTOR     # after a sync
+uv run --no-sync ...                                  # to work in between
+```
+
+`/v1/meta` reports `aggregate_version` from `importlib.metadata`, so that is
+where to look when behavior does not match the worktree. This is the same recipe
+`greater-tables` has used since a53.
+
+Do **not** copy library internals into this repo; depend on them and, if
+something is missing or awkward to import, raise it as an upstream change in
+`aggregate`. The two private names (`parser._PARSER`,
+`parser_errors._TERMINAL_LABELS`) are why the pin has a ceiling: re-check them
+at each library minor rather than trusting the range.
 
 `greater-tables` used to be a path source for the same reason and **is not any
 more**: 6.0.0 shipped to PyPI at a53, so it is an ordinary registry dependency
@@ -196,16 +219,27 @@ in one mechanical sweep that would bury real diffs.
 These are standing rules, to follow without being re-asked. The cadence
 mirrors the main `aggregate` project.
 
+**The version scheme changed at 1.0.0.** Through `1.0.0a202` every bump was one
+more alpha serial. Released, it is ordinary SemVer per the house rules: a feature
+or behavior change takes the minor (1.0.0 to 1.1.0 to 1.2.0), a fix takes the
+patch. Do not crawl, and do not go back to serials.
+
 - **Every plan-based change bumps the version.** Any code change executed from a
-  `dev/plan-*.md` bumps the `1.0.0a*` version in `pyproject.toml`. Pure tidying
-  (file moves, comment/doc-only edits with no behavior change) does not.
-- **Commit each version bump.** When a plan-based change bumps the `1.0.0a*`
-  version, commit the whole batch (source + tests + `CHANGELOG.md` + the plan doc
-  + `dev/TODO.md` + `pyproject.toml` + `uv.lock`) in one commit with a **one-line**
-  message. The matching `CHANGELOG.md` section is the commit's detailed
-  description, so the subject shouldn't restate it. Match the git-log convention:
-  `[aNN] <terse summary>`. The built SPA under `src/aggregate_api/static/` is
-  gitignored, so it is never part of the commit.
+  `dev/plan-*.md` bumps `version` in `pyproject.toml`. Pure tidying (file moves,
+  comment or doc-only edits with no behavior change) does not.
+- **Commit each version bump.** Commit the whole batch (source + tests +
+  `CHANGELOG.md` + the plan doc + `dev/TODO.md` + `pyproject.toml` + `uv.lock`)
+  in one commit with a **one-line** message. The matching `CHANGELOG.md` section
+  is the commit's detailed description, so the subject shouldn't restate it. The
+  git-log convention is the bracketed version, which carried 200 commits as
+  `[aNN]` and continues as the release number: `[1.1.0] <terse summary>`. The
+  built SPA under `src/aggregate_api/static/` is gitignored, so it is never part
+  of the commit.
+- **A release is more than a bump.** Publishing to PyPI, tagging, and the GitHub
+  release are the author's, and `.\scripts\release-check.ps1` is the gate on all
+  three: it builds the distributions and runs the suite against the installed
+  wheel in a clean environment, which is the only check that sees what an
+  installer actually receives. `V:\dev\RELEASE-PROCESS.md` is the checklist.
 - **Rebuild the SPA at the bump when `web/` moved.** `.\scripts\build-web.ps1`,
   after the commit and beside the re-sync below. Every gate and harness reads
   `web/src/` directly, so an SPA-only bump can be green everywhere and be
