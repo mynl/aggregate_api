@@ -93,6 +93,54 @@ test('generateTower always advances and always terminates', () => {
     }
 });
 
+test('generateTower tops the stack at a cap below the asked detachment', () => {
+    // The policy limit on `Capstone.SelectedLosses` is 10,000, and a span asked
+    // to reach 50,000 would otherwise stack past it into layers no single claim
+    // can reach.
+    const layers = generateTower(1000, 50000, 10000);
+    assert.ok(layers.length > 1, 'a capped stack is still a stack');
+    const top = layers[layers.length - 1];
+    assert.equal(top.attach + top.limit, 10000,
+        'the cap is the top bound exactly, not the snap above it');
+    // Still contiguous from the snapped attachment, and still all positive.
+    assert.equal(layers[0].attach, 1000);
+    for (let i = 1; i < layers.length; i++) {
+        assert.equal(layers[i].attach, layers[i - 1].attach + layers[i - 1].limit);
+        assert.ok(layers[i].limit > 0, 'the clamp leaves no zero-width layer');
+    }
+});
+
+test('generateTower ignores a cap above the asked detachment', () => {
+    // A cap that never bites changes nothing, which is what lets the occurrence
+    // tier pass the policy limit in unconditionally.
+    assert.deepEqual(generateTower(1000, 20000, 1e9), generateTower(1000, 20000));
+    // And so does an absent, null or non-finite one.
+    assert.deepEqual(generateTower(1000, 20000, null), generateTower(1000, 20000));
+    assert.deepEqual(generateTower(1000, 20000, Infinity), generateTower(1000, 20000));
+});
+
+test('generateTower pins the top at a cap sitting on the detachment', () => {
+    // Not a no-op, and this is where the two readings part. Uncapped, the stack
+    // is asked to *reach* 10,000 and so passes it, topping out at 15,000. With
+    // the cap on the same number the overshoot is exactly what is not allowed,
+    // so the top bound is 10,000.
+    const uncapped = generateTower(0, 10000);
+    const capped = generateTower(0, 10000, 10000);
+    const topOf = (ls) => ls[ls.length - 1].attach + ls[ls.length - 1].limit;
+    assert.equal(topOf(uncapped), 15000);
+    assert.equal(topOf(capped), 10000);
+});
+
+test('generateTower yields nothing for a cap at or below the attachment', () => {
+    // There is no width left to cover, so the generator says so and
+    // `composeTower` refuses in the preview line rather than writing a layer
+    // that covers nothing.
+    assert.deepEqual(generateTower(10000, 50000, 10000), []);
+    assert.deepEqual(generateTower(20000, 50000, 10000), []);
+    // The snap counts: 9,800 snaps to 10,000, which is the cap itself.
+    assert.deepEqual(generateTower(9800, 50000, 10000), []);
+});
+
 test('shareLadder climbs from the box to 95 percent', () => {
     const ladder = shareLadder(0.6, 5);
     assert.equal(ladder.length, 5);

@@ -122,7 +122,8 @@ from ..capability import (
     PNL_PREMIUM_STYLE_SUPPORTED, can_sharpen, capability_for, narrative_for,
 )
 from ..config import Settings, get_settings
-from ..layer_pricing import indication as layer_indication, price_clause
+from ..layer_pricing import (
+    indication as layer_indication, policy_limit, price_clause)
 from ..library import get_underwriter
 from ..library_notes import from_library
 from ..net import client_address
@@ -133,7 +134,7 @@ from ..pricing import (
     run_calibration, run_evaluation, run_natural_allocation,
     run_pricing_preview, run_ruin,
 )
-from ..tables import MAX_ROWS, frame_document
+from ..tables import MAX_ROWS, frame_document, frame_document_dict
 from ..serializers import (
     bin_density,
     bivariate_marginal_frame,
@@ -878,6 +879,7 @@ def _summary_fields(obj: Any) -> dict:
         "cv": cv,
         "validation": validation,
         "has_reins": reinsured,
+        "policy_limit": policy_limit(obj),
         "value_type": str(value_type) if value_type is not None else None,
         "note": note or None,
         "tags": tags,
@@ -3433,6 +3435,65 @@ def post_explode(
     return {"program": spread(program), "description": None, **built}
 
 
+def _quote_span(row: dict) -> str:
+    """One quote row's layer as a span, the way a slip writes it.
+
+    ``1,000 xs 1,000 @ 95%``, and ``inf xs 10,000`` on an unlimited cover, which
+    is how the request spells one. The placement is dropped on a whole-layer
+    share, since ``@ 100%`` says nothing.
+    """
+    limit = row["limit"]
+    span = "inf" if limit is None else f"{limit:,g}"
+    text = f"{span} xs {row['attach']:,g}"
+    share = row["share"]
+    return text if abs(share - 1.0) < 1e-9 else f"{text} @ {share:.0%}"
+
+
+def _quote_frame(quotes: list[dict]) -> pd.DataFrame:
+    """The quote sheet as a frame, indexed by layer name.
+
+    Parameters
+    ----------
+    quotes : list of dict
+        ``layer_pricing.layer_quotes`` rows, in clause order.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Twelve columns in reading order, indexed by ``Layer``: the layer's name
+        and span, what it is expected to cost and how variable that is, the four
+        candidate prices side by side with the one that bound, and then the
+        price and the two ratios it implies.
+
+    Notes
+    -----
+    The index is the label rather than the span, which is the point of the
+    column: a span says what a layer covers and a label says where it sits in
+    the stack. Both are carried, since a reader checking a quote against the
+    clause needs the span and a reader reading down the tower needs the name.
+
+    ``Span`` and ``Binds`` are left as object dtype deliberately, so no
+    thousands separator reaches a string, and the amounts stay numeric so the
+    interactive grid can sort and filter on them.
+    """
+    return pd.DataFrame(
+        {
+            "Span": [_quote_span(q) for q in quotes],
+            "EL": [q["el"] for q in quotes],
+            "CV": [q["cv"] for q in quotes],
+            "SD load": [q["sd_load"] for q in quotes],
+            "PH": [q["ph"] for q in quotes],
+            "Dual": [q["dual"] for q in quotes],
+            "Min ROL": [q["min_rol"] for q in quotes],
+            "Binds": [q["binds"] for q in quotes],
+            "Premium": [q["premium"] for q in quotes],
+            "ROL": [q["rol"] for q in quotes],
+            "LR": [q["loss_ratio"] for q in quotes],
+        },
+        index=pd.Index([q["label"] for q in quotes], name="Layer"),
+    )
+
+
 @router.post("/objects/{oid}/reins", response_model=models.DerivedResponse)
 def post_reins(
     oid: str,
@@ -3491,8 +3552,18 @@ def post_reins(
     program = collapse_program(program)
     built = post_object(models.BuildRequest(decl=program), request,
                         settings, cache, audit, uw, sessions)
+    # The quote sheet rides as a table document as well as as rows, so the SPA
+    # can render it in whichever table view the page is set to rather than
+    # always as the interactive grid. Keyed `quotes`, the way `BoundsResponse`
+    # keys its own `table`. The rows stay on the wire: they are the api's answer
+    # for a caller that is not a browser.
+    ir = None
+    if quotes:
+        ir = {"quotes": frame_document_dict(
+            _quote_frame(quotes), which="reins_quotes",
+            formats="reins_quotes")}
     return {"program": spread(program), "description": None,
-            "quotes": quotes, **built}
+            "quotes": quotes, "ir": ir, **built}
 
 
 @router.post("/objects/{oid}/layers/indication",

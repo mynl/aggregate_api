@@ -30,6 +30,7 @@ accurate and is not worked around; see the module docstring of
 from __future__ import annotations
 
 import math
+import re
 import warnings
 
 import pytest
@@ -237,6 +238,40 @@ def test_the_minimum_rate_on_line_binds_at_the_top_and_nowhere_lower(
             uw, gross, [("occurrence", 1.0, 50_000, 50_000)])
     assert remote["floored"] is True
     assert remote["rol"] == pytest.approx(MIN_ROL, rel=1e-9)
+    # And since a198 it says so by name: the minimum is the fourth candidate,
+    # not a floor applied after the three measures have been compared, so the
+    # row no longer reads `dual` beside a premium the dual transform did not
+    # produce. `floored` is unchanged and still rides, since it is the only
+    # signal the indication path has.
+    assert remote["binds"] == "min_rol"
+    assert remote["min_rol"] == pytest.approx(remote["premium"], rel=1e-9)
+    assert all(row["binds"] in {"sd", "ph", "dual"} for row in quiet_quotes)
+
+
+def test_an_unlimited_layer_has_no_minimum_rate_on_line_candidate(uw, gross):
+    """No rate-on-line base, so it competes on three rather than four."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        row, = layer_quotes(uw, gross, [("occurrence", 1.0, math.inf, 10_000)])
+    assert row["min_rol"] is None
+    assert row["binds"] in {"sd", "ph", "dual"}
+    assert row["floored"] is False
+
+
+def test_every_quote_row_carries_a_layer_name(uw, gross):
+    """The clause's own ``as "..."`` where it has one, and ``Occ n`` otherwise.
+
+    The fallback is numbered within its own tier in the order the layers arrive,
+    which is the order the clause spells them.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        rows = layer_quotes(
+            uw, gross,
+            [("occurrence", 1.0, 1000, 1000), ("occurrence", 1.0, 5000, 5000),
+             ("aggregate", 1.0, 5000, 5000)],
+            labels=["Working", None])
+    assert [row["label"] for row in rows] == ["Working", "Occ 2", "Agg 1"]
 
 
 def test_an_aggregate_cover_costs_more_than_the_occurrence_layer(uw, gross):
@@ -420,6 +455,68 @@ def test_the_reins_route_grosses_up_a_ceding_commission(client):
     one = bare.json()["quotes"][0]["premium"]
     two = grossed.json()["quotes"][0]["premium"]
     assert two * 0.75 == pytest.approx(one, rel=2e-3)
+
+
+def test_the_reins_route_serves_the_quote_sheet_as_a_document(client):
+    """The table document beside the rows, so the SPA can render either view.
+
+    Keyed ``quotes``, the way ``BoundsResponse`` keys its own ``table``. Through
+    a197 the row mounted the rows with the interactive grid directly and was the
+    one table in the app that ignored the page's table-view preference, because
+    there was no document for the static walker to render.
+    """
+    oid = _build_via_api(client, BOOK)
+    cession = ('occurrence net of 1000 xs 1000 as "Occ 1" '
+               'and 5000 xs 5000 as "Occ 2"')
+    r = client.post(f"/v1/objects/{oid}/reins",
+                    json={"cession": cession, "price": True})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    doc = body["ir"]["quotes"]
+    assert doc["ir_version"]
+    # Eleven data columns beside the `Layer` stub, in the sheet's reading
+    # order. A document's column name is a list, one entry per header level.
+    names = [lvl for col in doc["columns"] for lvl in col["name"]]
+    assert names == ["Layer", "Span", "EL", "CV", "SD load", "PH", "Dual",
+                     "Min ROL", "Binds", "Premium", "ROL", "LR"]
+    # Every row carries its name and its fourth candidate.
+    quotes = body["quotes"]
+    assert [q["label"] for q in quotes] == ["Occ 1", "Occ 2"]
+    assert all(q["min_rol"] is not None for q in quotes)
+    assert all(q["binds"] in {"sd", "ph", "dual", "min_rol"} for q in quotes)
+
+
+def test_a_priced_rate_on_line_reaches_the_clause_without_float_dust(client):
+    """The quote sheet and the program agree to the digit.
+
+    The dust was never a rounding failure in this repo: the api wrote
+    ``rol 12.1705%``, the parser computed ``12.1705 / 100`` as
+    ``0.12170500000000001``, and ``decl_writer._fmt_num`` rendered that with
+    ``repr``, the shortest round-tripping string. The bare fraction is the
+    library's own canonical spelling for exactly this reason, and
+    ``ROL_FIGS`` rounds the rate rather than the premium so the number in the
+    clause is the number in the sheet.
+    """
+    oid = _build_via_api(client, BOOK)
+    cession = 'occurrence net of 2000 xs 3000 and 5000 xs 5000'
+    r = client.post(f"/v1/objects/{oid}/reins",
+                    json={"cession": cession, "price": True})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    program = body["program"]
+    rates = re.findall(r"rol (\S+)", program)
+    assert len(rates) == 2, program
+    for text, quote in zip(rates, body["quotes"]):
+        assert quote["spelling"] == "rol"
+        # Four significant figures at most, a bare fraction, and no `%`.
+        assert re.fullmatch(r"0\.\d{1,6}", text), text
+        assert len(text.lstrip("0.").lstrip("0")) <= 4, text
+        assert float(text) == quote["rol"]
+        # And the premium the sheet prints is that rate times the base, so a
+        # reader checking one against the other finds them equal.
+        assert quote["premium"] == pytest.approx(
+            quote["rol"] * quote["share"] * quote["limit"], rel=1e-12)
+    assert "%" not in program.split("note{")[0]
 
 
 def test_the_reins_route_refuses_a_commission_of_one(client):

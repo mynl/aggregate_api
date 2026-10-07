@@ -73,6 +73,11 @@ const state = {
     name: null,
     mean: null,             // headline mean, seeding the Bounds premium field
     hasReins: false,        // the Price basis selector; the Reins tab reads `exhibits`
+    // The largest occurrence limit the program declares, or null where the
+    // cover is unlimited or the kind declares none. Quick Re's Tower caps its
+    // stack here: an occurrence layer above the policy limit covers nothing,
+    // because no single claim can reach it.
+    policyLimit: null,
     // What the object can answer, straight off the build response and already
     // in the shape `nav.js` takes: `{built, exhibits, charts, flags}`. The app
     // holds no per-kind table of its own, so a new library exhibit reaches the
@@ -352,6 +357,7 @@ function adoptBuild(res) {
     // refetch a frame to find it. The summary chips read the response direct.
     state.mean = res.mean;
     state.hasReins = Boolean(res.has_reins);
+    state.policyLimit = res.policy_limit ?? null;
     // A calibration is about the object it was made on, so a new object drops
     // both held pricing answers. `clearPanes` cannot do this: it also runs on a
     // perspective flip, where holding them is exactly what makes the toggle a
@@ -367,6 +373,7 @@ function adoptBuild(res) {
 function forgetBuild() {
     state.id = state.kind = state.name = state.mean = null;
     state.hasReins = false;
+    state.policyLimit = null;
     _builtDecl = null;
     forgetPricing();
     applyCapability(null);
@@ -3052,6 +3059,16 @@ async function composeCession() {
  * **currency** is refused: the ladder steps a fraction up the stack, and an
  * absolute amount of cover means nothing across layers of different limits.
  *
+ * **The occurrence tier is capped at the policy limit.** A tower running above
+ * it has layers no single claim can reach, so the stack stops there and the
+ * span above the limit is simply not written. A cap at or below the attachment
+ * leaves nothing to cede and the row refuses, naming the limit.
+ *
+ * The aggregate tier is **not** capped, and that asymmetry is the point rather
+ * than an omission: an aggregate cover above the per-claim limit is a real
+ * cover, since the year's total is not bounded by any one claim's, so an
+ * aggregate stack runs to the span as typed.
+ *
  * This cedes like Add re rather than replacing what is there, so pressing it on
  * an already ceded object adds a tier's worth of layers. The author's ruling:
  * expect one press, and the program box above is where a second thought is
@@ -3066,9 +3083,20 @@ async function composeTower() {
         throw new Error(`Tower needs the share as a percentage: ${layerNumber(share.value)} `
             + 'is an amount of cover, which means something on one layer only');
     }
-    let layers = generateTower(attachAmount, detachAmount);
+    const cap = basis === 'aggregate' ? null : state.policyLimit;
+    let layers = generateTower(attachAmount, detachAmount, cap);
     if (!layers.length) {
-        layers = [{ attach: attachAmount, limit: detachAmount - attachAmount }];
+        if (cap !== null && !(attachAmount < cap)) {
+            throw new Error(
+                `attach reads ${layerNumber(attachAmount)} here, at or above `
+                + `the policy limit of ${layerNumber(cap)}: an occurrence `
+                + 'layer there covers nothing, since no one claim can reach it');
+        }
+        // The span was too narrow to stack, not capped out of existence. One
+        // layer over the span is the honest answer, trimmed to the cap for the
+        // same reason the stack is.
+        const top = cap === null ? detachAmount : Math.min(detachAmount, cap);
+        layers = [{ attach: attachAmount, limit: top - attachAmount }];
     }
     const shares = shareLadder(share ? share.value : 1, layers.length);
     const prefix = basis === 'aggregate' ? 'Agg' : 'Occ';
@@ -3212,11 +3240,12 @@ function clearCessionDraft() {
 /**
  * The last priced press, layer by layer, under the row that wrote it.
  *
- * Seven columns and the story is in three of them: `sd_load`, `ph` and `dual`
- * side by side, with `binds` saying which won. Watch `dual` bind low in a tower
- * and `ph` bind high, which is the method working rather than a coincidence:
- * the dual transform loads the body of a distribution and the proportional
- * hazard transform loads the tail.
+ * Twelve columns and the story is in five of them: `SD load`, `PH`, `Dual` and
+ * `Min ROL` side by side, with `Binds` saying which won. Watch `Dual` bind low
+ * in a tower and `PH` bind high, which is the method working rather than a
+ * coincidence: the dual transform loads the body of a distribution and the
+ * proportional hazard transform loads the tail. `Min ROL` binds at the top,
+ * where the three measures all come in under the minimum rate on line.
  *
  * Here rather than as a sub-tab leaf, which is the author's ruling of
  * 2026-10-06: these rows belong to the press and not to the object, so a leaf
@@ -3224,36 +3253,33 @@ function clearCessionDraft() {
  * switch. Cleared by `clearCessionDraft`, which runs wherever the editor's
  * program is replaced, for the same reason the boxes are.
  *
- * @param {Array<object>|null} rows the response's `quotes`, or null to empty.
+ * **Through a197 this mounted the rows with `mountGrid` directly**, so it was
+ * the one table in the app that ignored the page-wide table-view preference and
+ * was always the interactive grid. It goes through `mountTable({doc})` and
+ * registers with `onTableViewChange` now, like every other table, which is what
+ * the route serving a table document is for.
+ *
+ * @param {object|null} doc the response's `ir.quotes` document, or null to
+ *     empty.
  */
-function renderQuoteTable(rows) {
+function renderQuoteTable(doc) {
     const host = $('qr-quotes');
     if (!host) return;
-    clearGrids('qr-quotes');
-    empty(host);
-    host.classList.toggle('d-none', !rows || !rows.length);
-    if (!rows || !rows.length) return;
-    host.appendChild(el('p', { className: 'qr-quotes-title' },
-                        'Last quote, layer by layer'));
-    const mount = el('div');
-    host.appendChild(mount);
-    mountGrid('qr-quotes', mount, {
-        columns: ['layer', 'el', 'cv', 'sd_load', 'ph', 'dual', 'binds',
-                  'premium', 'rol', 'LR'],
-        rows: rows.map((row) => [
-            `${row.limit === null ? 'inf' : fmt(row.limit)} xs ${fmt(row.attach)}`
-                + (row.share === 1 ? '' : ` @ ${percent(row.share)}`),
-            money(row.el),
-            row.cv === null ? '' : row.cv.toPrecision(3),
-            money(row.sd_load),
-            money(row.ph),
-            money(row.dual),
-            row.binds,
-            money(row.premium),
-            row.rol === null ? '' : percent(row.rol),
-            row.loss_ratio === null ? '' : percent(row.loss_ratio),
-        ]),
-    });
+    host.classList.toggle('d-none', !doc);
+    const draw = () => {
+        clearGrids('qr-quotes');
+        empty(host);
+        if (!doc) return;
+        const root = el('div');
+        host.appendChild(root);
+        root.appendChild(el('p', { className: 'qr-quotes-title' },
+                            'Last quote, layer by layer'));
+        const mount = el('div');
+        root.appendChild(mount);
+        mountTable('qr-quotes', mount, { doc }, GRID_FULL);
+        onTableViewChange('qr-quotes', draw, root);
+    };
+    draw();
 }
 
 /**
@@ -3288,13 +3314,13 @@ async function cedeWith(button, compose) {
         if (node) node.textContent = err.message;
         return;
     }
-    let quotes = null;
+    let sheet = null;
     await runDerivation(button, 'Ceding…', async (id) => {
         const res = await api.reins(id, cession, { price: true });
-        quotes = res.quotes;
+        sheet = res.ir?.quotes || null;
         return res;
     }, 'reinsurance');
-    renderQuoteTable(quotes);
+    renderQuoteTable(sheet);
     // Back to the single-layer reading of the span, which is what this line
     // always shows. See the section comment.
     renderCessionPreview();

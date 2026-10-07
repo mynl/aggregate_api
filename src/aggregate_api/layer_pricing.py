@@ -6,14 +6,21 @@ quote sheet rather than a bare structure. One method, no options, no radio
 buttons; the parameters are the constants at the top of this module and nothing
 in the UI reaches them.
 
-The method, per layer: three candidate prices, take the largest, then floor it.
+The method, per layer: four candidate prices, take the largest.
 
 .. code-block:: text
 
     sd_load   = el + LAMBDA * sd
-    technical = max(sd_load, ph_price, dual_price)
-    premium   = max(technical, MIN_ROL * share * limit)
+    min_rol   = MIN_ROL * share * limit
+    premium   = max(sd_load, ph_price, dual_price, min_rol)
     written   = premium / (1 - cede)
+
+The minimum rate on line is a **candidate** rather than a floor applied after
+the comparison. It is the same number either way, and it says more: ``binds``
+names the measure that set the price, so a layer quoted off the minimum reads
+``min_rol`` instead of reading ``dual`` beside a premium the dual transform did
+not produce. An unlimited layer has no rate-on-line base, so it has no fourth
+candidate and competes on three.
 
 Why each piece is there, since none of it is a clamp and the shaping is meant
 to be read off the formula rather than configured.
@@ -131,6 +138,14 @@ ROL_THRESHOLD = 0.10
 
 #: Significant figures the written premium is rounded to. A quote-sheet number.
 SIG_FIGS = 3
+
+#: Significant figures the rate on line is rounded to, on a ``rol``-spelled
+#: layer where the rate is what the clause carries.
+#:
+#: Four rather than three, because the rate is a small number read to the basis
+#: point: a top-of-tower rate of 1.217% rounded to three figures is 1.22%, which
+#: moves the premium by a quarter of a percent for no gain in legibility.
+ROL_FIGS = 4
 
 #: Cap on the auxiliary pricing builds. See the module Notes for why 16 is
 #: enough and why the object's own log2 is not used.
@@ -396,6 +411,28 @@ def _expected_count(obj: Any, tier: str, attach: float) -> float | None:
     return float(obj.n) * float(obj.sev.sf(attach))
 
 
+def _min_rol_premium(share: float, limit: float) -> float | None:
+    """The minimum-rate-on-line premium for one layer, or ``None``.
+
+    One place computes it, because it is read twice: as the fourth candidate in
+    :func:`layer_quotes`, and as the floor :func:`_finish` applies on the
+    indication path, which has no distortion candidates to compare it against.
+
+    Parameters
+    ----------
+    share, limit : float
+        The layer as placed. ``limit`` may be ``inf``.
+
+    Returns
+    -------
+    float or None
+        ``None`` on an unlimited layer: a fraction of an infinite limit is not
+        a number, and a rate on line is not how such a cover is quoted anyway.
+    """
+    base = share * limit
+    return MIN_ROL * base if math.isfinite(base) else None
+
+
 def _spelling(attach_pr: float, limit: float) -> str:
     """How this layer's premium is written: ``deposit`` or ``rol``.
 
@@ -418,6 +455,13 @@ def _finish(el: float, sd: float, technical: float, tier: str,
     The tail shared by the no-build indication and the full quote, so the floor,
     the gross-up, the rounding and the spelling decision cannot drift between
     what the form promises and what the press writes.
+
+    **What gets rounded follows the spelling.** A ``deposit`` layer carries its
+    premium in the clause, so the premium is the quote-sheet number and the rate
+    is its quotient. A ``rol`` layer carries its rate, so the rate rounds to
+    :data:`ROL_FIGS` and the premium follows from it. Either way the clause and
+    this row agree to the digit, which is the point: the clause states one of
+    the pair and the quote sheet is where the other is checked.
 
     Parameters
     ----------
@@ -447,10 +491,17 @@ def _finish(el: float, sd: float, technical: float, tier: str,
     if not (0.0 <= cede < 1.0):
         raise ValueError(f"cede is a fraction below 1, got {cede!r}")
     base = share * limit
-    floor = MIN_ROL * base if math.isfinite(base) else 0.0
+    min_rol = _min_rol_premium(share, limit)
+    floor = min_rol if min_rol is not None else 0.0
     premium = max(technical, floor)
-    written = _round_sig(premium / (1.0 - cede))
     spelling = _spelling(attach_pr, limit)
+    gross = premium / (1.0 - cede)
+    if spelling == "rol" and base > 0:
+        rol = _round_sig(gross / base, ROL_FIGS)
+        written = rol * base
+    else:
+        written = _round_sig(gross)
+        rol = (written / base) if math.isfinite(base) and base > 0 else None
     return {
         "tier": tier,
         "attach": float(attach),
@@ -463,7 +514,7 @@ def _finish(el: float, sd: float, technical: float, tier: str,
         "lol": (el / base) if base > 0 and math.isfinite(base) else None,
         "floored": premium <= floor and floor > 0,
         "premium": written,
-        "rol": (written / base) if math.isfinite(base) and base > 0 else None,
+        "rol": rol,
         "spelling": spelling,
         "cede": float(cede),
         "loss_ratio": (el / written) if written > 0 else None,
@@ -542,21 +593,34 @@ def _layer_decl(share: float, limit: float, attach: float,
     Returns
     -------
     str
+
+    Notes
+    -----
+    **A rate on line is written as a bare fraction, never as a percentage.**
+    That is the library's own canonical spelling, and
+    ``decl_writer._render_reins_clause`` says what it is for: a bare number
+    re-parses identically, with no float dust. The ``%`` form does not. The
+    parser computes ``12.1705 / 100``, which is ``0.12170500000000001``, and
+    ``decl_writer._fmt_num`` renders a non-integral float with ``repr``, the
+    shortest string that round-trips, so a layer written ``rol 12.1705%`` comes
+    back out of ``reins_program`` as ``rol 0.12170500000000001``. Written
+    ``rol 0.121705`` it comes back verbatim.
     """
     head = "" if abs(share - 1.0) < 1e-9 else f"{share * 100:g}% po "
     span = "inf" if not math.isfinite(limit) else f"{limit:g}"
     text = f"{head}{span} xs {attach:g}"
     if premium is not None:
         keyword, value = premium
-        text += (f" rol {value * 100:g}%" if keyword == "rol"
+        text += (f" rol {value:g}" if keyword == "rol"
                  else f" deposit {value:g}")
     if label:
         text += f' as "{label}"'
     return text
 
 
-def layer_quotes(uw: Any, obj: Any, layers, cede: float = CEDE) -> list[dict]:
-    """One quote per layer: the standard deviation load against two distortions.
+def layer_quotes(uw: Any, obj: Any, layers, cede: float = CEDE,
+                 labels=None) -> list[dict]:
+    """One quote per layer: three measures and the minimum rate on line.
 
     Parameters
     ----------
@@ -572,18 +636,38 @@ def layer_quotes(uw: Any, obj: Any, layers, cede: float = CEDE) -> list[dict]:
         ordering in ``occ_reins`` and ``agg_reins`` with the tier prepended.
     cede : float, optional
         Ceding commission, applied to every layer.
+    labels : sequence of (str or None), optional
+        The ``as "..."`` name of each layer, in the order given. A missing or
+        empty entry falls back to ``Occ n`` / ``Agg n``, numbered within its own
+        tier in the order the layers arrive, which is the order the clause
+        spells them. Shorter than ``layers`` is not an error; the tail falls
+        back.
 
     Returns
     -------
     list of dict
         One row per layer in the order given, each carrying every component and
-        not only the winner: ``sd_load``, ``ph``, ``dual``, which of the three
-        bound, and then the floored, grossed-up and rounded ``premium``. The
-        components are what the Reins quote table shows, and the demo is more
-        interesting for having them side by side.
+        not only the winner: ``sd_load``, ``ph``, ``dual``, ``min_rol``, which
+        of the four bound, the layer's ``label``, and then the grossed-up and
+        rounded ``premium``. The components are what the Reins quote table
+        shows, and the demo is more interesting for having them side by side.
 
     Notes
     -----
+    **The minimum rate on line is the fourth candidate, not a floor after the
+    fact.** Through a197 it was applied inside :func:`_finish` after the three
+    measures had been compared, so a layer priced off the minimum reported
+    ``binds = 'dual'`` beside a premium the dual transform did not produce, and
+    the only signal that the minimum had bitten was the ``floored`` boolean.
+    The premium is the same number; ``binds`` now names what set it.
+
+    ``label`` and ``min_rol`` are attached here rather than inside
+    :func:`_finish`, which the indication path shares. The response models carry
+    ``extra="forbid"``, and ``LayerIndication`` declares neither, so a row
+    carrying them would fail validation on the preview route. They belong
+    beside ``sd_load``, ``ph``, ``dual`` and ``binds`` in any case: all six are
+    the full quote's, and the indication has no clause to take a name from.
+
     The expected loss and standard deviation come from :func:`layer_moments` off
     the gross object rather than from the auxiliary build's own ``est_m`` and
     ``est_sd``. Two reasons: the closed form is exact where the auxiliary
@@ -596,18 +680,27 @@ def layer_quotes(uw: Any, obj: Any, layers, cede: float = CEDE) -> list[dict]:
     trips ``choquet_weights`` with "distorted atom weights materially
     negative", so it is clipped at zero and renormalized before pricing.
     """
+    given = list(labels or ())
+    counts: dict[str, int] = {}
     rows = []
-    for tier, share, limit, attach in layers:
+    for i, (tier, share, limit, attach) in enumerate(layers):
         el, sd = layer_moments(obj, tier, attach, limit, share)
         attach_pr = attachment_probability(obj, tier, attach)
         sd_load = el + LAMBDA * sd
         ph_price, dual_price = _distortion_prices(
             uw, obj, tier, share, limit, attach)
         candidates = {"sd": sd_load, "ph": ph_price, "dual": dual_price}
+        min_rol = _min_rol_premium(share, limit)
+        if min_rol is not None:
+            candidates["min_rol"] = min_rol
         binds = max(candidates, key=candidates.__getitem__)
+        counts[tier] = counts.get(tier, 0) + 1
+        label = (given[i] if i < len(given) else None) or (
+            f"{'Occ' if tier == 'occurrence' else 'Agg'} {counts[tier]}")
         row = _finish(el, sd, candidates[binds], tier, attach, limit, share,
                       attach_pr, cede)
         row.update(sd_load=sd_load, ph=ph_price, dual=dual_price, binds=binds,
+                   min_rol=min_rol, label=label,
                    count=_expected_count(obj, tier, attach))
         rows.append(row)
     return rows
@@ -691,7 +784,8 @@ def price_clause(uw: Any, obj: Any, cession, cede: float = CEDE
         kind = getattr(spec, f"{prefix}_kind", "") or "net of"
         labels = spec.spec.get(f"{prefix}_reins_label") or [None] * len(triples)
         quotes = layer_quotes(
-            uw, obj, [(tier, s, y, a) for s, y, a in triples], cede=cede)
+            uw, obj, [(tier, s, y, a) for s, y, a in triples], cede=cede,
+            labels=labels)
         parts = [
             _layer_decl(share, limit, attach, label,
                         (quote["spelling"],
@@ -700,8 +794,47 @@ def price_clause(uw: Any, obj: Any, cession, cede: float = CEDE
             for (share, limit, attach), label, quote
             in zip(triples, labels, quotes)
         ]
+        # The clause keeps the spec's own label, which is `None` where the
+        # cession wrote no `as "..."`; the fallback name belongs to the quote
+        # sheet's `Layer` column and not to the program text, where an invented
+        # name would come back out of `reins_program` as if it had been typed.
         clauses.append(f"{tier} {kind} " + " and ".join(parts))
         rows.extend(quotes)
     if not clauses:
         return cession, []
     return (clauses[0] if len(clauses) == 1 else clauses), rows
+
+
+def policy_limit(obj: Any) -> float | None:
+    """The largest occurrence limit the program declares, or ``None``.
+
+    The per-claim window, which is what bounds any occurrence cession: a layer
+    attaching at or above it covers nothing, because no single claim can reach
+    it. Read off the object's own ``exp_limit``, taking the maximum over a
+    profile, which is the same reading the library's
+    ``charts._emit_reins._claim_window`` takes.
+
+    Parameters
+    ----------
+    obj : Any
+        Any built object. Only an ``Aggregate`` carries an ``exp_limit``.
+
+    Returns
+    -------
+    float or None
+        ``None`` where the cover is unlimited, where any one line of a profile
+        is unlimited (the book's per-claim cover is then unbounded, whatever the
+        other lines say), or where the object declares no such clause at all.
+        An infinite limit is not a window, so it is reported as the absence of
+        one rather than as ``inf``: the caller's question is "is there a ceiling
+        here", and ``None`` is the honest answer when there is not.
+    """
+    spec = getattr(obj, "spec", None)
+    if not isinstance(spec, dict):
+        return None
+    limit = spec.get("exp_limit", math.inf)
+    try:
+        limit = float(max(limit)) if hasattr(limit, "__len__") else float(limit)
+    except (TypeError, ValueError):
+        return None
+    return limit if math.isfinite(limit) else None

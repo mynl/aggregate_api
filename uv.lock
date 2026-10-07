@@ -52,7 +52,6 @@ requires-dist = [
     { name = "pyarrow", marker = "extra == 'dev'", specifier = ">=15" },
     { name = "pygments" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7" },
-    { name = "pytest-testmon", marker = "extra == 'dev'", specifier = ">=2" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
@@ -69,7 +68,7 @@ provides-extras = ["dev", "notebook", "numba", "massive", "viz", "all"]
 
 [[package]]
 name = "aggregate-api"
-version = "1.0.0a197"
+version = "1.0.0a198"
 source = { editable = "." }
 dependencies = [
     { name = "aggregate" },

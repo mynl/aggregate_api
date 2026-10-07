@@ -78,27 +78,46 @@ const MAX_BOUNDS = 10;
  * layer running from zero, so a ground-up tower has layers rather than one
  * unbounded bottom.
  *
+ * **`cap` overrides both of those.** Where a finite cap is given the stack
+ * stops at it exactly, replacing the snapped bound that would have passed it,
+ * and nothing is lost by pinning the top there: a policy limit is itself a
+ * quote-sheet number. It is a hard ceiling rather than a target, so a cap at or
+ * below the attachment yields no layers at all, which is the honest answer. An
+ * occurrence layer above the per-claim limit covers nothing, because no single
+ * claim can reach it.
+ *
  * Parameters
  * ----------
  * attach : number
  *     Where the stack starts. Zero or less means ground up.
  * detach : number
  *     Where the stack is asked to reach.
+ * cap : number, optional
+ *     A ceiling no bound may pass. Omitted, null, zero or non-finite means no
+ *     ceiling, which is the aggregate tier and an unlimited book.
  *
  * Returns
  * -------
  * Array<{attach: number, limit: number}>
  *     Bottom-up, disjoint, contiguous. Empty when the span is too narrow to
  *     stack at all, which happens when the snap carries the bottom bound above
- *     the detachment: the caller decides what one layer means there.
+ *     the detachment, or when a cap leaves no width above the attachment: the
+ *     caller decides what to say there.
  */
-export function generateTower(attach, detach) {
+export function generateTower(attach, detach, cap = null) {
+    const ceiling = (cap !== null && cap > 0 && Number.isFinite(cap)) ? cap : null;
+    const top = ceiling === null ? detach : Math.min(detach, ceiling);
     const groundUp = !(attach > 0);
-    const start = groundUp ? snap125(Math.max(detach, 1) / 64) : snap125(attach);
+    const start = groundUp ? snap125(Math.max(top, 1) / 64) : snap125(attach);
+    if (ceiling !== null && start >= ceiling) return [];
     const bounds = groundUp ? [0, start] : [start];
-    while (bounds[bounds.length - 1] < detach && bounds.length < MAX_BOUNDS) {
+    while (bounds[bounds.length - 1] < top && bounds.length < MAX_BOUNDS) {
         const previous = bounds[bounds.length - 1];
-        bounds.push(Math.max(snap125(previous * 2.1), previous * 1.5));
+        const next = Math.max(snap125(previous * 2.1), previous * 1.5);
+        // The ceiling replaces the snapped bound that would have passed it, and
+        // then the loop ends: `next >= ceiling >= top` on that step, so there is
+        // no second clamped bound and no zero-width top layer.
+        bounds.push(ceiling === null ? next : Math.min(next, ceiling));
     }
     const layers = [];
     for (let i = 0; i < bounds.length - 1; i++) {

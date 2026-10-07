@@ -6,6 +6,27 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Punch-List-Oct-07]** IN PROGRESS, plan `dev/plan-a198-punch-list.md`, the
+  author's 2026-10-07 punch list after kicking the a197 tires: six items landing
+  as five version bumps across three repositories.
+  - [x] `1.0.0a198` [quick-re], the five faults in the Quick Re quote sheet: the
+    table cycles with the page's table view off a table document, the minimum
+    rate on line becomes the fourth candidate so `binds` names it, a row carries
+    its layer name beside its span, a rate on line is written as a bare fraction
+    and rounded to four figures so the clause and the sheet agree to the digit,
+    and an occurrence tower stops at the policy limit. `policy_limit` joins the
+    build response. Detail in `CHANGELOG.md` a198.
+  - [ ] `1.0.0a199` [narrative-bounds], `white-space: pre-wrap` on the narrative
+    panes, and the Bounds form on a P&L seeding off the closing block rather
+    than the gross one.
+  - [ ] library `1.0.0a397` and plugin `0.9.0` [pnl-emphasis], PnL Summary and
+    Waterfall bolding the gross and net-of-tier rows, and `CR` becoming
+    `Margin ratio`. **The plan names plugin 0.8.0, which is already taken.**
+  - [ ] library `1.0.0a398` [reins-labels], naming the Reinsurance plot's annual
+    triple.
+  - [ ] library `1.0.0a399` and api `1.0.0a200` [capstone], `Capstone.PC`
+    replaced by `Capstone.Capped`.
+
 - **[PnL-Pentagon]** DONE (`1.0.0a195`, `1.0.0a196`), plan
   `dev/done/plan-a195-pnl-pentagon.md`: the PnL group gains a **Pentagon** leaf
   drawing gross, ceded and net as one figure, at a solvency level picked from a

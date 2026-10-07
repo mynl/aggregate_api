@@ -245,6 +245,12 @@ class BuildResponse(BaseModel):
     # gross / net basis selector. Cheap: read off the cession specs, never off
     # ``reins_summary_df``, which would materialize a frame on every build.
     has_reins: bool = False
+    # The largest occurrence limit the program declares, or ``None`` where the
+    # cover is unlimited or the kind declares none. Rides here rather than on
+    # ``/meta`` for the reason the note and the tags do: the Quick Re row caps
+    # its tower at the policy limit, so it needs the number on every build and
+    # not only while one pane is open. See ``layer_pricing.policy_limit``.
+    policy_limit: float | None = None
     # The loss / payoff sign convention, on every object that has one.
     #
     # a57 sent it only for ``'payoff'``, to keep the status strip's first line
@@ -389,19 +395,33 @@ class LayerIndicationResponse(BaseModel):
 
 
 class LayerQuote(LayerIndication):
-    """One layer's full quote, with the three measures behind it.
+    """One layer's full quote, with the four candidates behind it.
 
     The components ride along rather than only the winner, because which
     measure bound is the interesting part: the dual transform loads the body of
     a distribution and binds low in a tower, the proportional hazard transform
-    loads the tail and binds high. ``binds`` is ``'sd'``, ``'ph'`` or
-    ``'dual'``.
+    loads the tail and binds high. ``binds`` is ``'sd'``, ``'ph'``, ``'dual'``
+    or ``'min_rol'``.
+
+    ``min_rol`` is the minimum-rate-on-line premium, which is the fourth
+    candidate rather than a floor applied after the comparison, so ``binds``
+    names it where it set the price. Null on an unlimited layer, which has no
+    rate-on-line base and competes on three.
+
+    ``label`` is the layer's ``as "..."`` name where the clause carried one, and
+    otherwise ``Occ n`` / ``Agg n``, numbered within its own tier in clause
+    order. It is the quote sheet's first column, so a row says which tier the
+    layer sits on and where in the stack it is, which the span alone does not.
+    The fallback is the sheet's and not the program's: the clause keeps the
+    spec's own naming.
     """
 
     sd_load: float
     ph: float
     dual: float
+    min_rol: float | None = None
     binds: str
+    label: str = ""
 
 
 class DerivedResponse(BuildResponse):
@@ -434,6 +454,14 @@ class DerivedResponse(BuildResponse):
             "The per-layer quote behind a priced cession, in the order the "
             "clause spells it. Only a cession asked to price carries this; "
             "every other derivation leaves it empty."
+        ),
+    )
+    ir: dict[str, Any] | None = Field(
+        None,
+        description=(
+            "Table document for the quote sheet, keyed 'quotes'. Carried the "
+            "way BoundsResponse carries its own, so the SPA can render the "
+            "rows in whichever table view the page is set to."
         ),
     )
 

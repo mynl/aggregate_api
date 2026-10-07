@@ -130,7 +130,39 @@ MONEY = ",.2f"
 # `PROBABILITY` came out at a71 with the `tail_df` entry that was its only user.
 
 FORMATS: dict[str, dict[str, object] | str] = {
-    # ---- empty, and staying that way --------------------------------------
+    # ---- the Quick Re quote sheet -----------------------------------------
+    #
+    # The one legitimate entry, and the reason the map still exists. This frame
+    # is **this repo's own**, built in `routes.objects.post_reins` out of
+    # `layer_pricing.layer_quotes`, so no library exhibit ships its formats and
+    # dtype inference is the only alternative. Inference reads `ROL` and `LR`
+    # as plain floats and the five currency columns at whatever precision their
+    # magnitude suggests, which is exactly the "a table whose decimal count
+    # moves with the book" problem `MONEY` exists to stop.
+    "reins_quotes": {
+        "EL": MONEY,
+        "SD load": MONEY,
+        "PH": MONEY,
+        "Dual": MONEY,
+        "Min ROL": MONEY,
+        "Premium": MONEY,
+        # `LR` takes the library's own ratio reading, `.1%`. **`ROL` does not**,
+        # and the extra place is load bearing: `layer_pricing.ROL_FIGS` rounds a
+        # rate-on-line quote to four significant figures precisely so the clause
+        # and this sheet agree to the digit, and `.1%` prints a rate of 0.1217
+        # as `12.2%` beside a clause reading `rol 0.1217`. Three places never
+        # hide a figure the clause carries, across both decades a rate on line
+        # occupies: `12.170%` on a working layer and `1.217%` at the top. The
+        # trailing zero is honest about where the rounding fell.
+        "ROL": ".3%",
+        "LR": ".1%",
+        # A multiple, not a percentage, which is why `CV` departs from the
+        # library's `ratio` reading of the same name.
+        "CV": ".3f",
+        "Span": "s",
+        "Binds": "s",
+    },
+    # ---- otherwise empty, and staying that way ----------------------------
     #
     # Every entry this map ever held named the formats for a frame whose table
     # the library publishes as an exhibit, which ships its formats resolved, so
@@ -145,6 +177,8 @@ FORMATS: dict[str, dict[str, object] | str] = {
     # renders them by dtype inference, and if that reads badly the answer is to
     # fetch the exhibit, which is what the app does. Nothing belongs here for a
     # frame the library publishes an exhibit for; that is what the exhibit is.
+    # A frame this repo builds itself is the exception, which is what the entry
+    # above is: there is no exhibit to fetch.
 }
 
 
