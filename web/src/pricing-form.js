@@ -441,13 +441,19 @@ export function createPricingForm(host, opts) {
             const tail = `assets ${money(q.assets)}, `
                 + `loss ratio ${percent(q.lr)}, PQ ${q.pq?.toFixed(3) ?? ''}, `
                 + `and CoC ${percent(q.coc)}`;
-            // The premium lead. A P&L reports its ledger's own pair; a request
-            // that carried an expense ratio reports the gross reading beside
-            // the technical premium; otherwise the line is what it always was.
+            // The premium lead. A P&L names all three of its ledger's figures,
+            // because they are three different numbers and which one a reader
+            // is pricing at depends on what they are doing: the gross is the
+            // book as written, the net is the position once every tier's
+            // program has worked, and the net of expense is what the Bounds
+            // form seeds from. On a single-group ledger all three agree. A
+            // request that carried an expense ratio reports the gross reading
+            // beside the technical premium; otherwise the line is what it
+            // always was.
             if (q.net_of_expense_premium != null) {
-                settle(`Preview: gross premium ${money(q.gross_premium)}, net `
-                    + `of expense premium ${money(q.net_of_expense_premium)}, `
-                    + tail);
+                settle(`Preview: gross premium ${money(q.gross_premium)}, `
+                    + `net premium ${money(q.net_premium)}, net of expense `
+                    + `premium ${money(q.net_of_expense_premium)}, ` + tail);
             } else if (q.gross_premium != null) {
                 settle(`Preview: gross premium ${money(q.gross_premium)}, `
                     + `net premium ${money(q.premium)}, ` + tail);

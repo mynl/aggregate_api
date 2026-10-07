@@ -4295,27 +4295,33 @@ const PNL_EVALUATE_NOTE = 'A P&L evaluates every row of its ledger on that '
     + 'row’s own terms; computed automatically.';
 
 /**
- * Append the ledger's own premium pair to the dormant Evaluate band's line.
+ * Append the ledger's own premium figures to the dormant Evaluate band's line.
  *
- * The preview route reports a P&L's `gross_premium` and
- * `net_of_expense_premium` off the ledger's gross block (a185), and the
- * dormant band is where that pair belongs: the premium box is dead, so the
- * line says what the book itself states. The anchor and target in the
- * request are the form's own defaults, because the route needs a complete
- * question to answer at all; the ledger fields do not depend on them.
+ * The preview route reports a P&L's `gross_premium` off the ledger's gross
+ * block (a185) and its `net_premium` and `net_of_expense_premium` off the
+ * closing block (a199), and the dormant band is where they belong: the premium
+ * box is dead, so the line says what the book itself states. The anchor and
+ * target in the request are the form's own defaults, because the route needs a
+ * complete question to answer at all; the ledger fields do not depend on them.
+ *
+ * All three are named, since a199 made them three different numbers on a peeled
+ * ledger. Saying "net of expense premium" alone would read as the gross book's
+ * net of expense, which is what it used to be.
  */
 async function reportPnlLedger() {
     const id = state.id;
     if (!id) return;
     const say = (pair) => evaluateForm.note(
         `${PNL_EVALUATE_NOTE} Ledger: gross premium ${money(pair.gross)}, `
-        + `net of expense premium ${money(pair.net)}.`);
+        + `net premium ${money(pair.net)}, net of expense premium `
+        + `${money(pair.netOfExpense)}.`);
     if (_pnlLedger && _pnlLedger.id === id) { say(_pnlLedger); return; }
     try {
         const q = await api.pricingPreview(id, { p: 0.99, coc: 0.15 });
         if (id !== state.id || state.kind !== 'pnl') return;
         if (q.gross_premium == null || q.net_of_expense_premium == null) return;
-        _pnlLedger = { id, gross: q.gross_premium, net: q.net_of_expense_premium };
+        _pnlLedger = { id, gross: q.gross_premium, net: q.net_premium,
+                       netOfExpense: q.net_of_expense_premium };
         say(_pnlLedger);
     } catch { /* the sentence already on the line stands */ }
 }

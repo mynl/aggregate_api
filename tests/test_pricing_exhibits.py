@@ -273,6 +273,21 @@ PNL_EXPENSED = ("pnl PX.PnlE 1000 prem less "
                 "agg PX.PnlEL 1000 prem at 70% lr sev lognorm 100 cv 2 "
                 "poisson less 0.25 premium expenses")
 
+#: The same book with a priced quota share, so its ledger's gross and closing
+#: blocks differ in premium as well as in loss.
+#:
+#: The premium figures are grid independent, which is what makes them safe to
+#: assert exactly. ``derive premium`` grosses the stated 1,000 of technical
+#: premium up for the 25 percent G&A, so the gross block writes 1,333.33 with
+#: 333.33 of expense. The share cedes half of that at ``rate 1``, so 666.67 of
+#: premium leaves, and ``cede 0.2`` returns 133.33 of ceding commission, a
+#: contra expense. The closing block is therefore 666.67 of premium against 200
+#: of expense. Only the loss column comes off the FFT.
+PNL_CEDED = ("xpnl PX.PnlCeded derive premium less "
+             "agg PX.PnlCededL 1000 prem at 70% lr sev lognorm 100 cv 2 "
+             "poisson aggregate net of 50% po inf xs 0 rate 1 cede 0.2 "
+             'as "QS" less 25% premium expenses')
+
 
 def test_preview_reads_a_premium_target_as_gross_with_a_ratio(client):
     """Gross 1000 at e = 0.25 is technical 750, and both read back.
@@ -344,12 +359,16 @@ def test_evaluate_reads_a_typed_premium_as_gross_with_a_ratio(client):
 
 
 def test_a_pnl_preview_reports_the_ledger_pair(client):
-    """A P&L's pair comes off the ledger, and a typed ratio is refused.
+    """A P&L's figures come off the ledger, and a typed ratio is refused.
 
-    ``economic_ratios_df``'s gross (first) block states P and E, so the
-    preview reports the book's own gross premium and its net of expense, and
-    an ``expense_ratio`` in the request is a 400: the ledger is the authority
-    on this book's expenses, not the form.
+    ``economic_ratios_df`` states P and E on every block, so the preview reports
+    the book's own gross premium and the net position's premium and net of
+    expense, and an ``expense_ratio`` in the request is a 400: the ledger is the
+    authority on this book's expenses, not the form.
+
+    This book is a single group, so its closing block **is** its gross block and
+    all three figures agree. The peeled case, where they do not, is
+    ``test_a_peeled_pnl_preview_reads_its_closing_block``.
     """
     oid, _ = _build(client, PNL_EXPENSED, log2=12)
     r = client.post(f"/v1/objects/{oid}/pricing/preview",
@@ -357,6 +376,7 @@ def test_a_pnl_preview_reports_the_ledger_pair(client):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["gross_premium"] == pytest.approx(1000)
+    assert body["net_premium"] == pytest.approx(1000)
     assert body["net_of_expense_premium"] == pytest.approx(750)
 
     refused = client.post(
@@ -369,6 +389,33 @@ def test_a_pnl_preview_reports_the_ledger_pair(client):
                             json={"expense_ratio": 0.1})
     assert evaluated.status_code == 400
     assert "ledger" in evaluated.json()["detail"]
+
+
+def test_a_peeled_pnl_preview_reads_its_closing_block(client):
+    """The pair is the **closing** position, not the gross book.
+
+    Through a198 both came off the gross (first) block, so the Bounds form on a
+    ceded ledger seeded at a premium the net book does not write and then swept
+    a range it does not occupy. ``gross_premium`` keeps its meaning and stays
+    the gross block's ``P``, so every older reader is unaffected; the two net
+    fields are the last block's, which is the position once every tier's program
+    has worked.
+    """
+    oid, _ = _build(client, PNL_CEDED, log2=12)
+    r = client.post(f"/v1/objects/{oid}/pricing/preview",
+                    json={"p": 0.99, "coc": 0.15})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # The gross block, unchanged in meaning: 1,000 technical grossed up for the
+    # 25 percent G&A.
+    assert body["gross_premium"] == pytest.approx(4000 / 3)
+    # The closing block. Half the gross premium left with the share.
+    assert body["net_premium"] == pytest.approx(2000 / 3)
+    # And its own P - E, the 200 of net expense after the ceding commission.
+    assert body["net_of_expense_premium"] == pytest.approx(2000 / 3 - 200)
+    # The a198 reading, which is what this bump is about: the gross block's
+    # P - E is 1,000, more than twice the number the form should seed.
+    assert body["net_of_expense_premium"] < 0.5 * (4000 / 3 - 1000 / 3)
 
 
 # ----------------------------------------------------------------------

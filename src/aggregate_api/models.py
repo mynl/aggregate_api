@@ -787,12 +787,15 @@ class PricingPreviewResponse(BaseModel):
     ``lr``, ``pq``, ``coc`` the three ratios between them. ``p`` echoes the
     probability the caller named, and is null when they anchored on assets.
 
-    ``premium`` is always the technical premium, net of expenses. The two
-    fields after the octet are the gross story: ``gross_premium`` rides when
-    the request carried an ``expense_ratio`` (the resolved technical premium
-    grossed back up) and on a P&L, where it is the ledger's own stated gross;
-    ``net_of_expense_premium`` is the P&L pair's other half, ``P − E`` off the
-    ledger's gross block, and is null everywhere else.
+    ``premium`` is always the technical premium, net of expenses. The three
+    fields after the octet are the gross story. ``gross_premium`` rides when the
+    request carried an ``expense_ratio`` (the resolved technical premium grossed
+    back up) and on a P&L, where it is the ledger's own stated gross.
+    ``net_premium`` and ``net_of_expense_premium`` are a P&L's only, ``P`` and
+    ``P − E`` off the ledger's **closing** block: the position once every tier's
+    program has worked, which is what a reader looking at a peeled P&L is
+    pricing. Both are null everywhere else. On a single-group ledger the closing
+    block is the gross block and all three agree.
     """
 
     model_config = _RESPONSE_CFG
@@ -807,6 +810,7 @@ class PricingPreviewResponse(BaseModel):
     pq: float | None = None
     coc: float | None = None
     gross_premium: float | None = None
+    net_premium: float | None = None
     net_of_expense_premium: float | None = None
 
 

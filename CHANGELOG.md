@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a199
+
+[Narrative-Bounds] **two one-liners from the punch list.** Plan `dev/plan-a198-punch-list.md`, batch [narrative-bounds]. Unrelated to each other and small enough to share a bump.
+
+- **The narrative panes keep their newlines.** `More / Narrative` rendered every section in a `<p>`, so the library's fixed-layout strings collapsed into one paragraph: a P&L's `construction_explanation` is seven newline-separated sentences plus an indented `Replay (...)` block, and `Aggregate.tail_description` is three aligned rows. `white-space: pre-wrap` on `.narrative-lead` and `.narrative-body` is the whole fix. Nothing changes server side, the strings already carrying their newlines, and single-paragraph sections are unaffected.
+- **Bounds on a P&L opens at the net premium, not the gross one.** The preview route read `economic_ratios_df`'s gross block for the pair the Bounds form seeds from, so on `Capstone.PnL` the box opened at 21,000 where the net position writes 4,881, and the sweep then ran over a range the book does not occupy. The two net fields come off the **closing** block now, the position once every tier's program has worked. `gross_premium` keeps its meaning and stays the gross block's `P`, so nothing already reading it changes.
+- **`net_premium` on the preview response**, the closing block's `P`, beside the `net_of_expense_premium` that was already there. The Calibrate preview line and the dormant Evaluate note both name all three figures now, since on a peeled ledger they are three different numbers and "net of expense premium" alone would read as the gross book's.
+
+On a single-group ledger the closing block **is** the gross block and all three figures agree, which is why this was invisible until a program with a cession reached the form.
+
 ## 1.0.0a198
 
 [Quick-Re-Quote-Sheet] **five faults in the quote sheet a197 shipped.** Plan `dev/plan-a198-punch-list.md`, batch [quick-re], the first of five bumps across three repositories in the author's 2026-10-07 punch list. All api and SPA; no library change.

@@ -16,9 +16,11 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
     and rounded to four figures so the clause and the sheet agree to the digit,
     and an occurrence tower stops at the policy limit. `policy_limit` joins the
     build response. Detail in `CHANGELOG.md` a198.
-  - [ ] `1.0.0a199` [narrative-bounds], `white-space: pre-wrap` on the narrative
+  - [x] `1.0.0a199` [narrative-bounds], `white-space: pre-wrap` on the narrative
     panes, and the Bounds form on a P&L seeding off the closing block rather
-    than the gross one.
+    than the gross one. `net_premium` joins the preview response and all three
+    premium figures are named wherever the pair was. Detail in `CHANGELOG.md`
+    a199.
   - [ ] library `1.0.0a397` and plugin `0.9.0` [pnl-emphasis], PnL Summary and
     Waterfall bolding the gross and net-of-tier rows, and `CR` becoming
     `Margin ratio`. **The plan names plugin 0.8.0, which is already taken.**

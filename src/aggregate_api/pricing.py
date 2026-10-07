@@ -267,9 +267,11 @@ def run_pricing_preview(
     dict
         Matches :class:`aggregate_api.models.PricingPreviewResponse`: the
         pentagon octet under wire names, plus the probability the caller named.
-        ``gross_premium`` rides when a ratio was sent, and on a P&L both
-        ``gross_premium`` and ``net_of_expense_premium`` report the ledger's
-        own pair off ``economic_ratios_df``'s gross (first) block.
+        ``gross_premium`` rides when a ratio was sent. On a P&L it is the
+        ledger's own stated gross, off ``economic_ratios_df``'s gross (first)
+        block, and ``net_premium`` and ``net_of_expense_premium`` are ``P`` and
+        ``P - E`` off the **closing** (last) block, which is the position the
+        whole program has worked.
 
     Notes
     -----
@@ -327,14 +329,29 @@ def run_pricing_preview(
     if expense_ratio is not None and out["premium"] is not None:
         out["gross_premium"] = out["premium"] / (1.0 - expense_ratio)
     if is_pnl:
-        # The ledger's own pair, not an assumed ratio: the gross (first) block
-        # of `economic_ratios_df`, whose amounts satisfy M == P - L - E.
-        ledger = source.economic_ratios_df.iloc[0]
-        gross = _scalar(ledger["P"])
-        expense = _scalar(ledger["E"])
+        # The ledger's own figures, not an assumed ratio. `economic_ratios_df`'s
+        # amounts satisfy M == P - L - E on every block, so a block's `P - E` is
+        # that block's premium net of its expenses.
+        #
+        # **Two blocks, not one.** The gross (first) block is the book before
+        # any cession and is what `gross_premium` has always meant. The pair the
+        # form needs is the closing (last) block: the position once every tier's
+        # program has worked, which is what a reader looking at a peeled P&L is
+        # pricing. Through a198 this read the gross block for both, so the
+        # Bounds form on `Capstone.PnL` opened at 21,000 where the net position
+        # is 4,881, and then swept a range the book does not occupy. On a
+        # single-group ledger the closing block *is* the gross block and all
+        # three figures agree, which is why the error was invisible until a
+        # program with a cession reached the form.
+        blocks = source.economic_ratios_df
+        gross = _scalar(blocks.iloc[0]["P"])
+        closing = blocks.iloc[-1]
+        net = _scalar(closing["P"])
+        expense = _scalar(closing["E"])
         out["gross_premium"] = gross
-        if gross is not None and expense is not None:
-            out["net_of_expense_premium"] = gross - expense
+        out["net_premium"] = net
+        if net is not None and expense is not None:
+            out["net_of_expense_premium"] = net - expense
     return out
 
 

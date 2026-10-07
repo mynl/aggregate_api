@@ -1077,8 +1077,16 @@ header .navbar { min-height: 56px; }
     background: var(--soft); border: 1px solid var(--line-2); border-radius: .4rem;
     padding: .6rem .7rem; margin-bottom: .9rem; overflow-x: auto;
 }
-.narrative-lead { font-size: .84rem; font-weight: 500; margin-bottom: .3rem; }
-.narrative-body { font-size: .8rem; color: var(--ink-2); margin-bottom: 1rem; }
+/* `pre-wrap` on both, because the library's strings carry their own newlines
+   and several of them are fixed-layout row blocks rather than prose. A P&L's
+   `construction_explanation` is seven newline-separated sentences plus an
+   indented `Replay (...)` block, and `Aggregate.tail_description` is three
+   aligned rows; in a `<p>` each collapsed into one paragraph. Single-paragraph
+   sections, which is most of them, are unaffected: there is nothing to wrap. */
+.narrative-lead { font-size: .84rem; font-weight: 500; margin-bottom: .3rem;
+  white-space: pre-wrap; }
+.narrative-body { font-size: .8rem; color: var(--ink-2); margin-bottom: 1rem;
+  white-space: pre-wrap; }
 
 /* ---- Bounds ----
    The envelope is a three-panel SVG that is wider than it is tall, so it takes

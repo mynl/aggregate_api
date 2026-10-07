@@ -66,3 +66,31 @@ Two notes, neither a divergence:
   10,000, as the plan predicts, and a cession of `2000 xs 3000 and 5000 xs 5000`
   comes back out of `reins_program` as `rol 0.2101` and `rol 0.03787`, verbatim
   and with no dust.
+
+## [narrative-bounds] api 1.0.0a199, landed
+
+Gates: `pytest` 483 passed, `npm test` 277 passed, `check-nav.mjs` clean.
+
+One divergence, from a blast radius the plan does not mention:
+
+4. **`reportPnlLedger` is a second reader of `net_of_expense_premium`**, and the
+   plan accounts only for `showBoundsLeaf`. It writes the dormant Evaluate
+   band's note, which said `Ledger: gross premium G, net of expense premium E`
+   off the gross block. With the field now reading the closing block that
+   sentence stays true of the number and false of the label, so the note names
+   all three figures, matching the Calibrate preview line's new wording. Its
+   docstring's "off the ledger's gross block (a185)" was wrong the moment the
+   field moved and is corrected.
+
+Verified against the real ledger before writing the test. `Capstone.PnL`'s
+`economic_ratios_df` runs Gross, four occurrence layers, All occurrence, Net of
+occurrence, QS, All; the gross block is 28,000 of premium against 7,000 of
+expense (21,000, which is what the form used to seed) and the closing block is
+6,015.625 against 1,134.765625, so `P - E` is 4,880.86. That is the plan's
+4,881 to the rounding.
+
+The new `PNL_CEDED` fixture's premium figures are grid independent, which is
+why they are asserted exactly: `derive premium` grosses 1,000 technical up to
+1,333.33 for the 25 percent G&A, the share cedes half of that at `rate 1`, and
+`cede 0.2` returns 133.33 of ceding commission as a contra expense. Only the
+loss column comes off the FFT.
