@@ -96,6 +96,7 @@ from datetime import datetime, timezone
 from pathlib import PurePath
 from typing import Annotated, Any, Literal
 
+import anyio
 import pandas as pd
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -651,7 +652,7 @@ def _resolve_object(oid: str, cache: ObjectCache) -> CacheEntry:
     return entry
 
 
-def _locked_entry(oid: str, cache: ObjectCache = Depends(_get_cache)):
+async def _locked_entry(oid: str):
     """Dependency: resolve an object and hold its lock for the whole request.
 
     Every route that pulls data off a built object depends on this rather than
@@ -678,15 +679,22 @@ def _locked_entry(oid: str, cache: ObjectCache = Depends(_get_cache)):
     hands it a context-manager object instead, which fails with
     ``'_GeneratorContextManager' object is not an iterator``.
 
-    **Bounded since a201, because an unbounded wait here could kill the
-    process.** FastAPI runs a sync dependency and a sync handler in two separate
-    ``run_in_threadpool`` calls, each taking one of anyio's 40 thread-limiter
-    tokens. So a request that has acquired this lock still needs a *second*
-    token to reach its handler and release it. Let forty requests block here on
-    one lock and every token is held by a thread that cannot progress, the
-    holder can never get a token to finish, and nothing breaks the cycle: the
-    process parks at 0% CPU with every sync route unreachable, ``/v1/health``
-    included, until it is restarted.
+    **Asynchronous and bounded, because waiting here in a worker thread could
+    kill the process.** FastAPI runs a sync dependency and a sync handler in two
+    separate ``run_in_threadpool`` calls, each taking one of anyio's 40
+    thread-limiter tokens. So a request that has acquired this lock still needs a
+    *second* token to reach its handler and release it. While this was a sync
+    dependency, forty requests blocking here held every token in threads that
+    could not progress, the holder could never get a token to finish, and
+    nothing broke the cycle: the process parked at 0% CPU with every sync route
+    unreachable, ``/v1/health`` included, until it was restarted.
+
+    a201 bounded the wait, which stopped the process dying and was not enough:
+    the same shape returned as a livelock that only the timeouts could break, 33
+    of 50 callers taking a 503 after ten seconds while the 17 winners ran at 590
+    ms apiece against a 46 ms critical section. Waiting on the event loop
+    instead, which is what a202 does below, is the fix: a waiter that holds no
+    token cannot starve the holder.
 
     That is not hypothetical and not about load. Measured at a200, from a fresh
     server each round, concurrent reads of **one** object: 39 callers survived,
@@ -707,16 +715,40 @@ def _locked_entry(oid: str, cache: ObjectCache = Depends(_get_cache)):
     ------
     CacheEntry
     """
-    entry = _resolve_object(oid, cache)
-    # Read settings directly rather than through Depends: one less sync
-    # dependency is one less token acquisition on a path whose whole problem is
-    # token pressure.
-    if not entry.lock.acquire(timeout=get_settings().entry_lock_timeout_s):
-        raise HTTPException(
-            status_code=503,
-            detail=f"object {oid} is busy; retry shortly",
-            headers={"Retry-After": "2"},
-        )
+    # Both dependencies are resolved by hand rather than through Depends. A sync
+    # dependency costs a thread token, and token pressure is this function's
+    # whole problem; `_get_cache` and `get_settings` are both singleton lookups,
+    # so the injection bought nothing here but the token.
+    settings = get_settings()
+    entry = _resolve_object(oid, _get_cache(settings))
+
+    # Wait on the event loop, never in a worker thread. `acquire(blocking=True)`
+    # would park a thread that is holding a token, which is the livelock
+    # described above: the request that holds the lock cannot get a token to run
+    # its handler, because the waiters are holding all of them. Polling a
+    # non-blocking acquire between `anyio.sleep` checkpoints keeps every waiter
+    # on the loop, where it costs no token, so the holder always gets one and
+    # always makes progress.
+    #
+    # A poll rather than an async lock on purpose. `CacheEntry.lock` is a plain
+    # `threading.Lock` because the object it guards is touched from worker
+    # threads, and swapping it for `anyio.Lock` would make every sync holder an
+    # async one. Five milliseconds against critical sections measured at 46 ms
+    # (a display-resolution `density_df`, which is what the SPA asks for) is
+    # under a tenth of a handoff, and the deadline is the real contract.
+    #
+    # Not FIFO, so a waiter can in principle be passed over. Bounded by the
+    # deadline below, which is the same answer a fair queue would eventually
+    # give.
+    deadline = time.monotonic() + settings.entry_lock_timeout_s
+    while not entry.lock.acquire(blocking=False):
+        if time.monotonic() >= deadline:
+            raise HTTPException(
+                status_code=503,
+                detail=f"object {oid} is busy; retry shortly",
+                headers={"Retry-After": "2"},
+            )
+        await anyio.sleep(0.005)
     try:
         yield entry
     finally:

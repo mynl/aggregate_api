@@ -4,6 +4,18 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a202
+
+[Entry-Lock-Async] **a201 stopped the server dying and left it refusing most of the room.** Plan `dev/plan-demo-load.md` item 0, part 2 of three. The bounded wait was necessary and not sufficient.
+
+- **What a201 still did.** 50 concurrent reads of one object: 33 refusals and a ten second wall, the 17 winners averaging 590 ms against a 46 ms critical section. The deadlock had become a livelock that only the timeouts could break. Same cause: a waiter blocking in a worker thread holds one of anyio's 40 tokens, so the request holding the lock cannot get a token to run its handler and release it.
+- **`_locked_entry` is `async def` now** and polls a non-blocking acquire between `anyio.sleep` checkpoints, so every waiter sits on the event loop holding no token. The holder therefore always gets a token and always makes progress. Its `cache` and `settings` dependencies are resolved by hand for the same reason: a sync dependency costs a token, and both are singleton lookups.
+- **Measured, 50 to 80 concurrent reads of one shared object, all answering 200**: SPA-shape `density_df` 50 callers in 1.42 s (was 33 refusals in 10.6 s), 80 callers in 2.5 s, `summary` 60 callers in 0.80 s. `/v1/health` answers in 2 ms throughout.
+- **A poll rather than an `anyio.Lock`**, because `CacheEntry.lock` guards an object touched from worker threads and swapping the primitive would make every sync holder an async one. Five milliseconds against a 46 ms section is under a tenth of a handoff.
+- **Still refuses the full-resolution `density_df` at 45 callers** (10 answered, 35 refused), because that one request is 1.8 s and 30 MB of JSON, so 45 of them is 81 s of serialized work against a 10 s deadline. The server stays up and answers health in 4 ms, which is the right way to decline. The SPA never sends that shape: `more:density` asks for `resolution=display` with four columns, which is the 46 ms case.
+
+Measurement that redirected this work: `getattr(obj, 'density_df')` costs **0.0 ms**, the frame being built during `build()` rather than lazily on read. The 1.4 s a full-grid read takes is `frame_to_payload` (678 ms) plus `json.dumps` (656 ms) over a 33.9 MB body, none of which touches the object. So the lock is held around work that does not need it, and narrowing it is the remaining win. Deferred: the demo's own request shapes are green without it.
+
 ## 1.0.0a201
 
 [Entry-Lock-Bounded] **more than 40 concurrent reads of one object used to kill the server process.** Plan `dev/plan-demo-load.md` item 0, part 1 of three, ahead of the 2026-10-16 demonstration. Found by stress testing, not reported.

@@ -96,6 +96,31 @@ def test_the_lock_survives_the_refusal(client, monkeypatch):
     get_settings.cache_clear()
 
 
+def test_locked_entry_waits_on_the_loop_not_in_a_thread():
+    """``_locked_entry`` must stay an async generator, or the livelock returns.
+
+    A sync dependency waits for the lock in a worker thread that is holding one
+    of anyio's 40 tokens. The request that *has* the lock then cannot get a
+    token to run its handler and release it, so nothing progresses until the
+    timeouts fire. Measured at a201, with the wait bounded but still in a
+    thread: 50 concurrent reads gave 33 refusals and a 10 s wall, the 17 winners
+    averaging 590 ms against a 46 ms critical section. As an async dependency
+    the same 50 all answered in 1.42 s.
+
+    Structural rather than behavioral because reproducing it needs more than 40
+    real sockets, which ``TestClient`` cannot provide from one portal thread.
+    ``dev/scripts/loadtest/blitz.ps1`` is the behavioral check.
+    """
+    import inspect
+
+    from aggregate_api.routes.objects import _locked_entry
+
+    assert inspect.isasyncgenfunction(_locked_entry), (
+        "_locked_entry must be `async def` with a yield: a sync version waits "
+        "for the lock while holding a thread token and livelocks the process"
+    )
+
+
 def test_health_needs_no_thread_token(client):
     """``/v1/health`` is async and dependency-free, so it answers when the pool is not.
 
