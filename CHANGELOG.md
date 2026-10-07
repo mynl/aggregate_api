@@ -4,6 +4,21 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a201
+
+[Entry-Lock-Bounded] **more than 40 concurrent reads of one object used to kill the server process.** Plan `dev/plan-demo-load.md` item 0, part 1 of three, ahead of the 2026-10-16 demonstration. Found by stress testing, not reported.
+
+- **The failure.** `_locked_entry` held a `CacheEntry`'s lock for a whole request with an unbounded wait. FastAPI runs a sync dependency and a sync handler in two separate threadpool calls, each needing one of anyio's 40 thread-limiter tokens, so a request holding the lock still needs a second token to finish and release it. Forty requests blocked on one lock hold every token, the holder can never progress, and the process parks at 0% CPU with every sync route unreachable until restarted.
+- **Measured, from a fresh server each round**, concurrent reads of one object: 39 callers survived, 45 killed it. The cliff is the token count. Reproduced identically on Python 3.13 and 3.14, so it is not an environment artifact. No client disconnect is involved.
+- **Why it matters here.** The shared cache key puts the whole room on one `CacheEntry`, so fifty people at three or four requests each is 150 concurrent requests against a cliff at 40.
+- **The fix.** A bounded `acquire(timeout=AGGAPI_ENTRY_LOCK_TIMEOUT_S)`, defaulting to 10 s to match the build timeout, refusing with HTTP 503 and `Retry-After` instead of waiting. 45 and 60 callers now both leave the server answering health in 3 ms.
+- **`/v1/health` and `/v1/meta` are `async def` and dependency-free**, so they answer when the thread pool is exhausted. A sync route needs a token, which made them unreachable at exactly the moment anyone would ask whether the server was alive. Diagnosing this needed `py-spy` because nothing in the app could reply.
+- **Not fixed yet**, and the reason parts 2 and 3 follow: reads of one object are still serialized, so under 45 callers 38 of them get a 503. The server survives; it is not yet usable at that concurrency.
+
+`dev/scripts/loadtest/blitz.ps1` reproduces the room, and `dev/scripts/loadtest/repro-lock-orphan.ps1` records a theory that proved wrong (client disconnects release the lock correctly).
+
+Needs no new library behavior. `uv.lock` does move `aggregate` from `1.0.0a399` to `1.0.0a401`, picked up from the sibling checkout rather than asked for by this change, so a `uv sync --frozen` elsewhere wants that checkout at a401.
+
 ## 1.0.0a200
 
 [Capstone-Capped] **the Examples menu's final capstone entry is `Capstone.Capped`**, not `Capstone.PC`. Plan `dev/done/plan-a198-punch-list.md`, batch [capstone], the last of five bumps across three repositories.

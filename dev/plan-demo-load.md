@@ -21,6 +21,48 @@ Nothing here is a capacity problem. No part of this plan makes the server
 faster or adds a worker. Every item removes duplicated work or corrects a
 budget.
 
+## Measured on 2026-10-07, at a200
+
+Everything below was reproduced locally with
+`dev/scripts/loadtest/blitz.ps1`, against one api process and no Caddy. These
+are observations, not predictions.
+
+**The headline: more than 40 concurrent requests on one cached object kills the
+server process permanently.** Not slowly, not partially. Every synchronous
+route stops answering, `/v1/health` included, the process sits at 0% CPU, and
+nothing short of a restart recovers it.
+
+Concurrent `GET /objects/{oid}/density_df` on a single `PropertyCasualty`
+object, each round from a fresh server:
+
+| callers | succeeded | wall  | server afterwards |
+|---|---|---|---|
+| 20 | 20 of 20 | 24.7 s | alive |
+| 30 | 23 of 30 | 30 s   | alive |
+| 39 | 25 of 39 | 30 s   | alive |
+| 45 | 3 of 45  | 30 s   | **dead** |
+
+The cliff sits at 40, which is exactly anyio's default thread-limiter token
+count. Reproduced identically on **Python 3.13**, which is what the VPS runs, so
+this is not an artifact of the local 3.14 environment.
+
+Two further numbers from the same runs:
+
+- **Reads of one object are strictly serial.** Twenty concurrent `density_df`
+  reads took 24.7 s, about 1.2 s each in sequence. Even with the deadlock fixed,
+  fifty people on one shared object is a minute of queue.
+- **The build stampede is real and milder than expected.** Fifty simultaneous
+  landing builds produced **17** builds of the same program rather than one. The
+  window is as wide as one build takes, so BasicBook at about 175 ms caught 17 of
+  50 arrivals. A 2 s example would catch nearly all of them, and
+  `distinct ids: 1` with `key_scope: shared 51, session 0` confirms the room does
+  share one cache entry.
+
+A theory worth recording as **wrong**, because it looks right and wasted an
+hour: this is not caused by client disconnects. Aborting a read mid-flight with
+a TCP reset, inside a 1.4 s critical section, releases the lock correctly every
+time. The deadlock needs no disconnect at all, only concurrency above 40.
+
 ## The mechanism, traced
 
 Read this first. Every finding below is a consequence of it.
@@ -77,10 +119,93 @@ Put 1, 2, 3 and 4 together: on a cold cache those same fifty page loads build
 
 ## The changes
 
-Five items. Items 1 and 2 are mandatory and independent of each other: item 1
+Six items. **Item 0 is the one that decides whether the demonstration happens
+at all**, and it is unrelated to everything that was in this plan before
+2026-10-07. Items 1 and 2 are mandatory and independent of each other: item 1
 without item 2 still 429s the room, and item 2 without item 1 still builds the
 same object fifty times. Items 3 to 5 are worth having and can be dropped
 without endangering the demo.
+
+### [Entry-Lock] item 0, the deadlock that kills the process
+
+**Problem.** `_locked_entry` (`routes/objects.py:654`) is a synchronous
+generator dependency that acquires a `CacheEntry`'s lock with an unbounded
+`with entry.lock:` and holds it for the whole request. FastAPI runs a sync
+dependency in an anyio worker thread, which consumes one of the thread
+limiter's 40 tokens, and then runs the sync handler in a **second**
+`run_in_threadpool` call, which needs another token.
+
+So a request that holds the lock must obtain a second token to reach its
+handler and finish. Once 40 requests are blocked inside the dependency waiting
+for that same lock, all 40 tokens are held by threads that will never make
+progress, the lock holder can never get a token to run its handler, and it
+therefore never releases the lock. Nothing breaks the cycle. The process parks
+at 0% CPU with every synchronous route unreachable.
+
+**Why the demonstration meets this immediately.** The shared cache key means
+the whole room reads **one** `CacheEntry`, so the room's requests all queue on
+one lock. Fifty people at three or four requests per page view is 150 or more
+concurrent requests on that entry, against a cliff at 40. The room will cross
+it in the first minute, and the only remedy on the day is a restart that puts
+everyone back on the cold path, which crosses it again.
+
+The irony to keep in view: the shared key is what makes builds cheap, and it is
+also what concentrates every read onto a single lock.
+
+**Change, in three parts. The first is the safety net and must land first.**
+
+1. **Never block indefinitely while holding a token.** Replace the bare `with`
+   with a bounded acquire and an explicit release:
+
+   ```python
+   if not entry.lock.acquire(timeout=settings.entry_lock_timeout_s):
+       raise HTTPException(status_code=503, detail="object busy, retry")
+   try:
+       yield entry
+   finally:
+       entry.lock.release()
+   ```
+
+   This does not fix the serialization and under a fifty-person room it will
+   hand out 503s. It converts a dead process into slow requests, which is the
+   difference between a recoverable moment and an ended demonstration. New
+   setting `AGGAPI_ENTRY_LOCK_TIMEOUT_S`, defaulting to something close to the
+   build timeout.
+
+2. **Stop holding the lock across the whole request.** The lock exists for one
+   documented and measured reason, lazy frame materialization on first access,
+   and it currently spans serialization, table rendering and response send as
+   well. Narrow it to the materialization itself, so the per-request reduction
+   work (which `density_df` does on every call, and which is most of that 1.2 s)
+   happens outside the critical section.
+
+3. **Materialize the frames at build time**, inside the build's own critical
+   section, before the entry is published to the cache. The lock's docstring
+   already says contention is confined to the first access of each frame and
+   was never reproducible once the frames were warm. For a room sharing one
+   object this is what turns the entry from a bottleneck into a read-only
+   value, and it is what makes the pre-warm step in the runbook actually
+   effective.
+
+**Also, so the server can be diagnosed when something like this happens
+again:** make `/v1/health`, `/v1/meta` and `/v1/status` `async def`. They do no
+blocking work, and as sync routes they need a token, which is why an exhausted
+pool makes the status page built for exactly this purpose unreachable. This
+investigation needed `py-spy` on a core dump because nothing in the app could
+answer.
+
+**Rejected: raising the token count.** It moves the cliff without removing it.
+Fifty people at four requests each is 200, and 200 threads of pandas work on one
+GIL is a different disaster. The limiter is not the bug.
+
+**Files.** `routes/objects.py` (`_locked_entry` and the routes that depend on
+it), `cache.py` (`CacheEntry`), `config.py`, `routes/meta.py`,
+`routes/status.py`, and a new test that holds the lock and asserts a 503 rather
+than a hang.
+
+**Acceptance.** `dev/scripts/loadtest/blitz.ps1` and the 45-caller
+`density_df` round both leave `/v1/health` answering. That round is the
+regression test; it is the only one that failed before.
 
 ### [Single-flight] item 1, one computation per key
 
@@ -371,6 +496,8 @@ To be pinned somewhere the author will actually read it on the day.
 
 ## Acceptance
 
+- **Forty five concurrent reads of one object leave `/v1/health` answering.**
+  This is the gate. Nothing else on this list matters if it fails.
 - Fifty landing loads inside ten seconds against a **cold** server produce
   **one** build of the landing program, no 504s, and p95 under 2 s.
 - The same fifty from one source address against the public route produce no

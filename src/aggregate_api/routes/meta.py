@@ -28,11 +28,11 @@ from importlib.metadata import version as _pkg_version
 from importlib.resources import files
 
 from aggregate import plugins as agg_plugins
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
 from .. import models
-from ..config import Settings, get_settings
+from ..config import get_settings
 
 
 # APIRouter is FastAPI's analogue of a Flask Blueprint -- a group
@@ -41,13 +41,23 @@ router = APIRouter()
 
 
 @router.get("/health", response_model=models.HealthResponse)
-def health() -> dict:
+async def health() -> dict:
     """Trivial liveness check.
 
     Returns both the api package version (``version``) and the
     underlying ``aggregate`` library version (``aggregate_version``)
     so a curl-from-prod debugging session can confirm which build of
     each it's talking to without an OpenAPI fetch.
+
+    ``async def``, and with no dependencies, **so that it answers when the
+    thread pool is exhausted**. FastAPI runs a sync route in an anyio worker
+    thread, which needs one of 40 tokens; a sync route therefore cannot be
+    served at all once 40 requests are stuck, which is exactly the moment
+    somebody asks whether the server is alive. This route does no blocking work,
+    so running it on the event loop costs nothing and removes it from that
+    failure entirely. A sync *dependency* would reintroduce the problem, which is
+    why there is not one here. See ``_locked_entry`` in ``routes/objects.py`` for
+    the failure this protects against.
     """
     return {
         "ok": True,
@@ -142,15 +152,23 @@ def plot_style() -> dict:
 
 
 @router.get("/meta", response_model=models.MetaResponse)
-def meta(settings: Settings = Depends(get_settings)) -> dict:
+async def meta() -> dict:
     """Echo the live config knobs the SPA needs.
 
-    ``Depends(get_settings)`` is FastAPI's dependency-injection
-    primitive -- the function parameter declared with ``Depends``
-    is filled by calling the dependency, with result caching
-    handled automatically. Flask users: closest analogue is
-    ``flask.current_app.config``, but typed and validated.
+    ``async def`` with the settings read in the body rather than through
+    ``Depends(get_settings)``, for the reason given on :func:`health`: a sync
+    dependency runs in the thread pool and needs one of anyio's 40 tokens, so a
+    route carrying one stops answering at exactly the moment the pool is
+    exhausted and somebody wants to know what this process is. ``get_settings``
+    is an ``lru_cache`` singleton, so calling it directly is a dict lookup and
+    the dependency bought nothing here beyond the token.
+
+    Flask users: ``Depends`` is FastAPI's dependency-injection primitive, the
+    closest analogue to ``flask.current_app.config`` but typed and validated. It
+    is the right tool nearly everywhere; this route is the exception, and why is
+    above.
     """
+    settings = get_settings()
     return {
         "version": _pkg_version("aggregate_api"),
         "aggregate_version": _pkg_version("aggregate"),

@@ -71,6 +71,23 @@ class Settings(BaseSettings):
     # Per-build wall-clock timeout; expires via threadpool.future.
     build_timeout_s: float = 10.0
 
+    # How long a request waits for a cached object's lock before giving up with
+    # HTTP 503.
+    #
+    # A timeout rather than an unbounded wait, because an unbounded one could
+    # take the whole process down. `_locked_entry` holds a CacheEntry's lock for
+    # the length of a request, and FastAPI runs a sync dependency and a sync
+    # handler in two separate threadpool calls, each needing one of anyio's 40
+    # tokens. Forty requests blocked on one lock therefore hold every token, and
+    # the request that holds the lock can never get a token to reach its handler
+    # and release it. Measured at a200: 45 concurrent reads of one object left
+    # the process at 0% CPU with every sync route, `/v1/health` included,
+    # permanently unreachable. 39 survived. See dev/plan-demo-load.md item 0.
+    #
+    # Ten seconds matches the build timeout, so the two ways a request can be
+    # told "not now" expire on the same clock.
+    entry_lock_timeout_s: float = 10.0
+
     # ------------------------------------------------------------------
     # Cache
     # ------------------------------------------------------------------

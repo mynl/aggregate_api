@@ -678,13 +678,49 @@ def _locked_entry(oid: str, cache: ObjectCache = Depends(_get_cache)):
     hands it a context-manager object instead, which fails with
     ``'_GeneratorContextManager' object is not an iterator``.
 
+    **Bounded since a201, because an unbounded wait here could kill the
+    process.** FastAPI runs a sync dependency and a sync handler in two separate
+    ``run_in_threadpool`` calls, each taking one of anyio's 40 thread-limiter
+    tokens. So a request that has acquired this lock still needs a *second*
+    token to reach its handler and release it. Let forty requests block here on
+    one lock and every token is held by a thread that cannot progress, the
+    holder can never get a token to finish, and nothing breaks the cycle: the
+    process parks at 0% CPU with every sync route unreachable, ``/v1/health``
+    included, until it is restarted.
+
+    That is not hypothetical and not about load. Measured at a200, from a fresh
+    server each round, concurrent reads of **one** object: 39 callers survived,
+    45 killed it. The cliff is at 40 because that is the token count. No client
+    disconnect is involved; aborting a request mid-critical-section releases the
+    lock correctly every time, which is a theory worth not re-testing.
+
+    The demonstration meets this immediately, because the shared cache key puts
+    the whole room on one ``CacheEntry`` and therefore on one lock. See
+    ``dev/plan-demo-load.md`` item 0.
+
+    A 503 is the right refusal: the object exists and the caller may have it in
+    a moment, which is what ``Retry-After`` says. Raising *before* the ``try``
+    is deliberate, so a failed acquire cannot reach the ``finally`` and release
+    a lock this request never held.
+
     Yields
     ------
     CacheEntry
     """
     entry = _resolve_object(oid, cache)
-    with entry.lock:
+    # Read settings directly rather than through Depends: one less sync
+    # dependency is one less token acquisition on a path whose whole problem is
+    # token pressure.
+    if not entry.lock.acquire(timeout=get_settings().entry_lock_timeout_s):
+        raise HTTPException(
+            status_code=503,
+            detail=f"object {oid} is busy; retry shortly",
+            headers={"Retry-After": "2"},
+        )
+    try:
         yield entry
+    finally:
+        entry.lock.release()
 
 
 def _has_reinsurance(obj: Any) -> bool:
