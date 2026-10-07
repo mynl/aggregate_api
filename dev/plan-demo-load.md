@@ -179,13 +179,30 @@ also what concentrates every read onto a single lock.
    work (which `density_df` does on every call, and which is most of that 1.2 s)
    happens outside the critical section.
 
-3. **Materialize the frames at build time**, inside the build's own critical
-   section, before the entry is published to the cache. The lock's docstring
-   already says contention is confined to the first access of each frame and
-   was never reproducible once the frames were warm. For a room sharing one
-   object this is what turns the entry from a bottleneck into a read-only
-   value, and it is what makes the pre-warm step in the runbook actually
-   effective.
+3. ~~**Materialize the frames at build time**~~ **Dropped, 2026-10-07, on
+   measurement.** The premise was wrong: `getattr(obj, 'density_df')` costs
+   **0.0 ms**, because the frame is built during `build()` and not lazily on
+   first read. There is nothing to pre-materialize. What a full-grid read
+   actually costs is `frame_to_payload` at 678 ms plus `json.dumps` at 656 ms
+   over a 33.9 MB body, none of which touches the object, so the remaining win
+   is **narrowing** the lock rather than warming anything. Deferred too, because
+   the demonstration's own request shapes are green without it: the SPA's
+   `more:density` asks for `resolution=display` with four columns, which is 46 ms
+   and 500 KB, not 1.8 s and 30 MB.
+
+**Landed, and verified.** Parts 1 and 2 shipped as **a201** and **a202**.
+
+| scenario | before | after |
+|---|---|---|
+| 50 concurrent SPA-shape `density_df` | process dead | 50 of 50 answered, 1.42 s |
+| 80 concurrent, same | process dead | 80 of 80 answered, 2.5 s |
+| 60 concurrent `summary` | process dead | 60 of 60 answered, 0.80 s |
+| `blitz -Cold -Follow`, 50 callers | 17 builds, then death | 50 of 50 answered, 4.7 s |
+| `blitz -Follow` warm, twice over | hung 83 s, then death | 50 of 50 answered, 4.2 s then 0.6 s |
+| 45 concurrent **full-grid** `density_df` | process dead | 10 answered, 35 refused, alive |
+
+`/v1/health` answers in 2 to 4 ms throughout, which is the point of making it
+async: the server can now be asked what is wrong while it is busy refusing work.
 
 **Also, so the server can be diagnosed when something like this happens
 again:** make `/v1/health`, `/v1/meta` and `/v1/status` `async def`. They do no
