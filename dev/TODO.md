@@ -6,9 +6,10 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
-- **[Punch-List-Oct-07]** IN PROGRESS, plan `dev/plan-a198-punch-list.md`, the
+- **[Punch-List-Oct-07]** DONE (`1.0.0a198` to `1.0.0a200`), plan
+  `dev/done/plan-a198-punch-list.md` with its execution notes beside it. The
   author's 2026-10-07 punch list after kicking the a197 tires: six items landing
-  as five version bumps across three repositories.
+  as five version bumps across three repositories, all executed 2026-10-07.
   - [x] `1.0.0a198` [quick-re], the five faults in the Quick Re quote sheet: the
     table cycles with the page's table view off a table document, the minimum
     rate on line becomes the fourth candidate so `binds` names it, a row carries
@@ -21,13 +22,18 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
     than the gross one. `net_premium` joins the preview response and all three
     premium figures are named wherever the pair was. Detail in `CHANGELOG.md`
     a199.
-  - [ ] library `1.0.0a397` and plugin `0.9.0` [pnl-emphasis], PnL Summary and
-    Waterfall bolding the gross and net-of-tier rows, and `CR` becoming
-    `Margin ratio`. **The plan names plugin 0.8.0, which is already taken.**
-  - [ ] library `1.0.0a398` [reins-labels], naming the Reinsurance plot's annual
-    triple.
-  - [ ] library `1.0.0a399` and api `1.0.0a200` [capstone], `Capstone.PC`
-    replaced by `Capstone.Capped`.
+  - [x] library `1.0.0a397` and plugin `0.9.0` [pnl-emphasis], PnL Summary and
+    Waterfall bolding gross, each net of tier and the closing net, and
+    `waterfall_df`'s `CR` becoming `Margin ratio`. The plan named plugin
+    `0.8.0`, which [Waterfall-Capital-Catchup] had already taken, so it landed
+    as `0.9.0`.
+  - [x] library `1.0.0a398` [reins-labels], the Reinsurance plot's annual triple
+    named `Gross`, `Ceded to occurrence`, `Net of occurrence`. The document-wide
+    legend strip goes from three chips to six, which the plan anticipated; the
+    revert is one line if that reads worse in use.
+  - [x] library `1.0.0a399` and api `1.0.0a200` [capstone], `Capstone.PC`
+    replaced in place by `Capstone.Capped`, a capped quota share that peels
+    top-down. Detail in `CHANGELOG.md` a200.
 
 - **[PnL-Pentagon]** DONE (`1.0.0a195`, `1.0.0a196`), plan
   `dev/done/plan-a195-pnl-pentagon.md`: the PnL group gains a **Pentagon** leaf

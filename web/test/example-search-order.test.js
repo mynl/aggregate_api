@@ -36,7 +36,8 @@ function hay(name, kind, tags, note) {
 const CAPSTONE_NAMES = [
     'Capstone.Sev', 'Capstone.Gross', 'Capstone.ExposureRating',
     'Capstone.SelectedLosses', 'Capstone.LossPicksTest', 'Capstone.XOL',
-    'Capstone.XOL.PnL', 'Capstone.FullProgram', 'Capstone.PnL', 'Capstone.PC',
+    'Capstone.XOL.PnL', 'Capstone.FullProgram', 'Capstone.PnL',
+    'Capstone.Capped',
     'Capstone.GrossNet',
 ];
 const CAPSTONE = CAPSTONE_NAMES.map((name) => hay(

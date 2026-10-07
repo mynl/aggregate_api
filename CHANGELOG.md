@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.0.0a200
+
+[Capstone-Capped] **the Examples menu's final capstone entry is `Capstone.Capped`**, not `Capstone.PC`. Plan `dev/done/plan-a198-punch-list.md`, batch [capstone], the last of five bumps across three repositories.
+
+- **Library `1.0.0a399` does the work**, replacing the entry in `library.agg` in place. `Capstone.PC` ceded a sliding-scale commission, and a slide blocks peeling, so the one entry whose point was the final program could not open the ledger that makes a final program worth reading. `Capstone.Capped` cedes a capped quota share instead, 75% of the first 20,000 of annual loss at a flat 30% ceding commission, and `peel top-down` works.
+- **The api change is one test.** `web/test/example-search-order.test.js` lists the Capstone entries in `library.agg` reading order and named the old entry. The menu itself needs no edit: it is painted from `Underwriter.recipes` sorted on `seq`, and the entry replaced the old one in place, so its position has not moved.
+
+Needs library `1.0.0a399`. Earlier bumps in this plan need `1.0.0a397` ([pnl-emphasis]) and `1.0.0a398` ([reins-labels]), and the Lab tab needs `aggregate-relativity` `0.9.0`, which the library's `Margin ratio` rename breaks without.
+
 ## 1.0.0a199
 
 [Narrative-Bounds] **two one-liners from the punch list.** Plan `dev/plan-a198-punch-list.md`, batch [narrative-bounds]. Unrelated to each other and small enough to share a bump.
