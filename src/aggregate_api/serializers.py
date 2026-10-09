@@ -314,6 +314,53 @@ def display_log2_for(n_cols: int, cap: int = DENSITY_DISPLAY_LOG2) -> int:
     return max(11, min(cap, rows.bit_length() - 1))
 
 
+#: ``p``-prefixed density columns that are **not** masses, so the display
+#: binning must right-edge them rather than sum them.
+#:
+#: ``p_exact_log10`` (``aggregate`` 1.2.0a7) is the base-10 logarithm of
+#: ``p_exact_float``, which makes it a pointwise reading like ``F`` or ``S`` that
+#: happens to carry the mass prefix. Two things go wrong if it is summed. Adding
+#: logarithms multiplies the probabilities they stand for, so the number means
+#: nothing. And a single exactly-zero bucket inside a super-bucket is ``-inf``,
+#: which takes the whole group with it and then serializes to ``null``, blanking
+#: exactly the deep tail the column exists to keep readable.
+#:
+#: Right-edging carries the ordinary caveat every pointwise column carries here:
+#: the value shown is the last bucket of the group, not a summary of it. The
+#: honest-looking alternative, the logarithm of the summed mass, is worse, since
+#: ``p_exact_float`` has underflowed to ``0.0`` across the region where this
+#: column is the only thing still reading.
+#:
+#: The parent frame's own ``log_p`` escapes the prefix rule by its spelling
+#: alone, which is luck rather than design.
+_NON_MASS_DENSITY_COLUMNS = frozenset({"p_exact_log10"})
+
+
+def mass_columns(df: pd.DataFrame) -> set[str]:
+    """The density columns the display binning should sum.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Any density frame.
+
+    Returns
+    -------
+    set of str
+        The ``p``-prefixed columns, less those listed in
+        ``_NON_MASS_DENSITY_COLUMNS``.
+
+    Notes
+    -----
+    One helper rather than the prefix test spelled out at each binning site.
+    The test was identical at four of them, which is how a ``p``-prefixed
+    column that is not a mass gets summed at three of them after being fixed at
+    the fourth.
+    """
+    return {c for c in df.columns
+            if c.startswith("p") and c not in _NON_MASS_DENSITY_COLUMNS}
+
+
 def bin_density(
     df: pd.DataFrame,
     source_log2: int,

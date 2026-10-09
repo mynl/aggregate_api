@@ -6,6 +6,13 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[nttagg-Exact-Log]** DONE (`1.3.0`), no plan doc: a tweak off the author's
+  1.2.0 tire-kicking, landing with a library reshape. `p_exact_log10` joins the
+  Density grid, and `serializers.mass_columns` stops the display binning summing
+  it as though it were a mass. `p_exact` left `density_df` at library 1.2.0a7,
+  so the exact rationals are no longer reachable through the api at all; see the
+  note at the end of `CHANGELOG.md` 1.3.0 and the open item below.
+
 - **[nttagg-Density-Column]** DONE (`1.2.0`), no plan doc: a tweak off the
   author's 1.1.0 tire-kicking. More > Density asks for `p_exact_float` on an
   `nttagg`, through a per-kind addition to the curated column subset
@@ -679,6 +686,19 @@ and the standing REMINDER below about what is worth plotting.
       fix is a fork per session, which also gives the session download an honest
       scope.
 - [ ] Expand the example library and DecL completion coverage.
+- [ ] **[NTT-Exact-Rationals]**, a route to an exact compound's exact
+      probabilities. Raised 2026-10-09 with `[nttagg-Exact-Log]` (1.3.0). The
+      reduced-Fraction `p_exact` left `density_df` at library 1.2.0a7 for a
+      property built on demand, which was the right call upstream (one gcd per
+      bucket against a 9,976 bit denominator, 77.7 s on a 1000 x 1000 case, paid
+      by every reader of the frame) and leaves this service with no path to the
+      rationals at all. `frame/density_df.csv` carried them through 1.2.0 and
+      does not any more. If they are wanted, the shape is a CSV-only export off
+      the `p_exact` property, streamed and never a JSON payload: one cell of the
+      headline case is a 410-character fraction. Open question for the author,
+      who may well not want it, since `p_exact_log10` carries about 1e-10
+      relative error in the implied probability and that is finer than anything
+      the app draws.
 - [ ] **[NTT-Accuracy]**, an exhibit comparing the exact and the float answer
       bucket by bucket. Raised 2026-10-09 with `[nttagg]` (1.1.0), which
       deliberately left the raw material unreachable: an `AggregateNTT` carries

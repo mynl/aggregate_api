@@ -2405,18 +2405,24 @@ def test_an_exact_compound_builds_and_names_its_own_kind(client):
 
 @requires_nttagg
 def test_the_exact_rationals_reach_the_csv_and_no_display_payload(client):
-    """``p_exact`` is a file column, ``p_exact_float`` is the screen column.
+    """No rational reaches a display payload; the two float views do.
 
     The exact mass per bucket is a ``Fraction``, and on the kind's headline case
     (``dfreq [1:100] dsev [1:100]``) a single cell serializes to roughly 410
     characters. It also matches the ``p``-prefix test that decides which columns
     a display grid *sums*, so binning would add rationals in bigint arithmetic
-    across the whole grid first. Both display paths therefore drop it and the
-    full-frame CSV keeps it, which is what that export is for.
+    across the whole grid first. Both display paths therefore drop it.
 
     The 6 by 6 case here would survive carrying it, and that is exactly why the
     test is worth having: the fault is invisible at this size and ruinous at the
     one the feature exists for.
+
+    **``p_exact`` left ``density_df`` at library 1.2.0a7**, for a property built
+    on demand, because one gcd per bucket against a 9,976 bit denominator cost
+    77.7 s on a 1000 x 1000 case and every reader of the frame paid it. So on a
+    current library there is no rational column to drop and the guard is
+    insurance; the assertions below hold either way, which is why they are
+    written as absence rather than as presence in the export.
     """
     oid = client.post("/v1/objects", json={"decl": _NTT, "log2": 8}).json()["id"]
 
@@ -2424,6 +2430,7 @@ def test_the_exact_rationals_reach_the_csv_and_no_display_payload(client):
     # keeps every column.
     cols = client.get(f"/v1/objects/{oid}/density_df").json()["columns"]
     assert "p_exact_float" in cols, "the display column has to be there"
+    assert "p_exact_log10" in cols, "and the one that reads in the deep tail"
     assert "p_exact" not in cols
     # And asked for by name, which is answered the same way rather than
     # specially.
@@ -2433,27 +2440,30 @@ def test_the_exact_rationals_reach_the_csv_and_no_display_payload(client):
     assert "p_exact" not in asked
 
     # The request the Density grid actually makes (``densityCols`` in
-    # ``web/src/main.js``: the curated four plus the per-kind extra). The drop
-    # takes the rational and leaves the rounded column beside it, which is the
-    # whole contract the grid depends on, and ``p_exact_float`` is a mass so the
-    # display binning sums it like ``p_total``.
+    # ``web/src/main.js``: the curated four plus the two per-kind extras). The
+    # drop takes any rational and leaves both float views beside it, which is
+    # the whole contract the grid depends on.
     grid = client.get(
         f"/v1/objects/{oid}/density_df",
-        params={"cols": "loss,p_total,F,S,p_exact_float",
+        params={"cols": "loss,p_total,F,S,p_exact_float,p_exact_log10",
                 "resolution": "display"},
     ).json()["columns"]
-    assert grid == ["loss", "p_total", "F", "S", "p_exact_float"]
+    assert grid == ["loss", "p_total", "F", "S", "p_exact_float",
+                    "p_exact_log10"]
 
     # The table document, the other display path onto the same frame.
     ir = client.get(f"/v1/objects/{oid}/frame/density_df", params={"format": "ir"})
     assert ir.status_code == 200, ir.text
     assert '"p_exact"' not in ir.text and "p_exact_float" in ir.text
 
-    # The export, which is the one way to get the exact numbers.
+    # The export, which is "exactly what the library built" and so carries
+    # whichever exact columns the installed library ships. Both float views are
+    # asserted; the rational is not, because whether it is there is the
+    # library's call and it moved at 1.2.0a7.
     csv = client.get(f"/v1/objects/{oid}/frame/density_df.csv")
     assert csv.status_code == 200, csv.text
     header = csv.text.splitlines()[0].split(",")
-    assert "p_exact" in header and "p_exact_float" in header
+    assert "p_exact_float" in header and "p_exact_log10" in header
 
 
 @requires_nttagg
@@ -2480,3 +2490,58 @@ def test_an_exact_compound_round_trips_through_the_session_export(client):
     # compound survives the round trip, not where it lands in the file.
     kinds = [s["kind"] for s in reloaded.json()["statements"]]
     assert "nttagg" in kinds
+
+
+@requires_nttagg
+def test_the_exact_logarithm_right_edges_rather_than_summing(client):
+    """``p_exact_log10`` is pointwise, so the display binning must not sum it.
+
+    The binner's rule is that a ``p``-prefixed column is a mass to add and
+    everything else is a value read at the super-bucket right edge.
+    ``p_exact_log10`` carries the prefix and is not a mass, so the rule caught
+    it by spelling, and summing it goes wrong twice: adding logarithms
+    multiplies the probabilities they stand for, and one exactly-zero bucket in
+    a group is ``-inf``, which takes the group with it and serializes to
+    ``null``. That blanks the deep tail, which is the only place the column is
+    the reading.
+
+    ``serializers.mass_columns`` is where the exception lives, and this test is
+    discriminating rather than approximate: the binned column is asserted equal
+    to the full column's right edges, and on this case a summed pair would read
+    about -2.9 against a right edge of about -1.4.
+
+    ``log2=14`` because binning has to actually happen: the display grid for a
+    three-column frame is 2**13, so a 2**14 source halves to it, two buckets to
+    one. The companion assertion is that ``p_exact_float``, which *is* a mass,
+    goes on summing.
+    """
+    oid = client.post(
+        "/v1/objects", json={"decl": _NTT, "log2": 14}
+    ).json()["id"]
+    cols = "loss,p_exact_float,p_exact_log10"
+    full = client.get(f"/v1/objects/{oid}/density_df",
+                      params={"cols": cols, "resolution": "full"}).json()
+    disp = client.get(f"/v1/objects/{oid}/density_df",
+                      params={"cols": cols, "resolution": "display"}).json()
+    assert full["columns"] == disp["columns"] == [
+        "loss", "p_exact_float", "p_exact_log10"]
+    ratio = len(full["rows"]) // len(disp["rows"])
+    assert ratio == 2, "the case is chosen so that binning happens"
+
+    i_log = full["columns"].index("p_exact_log10")
+    i_float = full["columns"].index("p_exact_float")
+    full_log = [r[i_log] for r in full["rows"]]
+    disp_log = [r[i_log] for r in disp["rows"]]
+    # Right-edged: each displayed value is the last bucket of its group.
+    assert disp_log == [full_log[ratio * i + ratio - 1]
+                        for i in range(len(disp_log))]
+    # An exactly-zero bucket is -inf, and a non-finite float goes out as null
+    # rather than as the `-Infinity` no strict JSON parser would read.
+    assert full_log[0] is None, "loss 0 is off support for this program"
+
+    # The mass beside it still sums, which is the half that must not change.
+    full_float = [r[i_float] for r in full["rows"]]
+    disp_float = [r[i_float] for r in disp["rows"]]
+    for i in range(8):
+        assert disp_float[i] == pytest.approx(
+            sum(full_float[ratio * i:ratio * i + ratio]), rel=1e-12)

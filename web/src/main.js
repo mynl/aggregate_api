@@ -1001,18 +1001,26 @@ const WHOLE_DENSITY_KINDS = new Set(['distortion', 'bvagg', 'sev']);
 const DENSITY_COLS = ['loss', 'p_total', 'F', 'S'];
 
 // Per-kind additions to that subset. An `nttagg` computes its masses exactly,
-// as rationals over prime fields, beside the ordinary float FFT answer, and
-// `p_exact_float` is that exact column rounded for display. Through the body of
-// the distribution it reads as a duplicate of `p_total`, and in the tails it
-// stops: the first and last buckets are where the float pipeline runs out of
-// precision while the exact answer still has digits, which is the reading the
-// kind exists for and the one place in the app it can be seen.
+// as rationals over prime fields, beside the ordinary float FFT answer, and the
+// two columns here are two views of that exact answer.
 //
-// The rational `p_exact` is deliberately not on offer. The api drops it from
-// every display payload, because one cell of the kind's own headline case is a
-// 410-character fraction; `frame/density_df.csv` is where the exact numbers
-// live.
-const DENSITY_COLS_BY_KIND = { nttagg: ['p_exact_float'] };
+// `p_exact_float` is the exact rational correctly rounded to a double. Through
+// the body of the distribution it reads as a duplicate of `p_total`, and in the
+// tails it stops: that is where the float pipeline runs out of precision while
+// the exact answer still has digits.
+//
+// `p_exact_log10` is the one that keeps reading all the way down, and on a large
+// case it is the only one that does. `p_exact_float` underflows to 0 below about
+// 1e-308, which on the kind's headline case is most of the tail; the logarithm
+// is formed from the coefficient's integer bit length, so a bucket at 1e-462
+// reads -467.7 where the float reads 0. It is `-inf` only where the probability
+// is exactly zero, and the api serializes a non-finite float as `null`, so an
+// off-support bucket shows as an empty cell rather than as a number.
+//
+// The exact rationals themselves are not on offer here. They left `density_df`
+// for an on-demand property at library 1.2.0a7, and a 410-character fraction was
+// never a value a table cell could carry anyway.
+const DENSITY_COLS_BY_KIND = { nttagg: ['p_exact_float', 'p_exact_log10'] };
 
 /**
  * The Density grid's `cols` request for one object kind.

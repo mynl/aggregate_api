@@ -4,6 +4,43 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.3.0
+
+[nttagg-Exact-Log] **the Density grid shows `p_exact_log10`, and a logarithm is
+no longer summed when the grid bins.** `aggregate` 1.2.0a7 reshaped an
+`nttagg`'s `density_df`: `p_exact_log10` is new, and the reduced-Fraction
+`p_exact` left the frame for a property built on demand, since one gcd per
+bucket against a 9,976 bit denominator cost 77.7 s on a 1000 x 1000 case and
+every reader of the frame paid it whether or not they wanted rationals.
+
+- **`p_exact_log10` joins the Density grid** beside `p_exact_float`, through the
+  same per-kind column list 1.2.0 added. It is the view that keeps reading in
+  the deep tail, and on a large case the only one that does: `p_exact_float`
+  underflows to 0 below about 1e-308, which is most of the tail of the kind's
+  headline case, while the logarithm is formed from the coefficient's integer
+  bit length and reads -467.7 for a bucket at 1e-462.
+- **Fixed: the display binning summed it.** The binner adds a `p`-prefixed
+  column as a mass and reads everything else at the super-bucket right edge.
+  `p_exact_log10` carries the prefix and is not a mass, so it was caught by
+  spelling, and summing it was wrong twice over: adding logarithms multiplies
+  the probabilities they stand for, and one exactly-zero bucket in a group is
+  `-inf`, which takes the whole group with it and then serializes to `null`.
+  That blanked precisely the deep tail the column exists to make readable. It
+  now right-edges, with the ordinary caveat every pointwise column here carries.
+- **One helper decides what a mass is**, `serializers.mass_columns`, called at
+  all four binning sites. The prefix test was spelled out identically at each,
+  which is how a column gets fixed at one site and left summed at the other
+  three.
+- An off-support bucket shows as an empty cell, not as `-inf`: a non-finite
+  float has always gone out as `null`, because `-Infinity` is not JSON a strict
+  parser will read.
+
+**One consequence worth stating plainly.** With `p_exact` off the frame, the
+exact rationals are no longer reachable through this service at all, including
+through `frame/density_df.csv`, which 1.1.0 described as the place they live.
+They are an `AggregateNTT.p_exact` property now, and exposing it would be a new
+route rather than a column. Nothing here asks for one yet.
+
 ## 1.2.0
 
 [nttagg-Density-Column] **More > Density shows an exact compound's exact

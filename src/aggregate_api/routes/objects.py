@@ -142,6 +142,7 @@ from ..serializers import (
     display_log2_for,
     frame_to_payload,
     info_to_payload,
+    mass_columns,
     pnl_density_frame,
     reset_index_safe,
     severity_density_frame,
@@ -2178,7 +2179,7 @@ def get_density_df(
             df = df[[c for c in col_list if c in df.columns]]
         if not binned:
             return frame_to_payload(df)
-        sum_cols = {c for c in df.columns if c.startswith("p")}
+        sum_cols = mass_columns(df)
         display_log2 = display_log2_for(len(df.columns))
         source_log2 = max(display_log2, (len(df) - 1).bit_length())
         return frame_to_payload(
@@ -2206,7 +2207,7 @@ def get_density_df(
     source_log2 = getattr(entry.obj, "log2", None)
     if source_log2 is not None and binned:
         # Bin the full grid down: p_* columns sum, loss/F/S right-edge.
-        sum_cols = {c for c in df.columns if c.startswith("p")}
+        sum_cols = mass_columns(df)
         return frame_to_payload(
             bin_density(
                 df, source_log2, sum_cols=sum_cols,
@@ -2291,7 +2292,7 @@ def get_unit_density_df(
     # The widest density payload the api serves: 2 * units + 3 columns. The cell
     # budget trades rows for those columns so a 12-unit portfolio ships the same
     # number of JSON numbers as a 2-unit one.
-    sum_cols = {c for c in df.columns if c.startswith("p")}
+    sum_cols = mass_columns(df)
     return frame_to_payload(
         bin_density(
             df, source_log2, sum_cols=sum_cols,
@@ -2449,7 +2450,7 @@ def get_reins_density_df(
     df = reset_index_safe(df)
     source_log2 = getattr(entry.obj, "log2", None)
     if source_log2 is not None and resolution == "display":
-        sum_cols = {c for c in df.columns if c.startswith("p")}
+        sum_cols = mass_columns(df)
         return frame_to_payload(
             bin_density(
                 df, source_log2, sum_cols=sum_cols,
