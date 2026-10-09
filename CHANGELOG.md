@@ -4,6 +4,61 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.1.0
+
+[nttagg] **the library's exact compound kind is admitted, served and labeled.**
+Plan `dev/done/plan-1.1.0-nttagg.md`. `aggregate` 1.1.0 added the DecL kind
+`nttagg`, a bounded discrete compound computed exactly over 32-bit prime fields
+with CRT reconstruction, and nothing here admitted it: the api classifies a
+built object by class name, `AggregateNTT` was not a key, and
+`build('nttagg Dice dfreq [1:6] dsev [1:6]')` ended in a 422 saying the kind was
+not supported. It now builds, serves every exhibit and chart the object lists,
+and names itself.
+
+- **Four kind touchpoints.** `AggregateNTT` maps to `nttagg` in
+  `_KIND_OF_CLASS`, the kind joins `SUPPORTED_KINDS`, it takes the slot beside
+  `bvagg` in the `.agg` export's dependency order that the library's own write
+  order gives it, and `BuildResponse.kind` lists it. The last is not cosmetic: a
+  kind the route classifies and the response model does not list makes the build
+  500 after doing all the work.
+- **`NTT Aggregate` on the status strip**, in both `main.js` and the separate
+  `lite.js` copy of the map. Without an entry the facts line called an exact
+  compound an Aggregate, which is wrong rather than merely missing.
+- **`nttagg` is a keyword in the editor**, colored and completed, in the
+  structural group beside the other words that open a declaration.
+- **The exact rational column stays out of the display payloads.** An
+  `nttagg`'s `density_df` carries `p_exact`, one `Fraction` per bucket. On the
+  kind's own headline case (`dfreq [1:100] dsev [1:100]`) the common denominator
+  is 100 * 100**100, so a single cell serializes to roughly 410 characters and a
+  full grid to tens of megabytes; the column also matches the `p`-prefix test
+  that decides which columns a display grid sums, so binning would add rationals
+  in bigint arithmetic across 2**16 rows first. The JSON `density_df` and the
+  `format=ir` table document both drop it through one shared helper, the
+  correctly rounded `p_exact_float` stays, and `frame/density_df.csv` keeps the
+  exact numbers, which is where someone who wants 200-digit rationals wants
+  them.
+- **Nothing was added to `capability.py`, deliberately.** An `nttagg` cannot sit
+  inside a P&L and cannot carry a cession, and the module derives both flags
+  from whether the object carries `pnl_program` and `reins_program`, which is a
+  contract the library maintains on purpose. `AggregateNTT` was the one class
+  where presence lied, so the fix was raised upstream and landed in `aggregate`
+  1.2.0a3; the P&L button and the Reins tab grey themselves, and they will light
+  again by themselves on the day the library relaxes the restriction.
+- **The new tests are gated on the parser, not on a version string.** The pin
+  stays `aggregate>=1.0.1,<2` and does not move, because every edit above is
+  inert without the library, so the suite has to stay green on a released 1.0.1
+  that cannot parse the kind. `tests.conftest.requires_nttagg` asks the
+  installed parser instead of comparing versions, which cannot go stale if the
+  library backports or renames.
+- **Two hard-coded kind lists in the example tests widened, ungated.** A library
+  entry added upstream can redden this suite with no line changing here, and
+  `library.agg` gained `nttagg ExactDiceOfDice` in 1.2.0a3, which was already
+  failing the assertion listing the words a DecL program can open with.
+
+`accuracy_df` and `ntt_audit` stay unreachable on purpose; the accuracy exhibit
+they are the raw material for is **[NTT-Accuracy]** in `dev/TODO.md`, and the
+right way in is the library registering it rather than a hand-wired route here.
+
 ## 1.0.0
 
 [First-Release] **the first release anybody else can install**, timed with the

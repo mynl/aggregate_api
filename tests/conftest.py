@@ -17,6 +17,43 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+def _nttagg_is_supported() -> bool:
+    """Whether the installed ``aggregate`` knows the ``nttagg`` kind.
+
+    Returns
+    -------
+    bool
+        True when a trivial ``nttagg`` program parses.
+
+    Notes
+    -----
+    A capability probe rather than a version comparison, deliberately. The kind
+    arrived in ``aggregate`` 1.1.0 while the pin is ``>=1.0.1,<2``, so the suite
+    has to stay green on a library that has never heard of it. Comparing version
+    strings would be a second declaration of the same fact, and it would be
+    wrong the day the library backports the kind or renames it; asking the
+    parser cannot be.
+    """
+    try:
+        from aggregate import build
+
+        build.parser.parse("nttagg Gate.Probe dfreq [1 2] dsev [1 2]")
+    except Exception:
+        return False
+    return True
+
+
+#: Gate for the exact-compound tests. Parsing, not building: the question is
+#: whether the grammar carries the keyword, and a build costs a grid.
+NTTAGG_SUPPORTED = _nttagg_is_supported()
+
+#: Marker form, for the tests and the parametrize cases behind the gate.
+requires_nttagg = pytest.mark.skipif(
+    not NTTAGG_SUPPORTED,
+    reason="the installed aggregate has no 'nttagg' kind (arrived in 1.1.0)",
+)
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     """Fresh app + cache per test, audit DB in tmp_path."""

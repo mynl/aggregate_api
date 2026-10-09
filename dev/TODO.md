@@ -6,6 +6,29 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[nttagg]** DONE (`1.1.0`), plan `dev/done/plan-1.1.0-nttagg.md`. The
+  library's exact bounded compound (`aggregate` 1.1.0's `nttagg`) is admitted,
+  served and labeled: four kind touchpoints, the `NTT Aggregate` label in both
+  copies of `KIND_LABEL`, the keyword in the editor's pool, and the exact
+  rational column kept out of both display payloads while the CSV keeps it.
+  `capability.py` deliberately untouched; the composability fix was the
+  library's and landed in `aggregate` 1.2.0a3. Detail in `CHANGELOG.md` 1.1.0.
+  - [x] `_KIND_OF_CLASS`, `SUPPORTED_KINDS`, `_KIND_ORDER`,
+    `BuildResponse.kind`. The last is not cosmetic: a kind the route classifies
+    and the response model does not list 500s after the build has run.
+  - [x] `p_exact` out of the JSON `density_df` and the `format=ir` document,
+    through one shared helper so the two display paths cannot drift. The
+    headline case puts a 410-character rational in a cell, and the column also
+    matches the `p`-prefix test that decides what a display grid sums.
+  - [x] Tests gated on the parser rather than on a version string
+    (`tests.conftest.requires_nttagg`), so the suite stays green on the released
+    1.0.1 the pin still admits.
+  - [x] Two hard-coded kind lists in `tests/test_examples.py` widened, ungated.
+    The second one was already red against the library's new `ExactDiceOfDice`
+    entry; the plan had identified only the first.
+  - [ ] **[NTT-Accuracy]**, carried forward to the backlog: the accuracy exhibit
+    that would show what makes the kind interesting.
+
 - **[Release-1.0.0]** DONE (`1.0.0`), plan `dev/done/plan-1.0.0-release.md`. The
   first public release, timed with the library's 1.0.1 on 2026-10-07. Three
   packaging defects meant no installation route delivered a working app, and all
@@ -647,6 +670,19 @@ and the standing REMINDER below about what is worth plotting.
       fix is a fork per session, which also gives the session download an honest
       scope.
 - [ ] Expand the example library and DecL completion coverage.
+- [ ] **[NTT-Accuracy]**, an exhibit comparing the exact and the float answer
+      bucket by bucket. Raised 2026-10-09 with `[nttagg]` (1.1.0), which
+      deliberately left the raw material unreachable: an `AggregateNTT` carries
+      `accuracy_df` (`p_exact_float`, `p_fft`, `err`, `abs_err`, `rel_err` over
+      the full grid) and `ntt_audit` (sizes, primes, timings, error summaries),
+      and neither is in `_CSV_FRAMES`, with `ntt_audit` a Series that has no
+      shape on the frame routes at all. The reason to wait is that this is a
+      pane with a chart and a reading rather than a dictionary entry, and the
+      right way in is upstream: ask the library to register the exhibit so the
+      app lights it from `available_exhibits` instead of hand-wiring a route.
+      Until it lands, the one upstream `nttagg` example (`ExactDiceOfDice` in
+      `library.agg`) builds an ordinary-looking aggregate that happens to be
+      exact, with nothing on screen saying so.
 - [x] **Density full-frame via CsvGrid `{url}` + worker** (follow-up from
       plan-grid). *(Closed — superseded by the faithful power-of-two density
       binning in 1.0.0a10/a11. The server now bins to a correct 2¹¹ display grid

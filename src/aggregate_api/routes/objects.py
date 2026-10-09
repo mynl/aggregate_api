@@ -1113,6 +1113,50 @@ def _drop_raw_moments(df):
     return df[~stat.isin(_RAW_MOMENTS)]
 
 
+# Exact-rational density columns, carried by an ``nttagg``'s ``density_df``
+# (``aggregate`` 1.1.0). ``p_exact`` holds a ``Fraction`` per bucket, which no
+# display payload should carry: the common denominator of the kind's own
+# headline case, ``dfreq [1:100] dsev [1:100]``, is 100 * 100**100, so a single
+# cell serializes to roughly 410 characters and a full grid to tens of
+# megabytes. Worse, ``p_exact`` matches the ``p``-prefix test that builds
+# ``sum_cols``, so binning for the display grid would sum rationals across
+# 2**16 rows in bigint arithmetic first. The companion ``p_exact_float`` is the
+# honest display column and stays. The exact numbers stay reachable in
+# ``frame/density_df.csv``, the "give me exactly what the library built" export,
+# which is also the right place for them: a 200-digit rational is wanted in a
+# file, not in a table cell.
+_EXACT_DENSITY_COLUMNS = frozenset({"p_exact"})
+
+
+def _drop_exact_rationals(df):
+    """Drop the exact-rational density columns from a display payload.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame or None
+        Any density frame. None passes through, matching
+        :func:`_drop_raw_moments`, because "the object has no such frame" is an
+        ordinary answer that is reported as a 400 further up.
+
+    Returns
+    -------
+    pandas.DataFrame or None
+        The frame without ``p_exact``, unchanged when it carries none (every
+        kind but ``nttagg``).
+
+    Notes
+    -----
+    One helper rather than a drop at each call site: the JSON density route and
+    the ``format=ir`` table document are two paths to one display, and the two
+    must not drift over which columns a reader sees. See
+    ``_EXACT_DENSITY_COLUMNS`` for why the column comes out at all.
+    """
+    if df is None:
+        return None
+    drop = [c for c in df.columns if c in _EXACT_DENSITY_COLUMNS]
+    return df.drop(columns=drop) if drop else df
+
+
 def _resolve_frame(obj: Any, name: str):
     """Return the named frame, calling it when it is a method.
 
@@ -1656,6 +1700,10 @@ _KIND_OF_CLASS = {
     "PnL": "pnl",
     "Distortion": "distortion",
     "Severity": "sev",
+    # ``aggregate`` 1.1.0's exact bounded compound, a subclass of ``Aggregate``.
+    # A string key, so nothing here imports ``aggregate.ntt``: under a library
+    # that predates the kind no object ever matches it and the entry is inert.
+    "AggregateNTT": "nttagg",
 }
 
 # The two taxonomies whose subclasses reach the api under the base name.
@@ -1666,7 +1714,7 @@ _KIND_OF_CLASS = {
 _KIND_OF_BASE = ((Distortion, "distortion"), (Severity, "sev"))
 
 # What POST /v1/objects will build, in the library's own vocabulary.
-SUPPORTED_KINDS = ("agg", "port", "sev", "distortion", "bvagg", "pnl")
+SUPPORTED_KINDS = ("agg", "port", "sev", "distortion", "bvagg", "pnl", "nttagg")
 
 # Guard: the contract declares which classes flow through to this service, so a
 # class added upstream without a kind here should be noticed, not silently
@@ -1742,8 +1790,13 @@ def list_objects(cache: ObjectCache = Depends(_get_cache)) -> dict:
 # write order: a sev precedes the agg that uses it, an agg precedes the port,
 # bvagg and pnl that reference it, so the emitted file re-loads cleanly. A
 # distortion depends on nothing and sorts last. An unlisted kind falls to 99.
+# An ``nttagg`` can neither reference nor be referenced, so its rank is free;
+# it takes the slot beside ``bvagg`` that the library's own
+# ``_KIND_WRITE_ORDER`` gives it rather than an arbitrary one. The tie breaks on
+# name, as it does upstream.
 _KIND_ORDER = {
-    "sev": 0, "agg": 1, "port": 2, "bvagg": 3, "pnl": 4, "distortion": 5,
+    "sev": 0, "agg": 1, "port": 2, "bvagg": 3, "nttagg": 3, "pnl": 4,
+    "distortion": 5,
 }
 
 
@@ -2143,6 +2196,9 @@ def get_density_df(
     # ``loss`` is already a column on the frame so reset_index_safe
     # avoids the collision.
     df = reset_index_safe(df)
+    # Before the column filter, so the payload never carries it however it is
+    # asked for; ``cols=p_exact`` is answered the same way as no ``cols`` at all.
+    df = _drop_exact_rationals(df)
 
     if col_list:
         df = df[[c for c in col_list if c in df.columns]]
@@ -2572,7 +2628,7 @@ def get_frame_document(
         raise HTTPException(
             status_code=422, detail=f"unknown format {format!r}; expected 'ir'"
         )
-    df = _named_frame(entry, which)
+    df = _drop_exact_rationals(_named_frame(entry, which))
     try:
         # `formats=which`, so a frame's own name is its format key. This route
         # passed none at all through a50, which left `summary`, `tail_df`,

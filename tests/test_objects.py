@@ -16,10 +16,17 @@ import re
 
 import pytest
 
+from aggregate_api import models
 from aggregate_api.serializers import display_log2_for
+
+from tests.conftest import requires_nttagg
 
 
 _DICE = "agg Dice dfreq [3] dsev [1:6]"
+
+# The exact compound (``aggregate`` 1.1.0), on the cheap case: support 36, so a
+# small grid says everything the 100 by 100 headline would and costs nothing.
+_NTT = "nttagg Dice.Exact dfreq [1:6] dsev [1:6]"
 
 # A small aggregate carrying occurrence reinsurance, for the reins_* paths.
 _REINS = (
@@ -2361,3 +2368,103 @@ def test_exhibit_envelope_contract(client):
     for p in ("reinsurer", "insured", "bogus"):
         r7 = client.get(f"/v1/objects/{oid}/exhibit/summary?perspective={p}")
         assert r7.status_code == 400, p
+
+
+# ----------------------------------------------------------------------
+# The exact compound, nttagg
+# ----------------------------------------------------------------------
+# Gated on the parser rather than on a version string: the pin is
+# ``aggregate>=1.0.1,<2`` and the kind arrived in 1.1.0, so the suite has to
+# stay green on a library that cannot parse any of these programs. See
+# ``tests.conftest._nttagg_is_supported``.
+
+@requires_nttagg
+def test_an_exact_compound_builds_and_names_its_own_kind(client):
+    """The four kind touchpoints, end to end.
+
+    An ``AggregateNTT`` is an ``Aggregate`` subclass, so it reaches the api
+    through every shared path already; what it needed was admitting. The
+    response-model assertion is the one that matters most and is easy to lose:
+    ``BuildResponse.kind`` is a ``Literal``, so a kind the route classifies and
+    the model does not list 500s *after* the build has run, which reads as a
+    service fault rather than as a missing enum member.
+    """
+    r = client.post("/v1/objects", json={"decl": _NTT, "log2": 8})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "nttagg"
+    assert body["name"] == "Dice.Exact"
+    assert body["log2"] == 8 and body["bs"] > 0
+    assert math.isfinite(body["mean"]) and math.isfinite(body["cv"])
+    # The exact dice of dice: 3.5 claims of mean 3.5.
+    assert body["mean"] == pytest.approx(12.25, rel=1e-9)
+    # The api's own response contract, asserted rather than inferred from the
+    # 200: this is the regression for the ``Literal``.
+    models.BuildResponse.model_validate(body)
+
+
+@requires_nttagg
+def test_the_exact_rationals_reach_the_csv_and_no_display_payload(client):
+    """``p_exact`` is a file column, ``p_exact_float`` is the screen column.
+
+    The exact mass per bucket is a ``Fraction``, and on the kind's headline case
+    (``dfreq [1:100] dsev [1:100]``) a single cell serializes to roughly 410
+    characters. It also matches the ``p``-prefix test that decides which columns
+    a display grid *sums*, so binning would add rationals in bigint arithmetic
+    across the whole grid first. Both display paths therefore drop it and the
+    full-frame CSV keeps it, which is what that export is for.
+
+    The 6 by 6 case here would survive carrying it, and that is exactly why the
+    test is worth having: the fault is invisible at this size and ruinous at the
+    one the feature exists for.
+    """
+    oid = client.post("/v1/objects", json={"decl": _NTT, "log2": 8}).json()["id"]
+
+    # The JSON frame, asked for with no ``cols`` at all, which is the shape that
+    # keeps every column.
+    cols = client.get(f"/v1/objects/{oid}/density_df").json()["columns"]
+    assert "p_exact_float" in cols, "the display column has to be there"
+    assert "p_exact" not in cols
+    # And asked for by name, which is answered the same way rather than
+    # specially.
+    asked = client.get(
+        f"/v1/objects/{oid}/density_df", params={"cols": "loss,p_exact"}
+    ).json()["columns"]
+    assert "p_exact" not in asked
+
+    # The table document, the other display path onto the same frame.
+    ir = client.get(f"/v1/objects/{oid}/frame/density_df", params={"format": "ir"})
+    assert ir.status_code == 200, ir.text
+    assert '"p_exact"' not in ir.text and "p_exact_float" in ir.text
+
+    # The export, which is the one way to get the exact numbers.
+    csv = client.get(f"/v1/objects/{oid}/frame/density_df.csv")
+    assert csv.status_code == 200, csv.text
+    header = csv.text.splitlines()[0].split(",")
+    assert "p_exact" in header and "p_exact_float" in header
+
+
+@requires_nttagg
+def test_an_exact_compound_round_trips_through_the_session_export(client):
+    """The ``.agg`` download carries it, in canonical form, and reloads.
+
+    ``_KIND_ORDER`` gives the kind a rank so the export's dependency sort has
+    something to say about it. Nothing can reference an ``nttagg`` and it
+    references nothing, so the rank is free and mirrors the library's own.
+    """
+    client.post("/v1/objects", json={"decl": _NTT, "log2": 8})
+    r = client.get("/v1/session/models.agg", params={"form": "agg"})
+    assert r.status_code == 200, r.text
+    assert "nttagg Dice.Exact" in r.text
+    # Canonical form expands the range, and the expansion is the program the
+    # parser reads back.
+    assert "dfreq [1 2 3 4 5 6]" in r.text
+    reloaded = client.post("/v1/decl/parse", json={"decl": r.text})
+    assert reloaded.status_code == 200, reloaded.text
+    # Picked out of the list rather than read off the front. The session recipes
+    # live on the process-wide underwriter, so a full-suite run exports whatever
+    # earlier tests built as well, and the export is dependency-ordered: a
+    # severity sorts ahead of everything. What is asserted is that the exact
+    # compound survives the round trip, not where it lands in the file.
+    kinds = [s["kind"] for s in reloaded.json()["statements"]]
+    assert "nttagg" in kinds

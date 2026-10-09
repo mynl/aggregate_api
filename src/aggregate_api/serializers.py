@@ -84,6 +84,15 @@ def _spec_value(value: Any) -> Any:
     than ``None``. The recursion has to cover dicts as well as lists: a ``port``
     spec carries its unit list on a nested ``spec`` key as
     ``[("agg", "A", {...}), ...]``, so a dict appears three levels down.
+
+    **The final ``str`` fallback is load bearing for an ``nttagg``**, which is
+    not obvious from reading it. An exact compound's spec carries its outcome
+    probabilities as ``Fraction``, and ``str(Fraction(1, 4))`` is ``"1/4"``,
+    which is both exact and the spelling the grammar itself accepts, so the
+    value round-trips through ``POST /v1/decl/parse`` and back into a program.
+    Coercing to ``float`` instead would throw away the exactness the kind exists
+    for. Same reasoning as the non-finite limit going out as ``"inf"``: a string
+    the parser reads back beats a number that has lost something.
     """
     if value is None:
         return None
@@ -114,6 +123,7 @@ def _spec_value(value: Any) -> Any:
         return {str(k): _spec_value(v) for k, v in value.items()}
     if isinstance(value, (str, bool, int)):
         return value
+    # A ``Fraction`` lands here, deliberately. See Notes.
     return str(value)
 
 

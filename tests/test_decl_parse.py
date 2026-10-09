@@ -12,6 +12,8 @@ import json
 
 import pytest
 
+from tests.conftest import requires_nttagg
+
 
 # A one-statement aggregate with an occurrence cession, so the spec carries
 # exposure, severity, frequency and reinsurance together.
@@ -248,3 +250,37 @@ def test_reformat_still_echoes_a_malformed_program_unchanged(client):
     r = client.post("/v1/decl/format", json={"decl": spread})
     assert r.status_code == 200, r.text
     assert r.json()["decl"] == spread
+
+
+@requires_nttagg
+def test_exact_probabilities_serialize_as_the_fractions_they_are(client):
+    """An ``nttagg``'s probabilities go out as ``"1/4"``, and that is intended.
+
+    The kind reads its inputs text-exactly: ``0.3`` is the rational 3/10, not
+    the nearest double, which is the whole point of computing over prime fields.
+    The spec therefore carries ``Fraction`` objects, and ``_spec_value`` has no
+    branch for them, so they fall through to the final ``str``.
+
+    That fallback is load bearing rather than accidental, which is why this test
+    exists: ``str(Fraction(1, 4))`` is ``"1/4"``, exact and the spelling the
+    grammar itself accepts, so the value round-trips back into a program.
+    Coercing to ``float`` would throw away the exactness the kind exists for.
+    Same reasoning as the unlimited layer going out as ``"inf"``.
+
+    Note the ``dsev`` weights: ``0.3 0.5 0.2`` is written as decimals and comes
+    back as thirds and fifths, which is the text-exact reading made visible.
+    """
+    decl = ("nttagg X.Exact dfreq [0 1 2] [1/4 1/2 1/4] "
+            "dsev [1 2 10] [0.3 0.5 0.2]")
+    statements = _parse(client, decl)
+    assert len(statements) == 1
+    one = statements[0]
+    assert one["kind"] == "nttagg"
+    assert one["name"] == "X.Exact"
+    spec = one["spec"]
+    assert spec["ntt_freq_outcomes"] == [0, 1, 2]
+    assert spec["ntt_freq_probs"] == ["1/4", "1/2", "1/4"]
+    assert spec["ntt_sev_outcomes"] == [1, 2, 10]
+    assert spec["ntt_sev_probs"] == ["3/10", "1/2", "1/5"]
+    # JSON-native throughout, which is the route's promise.
+    json.dumps(one)

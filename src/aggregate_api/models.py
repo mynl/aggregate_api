@@ -222,8 +222,11 @@ class BuildResponse(BaseModel):
 
     id: str
     # The parser's own kind vocabulary. ``bvagg`` (not ``bivariate``) because
-    # where the api and the library disagree on a name, the library wins.
-    kind: Literal["agg", "port", "sev", "distortion", "bvagg", "pnl"]
+    # where the api and the library disagree on a name, the library wins. A kind
+    # missing here is not cosmetic: the route classifies the object, pydantic
+    # then rejects the api's own response, and the build 500s after doing all
+    # the work.
+    kind: Literal["agg", "port", "sev", "distortion", "bvagg", "pnl", "nttagg"]
     name: str
     warnings: list[str] = []
     cached: bool

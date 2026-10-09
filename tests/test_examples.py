@@ -161,9 +161,14 @@ def test_example_decl_arrives_without_its_filing_clauses(client):
     # a different vocabulary: a ``bvagg`` is declared ``bivariate``, or by one of
     # the view keywords when it is a gross / ceded / net reading. ``clash`` is
     # the fourth of those views and joined this set at a140, with the
-    # ``BivariateClash`` entry the a327 examples brought in.
+    # ``BivariateClash`` entry the a327 examples brought in. ``nttagg`` joined
+    # with ``ExactDiceOfDice`` (library 1.2.0a3), which is the shape of hazard
+    # this set carries: an entry added upstream reddens this assertion with no
+    # line changing in this repo, so the set is widened ahead of the library
+    # rather than behind it.
     heads = {"agg", "port", "sev", "distortion", "dist", "pnl", "xpnl",
-             "bivariate", "clash", "grossceded", "grossnet", "netceded"}
+             "bivariate", "clash", "grossceded", "grossnet", "netceded",
+             "nttagg"}
     hinted = 0
     for item in client.get("/v1/examples").json()["items"]:
         decl = item["decl"]
@@ -280,7 +285,8 @@ def test_hero_example_builds(client):
     hero = min(heroes, key=lambda i: len(i["decl"]))
     r = client.post("/v1/objects", json={"decl": hero["decl"]})
     assert r.status_code == 200, r.text
-    assert r.json()["kind"] in ("agg", "port", "sev", "bvagg", "pnl", "distortion")
+    assert r.json()["kind"] in ("agg", "port", "sev", "bvagg", "pnl",
+                               "distortion", "nttagg")
 
 
 def test_hero_sparklines(client):

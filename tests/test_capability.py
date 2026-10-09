@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests.conftest import NTTAGG_SUPPORTED, requires_nttagg
+
 
 # One object of each kind the api builds, small enough to stay quick, plus an
 # aggregate carrying a cession and a P&L walk, since both light exhibits their
@@ -40,7 +42,25 @@ DECLS = {
     "xpnl": ("xpnl CAP.Xpnl 1000 prem less "
              "agg CAP.XpnlL 1000 prem at 70% lr sev lognorm 100 cv 2 "
              "occurrence ceded to 500 xs 500 deposit 100 poisson"),
+    # The exact compound, which is the one fixture the installed library may not
+    # be able to parse: the kind arrived in ``aggregate`` 1.1.0 and the pin is
+    # ``>=1.0.1,<2``. Its cases carry the gate; see ``LABELS`` below.
+    "nttagg": "nttagg CAP.Ntt dfreq [1:6] dsev [1:6]",
 }
+
+#: ``DECLS`` as parametrize cases, with the library-gated kinds marked. One
+#: place for the gate rather than a skip inside each sweep: the sweeps are what
+#: make the new kind worth adding to the table at all, since they assert that
+#: every exhibit and chart the block lights actually serves.
+LABELS = [
+    pytest.param(label, marks=[requires_nttagg] if label == "nttagg" else [])
+    for label in DECLS
+]
+
+#: The labels the installed library can build, for the loops that sweep the dict
+#: directly instead of parametrizing over it.
+BUILDABLE = [label for label in DECLS
+             if label != "nttagg" or NTTAGG_SUPPORTED]
 
 
 def _build(client, label):
@@ -50,7 +70,7 @@ def _build(client, label):
     return r.json()["id"], r.json()
 
 
-@pytest.mark.parametrize("label", list(DECLS))
+@pytest.mark.parametrize("label", LABELS)
 def test_every_kind_carries_a_capability_block(client, label):
     """Every build response carries the block, whatever the object can do."""
     _, body = _build(client, label)
@@ -176,7 +196,7 @@ def test_can_pnl_rate_is_honest_about_the_installed_library(client):
         assert body["capability"]["can_pnl_rate"] is False, label
 
 
-@pytest.mark.parametrize("label", list(DECLS))
+@pytest.mark.parametrize("label", LABELS)
 def test_inline_block_matches_the_standalone_route(client, label):
     """The two ways to ask must not drift.
 
@@ -190,7 +210,7 @@ def test_inline_block_matches_the_standalone_route(client, label):
     assert body["capability"]["exhibits"] == standalone.json()["exhibits"]
 
 
-@pytest.mark.parametrize("label", list(DECLS))
+@pytest.mark.parametrize("label", LABELS)
 def test_every_listed_exhibit_serves(client, label):
     """A leaf the block lights has to be a leaf that answers.
 
@@ -206,7 +226,7 @@ def test_every_listed_exhibit_serves(client, label):
             assert r.status_code == 200, f"{label}/{item['name']}/{perspective}"
 
 
-@pytest.mark.parametrize("label", list(DECLS))
+@pytest.mark.parametrize("label", LABELS)
 def test_every_listed_chart_serves(client, label):
     """Same contract for the chart leaves."""
     oid, body = _build(client, label)
@@ -226,7 +246,7 @@ def test_the_structure_chart_tracks_a_cession(client):
     one thing a reinsured P&L can show there.
     """
     lists = {label: _build(client, label)[1]["capability"]["charts"]
-             for label in DECLS}
+             for label in BUILDABLE}
     assert "structure" in lists["agg_reins"]
     assert "structure" in lists["xpnl"]
     for label in ("agg", "port", "sev", "distortion", "bvagg", "pnl"):
@@ -513,3 +533,41 @@ def test_capability_survives_the_cache_hit_path(client):
     second = client.post("/v1/objects", json={"decl": DECLS["agg"], "log2": 12}).json()
     assert second["cached"] is True
     assert second["capability"] == first["capability"]
+
+
+@requires_nttagg
+def test_an_exact_compound_can_neither_be_wrapped_nor_cede(client):
+    """The two flags the kind turns off, and the reason they are not declared here.
+
+    An ``nttagg`` cannot sit inside a P&L and cannot carry a cession, and the
+    library says so the way it says it for every other class: by not carrying
+    the method. ``can_pnl`` is ``hasattr(obj, 'pnl_program')`` and ``can_reins``
+    is ``hasattr(obj, 'reins_program')``, which is a contract the library
+    maintains deliberately (a ``PnL`` carries neither, a ``Portfolio`` carries
+    the first and not the second), so nothing in this repo declares a kind list
+    and nothing here has to be edited on the day the restriction is relaxed.
+
+    The composability override landed in ``aggregate`` 1.2.0a3. Against a
+    library carrying the kind but not the override, this test fails and names a
+    library defect, which is the right way round: the app would be lighting a
+    P&L button and a Reins tab that both raise on use.
+
+    Everything else the common surface offers stays on, and that is the other
+    half of the assertion: the object is an ``Aggregate``, so hints, the grid
+    probe and pricing all work unchanged.
+    """
+    _, body = _build(client, "nttagg")
+    cap = body["capability"]
+    assert cap["can_pnl"] is False
+    assert cap["can_reins"] is False
+    # The composed flags follow ``can_pnl`` rather than being decided again.
+    assert cap["can_pnl_rate"] is False
+    assert cap["can_xpnl"] is False
+    assert cap["can_explode"] is False
+    # And a cession view needs a cession.
+    assert cap["can_views"] is False
+    assert body["has_reins"] is False
+    # What an exact compound does answer.
+    assert cap["can_hints"] is True
+    assert cap["can_sharpen"] is True
+    assert cap["can_price"] is True

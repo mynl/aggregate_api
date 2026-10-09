@@ -1,7 +1,7 @@
 {
     "_comment": "Hand-curated DecL keyword pool, used by decl-mode.js for editor syntax highlighting and by completion.js as a client-side fallback when the api is unreachable. Mirrors _TERMINAL_LABELS in src/aggregate/parser_errors.py.",
     "structural": [
-        "agg", "port", "sev", "distortion", "note"
+        "agg", "port", "sev", "distortion", "note", "nttagg"
     ],
     "frequency": [
         "claims", "loss", "in", "premium", "at",
