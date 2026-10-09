@@ -6,6 +6,15 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[nttagg-Density-Column]** DONE (`1.2.0`), no plan doc: a tweak off the
+  author's 1.1.0 tire-kicking. More > Density asks for `p_exact_float` on an
+  `nttagg`, through a per-kind addition to the curated column subset
+  (`DENSITY_COLS_BY_KIND` in `web/src/main.js`) rather than by sending the kind
+  down the whole-frame path. The reading is in the tails, where the float
+  pipeline runs out of precision and the exact answer still has digits. No api
+  change; the route already served the column by name. Detail in `CHANGELOG.md`
+  1.2.0.
+
 - **[nttagg]** DONE (`1.1.0`), plan `dev/done/plan-1.1.0-nttagg.md`. The
   library's exact bounded compound (`aggregate` 1.1.0's `nttagg`) is admitted,
   served and labeled: four kind touchpoints, the `NTT Aggregate` label in both

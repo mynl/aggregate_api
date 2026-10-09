@@ -994,6 +994,36 @@ const KIND_LABEL = {
 // over [0,1], a bivariate's the joint-density matrix. Ask for the whole frame.
 const WHOLE_DENSITY_KINDS = new Set(['distortion', 'bvagg', 'sev']);
 
+// The curated subset itself: the four columns an aggregate's density reading is
+// made of. Asked for by name rather than taken whole because the frame is
+// twelve columns wide and 2**16 deep, and the other eight are conditional
+// expectations nobody reads off this grid.
+const DENSITY_COLS = ['loss', 'p_total', 'F', 'S'];
+
+// Per-kind additions to that subset. An `nttagg` computes its masses exactly,
+// as rationals over prime fields, beside the ordinary float FFT answer, and
+// `p_exact_float` is that exact column rounded for display. Through the body of
+// the distribution it reads as a duplicate of `p_total`, and in the tails it
+// stops: the first and last buckets are where the float pipeline runs out of
+// precision while the exact answer still has digits, which is the reading the
+// kind exists for and the one place in the app it can be seen.
+//
+// The rational `p_exact` is deliberately not on offer. The api drops it from
+// every display payload, because one cell of the kind's own headline case is a
+// 410-character fraction; `frame/density_df.csv` is where the exact numbers
+// live.
+const DENSITY_COLS_BY_KIND = { nttagg: ['p_exact_float'] };
+
+/**
+ * The Density grid's `cols` request for one object kind.
+ *
+ * @param {string} kind the object's kind, as the build response reports it.
+ * @returns {string} comma-separated column names, in request order.
+ */
+function densityCols(kind) {
+    return [...DENSITY_COLS, ...(DENSITY_COLS_BY_KIND[kind] || [])].join(',');
+}
+
 function sep() { return el('span', { className: 'sep' }, '·'); }
 
 /* ---- The facts line's three parts ----
@@ -1535,7 +1565,8 @@ const LOADERS = {
         // A distortion's density_df is the g-curve over s in [0,1]; a
         // bivariate's is its two component marginals; a severity's is a sampled
         // loss / pdf / F / S curve. None has the aggregate's columns, so pull
-        // the whole frame for those.
+        // the whole frame for those. Every other kind takes the curated subset,
+        // plus whatever `DENSITY_COLS_BY_KIND` adds for it.
         const opts = { resolution: 'display' };
         // renderCap lifts CsvGrid's 2,000-row default so the whole display grid
         // shows without a "show all" prompt. 8,192 is the widest that grid gets
@@ -1548,7 +1579,8 @@ const LOADERS = {
             { ...GRID_FULL, maxRows: 25, renderCap: 8192 },
             () => (WHOLE_DENSITY_KINDS.has(state.kind)
                 ? api.density_df(state.id, opts)
-                : api.density_df(state.id, { ...opts, cols: 'loss,p_total,F,S' })),
+                : api.density_df(state.id,
+                    { ...opts, cols: densityCols(state.kind) })),
             ['more', 'density']);
     },
     // The exhibit route, not the frame route: the library registers a

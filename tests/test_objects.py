@@ -2432,6 +2432,18 @@ def test_the_exact_rationals_reach_the_csv_and_no_display_payload(client):
     ).json()["columns"]
     assert "p_exact" not in asked
 
+    # The request the Density grid actually makes (``densityCols`` in
+    # ``web/src/main.js``: the curated four plus the per-kind extra). The drop
+    # takes the rational and leaves the rounded column beside it, which is the
+    # whole contract the grid depends on, and ``p_exact_float`` is a mass so the
+    # display binning sums it like ``p_total``.
+    grid = client.get(
+        f"/v1/objects/{oid}/density_df",
+        params={"cols": "loss,p_total,F,S,p_exact_float",
+                "resolution": "display"},
+    ).json()["columns"]
+    assert grid == ["loss", "p_total", "F", "S", "p_exact_float"]
+
     # The table document, the other display path onto the same frame.
     ir = client.get(f"/v1/objects/{oid}/frame/density_df", params={"format": "ir"})
     assert ir.status_code == 200, ir.text

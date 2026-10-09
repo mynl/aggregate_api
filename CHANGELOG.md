@@ -4,6 +4,32 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.2.0
+
+[nttagg-Density-Column] **More > Density shows an exact compound's exact
+probabilities beside its float ones.** An `nttagg` carries `p_exact_float`, the
+exactly computed mass per bucket rounded for display, and 1.1.0 served it on
+every payload without putting it on screen: the Density grid asks for a curated
+`loss, p_total, F, S` subset, so the one column that distinguishes the kind was
+the one column the pane dropped.
+
+- **The column request is now per kind.** `DENSITY_COLS` is the curated four and
+  `DENSITY_COLS_BY_KIND` adds to it, which for an `nttagg` means
+  `p_exact_float`. Narrower than the alternative on purpose: adding the kind to
+  `WHOLE_DENSITY_KINDS` would have pulled all twelve columns to get one, and
+  that set means "this kind's density frame is not the aggregate's shape at
+  all", which is true of a distortion and a bivariate and false here.
+- **Where to look, since the column reads as a duplicate.** Through the body of
+  the distribution `p_exact_float` and `p_total` agree to the eye. The tails are
+  the reading: the first and last buckets are where the float pipeline runs out
+  of precision while the exact answer still has digits, and the grid's filters
+  are how you get to them.
+- The rational `p_exact` is still dropped from every display payload and still
+  reaches `frame/density_df.csv`, unchanged from 1.1.0.
+
+No api change. The route already served the column to anyone who asked for it by
+name, which the suite now pins on the request the grid actually makes.
+
 ## 1.1.0
 
 [nttagg] **the library's exact compound kind is admitted, served and labeled.**
