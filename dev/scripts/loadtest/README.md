@@ -1,59 +1,49 @@
-## The room script
+# Load tests
 
-dev/scripts/loadtest/room.ps1. Fifty people, each with their own session id in the SPA's format, all opening the page on one synchronized instant, then working through examples with randomized think time. Each person does the page load (meta, examples), the landing build that happens whether they ask or not, then for each example: build, summary, exhibits, first exhibit, and a density read in the shape the SPA actually sends. It reports per-step latency and labels the codes by meaning, so 429 (Caddy refused), 503 (object busy), 504 (build timed out) and 502 (the app stopped answering) are not lumped together. It sends User-Agent: aggregate-api-roomtest so this traffic is identifiable in your logs afterwards.
+PowerShell 7 scripts that drive a running `aggregate-api` the way the SPA does.
+
+| Script | What it simulates |
+|---|---|
+| `room.ps1` | A led room: fifty people open the page on one instant, then work through a few examples with think time. The demonstration shape. |
+| `blitz.ps1` | N simultaneous landing builds at a local api, no Caddy in the path. Answers how many times the server builds the same object; one is the target. |
+| `repro-lock-orphan.ps1` | Proves that one abandoned read orphans a cache-entry lock, the bug a201 and a202 fixed. Kept as a regression check. |
+
+## room.ps1
+
+It sends `User-Agent: aggregate-api-roomtest`, so its traffic can be picked out of the Caddy log afterwards. Each simulated person carries their own `X-Aggregate-Session` in the SPA's format and does:
+
+1. the page load, `GET /v1/meta` and `GET /v1/examples`;
+2. the landing build, which every page load makes without being asked;
+3. per example: build, summary, exhibit list, first exhibit, and a density read in the shape the SPA sends.
+
+It reports latency per step and labels the status codes by meaning, since they call for different fixes: 429 is the Caddy limiter (a room behind one NAT address shares a budget), 503 is a busy object shedding a read, 504 is a build timing out in the queue, and 502 means the app stopped answering. A 429 is recorded and never retried, because the SPA does not retry either.
 
 ```powershell
 cd dev\scripts\loadtest
-.\room.ps1 -People 5 -Examples 3                                   # smoke first
-.\room.ps1 -StatusUrl http://10.8.0.1:19456/v1/status              # the real thing
-.\room.ps1 -ExampleNames 'BasicBook,PropertyCasualty,TwoLineBook' -PerPerson 3
+.\room.ps1 -People 5 -Examples 3                                        # smoke test, run first
+.\room.ps1 -StatusUrl http://10.8.0.1:19456/v1/status                   # the full room
+.\room.ps1 -ExampleNames 'BasicBook,PropertyCasualty,TwoLineBook' -PerPerson 3   # rehearse a running order
 ```
 
-Pass `-StatusUrl` with the VPN address to get the server's own counters before and after, since the public route 404s /v1/status by design.
+`-BaseUrl` defaults to the public site, so the Caddy limiter is in the path, which is the point. `-StatusUrl` reads the server's own counters before and after; the public route 404s `/v1/status` by design, so pass the VPN address.
 
-I have not run it against your public site, because that is outward-facing traffic on a live host and 50 people at 3 builds each is about 150 builds. Say go and I will run the 5-person smoke first and then the full 50, or run it yourself with the VPN status URL so you see the server side too.
+The default run is fifty people and about 150 builds against a live host, so run it deliberately.
 
-```powershell
-[10:01:22] V:\dev\aggregate-api\dev\scripts\loadtest> .\room.ps1 -StatusUrl http://10.8.0.1:19456/v1/status
+## Results
 
-room: 50 people, 2 examples each -> https://agg.mynl.com
-deployed: aggregate_api 1.0.0, aggregate 1.0.1
-examples: BasicBook[agg], Capstone.GrossNet[bvagg], CCoCDistortion[distortion], RetroRatedAccount[pnl], LayerPicks.Compare[port], Capstone.Sev[sev], Capstone.XOL.PnL[xpnl], DiceOneDie[agg]
-everyone opens the page at 10:02:08.465
+**Against the deployed 1.0.0 (aggregate 1.0.1), shortly after its 2026-10-07 release**: 50 people, 2 examples each, eight examples spread across the kinds, VPN status URL.
 
---- by step ---
-step             calls      ok   p50 ms   p95 ms other codes
-meta                50      50      313      344
-examples            50      50      601      864
-landing-build       50      50      739      890
-example-build      100     100      428     1394
-summary            100      88      260      428 400x12
-exhibits           100     100      263      342
-exhibit             88      88      269      433
-density            100     100      466      845
+| Step | Calls | OK | p50 ms | p95 ms |
+|---|---:|---:|---:|---:|
+| meta | 50 | 50 | 313 | 344 |
+| examples | 50 | 50 | 601 | 864 |
+| landing build | 50 | 50 | 739 | 890 |
+| example build | 100 | 100 | 428 | 1,394 |
+| summary | 100 | 88 | 260 | 428 |
+| exhibits | 100 | 100 | 263 | 342 |
+| exhibit | 88 | 88 | 269 | 433 |
+| density | 100 | 100 | 466 | 845 |
 
---- totals ---
-people           : 50
-requests         : 638
-wall clock       : 26.2 s
-latency overall  : p50 325 ms   p95 849 ms   max 2168 ms
-status codes     :
-                   HTTP 200   x626   ok
-                   HTTP 400   x12
+638 requests in 26.2 s, overall p50 325 ms, p95 849 ms, max 2,168 ms. No 429, 503, 504 or 502, and the site answered health in 256 ms afterwards. Server side: 6 builds started for the 150 asked for (the shared cache key paid), no build timeouts, object cache full at 50 of 50, process RSS 3,017 MB.
 
-health after     : HTTP 200 in 256 ms
-
---- server side, before -> after ---
-builds started   : 234 -> 240
-build timeouts   : 0 -> 0
-object cache     : 50 -> 50 of 50 entries
-cache hit rate   : 0.8984
-exhibit cache    : {"entries":37,"max":64,"hits":154,"misses":37,"hit_rate":0.8063,"evictions":0}
-chart cache      : {"entries":8,"max":8,"hits":100,"misses":234,"hit_rate":0.2994,"evictions":226}
-live sessions    : 50 -> 100 of 500
-key scope        : shared 490, session 22
-process RSS      : 3,017 MB
-
-
-[Elapsed: 00m 27s 438ms]
-```
+The 12 summary failures are HTTP 400, the summary route's "not available for this object" answer: the script asks every example for a summary, and one of the eight examples (12 of 100 picks) is of a kind that does not offer it. Not a server fault.
