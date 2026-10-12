@@ -1,0 +1,9 @@
+# Line endings, settled in the repository rather than in each machine's git
+# config. The repository stores LF; a checkout gets its platform's native ending,
+# so Windows editors see CRLF and nothing is ever committed with it.
+* text=auto
+
+# Shell scripts run under bash on the Linux host, where a CR ends every line in
+# an error. LF even in a Windows checkout, so a script copied straight off this
+# machine still runs.
+*.sh text eol=lf
