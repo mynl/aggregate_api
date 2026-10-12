@@ -28,6 +28,10 @@ _DICE = "agg Dice dfreq [3] dsev [1:6]"
 # small grid says everything the 100 by 100 headline would and costs nothing.
 _NTT = "nttagg Dice.Exact dfreq [1:6] dsev [1:6]"
 
+# An exact compound whose support (up to 8 x 2000 = 16,000) fills a 2**14 grid,
+# for the test that needs the display binning to happen. See its docstring.
+_NTT_WIDE = "nttagg Wide.Exact dfreq [1:8] dsev [1:2000]"
+
 # A small aggregate carrying occurrence reinsurance, for the reins_* paths.
 _REINS = (
     "agg ReinsEx 5 claims 100 xs 0 sev lognorm 10 cv .75 "
@@ -2388,13 +2392,18 @@ def test_an_exact_compound_builds_and_names_its_own_kind(client):
     ``BuildResponse.kind`` is a ``Literal``, so a kind the route classifies and
     the model does not list 500s *after* the build has run, which reads as a
     service fault rather than as a missing enum member.
+
+    ``log2=6`` because it is exactly what the support needs (the largest total
+    is 36, inside 64 buckets). Since ``aggregate`` 1.2.0a13 an ``nttagg``
+    treats ``log2`` as a cap and trims any larger request to that figure, so
+    asking for 6 reads the same on a library with the cap and on one without.
     """
-    r = client.post("/v1/objects", json={"decl": _NTT, "log2": 8})
+    r = client.post("/v1/objects", json={"decl": _NTT, "log2": 6})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["kind"] == "nttagg"
     assert body["name"] == "Dice.Exact"
-    assert body["log2"] == 8 and body["bs"] > 0
+    assert body["log2"] == 6 and body["bs"] > 0
     assert math.isfinite(body["mean"]) and math.isfinite(body["cv"])
     # The exact dice of dice: 3.5 claims of mean 3.5.
     assert body["mean"] == pytest.approx(12.25, rel=1e-9)
@@ -2507,16 +2516,22 @@ def test_the_exact_logarithm_right_edges_rather_than_summing(client):
 
     ``serializers.mass_columns`` is where the exception lives, and this test is
     discriminating rather than approximate: the binned column is asserted equal
-    to the full column's right edges, and on this case a summed pair would read
-    about -2.9 against a right edge of about -1.4.
+    to the full column's right edges, where a summed pair of logarithms would
+    read roughly twice the right edge.
 
     ``log2=14`` because binning has to actually happen: the display grid for a
     three-column frame is 2**13, so a 2**14 source halves to it, two buckets to
     one. The companion assertion is that ``p_exact_float``, which *is* a mass,
     goes on summing.
+
+    **The wide program, not the dice**, because since ``aggregate`` 1.2.0a13 an
+    ``nttagg`` treats ``log2`` as a cap and sizes its grid to its support. The
+    dice need 64 buckets, so they come back at ``log2=6`` whatever is asked and
+    nothing bins. ``_NTT_WIDE`` reaches 16,000, which needs all of 2**14 on a
+    library with the cap and on one without.
     """
     oid = client.post(
-        "/v1/objects", json={"decl": _NTT, "log2": 14}
+        "/v1/objects", json={"decl": _NTT_WIDE, "log2": 14}
     ).json()["id"]
     cols = "loss,p_exact_float,p_exact_log10"
     full = client.get(f"/v1/objects/{oid}/density_df",

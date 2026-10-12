@@ -12,9 +12,10 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
   Examples menu, per viewer, over `GET /v1/examples?database=`. [deep-link]
   (`1.5.0`): `/?database=<stem>&example=<name>` selects the file and builds the
   entry, for the paper's links, desktop and phone. Still owed, outside the
-  plan: raise the pin floor to the release carrying `aas-paper.agg` and deploy,
-  and update the two `nttagg` test expectations that library 1.2.0a13's
-  `[NTT-Grid-Cap]` breaks.
+  plan: raise the pin floor to the release carrying `aas-paper.agg` and deploy.
+  (The two `nttagg` tests library 1.2.0a13's `[NTT-Grid-Cap]` broke were fixed
+  after 1.5.0, test only: request `log2=6` for the dice, and a wider program
+  for the binning case.)
 
 - **[nttagg-Exact-Log]** DONE (`1.3.0`), no plan doc: a tweak off the author's
   1.2.0 tire-kicking, landing with a library reshape. `p_exact_log10` joins the
