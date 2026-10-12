@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.5.0
+
+[Example-Databases] **a page URL opens one example from one file, built**, so a reader of the `aggregate` paper can click the link beside a figure. Plan `dev/done/plan-1.4.0-example-databases.md`, step [deep-link], the second of two.
+
+- **`/?database=<stem>&example=<name>`** selects the file exactly as Menu ▸ Examples from does (and stores it), loads the entry with its caption and builds it: one build, replacing the landing one. Either parameter may appear alone; links meant for print should carry both.
+- **A broken link is visible.** An unknown file or entry builds the landing program as usual and the strip says `example "Fig3" not found in aas-paper.agg`, with its fold opened. An unknown file leaves the reader's stored choice alone.
+- **The address bar is cleaned** once the link is applied, so a reload never rebuilds the linked example over the reader's own work. Other parameters such as `?full=1` stay.
+- **Phones too.** The redirect already carried the query to `lite.html`, which now shows and builds the linked entry, or says it was not found.
+
 ## 1.4.0
 
 [Example-Databases] **the hamburger chooses which shipped `.agg` file fills the Examples menu.** Plan `dev/plan-1.4.0-example-databases.md`, step [databases], the first of two; [deep-link] follows as 1.5.0.

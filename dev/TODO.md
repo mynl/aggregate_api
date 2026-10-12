@@ -6,11 +6,15 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
-- **[Example-Databases]** plan `dev/plan-1.4.0-example-databases.md`, two
-  steps. [databases] DONE (`1.4.0`): Menu ▸ Examples from picks the shipped
-  `.agg` file behind the Examples menu, per viewer, over
-  `GET /v1/examples?database=`. [deep-link] pending (`1.5.0`): a page URL that
-  selects a file and builds one of its examples, for the paper's links.
+- **[Example-Databases]** DONE (`1.4.0` to `1.5.0`), plan
+  `dev/done/plan-1.4.0-example-databases.md`, two steps. [databases]
+  (`1.4.0`): Menu ▸ Examples from picks the shipped `.agg` file behind the
+  Examples menu, per viewer, over `GET /v1/examples?database=`. [deep-link]
+  (`1.5.0`): `/?database=<stem>&example=<name>` selects the file and builds the
+  entry, for the paper's links, desktop and phone. Still owed, outside the
+  plan: raise the pin floor to the release carrying `aas-paper.agg` and deploy,
+  and update the two `nttagg` test expectations that library 1.2.0a13's
+  `[NTT-Grid-Cap]` breaks.
 
 - **[nttagg-Exact-Log]** DONE (`1.3.0`), no plan doc: a tweak off the author's
   1.2.0 tire-kicking, landing with a library reshape. `p_exact_log10` joins the

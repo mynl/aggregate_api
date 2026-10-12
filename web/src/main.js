@@ -25,6 +25,7 @@ import { createEditor, emacsEnabledDefault, modifierName } from './editor.js';
 import {
     mountExamples, mountPalette, loadExamples, visibleExamples,
     onExamplesViewChange, loadDatabases, selectDatabase, selectedDatabase,
+    readDeepLink, clearDeepLink, findLinkedExample,
 } from './examples.js';
 import { renderInfo } from './renderers.js';
 import { fetchFailed, mountChart, mountChartDoc, notDrawable } from './charts/mount.js';
@@ -4737,12 +4738,44 @@ onExamplesViewChange(syncDatabaseMenu);
 //
 // The heroes endpoint stays on the server. The card gallery a37 took away is to
 // come back inside the Examples dropdown, and that is what will want it.
-function loadLanding() {
-    // The editor already holds `LANDING_DECL` from startup, so this is the
-    // build and nothing else: no text swap to watch and no fetch in front of
-    // it. `build()` reads the editor, so the reader can also have typed over it
-    // in the moment before this runs and get what they typed.
-    build();
+//
+// **A deep link replaces the landing build** (1.5.0). `/?database=<stem>&
+// example=<name>` waits for that file's payload and builds the linked entry
+// through `pickExample`, one build rather than two, so the editor shows
+// `BasicBook` until the payload lands. A link whose entry is not found builds
+// the landing program as usual and says so on the strip, so a broken link in a
+// printed paper is visible rather than silently replaced. A link carrying only
+// `database` selects the file and lands normally.
+async function loadLanding() {
+    const link = readDeepLink(window.location.search);
+    if (!link) {
+        // The editor already holds `LANDING_DECL` from startup, so this is the
+        // build and nothing else: no text swap to watch and no fetch in front
+        // of it. `build()` reads the editor, so the reader can also have typed
+        // over it in the moment before this runs and get what they typed.
+        build();
+        return;
+    }
+    let found;
+    try {
+        found = await findLinkedExample(link);
+    } catch {
+        found = { item: null, source: link.database ? `${link.database}.agg` : 'the library' };
+    }
+    clearDeepLink();
+    if (found.item) {
+        pickExample(found.item);
+        return;
+    }
+    await build();
+    if (!link.example) return;
+    noteDerivation(`example "${link.example}" not found in ${found.source}`);
+    // Open the fold, since a note behind a chevron is a broken link nobody
+    // sees. It stays open afterwards, as it would had the reader pressed it.
+    if (!$('summary-more').hidden) {
+        $('summary').classList.add('expanded');
+        $('summary-more').setAttribute('aria-expanded', 'true');
+    }
 }
 
 // The `data-why` footnote: one node on the body, clamped to the window. Wired

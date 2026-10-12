@@ -448,6 +448,103 @@ export function selectDatabase(name) {
     return ensureLoaded();
 }
 
+// ----------------------------------------------------------------------
+// Deep links: /?database=<stem>&example=<name>
+// ----------------------------------------------------------------------
+// A link printed beside a figure in a paper opens the app with that figure's
+// program built. `database` selects the file exactly as the menu does, and is
+// stored the same way; `example` names an entry in it. Either may appear alone.
+// Desktop (`main.js`) and phone (`lite.js`) both read the link through these.
+
+/** The query parameters a deep link carries, and nothing else. */
+const DEEP_LINK_PARAMS = ['database', 'example'];
+
+/**
+ * Parse a deep link out of a query string.
+ *
+ * Pure, and exported for the test. `URLSearchParams` does the decoding, so a
+ * dotted name such as `Bear1990.BN.One` needs no escaping and an escaped one
+ * arrives decoded. Surrounding whitespace is dropped, since no stem or entry
+ * name carries any and a link pasted out of a PDF sometimes does.
+ *
+ * @param {string} search `location.search`, with or without its `?`.
+ * @returns {{database: string|null, example: string|null}|null} null when the
+ *     string carries neither parameter.
+ */
+export function readDeepLink(search) {
+    const q = new URLSearchParams(search || '');
+    const database = (q.get('database') || '').trim() || null;
+    const example = (q.get('example') || '').trim() || null;
+    return (database || example) ? { database, example } : null;
+}
+
+/**
+ * `href` without the deep link's parameters, as a path plus query plus hash.
+ *
+ * Pure, and exported for the test. Every other parameter stays, so `?full=1`
+ * survives on the desktop page.
+ *
+ * @param {string} href an absolute URL.
+ * @returns {string}
+ */
+export function withoutDeepLink(href) {
+    const url = new URL(href);
+    for (const name of DEEP_LINK_PARAMS) url.searchParams.delete(name);
+    return `${url.pathname}${url.search}${url.hash}`;
+}
+
+/**
+ * Take the deep link out of the address bar once it has been applied.
+ *
+ * The file choice is already stored, so nothing is lost. Leaving the
+ * parameters would make a later reload discard whatever the reader picked
+ * since and rebuild the linked example over their work.
+ */
+export function clearDeepLink() {
+    try {
+        window.history.replaceState(window.history.state, '',
+            withoutDeepLink(window.location.href));
+    } catch {
+        /* an address bar that cannot be rewritten costs a rebuild on reload */
+    }
+}
+
+/**
+ * Apply a deep link's file choice and find its entry.
+ *
+ * A listed `database` is selected, and stored, as a menu pick would; the
+ * default's own stem selects the default. An unlisted one changes nothing, so
+ * a broken link cannot leave the reader's menu on a file that does not exist.
+ * The entry is matched by exact name, the first in file order winning (only
+ * `decl-testers.agg` reuses a name).
+ *
+ * @param {{database: string|null, example: string|null}} link from `readDeepLink`.
+ * @returns {Promise<{item: object|null, source: string}>} the entry, or null
+ *     when there is none to find, and the file it was looked for in, as a
+ *     reader names it, for the not-found message.
+ */
+export async function findLinkedExample(link) {
+    const listed = await loadDatabases();
+    const defaultName = listed?.find((d) => d.default)?.name || 'library';
+    if (link.database) {
+        const row = listed?.find((d) => d.name === link.database);
+        if (listed && !row) return { item: null, source: `${link.database}.agg` };
+        // When the listing did not answer, try the stem anyway: the examples
+        // request is the check, and `settleDatabase` drops it on the next visit.
+        await selectDatabase(row?.default ? null : link.database);
+    }
+    const source = exampleSource() || `${defaultName}.agg`;
+    if (!link.example) return { item: null, source };
+    let payload;
+    try {
+        payload = await loadExamples();
+    } catch {
+        return { item: null, source };
+    }
+    const item = (payload.items || []).find((i) => i.name === link.example) || null;
+    return { item, source };
+}
+
 /**
  * Fetch if needed, record a failure, and repaint the lists.
  *

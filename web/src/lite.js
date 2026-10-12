@@ -14,7 +14,9 @@
 import './styles/lite.css';
 import { ApiError, api, errorMessage } from './api.js';
 import { fetchFailed, mountChart, notDrawable } from './charts/mount.js';
-import { loadExamples, rankMatches } from './examples.js';
+import {
+    clearDeepLink, findLinkedExample, loadExamples, rankMatches, readDeepLink,
+} from './examples.js';
 import { clearGrids } from './grid.js';
 import { mountIrTable } from './tables.js';
 
@@ -357,26 +359,36 @@ async function renderTable(res) {
  * wait. No toast, no modal.
  */
 function renderBuildFailure(err) {
+    if (err instanceof ApiError && err.status === 429) {
+        const secs = Number(err.retryAfter);
+        renderStripMessage('Easy there', 'This is a shared, free demo, so builds are gently '
+            + 'rate-limited. '
+            + (Number.isFinite(secs) && secs > 0
+                ? `Please try again in about ${secs} second${secs === 1 ? '' : 's'}.`
+                : 'Please give it a moment and try again.'));
+    } else {
+        renderStripMessage('Build failed', errorMessage(err));
+    }
+}
+
+/**
+ * The strip as a message rather than a built object: a bold title and a line.
+ *
+ * A failed build is one tenant; a deep link whose example is not found (1.5.0)
+ * is the other, said in the same place so a broken link in a printed paper is
+ * visible on the phone as it is on the desktop.
+ */
+function renderStripMessage(title, text) {
     const strip = $('lite-strip');
     strip.replaceChildren();
     strip.classList.remove('is-warn');
     strip.classList.add('is-fail');
     const name = document.createElement('span');
     name.className = 'p-name';
+    name.textContent = title;
     const msg = document.createElement('div');
     msg.className = 'p-error';
-    if (err instanceof ApiError && err.status === 429) {
-        name.textContent = 'Easy there';
-        const secs = Number(err.retryAfter);
-        msg.textContent = 'This is a shared, free demo, so builds are gently '
-            + 'rate-limited. '
-            + (Number.isFinite(secs) && secs > 0
-                ? `Please try again in about ${secs} second${secs === 1 ? '' : 's'}.`
-                : 'Please give it a moment and try again.');
-    } else {
-        name.textContent = 'Build failed';
-        msg.textContent = errorMessage(err);
-    }
+    msg.textContent = text;
     strip.append(name, msg);
     $('lite-tiles').replaceChildren();
     $('lite-chart').hidden = true;
@@ -445,7 +457,25 @@ function init() {
         renderSheetList(sheetMatches(ev.target.value));
     });
 
-    initChips().catch((err) => {
+    // A deep link selects its file before the chips load, so the search sheet
+    // reads that file, and then shows and builds the linked entry, exactly as
+    // the desktop page does. See `findLinkedExample`.
+    const link = readDeepLink(location.search);
+    const linked = link
+        ? findLinkedExample(link).catch(() => ({ item: null, source: 'the library' }))
+        : Promise.resolve(null);
+    linked.then(async (found) => {
+        await initChips();
+        if (!link) return;
+        clearDeepLink();
+        if (found.item) {
+            pick(found.item);
+            build();
+        } else if (link.example) {
+            renderStripMessage('Example not found',
+                `example "${link.example}" not found in ${found.source}`);
+        }
+    }).catch((err) => {
         console.error('[lite] examples did not load', err);
         const row = $('lite-chips');
         row.textContent = 'The example library could not be loaded. ';
