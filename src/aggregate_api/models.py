@@ -1247,6 +1247,28 @@ class ExamplesResponse(BaseModel):
     facets: dict[str, list[FacetValue]]
 
 
+class DatabaseItem(BaseModel):
+    """One shipped ``.agg`` file the Examples menu can read, by stem."""
+
+    model_config = _RESPONSE_CFG
+
+    name: str
+    default: bool
+
+
+class DatabasesResponse(BaseModel):
+    """``GET /v1/examples/databases``: the files ``?database=`` accepts.
+
+    The default (the process base) first, then the rest alphabetically. A
+    directory listing: nothing is parsed, so there are no entry counts, and a
+    listed file can still fail to load.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    databases: list[DatabaseItem]
+
+
 class HeroesResponse(BaseModel):
     """``GET /v1/examples/heroes`` -- the entries tagged ``role:hero``."""
 

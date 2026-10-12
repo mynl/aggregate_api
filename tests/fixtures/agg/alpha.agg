@@ -1,0 +1,5 @@
+# Synthetic example database for the test suite. File order is deliberately
+# not alphabetical, so a test can tell reading order from a sort.
+agg Alpha.Zulu 5 claims dsev [1:6] poisson note{first in the file} tags{topic:dice};
+sev Alpha.Mike lognorm 1;
+agg Alpha.Bravo 1 claim dsev [1:6] fixed;

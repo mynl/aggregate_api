@@ -83,6 +83,15 @@
                                 aria-expanded="false" aria-label="menu" title="Menu">
                             <i class="bi bi-list"></i></button>
                         <ul class="dropdown-menu dropdown-menu-end">
+                            <!-- Examples from: which shipped .agg file feeds
+                                 the Examples menu, a per-viewer choice held in
+                                 the browser. The items are rendered by main.js
+                                 from /v1/examples/databases, between this header
+                                 and the divider, in the same checked-item form
+                                 as Tables below. The section hides itself when
+                                 the listing does not answer. -->
+                            <li id="database-header"><h6 class="dropdown-header">Examples from</h6></li>
+                            <li id="database-divider"><hr class="dropdown-divider"></li>
                             <!-- Tables: the page-wide static / interactive choice. It lives here
                                  rather than on each tab because it is a preference, not a per-table
                                  decision, and a switch on every table would be a lot of chrome for
@@ -773,7 +782,11 @@
                 <li><span class="t">Build</span>: run the program (same as Ctrl+Enter)</li>
                 <li><span class="t">Examples</span>: load a ready-made program. Type to search it,
                     or click the tag pills to narrow it; the arrow walk follows what is left on
-                    screen</li>
+                    screen. Menu ▸ Examples from chooses which shipped file fills it:
+                    <code>library.agg</code> by default, or another such as the programs behind
+                    the <em>Reproductions</em> book. The choice is remembered in this browser,
+                    each file keeps its own pill filters, and every program still builds
+                    against the shipped library</li>
                 <li><span class="t">Reformat</span>: rewrite the program in canonical form, keeping
                     its <code>note{}</code>, <code>hints{}</code> and <code>tags{}</code></li>
                 <li><span class="t">Sharpen</span>: audit the grid and move to a better one, writing

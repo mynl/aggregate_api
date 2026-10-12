@@ -72,7 +72,7 @@ from typing import Sequence
 
 from aggregate.decl_writer import format_program, spec_to_decl
 
-from .library import get_underwriter
+from .library import get_database_underwriter, get_underwriter
 
 logger = logging.getLogger(__name__)
 
@@ -396,9 +396,17 @@ def _facets(items: list[dict]) -> dict[str, list[dict]]:
     }
 
 
-@lru_cache(maxsize=1)
-def load_examples() -> dict:
+@lru_cache(maxsize=16)
+def load_examples(database: str | None = None) -> dict:
     """Return the whole example library, one flat list in the file's own order.
+
+    Parameters
+    ----------
+    database : str, optional
+        The stem of a non-default shipped ``.agg`` file, read through
+        :func:`aggregate_api.library.get_database_underwriter`. ``None``, the
+        default, is the process base, byte for byte what this served before
+        the parameter existed.
 
     Returns
     -------
@@ -427,9 +435,10 @@ def load_examples() -> dict:
     Cached for the process. Resolving the base is cheap, since nothing is built,
     but it walks all of it, so it is not worth repeating per request. Filtering
     runs against this cached payload rather than against the frame, which is why
-    :func:`filter_examples` is a separate call.
+    :func:`filter_examples` is a separate call. Keyed on `database`, so each
+    shipped file is walked once; ``maxsize`` covers them all.
     """
-    uw = get_underwriter()
+    uw = get_underwriter() if database is None else get_database_underwriter(database)
     frame = _library_only(uw.recipes)
     if "seq" not in frame.columns:
         raise RuntimeError(

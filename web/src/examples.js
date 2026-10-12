@@ -26,15 +26,35 @@
 // separate facet UI to design, learn or keep in sync with the pills. The filter
 // set is one module-level `Set` shared by both surfaces and persisted per
 // viewer, so a filter set in the dropdown is still on in the palette.
+//
+// **Which file feeds the list is a per-viewer choice** (1.4.0). The hamburger's
+// Examples from section picks one of the shipped `.agg` files the server lists
+// at `/v1/examples/databases`; the stem is stored in the browser and sent as
+// `?database=`. The server's own base is shared by every viewer and never
+// moves, so builds resolve against it whichever file the menu reads. `null`
+// throughout means the default file, which is the request made before 1.4.0.
 
 import uFuzzy from '@leeoniya/ufuzzy';
-import { api } from './api.js';
+import { api, errorMessage } from './api.js';
 import { el, empty } from './utils/dom.js';
 
 let cached = null;
 let loading = null;   // the fetch in flight, so concurrent callers share one
 let flat = null;      // every entry once, in the library's order
 let haystack = null;  // the strings uFuzzy searches, index-aligned with `flat`
+let failure = null;   // why the current file did not load, until it is changed
+
+// The selected file's stem, or null for the default. Read once at startup and
+// checked against the server's listing before the first fetch that uses it.
+const DATABASE_KEY = 'aggapi.examples.database';
+let database = readDatabase();
+
+// Bumped whenever the file changes, so a payload fetched for the old file and
+// landing late is recognized and dropped rather than shown under the new one.
+let generation = 0;
+
+let databases = null;         // the server's listing, once it has answered
+let databasesLoading = null;  // the listing request in flight
 
 /**
  * uFuzzy's own ranking chain with the library's order as the tiebreak.
@@ -125,6 +145,50 @@ const SEARCH_PERMUTE_TERMS = 4;
 const FILTER_KEY = 'aggapi.examples.filters';
 const active = new Set(readFilters());
 const watchers = new Set();
+// The dropdown's and the palette's redraws. Kept apart from `watchers` so a
+// payload arriving can repaint the lists without telling `main.js` the view
+// moved, which would drop a ring cursor a deep link has just set.
+const surfaces = new Set();
+
+/**
+ * The `localStorage` key holding the pill filters for one file.
+ *
+ * Filters are stored per file because the files carry different tags:
+ * `reproductions.agg` has none at all, so a `role:intro` carried over from
+ * `library.agg` would hide every row with nothing on screen to say why.
+ *
+ * **The default file keeps the key it had before 1.4.0**, so a returning
+ * reader's filters survive the upgrade. That is also why the argument is the
+ * selection (null for the default) rather than the default's stem, which
+ * changes when a server sets `AGGAPI_LIBRARY`.
+ *
+ * Pure, and exported for the test.
+ *
+ * @param {string|null} name the selected stem, or null for the default.
+ * @returns {string}
+ */
+export function filterKey(name) {
+    return name ? `${FILTER_KEY}.${name}` : FILTER_KEY;
+}
+
+/** The stored file choice, or null. Wrapped like `readFilters`, for the same reason. */
+function readDatabase() {
+    try {
+        return window.localStorage.getItem(DATABASE_KEY) || null;
+    } catch {
+        return null;
+    }
+}
+
+/** Store the file choice, or clear it for the default. */
+function writeDatabase(name) {
+    try {
+        if (name) window.localStorage.setItem(DATABASE_KEY, name);
+        else window.localStorage.removeItem(DATABASE_KEY);
+    } catch {
+        /* a preference, not a menu */
+    }
+}
 
 /**
  * The search box's text, as module state beside the filter set.
@@ -150,7 +214,7 @@ let needle = '';
  */
 function readFilters() {
     try {
-        const parsed = JSON.parse(window.localStorage.getItem(FILTER_KEY) || 'null');
+        const parsed = JSON.parse(window.localStorage.getItem(filterKey(database)) || 'null');
         return Array.isArray(parsed) ? parsed.filter((k) => typeof k === 'string') : [];
     } catch {
         return [];
@@ -160,7 +224,7 @@ function readFilters() {
 /** Persist the filter keys, silently doing nothing where storage is refused. */
 function writeFilters() {
     try {
-        window.localStorage.setItem(FILTER_KEY, JSON.stringify([...active]));
+        window.localStorage.setItem(filterKey(database), JSON.stringify([...active]));
     } catch {
         /* see readFilters: a filter, not a menu */
     }
@@ -180,15 +244,21 @@ function writeFilters() {
  */
 let notifying = false;
 
-/** Tell every mounted surface the view moved. */
+/** Tell every mounted surface, and every watcher, the view moved. */
 function notify() {
     if (notifying) return;
     notifying = true;
     try {
+        for (const draw of surfaces) draw();
         for (const watcher of watchers) watcher();
     } finally {
         notifying = false;
     }
+}
+
+/** Redraw the lists only: the payload moved, the view the ring indexes did not. */
+function repaint() {
+    for (const draw of surfaces) draw();
 }
 
 /**
@@ -268,13 +338,130 @@ function publishNeedle(text) {
  */
 export async function loadExamples() {
     if (cached) return cached;
-    if (!loading) loading = api.examples().finally(() => { loading = null; });
+    const gen = generation;
+    if (!loading) {
+        const flight = fetchPayload().finally(() => {
+            if (loading === flight) loading = null;
+        });
+        loading = flight;
+    }
     const payload = await loading;
+    // The file changed while this was in flight: what arrived belongs to the
+    // old one, so ask again for the new one rather than caching it.
+    if (gen !== generation) return loadExamples();
     if (!cached) {
         cached = payload;
         buildIndex(cached);
     }
     return cached;
+}
+
+/** The request behind `loadExamples`, after the stored choice is checked. */
+async function fetchPayload() {
+    await settleDatabase();
+    return api.examples(database);
+}
+
+/**
+ * The server's list of example files, memoized, or null when it did not answer.
+ *
+ * A failure is not remembered, so the next caller asks again.
+ *
+ * @returns {Promise<Array<{name: string, default: boolean}>|null>}
+ */
+export async function loadDatabases() {
+    if (databases) return databases;
+    if (!databasesLoading) {
+        databasesLoading = api.databases()
+            .then((res) => { databases = res.databases || []; return databases; })
+            .catch(() => null)
+            .finally(() => { databasesLoading = null; });
+    }
+    return databasesLoading;
+}
+
+/**
+ * Drop a stored choice the server no longer lists, silently.
+ *
+ * A file can leave a later `aggregate`, and a stored stem naming it would
+ * otherwise turn every visit into an error in the Examples menu. A stored stem
+ * that names the default is normalized to null, the same choice spelled the
+ * way the rest of this module spells it. When the listing itself did not
+ * answer nothing is dropped: the examples request will say if the stem is bad.
+ *
+ * Nothing has been fetched for the stale choice yet, so this is a plain reset
+ * rather than a `selectDatabase`, which would bump the generation under the
+ * fetch that called it.
+ */
+async function settleDatabase() {
+    if (!database) return;
+    const listed = await loadDatabases();
+    if (!listed) return;
+    const row = listed.find((d) => d.name === database);
+    if (row && !row.default) return;
+    database = null;
+    writeDatabase(null);
+    resetFilters();
+    notify();
+}
+
+/** The selected stem, or null for the default file. */
+export function selectedDatabase() {
+    return database;
+}
+
+/** The selected file as a reader names it (`reproductions.agg`), or null. */
+function exampleSource() {
+    return database ? `${database}.agg` : null;
+}
+
+/** Load the selected file's stored filters into the active set. */
+function resetFilters() {
+    active.clear();
+    for (const key of readFilters()) active.add(key);
+}
+
+/**
+ * Make `name` the file behind every example surface.
+ *
+ * Stores the choice, forgets the payload and the search index, swaps in the
+ * file's own filters, tells every surface and watcher (which drops the ring
+ * cursor, since it indexed the old list), and fetches. The surfaces show a
+ * loading line meanwhile, and the failure if the file does not load.
+ *
+ * @param {string|null} name a listed stem, or null for the default.
+ * @returns {Promise<void>} settles once the new payload is drawn, or failed.
+ */
+export function selectDatabase(name) {
+    const next = name || null;
+    if (next === database) return Promise.resolve();
+    database = next;
+    writeDatabase(next);
+    generation += 1;
+    cached = null;
+    flat = null;
+    haystack = null;
+    loading = null;
+    failure = null;
+    resetFilters();
+    notify();
+    return ensureLoaded();
+}
+
+/**
+ * Fetch if needed, record a failure, and repaint the lists.
+ *
+ * The one place a surface's fetch is handled, so the dropdown, the palette and
+ * a file change all reach the same three states: loading, loaded, failed.
+ */
+async function ensureLoaded() {
+    const gen = generation;
+    try {
+        await loadExamples();
+    } catch (err) {
+        if (gen === generation) failure = err;
+    }
+    if (gen === generation) repaint();
 }
 
 /**
@@ -543,40 +730,68 @@ function renderList(container, payload, typed, onPick) {
     for (const item of hits) container.appendChild(row(item, onPick));
 }
 
-/** Populate the dropdown menu element with a pinned search box + the list. */
-export async function mountExamples(menuEl, onPick) {
-    let payload;
-    try {
-        payload = await loadExamples();
-    } catch (err) {
-        empty(menuEl);
-        menuEl.appendChild(el('li', {}, el('span', {
-            className: 'dropdown-item-text text-danger small',
-        }, `failed to load examples: ${err.message}`)));
+/**
+ * Draw one surface's list in whichever state the payload is in.
+ *
+ * The failure says which file failed and carries the server's message, which
+ * for a file that does not parse is the parse error, so a reader who picked a
+ * broken file sees why rather than an empty list.
+ */
+function drawSurface(container, typed, onPick) {
+    if (cached) {
+        renderList(container, cached, typed, onPick);
         return;
     }
+    empty(container);
+    const source = exampleSource();
+    const text = failure
+        ? `failed to load ${source || 'examples'}: ${errorMessage(failure)}`
+        : `loading ${source || 'examples'}…`;
+    container.appendChild(el('li', {}, el('span', {
+        className: `dropdown-item-text small ${failure ? 'text-danger' : 'text-muted'}`,
+    }, text)));
+}
 
+/**
+ * Populate the dropdown menu element with a pinned search box + the list.
+ *
+ * Mounted at once and filled when the payload lands, and refilled whenever the
+ * file changes, so every draw reads the current payload rather than one
+ * captured at mount. A header line above the box names the file when it is
+ * not the default, so a reader cannot forget where the list came from.
+ */
+export function mountExamples(menuEl, onPick) {
     empty(menuEl);
+    const source = el('h6', { className: 'dropdown-header example-source' });
     const list = el('div', { className: 'example-list' });
     const input = el('input', {
         type: 'search',
         className: 'form-control form-control-sm example-search',
-        placeholder: `search ${(payload.items || []).length} examples…`,
+        placeholder: 'search examples…',
         autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: false,
     });
-    const draw = () => renderList(list, payload, input.value, onPick);
+    const draw = () => {
+        const label = exampleSource();
+        source.textContent = label ? `from ${label}` : '';
+        source.hidden = !label;
+        input.placeholder = cached
+            ? `search ${(cached.items || []).length} examples…` : 'search examples…';
+        drawSurface(list, input.value, onPick);
+    };
     // Publish, and let the fanout draw: this surface is one of its watchers. See
     // `publishNeedle` for why the render must not be the thing that publishes.
     input.addEventListener('input', () => publishNeedle(input.value));
     // Keystrokes inside a dropdown otherwise reach Bootstrap's own item
     // navigation, which steals the arrow keys and closes on Escape mid-word.
     input.addEventListener('keydown', (ev) => ev.stopPropagation());
-    // A pill clicked in the palette has to move this list too.
-    onExamplesViewChange(draw);
+    // A pill clicked in the palette, or a file change, has to move this list too.
+    surfaces.add(draw);
 
+    menuEl.appendChild(el('li', {}, source));
     menuEl.appendChild(el('li', { className: 'example-search-wrap' }, input));
     menuEl.appendChild(el('li', {}, list));
     draw();
+    ensureLoaded();
 
     // Focus the box when the menu opens, so the dropdown is type-to-find.
     const toggle = menuEl.previousElementSibling;
@@ -600,14 +815,12 @@ export function mountPalette(onPick) {
     // being a second opinion about what the palette shows.
     let draw = null;
 
-    async function ensure() {
-        if (root) return true;
-        let payload;
-        try {
-            payload = await loadExamples();
-        } catch {
-            return false;
-        }
+    // Built on first open, and from then on drawn from the current payload, so
+    // a file change reaches it the way it reaches the dropdown. It opens on a
+    // loading or failed line rather than refusing to open, which is what it did
+    // through 1.3.0 when the fetch failed.
+    function ensure() {
+        if (root) return;
         list = el('div', { className: 'example-list palette-list' });
         input = el('input', {
             type: 'search',
@@ -616,26 +829,28 @@ export function mountPalette(onPick) {
             autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: false,
         });
         const pick = (item) => { close(); onPick?.(item); };
-        draw = () => renderList(list, payload, input.value, pick);
+        draw = () => {
+            const label = exampleSource();
+            input.placeholder = label ? `search ${label}…` : 'search the library…';
+            drawSurface(list, input.value, pick);
+        };
         // Publish, and let the fanout draw. See `publishNeedle`.
         input.addEventListener('input', () => publishNeedle(input.value));
-        // A pill clicked in the dropdown has to move this list too.
-        onExamplesViewChange(draw);
+        // A pill clicked in the dropdown, or a file change, has to move this too.
+        surfaces.add(draw);
         root = el('div', { className: 'palette-backdrop', role: 'dialog', 'aria-modal': 'true' },
             el('div', { className: 'palette' }, input, list));
         // Click outside closes; clicks on the panel itself must not.
         root.addEventListener('mousedown', (ev) => { if (ev.target === root) close(); });
         document.body.appendChild(root);
-        draw();
-        return true;
     }
 
     function close() {
         if (root) root.classList.remove('open');
     }
 
-    async function open() {
-        if (!(await ensure())) return;
+    function open() {
+        ensure();
         root.classList.add('open');
         input.value = '';
         // The box is empty, so the needle is: an emptied box that left the ring
@@ -645,6 +860,7 @@ export function mountPalette(onPick) {
         publishNeedle('');
         draw();
         input.focus();
+        ensureLoaded();
     }
 
     document.addEventListener('keydown', (ev) => {

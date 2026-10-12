@@ -24,7 +24,7 @@ import { createPricingForm, money, percent } from './pricing-form.js';
 import { createEditor, emacsEnabledDefault, modifierName } from './editor.js';
 import {
     mountExamples, mountPalette, loadExamples, visibleExamples,
-    onExamplesViewChange,
+    onExamplesViewChange, loadDatabases, selectDatabase, selectedDatabase,
 } from './examples.js';
 import { renderInfo } from './renderers.js';
 import { fetchFailed, mountChart, mountChartDoc, notDrawable } from './charts/mount.js';
@@ -4661,6 +4661,55 @@ onExamplesViewChange(() => {
     exampleRing.cursor = -1;
     renderHistoryNav();
 });
+
+// ----------------------------------------------------------------------
+// Examples from: the file behind the Examples menu
+// ----------------------------------------------------------------------
+// The hamburger's first section, one checked item per shipped `.agg` file the
+// server lists. A per-viewer view choice, stored by `examples.js`; the server's
+// base and every build are untouched by it.
+
+/** Tick the selected file, whatever moved it: a click, or a stale choice dropped. */
+function syncDatabaseMenu() {
+    const chosen = selectedDatabase();
+    for (const item of document.querySelectorAll('[data-database]')) {
+        const isDefault = item.dataset.databaseDefault === 'true';
+        item.classList.toggle('active', chosen ? item.dataset.database === chosen : isDefault);
+    }
+}
+
+/**
+ * Render the Examples from items between their header and divider.
+ *
+ * The section hides when the listing does not answer, rather than standing as
+ * a header over nothing. The default file is marked as such, and picking it
+ * clears the stored choice rather than storing its stem, so a server that
+ * later changes its default carries the reader with it.
+ */
+async function mountDatabaseMenu() {
+    const listed = await loadDatabases();
+    const divider = $('database-divider');
+    if (!listed || !listed.length) {
+        $('database-header').hidden = true;
+        divider.hidden = true;
+        return;
+    }
+    for (const db of listed) {
+        divider.before(el('li', {}, el('button', {
+            type: 'button',
+            className: 'dropdown-item menu-check-item',
+            dataset: { database: db.name, databaseDefault: String(db.default) },
+            onClick: () => selectDatabase(db.default ? null : db.name),
+        },
+            el('i', { className: 'bi bi-check2' }),
+            el('span', {}, `${db.name}.agg`),
+            db.default ? el('small', { className: 'text-muted' }, 'default') : null)));
+    }
+    syncDatabaseMenu();
+}
+
+mountDatabaseMenu();
+onExamplesViewChange(syncDatabaseMenu);
 
 // ----------------------------------------------------------------------
 // The landing build

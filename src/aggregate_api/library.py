@@ -92,3 +92,106 @@ def get_underwriter():
     uw.load()
     status.record_library_load((time.monotonic() - started) * 1000)
     return uw
+
+
+# The stem the shipped singleton is read from, and so the default database when
+# no custom library is configured.
+SHIPPED_LIBRARY = "library"
+
+
+def _custom_library() -> Path | None:
+    """The configured custom ``.agg``, when it exists, else ``None``.
+
+    Mirrors the test :func:`get_underwriter` applies, so the listing names the
+    file the process base was actually read from: a configured but missing path
+    falls back to the shipped library there, and is not listed here.
+    """
+    from .config import get_settings
+
+    custom = get_settings().library
+    if custom and Path(custom).is_file():
+        return Path(custom)
+    return None
+
+
+def shipped_databases() -> list[dict]:
+    """The ``.agg`` files the Examples menu may read, the default first.
+
+    Returns
+    -------
+    list of dict
+        ``{"name": stem, "default": bool, "path": str or None}`` per file. The
+        default is the process base: the custom library when one is configured,
+        else ``library``. The rest follow alphabetically. ``path`` is for the
+        loader and never leaves the process.
+
+    Notes
+    -----
+    **Only the package's own directory.** ``available_databases()`` also reports
+    the ``cwd`` and ``user`` (``~/.aggregate``) rows, and both are excluded on
+    purpose: on a server ``cwd`` is wherever the process happened to be
+    launched, and on the author's machine the user directory may hold private
+    files. Stems starting with ``_`` (the library's own test suites) are
+    excluded too.
+
+    Not cached: three directory globs cost nothing beside a request, and an
+    uncached listing follows a reinstalled ``aggregate`` without a restart.
+    """
+    from aggregate import build
+
+    frame = build.available_databases()
+    shipped = frame[(frame["where"] == "default")
+                    & ~frame["name"].str.startswith("_")]
+    custom = _custom_library()
+    default_name = custom.stem if custom else SHIPPED_LIBRARY
+    rows = [{"name": default_name, "default": True,
+             "path": str(custom) if custom else None}]
+    for name, path in sorted(zip(shipped["name"], shipped["path"])):
+        # The shipped library is the default unless a custom file displaced it,
+        # and then it is listed like any other shipped file. A custom file whose
+        # stem matches a shipped one shadows it rather than listing it twice.
+        if name != default_name:
+            rows.append({"name": name, "default": False, "path": path})
+    return rows
+
+
+@lru_cache(maxsize=16)
+def get_database_underwriter(name: str):
+    """A private ``Underwriter`` over one non-default shipped ``.agg`` file.
+
+    Parameters
+    ----------
+    name : str
+        A stem :func:`shipped_databases` lists with ``default`` false.
+
+    Returns
+    -------
+    aggregate.underwriter.Underwriter
+        Loaded, and cached for the process on `name`.
+
+    Raises
+    ------
+    KeyError
+        `name` is not a listed non-default file. It is matched against the
+        listing and **never** used as a path, so ``../x`` cannot reach a read.
+    Exception
+        Whatever ``Underwriter.load`` raises on the file's first bad statement.
+        One bad statement fails the whole file; ``lru_cache`` does not cache the
+        failure, so a fixed file is picked up on the next request.
+
+    Notes
+    -----
+    A view for the Examples menu only. Builds still run in the session's fork
+    of the process base, so an entry from another file builds when it is self
+    contained or refers only to ``library.agg`` entries, which holds for every
+    file this serves (author, 2026-10-12). ``maxsize`` covers the handful of
+    shipped files with room to spare.
+    """
+    from aggregate import Underwriter
+
+    for row in shipped_databases():
+        if row["name"] == name and not row["default"]:
+            uw = Underwriter(databases=(row["path"],))
+            uw.load()
+            return uw
+    raise KeyError(name)

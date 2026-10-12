@@ -1,0 +1,3 @@
+# Synthetic: the second statement does not parse, so the whole file fails.
+agg Broken.Good 1 claim dsev [1:6] fixed;
+agg Broken.Bad 10 claims dsev [1 2] frobnicate;

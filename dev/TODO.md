@@ -6,6 +6,12 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Example-Databases]** plan `dev/plan-1.4.0-example-databases.md`, two
+  steps. [databases] DONE (`1.4.0`): Menu ▸ Examples from picks the shipped
+  `.agg` file behind the Examples menu, per viewer, over
+  `GET /v1/examples?database=`. [deep-link] pending (`1.5.0`): a page URL that
+  selects a file and builds one of its examples, for the paper's links.
+
 - **[nttagg-Exact-Log]** DONE (`1.3.0`), no plan doc: a tweak off the author's
   1.2.0 tire-kicking, landing with a library reshape. `p_exact_log10` joins the
   Density grid, and `serializers.mass_columns` stops the display binning summing

@@ -1,7 +1,10 @@
-"""Tests for /v1/examples and /v1/examples/heroes (aggregate's recipe base)."""
+"""Tests for /v1/examples, /v1/examples/databases and /v1/examples/heroes."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pandas as pd
 import pytest
 
 from aggregate_api.examples import filter_examples, load_examples, load_heroes
@@ -353,3 +356,115 @@ def test_loaders_are_cached():
     """Repeat calls return the identical object (``lru_cache``)."""
     assert load_examples() is load_examples()
     assert load_heroes() is load_heroes()
+
+
+# ---------------------------------------------------------------------------
+# ?database=: another shipped .agg file behind the Examples menu
+# ---------------------------------------------------------------------------
+#
+# The suite must not depend on what the installed ``aggregate`` ships (1.0.1,
+# the pin floor, has no ``reproductions.agg``), so discovery is replaced with a
+# synthetic directory: the real ``library.agg`` as the default row, three
+# fixture files beside it, and a ``cwd`` and a ``user`` row that must never be
+# offered.
+
+FIXTURE_AGG = Path(__file__).parent / "fixtures" / "agg"
+
+
+@pytest.fixture
+def fixture_databases(monkeypatch):
+    """Point ``build.available_databases`` at ``tests/fixtures/agg``.
+
+    Yields
+    ------
+    None
+        The loader caches are cleared on the way in and out, since they are
+        keyed on stems the fixture directory reuses across tests.
+    """
+    from aggregate import build
+
+    from aggregate_api.library import get_database_underwriter
+
+    real = build.available_databases()
+    library = real[(real["where"] == "default") & (real["name"] == "library")]
+    rows = [{"name": "library", "where": "default", "path": library["path"].iloc[0]}]
+    rows += [{"name": f.stem, "where": "default", "path": str(f)}
+             for f in sorted(FIXTURE_AGG.glob("*.agg"))]
+    rows += [{"name": "launched-here", "where": "cwd", "path": str(FIXTURE_AGG / "alpha.agg")},
+             {"name": "private", "where": "user", "path": str(FIXTURE_AGG / "alpha.agg")}]
+    frame = pd.DataFrame(rows, columns=["name", "where", "path"])
+    monkeypatch.setattr(build, "available_databases", lambda: frame)
+    get_database_underwriter.cache_clear()
+    load_examples.cache_clear()
+    yield
+    get_database_underwriter.cache_clear()
+    load_examples.cache_clear()
+
+
+def test_the_database_listing_is_shipped_files_default_first(client, fixture_databases):
+    """Default first, then alphabetical; no ``_`` stems, no cwd or user rows."""
+    r = client.get("/v1/examples/databases")
+    assert r.status_code == 200
+    assert r.json() == {"databases": [
+        {"name": "library", "default": True},
+        {"name": "alpha", "default": False},
+        {"name": "broken", "default": False},
+    ]}
+
+
+def test_a_database_serves_its_entries_in_file_order(client, fixture_databases):
+    """``?database=alpha`` is alpha's entries, in the order the file writes them."""
+    r = client.get("/v1/examples", params={"database": "alpha"})
+    assert r.status_code == 200
+    body = r.json()
+    assert [i["name"] for i in body["items"]] == ["Alpha.Zulu", "Alpha.Mike", "Alpha.Bravo"]
+    zulu = body["items"][0]
+    assert zulu["note"] == "first in the file"
+    assert zulu["tags"] == ["topic:dice"]
+    assert "note{" not in zulu["decl"] and "tags{" not in zulu["decl"]
+    assert body["facets"]["topic"] == [{"value": "dice", "count": 1}]
+
+
+def test_absent_or_default_database_is_the_process_base(client, fixture_databases):
+    """No parameter, and the default's own stem, both serve today's payload."""
+    plain = client.get("/v1/examples").json()
+    named = client.get("/v1/examples", params={"database": "library"}).json()
+    assert plain == named
+    assert len(plain["items"]) > 100
+
+
+@pytest.mark.parametrize("database", ["../x", "nope", "launched-here", "private", "_hidden"])
+def test_an_unlisted_database_is_a_422_not_a_read(client, fixture_databases, database):
+    """Matched against the listing by stem, never used as a path."""
+    r = client.get("/v1/examples", params={"database": database})
+    assert r.status_code == 422
+    assert "unknown example database" in r.json()["detail"]
+
+
+def test_a_file_that_fails_to_parse_is_a_422_with_the_message(client, fixture_databases):
+    """One bad statement fails the whole file, and the default still works."""
+    r = client.get("/v1/examples", params={"database": "broken"})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert detail.startswith("broken.agg could not be loaded:")
+    assert "frobnicate" in detail
+    assert client.get("/v1/examples").status_code == 200
+    assert client.get("/v1/examples", params={"database": "alpha"}).status_code == 200
+
+
+def test_a_custom_library_is_the_default_and_library_is_listed(
+        tmp_path, monkeypatch, fixture_databases):
+    """``AGGAPI_LIBRARY`` displaces ``library`` as the default, listed first."""
+    from aggregate_api.config import get_settings
+    from aggregate_api.library import shipped_databases
+
+    custom = tmp_path / "curated.agg"
+    custom.write_text("agg Curated.One 1 claim dsev [1:6] fixed;\n", encoding="utf-8")
+    monkeypatch.setenv("AGGAPI_LIBRARY", str(custom))
+    get_settings.cache_clear()
+    try:
+        names = [(row["name"], row["default"]) for row in shipped_databases()]
+    finally:
+        get_settings.cache_clear()
+    assert names == [("curated", True), ("alpha", False), ("broken", False),
+                     ("library", False)]

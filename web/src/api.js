@@ -315,8 +315,16 @@ export const api = {
     formatDecl:   (decl)            => _json('POST', '/v1/decl/format', { decl }),
 
     // Metadata
-    // group: 'topic' (default) | 'kind' | 'role'
-    examples:     ()                => _json('GET',  '/v1/examples'),
+    /**
+     * The example library, one flat list in file order.
+     *
+     * `database` is a stem from `databases()`; absent (or null) is the
+     * process base, which is what every call made before 1.4.0.
+     */
+    examples:     (database)        => _json('GET',  database
+        ? `/v1/examples?${qs({ database })}` : '/v1/examples'),
+    /** The shipped `.agg` files the Examples menu can read, the default first. */
+    databases:    ()                => _json('GET',  '/v1/examples/databases'),
     /**
      * The `role:hero` entries, with their sparklines.
      *

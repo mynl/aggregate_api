@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.4.0
+
+[Example-Databases] **the hamburger chooses which shipped `.agg` file fills the Examples menu.** Plan `dev/plan-1.4.0-example-databases.md`, step [databases], the first of two; [deep-link] follows as 1.5.0.
+
+- **Menu ▸ Examples from** lists the `.agg` files the installed `aggregate` ships (`library.agg` by default, then `decl-testers.agg` and, from the library's next release, `reproductions.agg`). Picking one refills the Examples dropdown, the Ctrl+K palette and the Ctrl+Shift ring, in that file's own order, and the dropdown's header names the file when it is not the default.
+- **A per-viewer choice**, stored in the browser. The server's base is shared and untouched, so every program still builds against the shipped library, which holds because the files served are self contained or refer only to `library.agg`.
+- **Pill filters are stored per file**, so a `role:intro` set in `library.agg` cannot silently empty a file that carries no tags. The default keeps its old key, so existing filters survive.
+- **New route** `GET /v1/examples/databases`, and `GET /v1/examples?database=<stem>`. Only the package's own directory is offered, minus `_` stems; the `cwd` and `~/.aggregate` files never are. An unlisted stem (including any path) is a 422, and a file that fails to parse is a 422 carrying the parse message, shown in the menu. No parameter is byte for byte the old payload.
+- A stored choice the server no longer lists falls back to the default silently. The palette now opens on a loading or failure line instead of refusing to open.
+
 ## 1.3.0
 
 [nttagg-Exact-Log] **the Density grid shows `p_exact_log10`, and a logarithm is

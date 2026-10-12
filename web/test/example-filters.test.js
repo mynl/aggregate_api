@@ -17,7 +17,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { applyFilters } from '../src/examples.js';
+import { applyFilters, filterKey } from '../src/examples.js';
 
 /** One row, in the shape the payload serves. */
 function item(name, kind, ...tags) {
@@ -105,4 +105,20 @@ test('a row with no pills survives only an empty filter set', () => {
     const bare = [{ name: 'Bare', kind: 'agg' }];
     assert.equal(applyFilters(bare, []), bare);
     assert.deepEqual(applyFilters(bare, ['kind:agg']), []);
+});
+
+// Filters are stored per example file (1.4.0), because the files carry
+// different tags and a filter carried across would empty the list silently.
+// The default keeps the pre-1.4.0 key so a returning reader's filters survive.
+
+test('the default file keeps the key filters had before 1.4.0', () => {
+    assert.equal(filterKey(null), 'aggapi.examples.filters');
+    assert.equal(filterKey(undefined), 'aggapi.examples.filters');
+    assert.equal(filterKey(''), 'aggapi.examples.filters');
+});
+
+test('every other file has a key of its own', () => {
+    assert.equal(filterKey('reproductions'), 'aggapi.examples.filters.reproductions');
+    assert.equal(filterKey('decl-testers'), 'aggapi.examples.filters.decl-testers');
+    assert.notEqual(filterKey('reproductions'), filterKey('decl-testers'));
 });
