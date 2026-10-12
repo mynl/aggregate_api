@@ -58,8 +58,11 @@ Then read everything the plan is attached to, because a plan is rarely alone:
 - **The control list.** `T:/worktrees/dev-files.md` carries a row per plan with
   its real status, and its "Getting to 1.0" section is the author's master list.
   The row is more current than the plan's own header.
-- **The tracked items.** `dev/TODO.md`, and `dev/api-punchlist.md`, which is the
-  author's rolling punch list and often annotates items to a plan.
+- **The tracked items.** `dev/TODO.md` is the live roadmap and the only list to
+  check for pending work. `dev/done/api-punchlist.md` is the author's seven
+  rounds of punch lists, retired 2026-10-07 and kept as history: its open items
+  were absorbed into `dev/TODO.md`, so read it for the provenance of an older
+  item and never as a source of outstanding ones.
 
 ## 2. Read the ground truth, never assert it from memory
 
@@ -198,8 +201,7 @@ In the final phase's commit, and not before:
   the same breath: repoint the link and fix the LIB `.gitignore` entry that
   keeps it uncommitted. A reflected plan is retired on each side independently,
   when that side's half lands.
-- Tick the `dev/TODO.md` entry, and any `dev/api-punchlist.md` item annotated to
-  this plan.
+- Tick the `dev/TODO.md` entry.
 - Update the `dev-files.md` row to DONE with the version range.
 
 ## 8. Report
