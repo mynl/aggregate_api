@@ -1,6 +1,36 @@
 # plan-demo-load: survive fifty people on 2026-10-16
 
-Status: draft, awaiting review
+> **Closed 2026-10-13, partly executed.** We load tested with scripts and
+> changed the FastAPI side so that a room should (fingers crossed) work. What
+> actually happened, checked against the git log, `CHANGELOG.md` and the code:
+>
+> * **Done.** Item 0 [Entry-Lock], the deadlock that killed the process:
+>   **a201** (bounded lock wait refusing with 503 and `Retry-After`, new
+>   `AGGAPI_ENTRY_LOCK_TIMEOUT_S`, `/v1/health` and `/v1/meta` made `async`)
+>   and **a202** (`_locked_entry` waits on the event loop, holding no thread
+>   token). Note that a202 is not the "narrow the lock" written as part 2
+>   below. Narrowing was deferred, and part 3 was dropped on measurement. The
+>   gate passed: 45 to 80 concurrent reads leave `/v1/health` answering.
+> * **Done, differently.** The harness is PowerShell, not k6:
+>   `dev/scripts/loadtest/blitz.ps1` and `repro-lock-orphan.ps1` (a201), and
+>   `room.ps1` with a usage README (2026-10-12, commits `2a10e64` and
+>   `23343c4`). The room run against the deployed 1.0.0 through the public
+>   route: 50 people, 638 requests, p95 849 ms, no 429, 503, 504 or 502, and 6
+>   builds for 150 asked. Results are in that README.
+> * **Caddy tooling, not the limiter change.** `scripts/caddy-reload.sh` and
+>   `caddy-log.sh` (2026-10-12) make Caddyfile edits safe to apply. Item 2's
+>   two-zone limiter is not recorded anywhere in this repo. The room run saw no
+>   429s, so check the live `/etc/caddy/Caddyfile` for what is actually
+>   deployed, and whether a dated widening needs reverting.
+> * **Not done.** Item 1 [Single-flight] (no `single_flight.py`), item 3
+>   [Chart-Cache] (`_CHART_CACHE_MAX` is still the constant 8), item 4
+>   [Heavy-Guard], item 5 [Hero-Endpoint] (no warning comment on
+>   `load_hero_sparklines`), `/v1/status` still sync, and the
+>   `warm.ps1` and GitHub Actions pieces. The room test suggests the shared
+>   cache key covers the led-room case without single-flight. Reopen these
+>   from here if a bigger or less synchronized audience is coming.
+
+Status: closed, see the note above
 Target versions: a179 onward (current is a178)
 Owner: author
 Occasion: a live demonstration to roughly fifty people on 2026-10-16
