@@ -1912,6 +1912,27 @@ main.decl-open > .editor-area ~ * {
     paint-order: stroke; stroke: #fff; stroke-width: 3px; }
 .pent-lead { stroke: var(--pent-faint); stroke-width: .5; }
 .pent-node { cursor: default; }
+/* The node being read. The readout sits far from the node it explains, so a
+   thin ink line on that node's disc or chip links the two. It also stands in for
+   the focus ring, which an SVG group draws badly or not at all. */
+.pent-node:focus { outline: none; }
+.pent-node.is-read :is(.pent-ceded, .pent-net, .pent-empty) {
+    stroke: var(--ink); stroke-width: 1.2; }
+.pent-node.is-read .pent-chip rect { stroke: var(--ink); stroke-width: 1.2; }
+
+/* The readout, in the figure's empty lower-left corner. Sized in viewBox units
+   like every label here, so 10.5px renders about 10 to 13px across the figure's
+   600 to 780px range. Plain block text only: WebKit misplaces content inside a
+   `foreignObject` that is positioned, transformed or given opacity. */
+.pent-readout {
+    height: 100%; overflow: hidden; padding-top: 4px;
+    border-top: 1px solid var(--line-2);
+    font: 10.5px/1.35 var(--ui); color: var(--mut);
+}
+.pent-readout-name {
+    display: block; color: var(--ink); font-weight: 700;
+}
+.pent-readout-name:empty { display: none; }
 
 /* Labels sit over the figure's own edges, so they carry a halo. */
 .pent-name, .pent-g, .pent-c, .pent-n {

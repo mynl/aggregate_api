@@ -15,9 +15,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-    GEOM, VERTS, VIEW_BOX, levelLabel, netFraction, pctFitsInSector,
-    pentagonGlyph, pentagonSvg, radiusFor, rowsByStep, sidesOf, springPath,
-    wedgePath,
+    GEOM, NOTE_MAX, READOUT, READOUT_REST, VERTS, VIEW_BOX, levelLabel,
+    netFraction, pctFitsInSector, pentagonGlyph, pentagonSvg, radiusFor,
+    rowsByStep, sidesOf, springPath, wedgePath,
 } from '../src/charts/pentagon.js';
 
 // One level's payload in the shape the route serves, with the three rows the
@@ -183,7 +183,7 @@ test('the figure draws every node, chip and label stack', () => {
     const { x, y, w, h } = VIEW_BOX;
     assert.ok(svg.startsWith(
         `<svg class="pent-figure" viewBox="${x} ${y} ${w} ${h}"`), svg.slice(0, 60));
-    // seven nodes and three chips, each its own tooltip host
+    // seven nodes and three chips, each carrying its own note
     assert.equal((svg.match(/class="pent-node"/g) || []).length, 10);
     assert.equal((svg.match(/class="pent-chip"/g) || []).length, 3);
     // the names are uppercased by CSS, so the markup carries them as written
@@ -252,11 +252,81 @@ test('the strips glyph is the pentagon itself, five points', () => {
     assert.equal(glyph.match(/points="([^"]+)"/)[1].split(' ').length, 5);
 });
 
-test('a tooltip with a quote cannot break out of its attribute', () => {
-    // Every tooltip here is authored, but the node names are interpolated too,
-    // so the escape is applied to all of them.
+// ----------------------------------------------------------------------
+// The readout: notes in the lower-left corner, not tooltips over the numbers
+// ----------------------------------------------------------------------
+/** Every `data-tip` in the figure, unescaped. */
+const tipsOf = (svg) => [...svg.matchAll(/ data-tip="([^"]*)"/g)]
+    .map((mt) => mt[1].replace(/&quot;/g, '"').replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
+
+test('a note with a quote cannot break out of its attribute', () => {
+    // Every note here is authored, but the node names are interpolated too, so
+    // the escape is applied to all of them.
     const svg = pentagonSvg(FRAME, 100);
-    const titles = svg.match(/title="[^"]*"/g) || [];
-    assert.equal(titles.length, 10, 'one per node and chip');
-    assert.ok(!svg.includes('title=""'), 'and none of them empty');
+    const tips = tipsOf(svg);
+    assert.equal(tips.length, 10, 'one per node and chip');
+    assert.ok(tips.every((tip) => tip.length > 0), 'and none of them empty');
+    assert.equal((svg.match(/ data-tip-name="[^"]+"/g) || []).length, 10);
+    // each note runs to the closing quote of its own attribute: an unescaped
+    // quote would end it early, and the next thing would not be the `>` that
+    // closes the node's tag
+    const tails = [...svg.matchAll(/ data-tip="[^"]*"(.)/g)].map((mt) => mt[1]);
+    assert.deepEqual(new Set(tails), new Set(['>']));
+});
+
+test('no tooltip is left on the figure', () => {
+    const svg = pentagonSvg(FRAME, 100);
+    assert.ok(!svg.includes('data-bs-toggle'));
+    assert.ok(!/\stitle=/.test(svg));
+    assert.equal((svg.match(/class="pent-node" tabindex="0"/g) || []).length, 10,
+        'every node takes focus, so Tab walks them');
+});
+
+test('every note fits the readout', () => {
+    // At 10.5px a 158-unit line holds about 28 characters, so 240 is about nine
+    // lines under the name. The level is interpolated into the assets note, so
+    // check it at a long one too.
+    for (const t of [100, 100000]) {
+        for (const tip of tipsOf(pentagonSvg(FRAME, t))) {
+            assert.ok(tip.length <= NOTE_MAX, `${tip.length}: ${tip}`);
+        }
+    }
+});
+
+test('the readout names a node without its input mark', () => {
+    const svg = pentagonSvg(FRAME, 100);
+    assert.ok(svg.includes('data-tip-name="assets"'));
+    for (const name of ['capital', 'loss and CV', 'CoC', 'TLR and LR', 'P:Q']) {
+        assert.ok(svg.includes(`data-tip-name="${name}"`), name);
+    }
+});
+
+test('the figure carries one readout, at rest', () => {
+    const svg = pentagonSvg(FRAME, 100);
+    assert.equal((svg.match(/class="pent-readout"/g) || []).length, 1);
+    assert.ok(svg.includes(`<span class="pent-readout-text">${READOUT_REST}</span>`));
+});
+
+test('the readout box sits in the corner the figure leaves empty', () => {
+    // Computed from the geometry rather than from literals, so a change to the
+    // frame that collides with the box fails here rather than on the page.
+    const { CX, CY, R, R_MAX, WY } = GEOM;
+    const { x, y, w, h } = READOUT;
+    const qx = CX + R * VERTS[1][0];
+    const qy = CY + R * VERTS[1][1];
+    // inside the viewBox
+    assert.ok(x >= VIEW_BOX.x && y >= VIEW_BOX.y);
+    assert.ok(x + w <= VIEW_BOX.x + VIEW_BOX.w && y + h <= VIEW_BOX.y + VIEW_BOX.h);
+    // left of the dashed arc from capital to gross premium, at the box's top,
+    // which is where the arc comes nearest
+    const arcX = qx + (y - qy) / (WY - qy) * (CX - qx);
+    assert.ok(x + w < arcX, `right edge ${x + w} against the arc at ${arcX}`);
+    // below the P:Q chip, read off the figure's own markup
+    const svg = pentagonSvg(FRAME, 100);
+    const chipAt = svg.lastIndexOf('<rect', svg.indexOf('>P:Q<'));
+    const [, ry, rh] = svg.slice(chipAt).match(/y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/);
+    assert.ok(y > Number(ry) + Number(rh), `top ${y} against the chip's foot`);
+    // and short of gross premium's largest possible disc
+    assert.ok(x + w < CX - R_MAX);
 });

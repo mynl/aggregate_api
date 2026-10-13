@@ -6,6 +6,13 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Pentagon-Readout]** DONE (`1.8.0`), plan
+  `dev/plan-1.6.0-pentagon-readout.md` (in `dev/` until the author retires
+  it; numbered 1.6.0 when drafted, landed after the DecL help took 1.6.0 and
+  1.7.0). The PnL group's Pentagon notes moved from Bootstrap tooltips to one
+  fixed readout in the figure's lower-left corner, driven by hover, focus and
+  tap. Still owed: the iPad check on a real device.
+
 - **[DecL-Help]** DONE (`1.6.0` to `1.7.0`), plan
   `dev/plan-1.7.0-decl-help.md` (in `dev/` until the author retires it), two
   steps, the api half of the library's [DecL-Help-Pages] (`aggregate`

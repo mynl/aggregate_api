@@ -4,6 +4,14 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.8.0
+
+[Pentagon-Readout] **the Pentagon's notes appear in a fixed readout at the figure's lower left** instead of as tooltips over the figure. Plan `dev/plan-1.6.0-pentagon-readout.md` (landed as 1.8.0; 1.6.0 and 1.7.0 went to the DecL help).
+
+- Hover, focus or tap a node or chip and its name and note fill the empty lower-left corner, and that node takes a thin ink outline; leaving the figure restores a faint hint. Nothing pops up over the numbers any more.
+- Tapping works on an iPad (a tap on empty figure restores the hint), and every node is reachable by Tab.
+- The assets and capital notes are shorter, and every note is capped so it fits the box.
+
 ## 1.7.0
 
 [DecL-Help] **Menu ▸ DecL on one page** opens the library's DecL reference card, which prints to one Letter page. Plan `dev/plan-1.7.0-decl-help.md`, step [card], the second of two.

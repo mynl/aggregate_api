@@ -36,6 +36,13 @@
 // The markup is built as a string and handed to the DOM once, which is aSP's
 // own approach and keeps every geometry function pure and testable under
 // `node --test` with no DOM at all. See `web/test/pentagon.test.js`.
+//
+// Each node and chip carries a paragraph explaining it, which appears in one
+// fixed readout in the figure's empty lower-left corner. Through 1.7.0 these
+// were Bootstrap tooltips, and at the 2026-10-13 demo they covered the very
+// numbers they explained and jumped as the pointer crossed the figure. The
+// readout needs no Bootstrap, so `mountPentagon` wires it itself and the module
+// still imports nothing from the bundler.
 
 import { money, percent } from '../pricing-form.js';
 
@@ -73,6 +80,24 @@ GEOM.EY = (GEOM.CY + GEOM.R + GEOM.WY) / 2;
  * with the numbers.
  */
 export const VIEW_BOX = { x: 235, y: 78, w: 620, h: 580 };
+
+/**
+ * The readout's box, in viewBox units: the figure's empty lower-left corner.
+ *
+ * Clear on every book because the vertices are fixed and `R_MAX` caps every
+ * disc: the lowest thing on the left is the P:Q chip, ending near (449, 482); the
+ * dashed arc from capital down to gross premium passes x 447 at this box's top;
+ * and gross premium's disc and label stack are right of x 460. The test computes
+ * those three from `GEOM` and `VERTS`, so a geometry change that collides fails
+ * there rather than here.
+ */
+export const READOUT = { x: 240, y: 488, w: 158, h: 166 };
+
+/** What the readout says while no node is being read. */
+export const READOUT_REST = 'Hover or tap a node or chip to read what it shows.';
+
+/** The longest note the readout holds without clipping, at its type size. */
+export const NOTE_MAX = 240;
 
 /** Every stack takes the same order down the page: gross, ceded, net. */
 const ROW_CLS = ['pent-g', 'pent-c', 'pent-n'];
@@ -241,7 +266,7 @@ const pct = (v) => (Number.isFinite(v) ? percent(v) : DOT);
 const num = (v) => (Number.isFinite(v) ? v.toFixed(2) : DOT);
 const lev = (v) => (Number.isFinite(v) ? `${v.toFixed(2)}:1` : DOT);
 
-/** Escape for an attribute value. Every tooltip is authored here, but the
+/** Escape for an attribute value. Every note is authored here, but the
     object's own labels are not, so this is applied to all of them. */
 function esc(text) {
     return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -306,8 +331,8 @@ function nodeDisc(x, y, r, f, out, lead) {
  * The three lines beside a node, gross over ceded over net.
  *
  * A row may carry more than one column; they set right-aligned, as the chips
- * do, so the columns line up down the stack. The node's title names the columns
- * in order, which is the principle everywhere here: titles match numbers.
+ * do, so the columns line up down the stack. The node's note names the columns
+ * in order, which is the principle everywhere here: notes match numbers.
  */
 function nodeLabel(x, y, r, side, name, rows, dx = 0) {
     const anchor = side === 'left' ? 'end' : 'start';
@@ -376,7 +401,7 @@ export function pentagonGlyph(size = 34) {
  * frame : object
  *     One level's `{columns, rows}` payload.
  * t : number
- *     The level, for the tooltip on assets, which is the one node the reader's
+ *     The level, for the note on assets, which is the one node the reader's
  *     own choice moves.
  *
  * Returns
@@ -409,6 +434,12 @@ export function pentagonSvg(frame, t) {
         + `y2="${WY}"/>`
         + `<line class="pent-arc" x1="${pQ[0]}" y1="${pQ[1]}" x2="${CX}" `
         + `y2="${WY}"/>`);
+    /**
+     * The opening tag of a node or chip: its note and name as data for the
+     * readout, and a tab stop, since a `<g>` cannot take focus without one.
+     */
+    const nodeOpen = (name, tip) => `<g class="pent-node" tabindex="0" `
+        + `data-tip-name="${esc(name)}" data-tip="${esc(tip)}">`;
     const place = (pos, key, name, side, rows, opt = {}) => {
         const gv = g[key];
         const r = radiusFor(gv, vmax);
@@ -417,8 +448,9 @@ export function pentagonSvg(frame, t) {
         // so the two mid vertices mirror each other
         const out = (f === null || pctFitsInSector(r, 1 - f)) ? null
             : (side === 'left' ? 'upright' : 'upleft');
-        el.push(`<g class="pent-node" data-bs-toggle="tooltip" `
-            + `title="${esc(opt.tip || '')}">`
+        // the input mark belongs to the label on the figure, not to the name
+        // the readout prints above the note
+        el.push(nodeOpen(name.replace(star, ''), opt.tip || '')
             + nodeDisc(pos[0], pos[1], r, f, out, opt.lead)
             + nodeLabel(pos[0], pos[1], r, side, name, rows, opt.dx || 0)
             + `</g>`);
@@ -431,10 +463,9 @@ export function pentagonSvg(frame, t) {
 
     place(pA, 'a', `assets${star}`, 'left', stack('a'),
         { tip: `Assets the solvency standard calls for at ${levelLabel(t)}: `
-            + 'a = P + Q, with P the technical premium. The one figure in the '
-            + 'picture the reader sets, through the strip above. Notional: '
-            + 'nothing in the ledger is truncated here and no default is '
-            + 'modeled.' });
+            + 'a = P + Q, with P the technical premium. The one figure you set, '
+            + 'through the strip above. Notional: nothing is truncated and no '
+            + 'default is modeled.' });
     // no star on loss: aSP marked volume here, which the reader set through its
     // own book card. Here the solvency level is the only input, so assets takes
     // the only mark in the figure.
@@ -449,9 +480,8 @@ export function pentagonSvg(frame, t) {
     place(pQ, 'Q', 'capital', 'left', stack('Q'),
         { lead: true,
           tip: 'Capital behind the book: Q = a − P. The red share is what the '
-            + 'cession released, and it does not have to grow with the level: '
-            + 'a program exhausted in the far tail releases less at a remoter '
-            + 'standard.' });
+            + 'cession released. It need not grow with the level: a program '
+            + 'exhausted in the far tail releases less at a remoter standard.' });
     // a margin is premium less loss and the premium is fixed, so the standard
     // deviation of a margin is the standard deviation of its loss
     place(pM, 'M', 'margin and SD', 'right',
@@ -477,27 +507,51 @@ export function pentagonSvg(frame, t) {
     ], { tip: 'Written premium, its combined ratio, and the cv of that '
             + 'combined ratio: the standard deviation over loss plus expense. '
             + 'The red line is the cession, ceded premium and what it bought.' });
-    // the chips, each on the line it belongs to, each with its own tooltip
-    const wrap = (tip, inner) => `<g class="pent-node" `
-        + `data-bs-toggle="tooltip" title="${esc(tip)}">${inner}</g>`;
-    el.push(wrap('Cost of capital, margin over capital. The red row is the '
+    // the chips, each on the line it belongs to, each with its own note, named
+    // by its column heads
+    const wrap = (name, tip, inner) => `${nodeOpen(name, tip)}${inner}</g>`;
+    el.push(wrap('CoC', 'Cost of capital, margin over capital. The red row is the '
         + 'cession itself: margin given up over capital released, which is the '
         + 'rate the reinsurance was bought at.',
     chip((pQ[0] + pM[0]) / 2, (pQ[1] + pM[1]) / 2, ['CoC'],
         [[pct(g.CoC)], [pct(c.CoC)], [pct(n.CoC)]], 62)));
-    el.push(wrap('Loss over technical premium, then loss over written premium.',
+    el.push(wrap('TLR and LR',
+        'Loss over technical premium, then loss over written premium.',
     chip(pP[0] + (pL[0] - pP[0]) * 0.66 - 16,
         pP[1] + (pL[1] - pP[1]) * 0.66, ['TLR', 'LR'],
         [[pct(g.TLR), pct(g.LR)], [pct(c.TLR), pct(c.LR)],
          [pct(n.TLR), pct(n.LR)]], 106)));
-    el.push(wrap('Written premium to capital. The red row is ceded premium '
+    el.push(wrap('P:Q', 'Written premium to capital. The red row is ceded premium '
         + 'over the capital that cession released.',
     chip((pQ[0] + CX) / 2 - 16, (pQ[1] + WY) / 2, ['P:Q'],
         [[lev(g.PQ)], [lev(c.PQ)], [lev(n.PQ)]], 72)));
+    el.push(readoutMarkup());
     const { x, y, w, h } = VIEW_BOX;
+    // `group`, not `img`: an image's children are hidden from assistive
+    // technology, which would hide the focusable nodes and the live readout
     return `<svg class="pent-figure" viewBox="${x} ${y} ${w} ${h}" `
-        + `role="img" aria-label="Pentagon report at ${levelLabel(t)}">`
+        + `role="group" aria-label="Pentagon report at ${levelLabel(t)}">`
         + el.join('') + `</svg>`;
+}
+
+/**
+ * The readout: one fixed place in the figure's empty corner where a node's note
+ * appears, in place of a tooltip over the numbers it explains.
+ *
+ * A `foreignObject`, so it scales with the figure and wraps natively; an HTML
+ * overlay would have to track the SVG's scale by hand. Its contents are plain
+ * block text, never positioned, transformed or given opacity, which is what
+ * WebKit draws in the wrong place inside a `foreignObject`.
+ */
+function readoutMarkup() {
+    const { x, y, w, h } = READOUT;
+    return `<foreignObject class="pent-readout-fo" x="${x}" y="${y}" `
+        + `width="${w}" height="${h}">`
+        + `<div xmlns="http://www.w3.org/1999/xhtml" class="pent-readout" `
+        + `aria-live="polite">`
+        + `<b class="pent-readout-name"></b>`
+        + `<span class="pent-readout-text">${READOUT_REST}</span>`
+        + `</div></foreignObject>`;
 }
 
 // ----------------------------------------------------------------------
@@ -547,7 +601,8 @@ function noteMarkup(t) {
         + `too small to hold it. `
         + `<b>The capital is notional:</b> nothing in the ledger is truncated `
         + `at these amounts, no default is modeled and no premium is reduced `
-        + `for the possibility of insolvency. Hover any node or chip.`
+        + `for the possibility of insolvency. Hover or tap any node or chip; `
+        + `its note appears at the lower left.`
         + `</p>`;
 }
 
@@ -563,13 +618,22 @@ function noteMarkup(t) {
  *     The pane to fill. Its contents are replaced.
  * levels : Array
  *     The response's `levels`, each `{t, frame}`.
- * onTooltips : function, optional
- *     Called with the host after each draw, so the caller can attach whatever
- *     tooltip mechanism it uses to the `[data-bs-toggle="tooltip"]` nodes. Kept
- *     as a callback rather than importing Bootstrap here, so this module stays
- *     testable with no DOM and no bundler globals.
+ *
+ * Notes
+ * -----
+ * The readout is driven from here, by listeners attached once to `host` that
+ * delegate to the nearest `.pent-node`. `draw()` replaces the host's contents
+ * on every level change, and delegation means nothing has to be re-wired: a
+ * fresh figure starts at rest and the same listeners read it.
+ *
+ * Hover, focus and click all read a node, so a tap on an iPad works where
+ * hover tooltips did not, and Tab walks the nodes. Leaving the figure restores
+ * the rest state for a mouse only: a touch pointer leaves the moment the finger
+ * lifts, which would wipe the note the tap just showed, so on touch the rest
+ * state comes back from a tap on the figure away from any node. Text goes in by
+ * `textContent`, so no markup in a note is ever interpreted.
  */
-export function mountPentagon(host, levels, onTooltips) {
+export function mountPentagon(host, levels) {
     if (!host) return;
     if (!levels || !levels.length) {
         host.innerHTML = '<p class="text-muted small">'
@@ -591,7 +655,43 @@ export function mountPentagon(host, levels, onTooltips) {
                 draw();
             });
         });
-        if (onTooltips) onTooltips(host);
     };
+    /** Put a node's note in the readout, or the rest hint when `node` is null. */
+    const read = (node) => {
+        const name = host.querySelector('.pent-readout-name');
+        const text = host.querySelector('.pent-readout-text');
+        if (!name || !text) return;
+        host.querySelectorAll('.pent-node.is-read')
+            .forEach((other) => other.classList.remove('is-read'));
+        name.textContent = node ? node.dataset.tipName : '';
+        text.textContent = node ? node.dataset.tip : READOUT_REST;
+        if (node) node.classList.add('is-read');
+    };
+    const nodeOf = (target) => {
+        const node = target instanceof Element ? target.closest('.pent-node') : null;
+        return node && host.contains(node) ? node : null;
+    };
+    host.addEventListener('pointerover', (ev) => {
+        const node = nodeOf(ev.target);
+        if (node) read(node);
+    });
+    host.addEventListener('pointerout', (ev) => {
+        if (ev.pointerType !== 'mouse') return;
+        const fig = ev.target instanceof Element ? ev.target.closest('.pent-figure') : null;
+        if (fig && !(ev.relatedTarget instanceof Node && fig.contains(ev.relatedTarget))) {
+            read(null);
+        }
+    });
+    host.addEventListener('focusin', (ev) => {
+        const node = nodeOf(ev.target);
+        if (node) read(node);
+    });
+    host.addEventListener('focusout', (ev) => {
+        if (!nodeOf(ev.relatedTarget)) read(null);
+    });
+    host.addEventListener('click', (ev) => {
+        if (!(ev.target instanceof Element) || !ev.target.closest('.pent-figure')) return;
+        read(nodeOf(ev.target));
+    });
     draw();
 }

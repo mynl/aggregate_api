@@ -2705,10 +2705,9 @@ function errorNode(err) {
  * The PnL group's Pentagon leaf: one POST, then a figure that draws itself.
  *
  * The only leaf in the group that is not a library document, so it does not go
- * through `loadExhibitLeaf`. The one thing this does beyond fetching is attach
- * the Bootstrap tooltips the figure's nodes and chips declare, which are
- * paragraphs and so cannot be native titles, the same reasoning the five
- * pricing forms' `?` buttons follow.
+ * through `loadExhibitLeaf`. Each node's and chip's note appears in a readout
+ * inside the figure, which `mountPentagon` wires itself, so this only fetches
+ * and mounts.
  *
  * Every solvency level comes back in that one POST, so the strip above the
  * figure labels each of its mini pentagons with the assets that level implies
@@ -2727,18 +2726,7 @@ async function loadPentagon() {
         if (lede) root.appendChild(lede);
         const host = el('div');
         root.appendChild(host);
-        // Disposed and rebuilt on every redraw. `container: 'body'` puts the
-        // box outside the SVG, which cannot lay out a div, and that is also
-        // what makes disposal matter: a tooltip showing when its node is
-        // replaced would otherwise be left attached to the body with nothing
-        // to point at.
-        let tips = [];
-        mountPentagon(host, payload.levels, (scope) => {
-            tips.forEach((tip) => tip.dispose());
-            tips = [...scope.querySelectorAll('[data-bs-toggle="tooltip"]')]
-                .map((node) => bootstrap.Tooltip
-                    .getOrCreateInstance(node, { container: 'body' }));
-        });
+        mountPentagon(host, payload.levels);
     } catch (err) {
         if (id === state.id) replacePane('pane-economics', errorNode(err));
     }
