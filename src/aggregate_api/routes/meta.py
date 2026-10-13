@@ -31,7 +31,7 @@ from aggregate import plugins as agg_plugins
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
-from .. import models
+from .. import decl_help, models
 from ..config import get_settings
 
 
@@ -178,6 +178,7 @@ async def meta() -> dict:
         "build_timeout_s": settings.build_timeout_s,
         "cache_max": settings.cache_max,
         "plugins": _plugin_manifest(),
+        "decl_help": decl_help.available_forms(),
     }
 
 

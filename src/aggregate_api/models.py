@@ -1388,6 +1388,10 @@ class MetaResponse(BaseModel):
     # a second round trip to carry a handful of strings. Empty on a stock
     # install, which is what suppresses the tab entirely.
     plugins: list[PluginInfo] = []
+    # The DecL help pages the installed library offers (`anatomy`, `card`), so
+    # the SPA knows at boot whether its `?` and menu item can open anything,
+    # for the reason `plugins` gives. Empty before `aggregate` 1.2.0.
+    decl_help: list[str] = []
 
 
 class StatusResponse(BaseModel):

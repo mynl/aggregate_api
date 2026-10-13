@@ -20,18 +20,21 @@ Routes
 * ``GET  /v1/decl/grammar``: serves ``decl.lark`` verbatim as
   ``text/plain``. Lets a future docs page embed the live grammar without a
   build-time include step.
+* ``GET  /v1/decl/help``: serves one of the library's DecL help pages as an
+  HTML fragment, or a 404 naming the library version when it has none.
 """
 
 from __future__ import annotations
 
+from importlib.metadata import version as _pkg_version
 from importlib.resources import files
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from aggregate.parser_errors import format_error
 
-from .. import models
+from .. import decl_help, models
 from ..completion import complete, lex
 from ..serializers import spec_to_payload
 
@@ -325,3 +328,48 @@ def decl_grammar() -> PlainTextResponse:
     """
     text = files("aggregate").joinpath("decl.lark").read_text(encoding="utf-8")
     return PlainTextResponse(text)
+
+
+@router.get(
+    "/decl/help",
+    response_class=HTMLResponse,
+    responses={200: {"content": {"text/html": {}}}, 404: {}},
+)
+def decl_help_page(form: str = "anatomy", v: str | None = None) -> HTMLResponse:
+    """Return one DecL help page, as the installed library renders it.
+
+    Parameters
+    ----------
+    form : str
+        Which page: ``anatomy`` (one statement taken apart slot by slot) or
+        ``card`` (the one-page reference). Checked against what the library
+        offers before the library is asked, so an unknown form is a 404 and
+        never a 500.
+    v : str, optional
+        Accepted and ignored. The SPA sends the library version here so that
+        an upgraded library changes the URL, and a browser cannot keep serving
+        the old page for the hour the cache header allows.
+
+    Returns
+    -------
+    HTMLResponse
+        The fragment byte for byte, ``text/html``, cacheable for an hour.
+
+    Raises
+    ------
+    HTTPException
+        404 when the installed library has no help or does not offer ``form``.
+        The detail names the library version, since that is the whole of the
+        explanation and the fix.
+    """
+    forms = decl_help.available_forms()
+    if form not in forms:
+        installed = _pkg_version("aggregate")
+        reason = (f"aggregate {installed} has no DecL help" if not forms
+                  else f"aggregate {installed} has no {form!r} help; "
+                       f"it offers {', '.join(forms)}")
+        raise HTTPException(status_code=404, detail=reason)
+    return HTMLResponse(
+        decl_help.fragment(form),
+        headers={"Cache-Control": "public, max-age=3600"},
+    )

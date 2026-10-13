@@ -309,8 +309,25 @@ header .navbar { min-height: 56px; }
 }
 .editor-box .cm-editor { border-radius: inherit; background: #fff; }
 .editor-box .cm-editor.cm-focused { outline: none; }
+/* The margin column, top to bottom: help, clear, then the history walk. Each
+   `top` clears the mark above it rather than guessing: a 1.15rem glyph's line box
+   measures 28px, so help at .85rem ends at 41px, clear starts at 2.6rem (41.6px)
+   and ends at 70px, and the walk starts below that at 4.55rem.
+
+   The help mark is a real button where the clear icon is an `<i>`, so it resets
+   the button chrome and keeps the icon's line height; the glyph then sits on the
+   column's right edge exactly as the clear glyph does. House color only while
+   the help is open, so the column stays one grey set at rest. */
+.editor-help {
+    position: absolute; right: 1rem; top: .85rem; z-index: 3;
+    padding: 0; border: none; background: none; cursor: pointer;
+    color: var(--mut); font-size: 1.15rem; line-height: 1.5;
+}
+.editor-help:hover:not(:disabled) { color: var(--ink); }
+.editor-help[aria-expanded="true"] { color: var(--house); }
+.editor-help:disabled { color: var(--line); cursor: default; }
 .editor-clear {
-    position: absolute; right: 1rem; top: .85rem; cursor: pointer;
+    position: absolute; right: 1rem; top: 2.6rem; cursor: pointer;
     color: var(--mut); font-size: 1.15rem; z-index: 3;
 }
 .editor-clear:hover { color: var(--mut); }
@@ -318,11 +335,12 @@ header .navbar { min-height: 56px; }
    back, the readout, step forward. Up is older and a lower number, down is
    newer and a higher one, so the stack draws the list it walks.
 
-   `top` clears the icon rather than guessing at it: the icon sits at .85rem and
-   its line box measures 28px, so it ends at 41px and this starts below that.
-   The room below is the editor's own floor of six text lines, about 143px, so
-   two 2.1rem buttons, the readout and two .1rem gaps end near 128px with a
-   little slack.
+   `top` clears the icon rather than guessing at it: the icon sits at 2.6rem and
+   its line box measures 28px, so it ends at 70px and this starts below that.
+   The room below is the editor's own floor of seven text lines, about 162px, so
+   two 2.1rem buttons, the readout and two .1rem gaps end near 156px with a
+   little slack. Through 1.5.0 the floor was six lines and the stack ended near
+   128px; the help mark above the clear icon cost one line.
 
    2.1rem is 33.6px, under Apple's 44px touch guidance, and the trade is
    deliberate: there is no more room without pushing the stack outside the
@@ -335,7 +353,7 @@ header .navbar { min-height: 56px; }
    The arithmetic above still holds at a127, which dropped the border. Losing
    1px each side takes the drawn box from 33.6px to 31.6px while the LAID OUT
    box stays 2.1rem, since the height is declared rather than derived, so the
-   stack ends near the same 128px and the 44px trade is unchanged. What moved is
+   stack ends where it did and the 44px trade is unchanged. What moved is
    only what is painted.
 
    `align-items: flex-end`, not `center`. The three marks in this margin are the
@@ -348,7 +366,7 @@ header .navbar { min-height: 56px; }
    editor's right margin still takes a click through the gaps, and the readout
    must not start eating them. Only the buttons take it back. */
 .editor-hist {
-    position: absolute; right: 1rem; top: 2.8rem; z-index: 3;
+    position: absolute; right: 1rem; top: 4.55rem; z-index: 3;
     display: flex; flex-direction: column; align-items: flex-end; gap: .1rem;
     pointer-events: none; user-select: none;
 }
@@ -423,6 +441,68 @@ header .navbar { min-height: 56px; }
 .opt-toggle .v { font-family: var(--mono); color: var(--ink); }
 .bs-custom { padding: .25rem .75rem; }
 .bs-custom input { height: 1.7rem; font-size: .78rem; }
+
+/* ---- DecL help popover ----
+   The library's anatomy page, in front of the output and under the action row,
+   with the editor and the row live above it. Everything inside the slot is the
+   library's and styles itself; what is here is the host's chrome: the house top
+   edge, the shadow, the caret, the close, the dimming, and the Load buttons.
+
+   Absolute inside `.editor-area`, so it covers the output rather than pushing it
+   down, and closing restores the output exactly. An absolute box still counts
+   toward the page's scrollable height, so a popover taller than the output below
+   grows the page and there is still one scrollbar.
+
+   z-index 40: above the output and its sticky table headers, below the action
+   row's dropdowns (1000), so the Examples menu still opens over it, and below the
+   footnote tips (60). */
+.editor-area { position: relative; }
+.decl-pop {
+    /* `100%` is the action row's bottom edge: its margin collapses through the
+       wrapper, which has no padding or border to stop it. .7rem leaves the
+       caret room inside that margin. */
+    position: absolute; left: 0; right: 0; top: calc(100% + .7rem);
+    z-index: 40; padding: .6rem; background: #fff;
+    border: 1px solid var(--line); border-top: 3px solid var(--house);
+    border-radius: .5rem; box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, .28);
+}
+/* The caret points up at the margin column, where the `?` that opened it sits:
+   right edge 1rem in, as the column's glyphs are, and centered on a 1.15rem
+   glyph. */
+.decl-pop::before {
+    content: ""; position: absolute; top: calc(-.55rem - 3px); right: calc(1rem + .575rem - .55rem);
+    border: .55rem solid transparent; border-top: 0; border-bottom-color: var(--house);
+}
+.decl-pop-close { position: absolute; top: 1rem; right: 1rem; z-index: 1; }
+.decl-pop-msg { margin: .4rem 2.5rem .4rem .4rem; color: var(--mut); }
+/* The output behind it: dimmed and blurred, not removed. Every sibling after the
+   editor area is output (the strip, the tabs, the panes), so one sibling rule
+   covers all of it with no list to keep in step. */
+main.decl-open > .editor-area ~ * {
+    opacity: .35; filter: blur(1.5px); transition: opacity .15s, filter .15s;
+}
+/* Load: the app's control, inside the library's markup. The fragment positions
+   each loadable element relatively, so the button sits in a code block's top
+   right corner, where the code's short first line leaves room. The anatomy table
+   has no such room (its first row's gloss runs to the edge), so a loadable that
+   is not a code block takes the button just below its bottom right corner. */
+.decl-pop .dh-load {
+    position: absolute; top: .35rem; right: .35rem; z-index: 1;
+    padding: .1rem .55rem; border: 1px solid var(--house); border-radius: .3rem;
+    background: #fff; color: var(--house);
+    font: 600 .72rem/1.4 var(--bs-body-font-family); cursor: pointer;
+}
+.decl-pop .dh-load:hover { background: var(--house); color: #fff; }
+.decl-pop .dh-load.dh-load-below { top: calc(100% + .35rem); right: 0; }
+/* The receipt for Load: the box rings once in the house color, so the reader
+   sees where the program went while their eyes are still on the help. */
+@keyframes editor-loaded {
+    from { box-shadow: 0 0 0 .3rem var(--house-ring); }
+    to   { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .editor-box.is-loaded { animation: editor-loaded .6s ease-out 1; }
+}
 
 /* ---- Status strip: what is built, and whether it is OK ----
    The summary line and the timing line share one bordered, tinted container, so

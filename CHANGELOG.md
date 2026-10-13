@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.6.0
+
+[DecL-Help] **a `?` in the program box opens DecL help**, one statement taken apart slot by slot, written by the `aggregate` library. Plan `dev/plan-1.7.0-decl-help.md`, step [anatomy], the first of two (numbered one below the plan, since the pentagon readout plan has not landed).
+
+- The `?` sits above the `✕` in the editor's margin column; the history arrows move down and an empty editor is seven lines tall.
+- The help opens over the dimmed output with the editor live above it. Hover a slot to light up the forms it accepts.
+- Load puts an example in the editor without building, and the box rings once to show where it went; Build closes the help and shows the result. The `✕`, Esc, the `?` and a click on the dimmed output close it too.
+- New route `GET /v1/decl/help?form=anatomy`, and `/v1/meta` lists the forms the installed library offers in `decl_help`. With a library that has none (anything before `aggregate` 1.2.0a15, including the 1.0.1 floor of the pin) the `?` is disabled and its title says why.
+
 ## 1.5.0
 
 [Example-Databases] **a page URL opens one example from one file, built**, so a reader of the `aggregate` paper can click the link beside a figure. Plan `dev/done/plan-1.4.0-example-databases.md`, step [deep-link], the second of two.

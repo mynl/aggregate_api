@@ -191,11 +191,25 @@
                <a href="#aboutPanel" data-bs-toggle="offcanvas" data-bs-target="#aboutPanel">terms</a>.</p>
         </div>
 
+        <!-- The editor area: the program box and the action row, with the DecL
+             help popover anchored beneath them. The wrapper exists for the
+             popover, whose top edge is the row's bottom; its contents keep their
+             old indentation so the diff that added it stays readable. -->
+        <div class="editor-area" id="editor-area">
         <!-- Editor box (CM6 mounts into #editor-host) -->
         <div class="editor-wrap">
             <div class="editor-box" id="editor-box">
                 <div id="editor-host"></div>
             </div>
+            <!-- DecL help, the first mark in the margin column, above the clear
+                 icon. The label never changes: pressing it again closes the help,
+                 which is the same action, and `aria-expanded` plus the house
+                 color say which state it is in. Disabled, with the reason in its
+                 title, until `/v1/meta` says the library offers the page. -->
+            <button type="button" class="editor-help" id="editor-help"
+                    aria-label="DecL help" aria-expanded="false" aria-controls="decl-pop"
+                    title="DecL help" disabled>
+                <i class="bi bi-question-circle" aria-hidden="true"></i></button>
             <i class="bi bi-x-circle editor-clear" id="editor-clear" title="clear" role="button" aria-label="clear editor"></i>
             <!-- The history walk: up, the readout, down, stacked in the
                  editor's right margin. The nav belongs with the box it
@@ -366,6 +380,16 @@
                 <span class="fb-text"><span class="mod-key">Ctrl</span>+↑↓ history<span class="sep">·</span>Ctrl+Shift+U tables</span>
             </span>
         </div>
+
+        <!-- The DecL help popover, in front of the output and under the action
+             row, with the editor live above it. The library writes the page; the
+             slot receives it and decl-help.js adds the Load buttons. -->
+        <div class="decl-pop" id="decl-pop" role="dialog" aria-label="DecL help" hidden>
+            <button type="button" class="btn-close decl-pop-close" id="decl-pop-close"
+                    aria-label="close DecL help"></button>
+            <div class="decl-pop-slot" id="decl-pop-slot"></div>
+        </div>
+        </div><!-- /.editor-area -->
 
         <!-- Status strip: what is built, and whether it is OK. One line, and a
              second that folds:

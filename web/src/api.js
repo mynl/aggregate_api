@@ -335,6 +335,23 @@ export const api = {
      */
     heroes:       ()                => _json('GET',  '/v1/examples/heroes'),
     meta:         ()                => _json('GET',  '/v1/meta'),
+    /**
+     * One of the library's DecL help pages, as the HTML fragment it renders.
+     *
+     * Text rather than JSON, so not through `_json`; a refusal still arrives as
+     * an `ApiError` carrying the JSON `detail`, which names the library version.
+     * `v` is the library version, sent only so an upgrade changes the URL and
+     * the hour of browser caching cannot serve the old page.
+     */
+    declHelp: async (form, v) => {
+        const r = await fetch(`${API_BASE}/v1/decl/help?${qs({ form, v })}`,
+            { headers: { [SESSION_HEADER]: sessionId() } });
+        const text = await r.text();
+        if (r.ok) return text;
+        let body;
+        try { body = JSON.parse(text); } catch { body = { message: text }; }
+        throw new ApiError(r.status, body, r.headers.get('Retry-After'));
+    },
     /** House plot style (aggregate.style's color cycle etc.) for the charts. */
     style:        ()                => _json('GET',  '/v1/meta/style'),
     health:       ()                => _json('GET',  '/v1/health'),

@@ -6,6 +6,15 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[DecL-Help]** IN PROGRESS, plan `dev/plan-1.7.0-decl-help.md`, two steps,
+  the api half of the library's [DecL-Help-Pages] (`aggregate` 1.2.0a15).
+  [anatomy] DONE (`1.6.0`): a `?` above the `✕` in the program box opens the
+  library's anatomy page in a popover over the dimmed output, with Load buttons
+  that fill the editor without building; `GET /v1/decl/help` and
+  `/v1/meta.decl_help`. [card] pending (`1.7.0`): Menu ▸ DecL on one page, the
+  printable card. Both one below the plan's numbers, since
+  `plan-1.6.0-pentagon-readout.md` has not landed.
+
 - **[Example-Databases]** DONE (`1.4.0` to `1.5.0`), plan
   `dev/done/plan-1.4.0-example-databases.md`, two steps. [databases]
   (`1.4.0`): Menu ▸ Examples from picks the shipped `.agg` file behind the
@@ -677,6 +686,14 @@ and the standing REMINDER below about what is worth plotting.
       document verified correct; broken since a62. Fixed at a99 with a
       `custom` polygon plus two plain edge lines, and the smoke test gained
       `checkBands`. *(done; moved to `dev/done/`)*
+- [ ] **[Keyword-Mirror-Gaps]** `web/src/decl-keywords.json` lacks `deposit`,
+      `rol`, `cede`, `reinstatements`, `lr`, `dist`, `bivariate`, `clash`,
+      `grossnet`, `ssev` and `picks`, found by the library while writing the
+      DecL help (2026-10-13). Check the whole mirror against
+      `parser_errors._TERMINAL_LABELS`, not just these.
+- [ ] **[Name-Underscore-Comment]** the comment at `web/src/decl-mode.js` line
+      31 says names may not contain `_`, which the grammar allows. Fix the
+      comment, and the highlighter's name pattern if it follows the comment.
 
 ## Backlog / ideas (unordered)
 

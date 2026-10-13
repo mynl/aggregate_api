@@ -44,6 +44,7 @@ import {
     whyGroup,
 } from './nav.js';
 import { mountPentagon } from './charts/pentagon.js';
+import { mountDeclHelp } from './decl-help.js';
 import { generateTower, shareLadder } from './tower.js';
 import * as history from './history.js';
 import { anchorEditor, anchorNav, anchorNavSettled } from './scroll.js';
@@ -332,6 +333,48 @@ if (emacsItem) {
 }
 
 // ----------------------------------------------------------------------
+// DecL help: the library's anatomy page under the `?` in the margin column
+// ----------------------------------------------------------------------
+// Mounted here, above `build`, because `build` closes it and the landing build
+// runs before the rest of this module has finished evaluating. Enabled from the
+// meta fetch below, which says whether the installed library has the page.
+let _aggregateVersion = '';
+const declHelp = mountDeclHelp({
+    button: $('editor-help'),
+    pop: $('decl-pop'),
+    main: document.querySelector('main'),
+    // The library version rides on the URL so an upgrade cannot be hidden by the
+    // hour of browser caching the route allows. Read when the help first opens,
+    // which is after the meta fetch that fills it, since the `?` is disabled
+    // until then.
+    fetchFragment: (form) => api.declHelp(form, _aggregateVersion),
+    onLoad: loadFromHelp,
+});
+
+/**
+ * Put a program from the help in the editor, without building.
+ *
+ * Load loads and does not build (author, 2026-10-13): the reader is composing
+ * with the slot table beside them, so the help stays open too. Treated as the
+ * reader's own edit rather than a walk: the box no longer holds a library row,
+ * so the example caption and the walk position go, as they do when the reader
+ * types. The box rings once so the eye finds where the program went.
+ *
+ * @param {string} program the DecL, verbatim from the page's `data-load`.
+ */
+function loadFromHelp(program) {
+    walkMode = 'history';
+    history.resetCursor();
+    captionExample(null);
+    loadExample(program);
+    renderHistoryNav();
+    const box = $('editor-box');
+    box.classList.remove('is-loaded');
+    void box.offsetWidth;       // restart the animation; see `flashStrip`
+    box.classList.add('is-loaded');
+}
+
+// ----------------------------------------------------------------------
 // Build
 // ----------------------------------------------------------------------
 // The log2 and bs dropdowns used to sit next to this button and were never
@@ -479,6 +522,9 @@ function renderValue(res) {
 }
 
 async function build() {
+    // Every build closes the DecL help: Build, Ctrl+Enter and an example pick
+    // alike. The reader asked to see a result, and the help is in front of it.
+    declHelp.close();
     const decl = editor.getText().trim();
     if (!decl) { renderNothingToBuild(); return; }
 
@@ -4870,6 +4916,8 @@ api.meta().then((meta) => {
     const strip = $('nav-versions');
     if (strip) strip.textContent = `agg ${meta.aggregate_version} · api ${meta.version}`;
     installPlugins(meta.plugins || []);
+    _aggregateVersion = meta.aggregate_version;
+    declHelp.offer(meta);
 }).catch(() => {
     $('about-api').textContent = '(api offline)';
 });
