@@ -1923,12 +1923,19 @@ main.decl-open > .editor-area ~ * {
 /* The readout, in the figure's empty lower-left corner. Sized in viewBox units
    like every label here, so 10.5px renders about 10 to 13px across the figure's
    600 to 780px range. Plain block text only: WebKit misplaces content inside a
-   `foreignObject` that is positioned, transformed or given opacity. */
+   `foreignObject` that is positioned, transformed or given opacity.
+
+   Bottom aligned (author, 2026-10-13): the text sits on the box's floor, level
+   with gross premium, and away from the P:Q chip above it, which is less crowded
+   than hanging from the top. The body carries the hairline so the rule rides on
+   top of the text rather than staying at the box's top edge. A flex column moves
+   nothing by position or transform, so the WebKit caution above still holds. */
 .pent-readout {
-    height: 100%; overflow: hidden; padding-top: 4px;
-    border-top: 1px solid var(--line-2);
+    height: 100%; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: flex-end;
     font: 10.5px/1.35 var(--ui); color: var(--mut);
 }
+.pent-readout-body { padding-top: 4px; border-top: 1px solid var(--line-2); }
 .pent-readout-name {
     display: block; color: var(--ink); font-weight: 700;
 }

@@ -548,10 +548,10 @@ function readoutMarkup() {
     return `<foreignObject class="pent-readout-fo" x="${x}" y="${y}" `
         + `width="${w}" height="${h}">`
         + `<div xmlns="http://www.w3.org/1999/xhtml" class="pent-readout" `
-        + `aria-live="polite">`
+        + `aria-live="polite"><div class="pent-readout-body">`
         + `<b class="pent-readout-name"></b>`
         + `<span class="pent-readout-text">${READOUT_REST}</span>`
-        + `</div></foreignObject>`;
+        + `</div></div></foreignObject>`;
 }
 
 // ----------------------------------------------------------------------

@@ -4,6 +4,10 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.8.1
+
+[Pentagon-Readout] **the Pentagon's readout sits on the floor of its corner**, level with gross premium, rather than hanging from the top just under the P:Q chip, which crowded it. The hairline rule rides on top of the text. A tweak after kicking the tires on 1.8.0.
+
 ## 1.8.0
 
 [Pentagon-Readout] **the Pentagon's notes appear in a fixed readout at the figure's lower left** instead of as tooltips over the figure. Plan `dev/plan-1.6.0-pentagon-readout.md` (landed as 1.8.0; 1.6.0 and 1.7.0 went to the DecL help).
