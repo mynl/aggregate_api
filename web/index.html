@@ -153,6 +153,12 @@
                                 <small class="text-muted">Ctrl+A/E/K/Y, N/P, F/B/D</small></button></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><button type="button" class="dropdown-item" data-bs-toggle="offcanvas" data-bs-target="#helpPanel">Help</button></li>
+                            <!-- The library's DecL reference card. Disabled until
+                                 `/v1/meta` says the library has it, with the
+                                 reason as a line under the label: a disabled item
+                                 takes no pointer, so a title would never show. -->
+                            <li><button type="button" class="dropdown-item" id="decl-card-item" disabled>
+                                DecL on one page<small class="d-block text-muted" id="decl-card-why"></small></button></li>
                             <li><button type="button" class="dropdown-item" id="dl-agg">Download models</button></li>
                             <!-- "Download plot" stood here through a130. It is
                                  the chart's own Download menu now, in the strip
@@ -935,6 +941,26 @@
                 <a href="https://aggregate.readthedocs.io/en/latest/4_dec_Language_Reference.html" target="_blank" rel="noopener">DecL reference</a> ·
                 <a href="https://github.com/mynl/aggregate" target="_blank" rel="noopener">github</a>
             </p>
+        </div>
+    </div>
+
+    <!-- DecL on one page: the library's reference card on a sheet sized to it
+         (1056px is 11in at 96 CSS px). A modal, where the anatomy is a popover,
+         because the card is for reading and printing rather than for composing
+         beside the editor. No Load buttons. Print hides everything but the
+         body of this sheet; see `printing-decl-card` in site.css. -->
+    <div class="modal fade decl-card-sheet" id="decl-card-sheet" tabindex="-1"
+         aria-label="DecL on one page" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="decl-card-print">
+                        <i class="bi bi-printer" aria-hidden="true"></i> Print or save as PDF</button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"
+                            aria-label="close DecL on one page"></button>
+                </div>
+                <div class="modal-body decl-card-body" id="decl-card-slot"></div>
+            </div>
         </div>
     </div>
 

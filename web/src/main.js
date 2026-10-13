@@ -333,7 +333,8 @@ if (emacsItem) {
 }
 
 // ----------------------------------------------------------------------
-// DecL help: the library's anatomy page under the `?` in the margin column
+// DecL help: the library's anatomy page under the `?` in the margin column, and
+// its one-page card under Menu ▸ DecL on one page
 // ----------------------------------------------------------------------
 // Mounted here, above `build`, because `build` closes it and the landing build
 // runs before the rest of this module has finished evaluating. Enabled from the
@@ -349,6 +350,13 @@ const declHelp = mountDeclHelp({
     // until then.
     fetchFragment: (form) => api.declHelp(form, _aggregateVersion),
     onLoad: loadFromHelp,
+    card: {
+        item: $('decl-card-item'),
+        why: $('decl-card-why'),
+        slot: $('decl-card-slot'),
+        printBtn: $('decl-card-print'),
+        show: () => bootstrap.Modal.getOrCreateInstance($('decl-card-sheet')).show(),
+    },
 });
 
 /**

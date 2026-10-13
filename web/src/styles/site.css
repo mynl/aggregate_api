@@ -504,6 +504,32 @@ main.decl-open > .editor-area ~ * {
     .editor-box.is-loaded { animation: editor-loaded .6s ease-out 1; }
 }
 
+/* ---- DecL on one page: the card's sheet, and printing it ----
+   The sheet is sized to the card, 1056px being 11in at 96 CSS px, and the body
+   carries no padding, so on screen the card sits at the width it prints at. The
+   card has its own border and margins; the app adds no chrome to the printed
+   page. Narrower windows get the card's own container query layouts. */
+.decl-card-sheet .modal-dialog { max-width: min(1058px, 100vw - 2rem); }   /* 1056 + the 1px borders */
+.decl-card-sheet .modal-header { gap: .5rem; justify-content: space-between; }
+.decl-card-sheet .modal-body { padding: 0; }
+/* Print the sheet's body and nothing else, and only when its Print button asked:
+   `printing-decl-card` is on `body` for that one print. Ctrl+P anywhere else
+   matches none of this. The modal is a child of `body`, so hiding every other
+   child (the page, the backdrop, the offcanvas panels) leaves it alone, and it is
+   then unfixed and unscrolled so the card flows onto the page at 11in. */
+@media print {
+    body.printing-decl-card { margin: 0; padding: 0; background: #fff; }
+    body.printing-decl-card > :not(.decl-card-sheet) { display: none !important; }
+    body.printing-decl-card .decl-card-sheet {
+        position: static; display: block !important; overflow: visible; }
+    body.printing-decl-card .decl-card-sheet .modal-dialog {
+        max-width: none; width: 11in; margin: 0; transform: none; height: auto; }
+    body.printing-decl-card .decl-card-sheet .modal-content {
+        border: 0; border-radius: 0; box-shadow: none; max-height: none; overflow: visible; }
+    body.printing-decl-card .decl-card-sheet .modal-header { display: none; }
+    body.printing-decl-card .decl-card-sheet .modal-body { overflow: visible; }
+}
+
 /* ---- Status strip: what is built, and whether it is OK ----
    The summary line and the timing line share one bordered, tinted container, so
    the instrumentation reads as one thing rather than as two more bands in a

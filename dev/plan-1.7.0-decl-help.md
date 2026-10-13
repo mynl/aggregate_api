@@ -396,3 +396,17 @@ Executed 2026-10-13 on the author's `/execute-plan`, after the library landed it
 * Hover on the severity row lights all four `severity` elements. Load on the portfolio puts `port Two.Books ...` in the editor, rings the box and leaves the help open and the strip unchanged; Build then closes the help and builds `Two.Books`. The `✕`, Esc, the `?` and a real mouse click on the dimmed output each close it.
 * At 820 by 1180 (iPad portrait) the fragment is one column and at 1180 by 820 two; neither scrolls the page sideways (`scrollWidth == clientWidth`).
 * `uv run --no-sync pytest` against 1.2.0a15: 517 passed. `npm test`: 289 passed.
+
+### Divergences, step [card]
+
+9. **[Card-Reason-Line] the unavailable menu item gives its reason as a small line under the label**, not as a title: a disabled dropdown item takes no pointer events, so its title would never show.
+10. **[Card-Closes-Popover] opening the card closes the anatomy popover first.** The card's insert removes the anatomy section (the plan's hygiene), which would otherwise leave an open, empty popover behind the sheet.
+11. **[Sheet-Width] the dialog is `min(1058px, 100vw - 2rem)`**, the plan's 1056px plus the content's two 1px borders, with no body padding, so the card's own box is 1056px wide wherever the sheet does not scroll. With the body scrolling, the scrollbar takes 15px on screen; print is unaffected, since the print rules set the dialog to 11in and unscroll it.
+
+### Measurements, step [card]
+
+* Headless Edge against 1.2.0a15 at 1280 by 900: the item sits directly after Help; the sheet holds one `decl-help dh-card in-lab` section at 11px and no Load buttons, 814px tall.
+* `Page.printToPDF` with `preferCSSPageSize`, under `printing-decl-card` and the injected `@page`: **one page, 792 by 612pt**, box fills and token colors intact, no app chrome. The main page without the class prints portrait, 612 by 792pt, as before.
+* Anatomy, then card, then anatomy, then card: one section in the document each time, the anatomy at 13.5px with its three Load buttons back, the card at 11px. Esc and the sheet's `✕` close it.
+* Against 1.0.1, after the bump's plain `uv sync`: the item is disabled with "DecL help arrives with aggregate 1.2.0" under it.
+* Print through a real browser dialog (Chrome and Edge, Save as PDF) is left for the author; `window.print()` does nothing headless, so the measurement above replays its two steps around a direct PDF render.

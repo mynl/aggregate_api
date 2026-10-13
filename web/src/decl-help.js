@@ -1,11 +1,12 @@
-// DecL help: the library's anatomy page, opened from the `?` in the program box.
+// DecL help: the library's anatomy page, opened from the `?` in the program box,
+// and its one-page card, opened from Menu ▸ DecL on one page.
 //
-// The library writes the page (words, styles, syntax colors) and the api serves
-// it as an HTML fragment. What is here is only what the Lab adds: where the page
-// opens and how it closes, the `in-lab` class that shows the Lab's own notes,
-// and a Load button on every example the page marks loadable.
+// The library writes the pages (words, styles, syntax colors) and the api serves
+// them as HTML fragments. What is here is only what the Lab adds: where each page
+// opens and how it closes, the `in-lab` class that shows the Lab's own notes, a
+// Load button on every example the anatomy marks loadable, and printing the card.
 //
-// Plan `dev/plan-1.7.0-decl-help.md`, step [anatomy].
+// Plan `dev/plan-1.7.0-decl-help.md`, steps [anatomy] and [card].
 
 /** The text on the `?` when the installed library has no help. */
 export const UNAVAILABLE = 'DecL help arrives with aggregate 1.2.0';
@@ -42,12 +43,18 @@ export function loadables(root) {
  *     Fetches one form's HTML. Called at most once per form while it succeeds.
  * onLoad : function(string)
  *     Puts a program in the editor. Called by a Load button; must not build.
+ * card : object
+ *     Menu ▸ DecL on one page: `item` (the menu button), `why` (the line under
+ *     its label that gives the reason when it is unavailable), `slot` (the
+ *     sheet's body), `printBtn`, and `show()`, which opens the sheet. The sheet
+ *     is a Bootstrap modal, so its `✕` and Esc are Bootstrap's.
  *
  * Returns
  * -------
  * object
- *     `offer(meta)` to enable the `?` from `/v1/meta`, `open()`, `close()` and
- *     `isOpen()`. `close` is safe to call at any time, and `build()` calls it.
+ *     `offer(meta)` to enable both entry points from `/v1/meta`, `open()`,
+ *     `close()` and `isOpen()` for the popover, and `openCard()`. `close` is safe
+ *     to call at any time, and `build()` calls it.
  *
  * Notes
  * -----
@@ -59,7 +66,7 @@ export function loadables(root) {
  * because a reader using it is composing with the slot table beside them. Build
  * closes the help and shows the result.
  */
-export function mountDeclHelp({ button, pop, main, fetchFragment, onLoad }) {
+export function mountDeclHelp({ button, pop, main, fetchFragment, onLoad, card }) {
     const slot = pop.querySelector('.decl-pop-slot');
     const closeBtn = pop.querySelector('.decl-pop-close');
     // One request per form, kept while it succeeds; a failure is forgotten so
@@ -76,28 +83,30 @@ export function mountDeclHelp({ button, pop, main, fetchFragment, onLoad }) {
         return pending.get(form);
     }
 
-    function message(text) {
+    function message(target, text) {
         const p = document.createElement('p');
         p.className = 'decl-pop-msg';
         p.textContent = text;
-        slot.replaceChildren(p);
+        target.replaceChildren(p);
     }
 
     /**
-     * Insert the fragment and add what only the Lab has.
+     * Insert a fragment into `target` and add what only the Lab has.
      *
-     * Any other help section in the document goes first. The library scopes every
-     * rule to its form, so two cannot restyle each other; one at a time is
-     * hygiene now, not correctness (the plan's Q2).
+     * Any other help section in the document goes first, so opening the card
+     * takes the anatomy out of the popover and the reverse. The library scopes
+     * every rule to its form, so two cannot restyle each other; one at a time is
+     * hygiene now, not correctness (the plan's Q2). Load buttons go on the
+     * anatomy only: the card is for reading and printing.
      */
-    function insert(html) {
+    function insert(target, html, { loads }) {
         for (const old of document.querySelectorAll('.decl-help')) old.remove();
         const host = document.createElement('div');
         host.innerHTML = html;
         const section = host.querySelector('.decl-help');
-        if (!section) { message('The DecL help arrived empty.'); return; }
+        if (!section) { message(target, 'The DecL help arrived empty.'); return; }
         section.classList.add('in-lab');
-        for (const { node, program } of loadables(section)) {
+        for (const { node, program } of loads ? loadables(section) : []) {
             const load = document.createElement('button');
             load.type = 'button';
             // A code block takes the button inside its top right corner; any
@@ -112,7 +121,7 @@ export function mountDeclHelp({ button, pop, main, fetchFragment, onLoad }) {
             });
             node.prepend(load);
         }
-        slot.replaceChildren(section);
+        target.replaceChildren(section);
     }
 
     async function show() {
@@ -121,13 +130,48 @@ export function mountDeclHelp({ button, pop, main, fetchFragment, onLoad }) {
         main.classList.add('decl-open');
         button.setAttribute('aria-expanded', 'true');
         if (slot.querySelector('.decl-help.dh-anatomy')) return;
-        message('Loading DecL help…');
+        message(slot, 'Loading DecL help…');
         try {
             const html = await fragment('anatomy');
-            if (open) insert(html);
+            if (open) insert(slot, html, { loads: true });
         } catch (err) {
-            if (open) message(`DecL help could not be loaded: ${err.message}`);
+            if (open) message(slot, `DecL help could not be loaded: ${err.message}`);
         }
+    }
+
+    /** Menu ▸ DecL on one page: close the popover, open the sheet, fill it. */
+    async function showCard() {
+        close();
+        card.show();
+        if (card.slot.querySelector('.decl-help.dh-card')) return;
+        message(card.slot, 'Loading the DecL card…');
+        try {
+            insert(card.slot, await fragment('card'), { loads: false });
+        } catch (err) {
+            message(card.slot, `The DecL card could not be loaded: ${err.message}`);
+        }
+    }
+
+    /**
+     * Print the sheet alone, on one Letter landscape page.
+     *
+     * The `@page` rule is injected for the one print and removed after it,
+     * rather than written in site.css, because `@page` cannot be scoped to a
+     * class: a permanent rule would change how every other page of the app
+     * prints. `printing-decl-card` on `body` is what the print CSS keys on to
+     * hide everything but the sheet's body. The card keeps its own colors in
+     * print (it sets `print-color-adjust` on itself), so nothing here does.
+     */
+    function printCard() {
+        const page = document.createElement('style');
+        page.textContent = '@page { size: letter landscape; margin: 0; }';
+        document.head.append(page);
+        document.body.classList.add('printing-decl-card');
+        window.addEventListener('afterprint', () => {
+            page.remove();
+            document.body.classList.remove('printing-decl-card');
+        }, { once: true });
+        window.print();
     }
 
     function close() {
@@ -158,14 +202,22 @@ export function mountDeclHelp({ button, pop, main, fetchFragment, onLoad }) {
         close();
     }, true);
 
+    card.item.addEventListener('click', showCard);
+    card.printBtn.addEventListener('click', printCard);
+
     return {
         offer(meta) {
-            const has = Array.isArray(meta?.decl_help) && meta.decl_help.includes('anatomy');
-            button.disabled = !has;
-            button.title = has ? 'DecL help' : UNAVAILABLE;
+            const forms = Array.isArray(meta?.decl_help) ? meta.decl_help : [];
+            const anatomy = forms.includes('anatomy');
+            button.disabled = !anatomy;
+            button.title = anatomy ? 'DecL help' : UNAVAILABLE;
+            const hasCard = forms.includes('card');
+            card.item.disabled = !hasCard;
+            card.why.textContent = hasCard ? '' : UNAVAILABLE;
         },
         open: show,
         close,
         isOpen: () => open,
+        openCard: showCard,
     };
 }

@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.7.0
+
+[DecL-Help] **Menu ▸ DecL on one page** opens the library's DecL reference card, which prints to one Letter page. Plan `dev/plan-1.7.0-decl-help.md`, step [card], the second of two.
+
+- The card opens on a sheet sized to it, directly after Help in the hamburger, with Print or save as PDF; the `✕` and Esc close it.
+- The printout is exactly one Letter landscape page, colors intact, with nothing else from the app on it. Ctrl+P anywhere else prints as before.
+- Opening the card after the anatomy, or the reverse, shows each at its own type size.
+- Unavailable, with the reason under the item, when the installed library has no card.
+
 ## 1.6.0
 
 [DecL-Help] **a `?` in the program box opens DecL help**, one statement taken apart slot by slot, written by the `aggregate` library. Plan `dev/plan-1.7.0-decl-help.md`, step [anatomy], the first of two (numbered one below the plan, since the pentagon readout plan has not landed).

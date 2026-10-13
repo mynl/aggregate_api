@@ -6,14 +6,17 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
-- **[DecL-Help]** IN PROGRESS, plan `dev/plan-1.7.0-decl-help.md`, two steps,
-  the api half of the library's [DecL-Help-Pages] (`aggregate` 1.2.0a15).
-  [anatomy] DONE (`1.6.0`): a `?` above the `✕` in the program box opens the
-  library's anatomy page in a popover over the dimmed output, with Load buttons
-  that fill the editor without building; `GET /v1/decl/help` and
-  `/v1/meta.decl_help`. [card] pending (`1.7.0`): Menu ▸ DecL on one page, the
-  printable card. Both one below the plan's numbers, since
-  `plan-1.6.0-pentagon-readout.md` has not landed.
+- **[DecL-Help]** DONE (`1.6.0` to `1.7.0`), plan
+  `dev/plan-1.7.0-decl-help.md` (in `dev/` until the author retires it), two
+  steps, the api half of the library's [DecL-Help-Pages] (`aggregate`
+  1.2.0a15). [anatomy] (`1.6.0`): a `?` above the `✕` in the program box opens
+  the library's anatomy page in a popover over the dimmed output, with Load
+  buttons that fill the editor without building; `GET /v1/decl/help` and
+  `/v1/meta.decl_help`. [card] (`1.7.0`): Menu ▸ DecL on one page, the card on
+  a sheet that prints to one Letter landscape page. Both one below the plan's
+  numbers, since `plan-1.6.0-pentagon-readout.md` has not landed. Still owed,
+  outside the plan: the help reaches PyPI users only once `aggregate` 1.2.0
+  ships, and the pin floor moves only if the author wants it guaranteed.
 
 - **[Example-Databases]** DONE (`1.4.0` to `1.5.0`), plan
   `dev/done/plan-1.4.0-example-databases.md`, two steps. [databases]
