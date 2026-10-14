@@ -83,6 +83,15 @@
                                 aria-expanded="false" aria-label="menu" title="Menu">
                             <i class="bi bi-list"></i></button>
                         <ul class="dropdown-menu dropdown-menu-end">
+                            <!-- A deep link to the entry and tab on screen, first
+                                 and in a group of its own (author, 1.13.1). Its
+                                 state is worked out each time the menu opens; the
+                                 line under the label appears only when the item
+                                 is greyed, to say why, since a disabled item takes
+                                 no pointer and a title would never show. -->
+                            <li><button type="button" class="dropdown-item" id="copy-link-item" disabled>
+                                Copy link to example &amp; tab<small class="d-block text-muted" id="copy-link-why" hidden></small></button></li>
+                            <li><hr class="dropdown-divider"></li>
                             <!-- Examples from: which shipped .agg file feeds
                                  the Examples menu, a per-viewer choice held in
                                  the browser. The items are rendered by main.js
@@ -160,12 +169,6 @@
                             <li><button type="button" class="dropdown-item" id="decl-card-item" disabled>
                                 DecL on one page<small class="d-block text-muted" id="decl-card-why"></small></button></li>
                             <li><button type="button" class="dropdown-item" id="dl-agg">Download models</button></li>
-                            <!-- A deep link to the entry and tab on screen. Its
-                                 state is worked out each time the menu opens,
-                                 with the reason as a line under the label, the
-                                 same form as DecL on one page. -->
-                            <li><button type="button" class="dropdown-item" id="copy-link-item" disabled>
-                                Copy link<small class="d-block text-muted" id="copy-link-why"></small></button></li>
                             <!-- "Download plot" stood here through a130. It is
                                  the chart's own Download menu now, in the strip
                                  beside the picture, which is where the reader is
@@ -885,7 +888,7 @@
                     the drawn surface as GLB, OBJ or STL, and a SpaceMouse can fly it in Chromium</li>
             </ul>
             <p class="small text-muted">Menu ▸ Download models saves every program you built
-                this session as one <code>.agg</code> file. Menu ▸ Copy link copies a link that
+                this session as one <code>.agg</code> file. Menu ▸ Copy link to example &amp; tab copies a link that
                 opens the example on screen at the tab you are on, for an entry picked from the
                 Examples menu and built unedited.</p>
 

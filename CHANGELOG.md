@@ -4,6 +4,14 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.13.1
+
+[Copy-Link-Fixes] **Copy link works over plain http, and sits first in the menu.** No plan doc: the author's 1.13.0 tire-kicking.
+
+- On the VPN address (`http://10.8.0.8`) the browser offers no clipboard API, so nothing was copied and the link landed in the strip behind `copy this link:`. It now falls back to the older browser copy command, which works there.
+- The strip shows the link as a clickable link (new tab), after `link copied: `, or bare when no copy route works. A gap now separates it from the tag chips below.
+- The item is the menu's first, in a group of its own, labeled **Copy link to example & tab** on one line. The reason line appears only when it is greyed.
+
 ## 1.13.0
 
 [Exact-Tail-Leaf] **More ▸ Exact tail draws an nttagg's exact probabilities on a log10 scale, beside the float FFT.** Plan `dev/done/plan-1.13.0-exact-tail-leaf.md`.

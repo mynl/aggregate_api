@@ -740,9 +740,18 @@ async function runDerivation(btn, busy, call, land) {
  * to be written onto the timing line itself, which the very next `renderTiming`
  * then overwrote, so Sharpen's verdict, the one sentence saying what the probe
  * decided and why, was on screen for less time than it took to read.
+ *
+ * Parameters
+ * ----------
+ * text : string
+ *     The sentence, or the lead-in before a link.
+ * href : string or null
+ *     A URL to draw after `text` as a live link opening in a new tab: what
+ *     Copy link just wrote (1.13.1). Null for an ordinary sentence.
  */
-function noteDerivation(text) {
+function noteDerivation(text, href = null) {
     _note.derivation = text || '';
+    _note.href = href || null;
     renderNote();
 }
 
@@ -797,7 +806,7 @@ function noteDerivation(text) {
  * cost a `/meta` fetch to draw; the strip stands under all six and is already
  * holding the build response that carries both fields.
  */
-const _note = { tags: [], declared: '', derivation: '', warnings: [],
+const _note = { tags: [], declared: '', derivation: '', href: null, warnings: [],
                 caption: null };
 
 function renderNote() {
@@ -813,7 +822,14 @@ function renderNote() {
     for (const w of _note.warnings) {
         line.appendChild(el('span', { className: 'note-warn' }, w));
     }
-    if (_note.derivation) line.appendChild(el('span', {}, _note.derivation));
+    if (_note.derivation || _note.href) {
+        const said = el('span', { className: 'note-derivation' }, _note.derivation);
+        if (_note.href) {
+            said.appendChild(el('a', { href: _note.href, target: '_blank', rel: 'noopener' },
+                                _note.href));
+        }
+        line.appendChild(said);
+    }
     if (tags.length || declared) {
         // One block, so the chips and the sentence wrap as one paragraph rather
         // than the note starting a line of its own under a short row of tags.
@@ -843,6 +859,7 @@ function clearNote() {
     _note.tags = [];
     _note.declared = '';
     _note.derivation = '';
+    _note.href = null;
     _note.warnings = [];
     renderNote();
 }
@@ -5029,10 +5046,11 @@ async function loadLanding() {
  * It stays open afterwards, as it would had the reader pressed it.
  *
  * @param {string} text the message, naming the parameter and its value, or
- *     carrying the link itself.
+ *     the lead-in before a copied link.
+ * @param {string|null} href the copied link, drawn clickable after `text`.
  */
-function noteLink(text) {
-    noteDerivation(text);
+function noteLink(text, href = null) {
+    noteDerivation(text, href);
     if (!$('summary-more').hidden) {
         $('summary').classList.add('expanded');
         $('summary-more').setAttribute('aria-expanded', 'true');
@@ -5217,13 +5235,55 @@ function copyLinkBlocked() {
 }
 
 /**
+ * Put text on the clipboard, by whichever route the page is allowed.
+ *
+ * Parameters
+ * ----------
+ * text : string
+ *     What to copy.
+ *
+ * Returns
+ * -------
+ * boolean
+ *     True when the browser says the copy happened.
+ *
+ * Notes
+ * -----
+ * `navigator.clipboard` exists only in a secure context, which plain http on
+ * any address but localhost is not, so on the VPN address (`http://10.8.0.8`)
+ * it is undefined. The fallback is the older `execCommand('copy')` over a
+ * selected, invisible textarea, which browsers still honor without a secure
+ * context as long as it runs inside the click. Deprecated, and the only route
+ * there is (1.13.1).
+ */
+async function copyText(text) {
+    if (navigator.clipboard?.writeText) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch { /* refused: try the older route */ }
+    }
+    const area = el('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    let copied = false;
+    try { copied = document.execCommand('copy'); } catch { copied = false; }
+    area.remove();
+    return copied;
+}
+
+/**
  * Write the link and put it on the clipboard, or on the strip to copy by hand.
  *
  * Always names `database`, the default's own stem included, because otherwise
  * the recipient's stored file decides where `example` is looked up. The view is
- * written in keys, the stable vocabulary, not labels. The clipboard API is
- * missing on a plain-http origin that is not localhost (the VPN address), so
- * the link then stays on screen to select.
+ * written in keys, the stable vocabulary, not labels. When neither clipboard
+ * route works, the bare link stays on the strip to select (author, 1.13.1: the
+ * URL alone, with no lead-in).
  */
 async function copyLink() {
     if (copyLinkBlocked()) return;
@@ -5238,12 +5298,7 @@ async function copyLink() {
         example: _linkable.name,
         view: `${group}:${activeLeaf(group)}`,
     });
-    try {
-        await navigator.clipboard.writeText(href);
-        noteLink(`link copied: ${href}`);
-    } catch {
-        noteLink(`copy this link: ${href}`);
-    }
+    noteLink(await copyText(href) ? 'link copied: ' : '', href);
 }
 
 {
@@ -5252,7 +5307,10 @@ async function copyLink() {
     document.querySelector('.hamburger-btn')?.addEventListener('show.bs.dropdown', () => {
         const blocked = copyLinkBlocked();
         item.disabled = Boolean(blocked);
-        why.textContent = blocked || 'this example, on this tab';
+        // One line when live (the label says what it does); the reason below
+        // it only when greyed (author, 1.13.1).
+        why.textContent = blocked || '';
+        why.hidden = !blocked;
     });
     item.addEventListener('click', copyLink);
 }

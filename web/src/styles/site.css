@@ -699,6 +699,12 @@ main.decl-open > .editor-area ~ * {
    it. On the boundary rather than on `.note-warn` itself, so a warning that is
    the last thing in the slot adds no trailing space. */
 .summary-note .note-warn + span:not(.note-warn) { margin-top: .5rem; }
+/* The same boundary after a derivation's line (what Sharpen or PnL did, or a
+   copied link): without it the tag chips below sat hard against it (author,
+   1.13.1). A link is one unbroken string, so it may break anywhere rather than
+   run out past the strip's measure. */
+.summary-note .note-derivation { overflow-wrap: anywhere; }
+.summary-note .note-derivation + .note-declared { margin-top: .5rem; }
 /* The timing sub-line retired at a158. "Calculated in 0.412 seconds" was a whole
    line and a whole sentence for a number nobody reads; the clock in line one's
    corner says the same thing in four characters. */
