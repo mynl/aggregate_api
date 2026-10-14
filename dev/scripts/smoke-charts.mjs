@@ -53,6 +53,11 @@ const {
 // `charts._two_panel.RETURN_PERIOD_TOP`, which is the suggested ladder.
 const MAX_RETURN_PERIOD = 1e9;
 
+// The chart IR version every captured document should carry, restated for the
+// same reason as the cap above. It stood at 3 here after the adapter and the
+// library had both moved to 4, which failed every document; corrected at 1.13.0.
+const IR_VERSION = 4;
+
 const cases = JSON.parse(readFileSync(fixture, 'utf8'));
 
 let failures = 0;
@@ -452,7 +457,7 @@ for (const [name, entry] of Object.entries(cases)) {
     for (const [chart, doc] of Object.entries(entry.charts || {})) {
         const label = `${name}/${chart}`;
         if (!doc) { fail(label, 'no document captured'); continue; }
-        if (doc.ir_version !== 3) fail(label, `ir_version ${doc.ir_version}`);
+        if (doc.ir_version !== IR_VERSION) fail(label, `ir_version ${doc.ir_version}`);
         const option = chartdocToEcharts(doc, { width: 980 });
         if (!checkDrawable(label, doc, option)) continue;
         checkLabels(label, doc, option);

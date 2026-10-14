@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.conftest import NTTAGG_SUPPORTED, requires_nttagg
+from tests.conftest import NTTAGG_SUPPORTED, requires_exact_tail, requires_nttagg
 
 
 # One object of each kind the api builds, small enough to stay quick, plus an
@@ -571,3 +571,25 @@ def test_an_exact_compound_can_neither_be_wrapped_nor_cede(client):
     assert cap["can_hints"] is True
     assert cap["can_sharpen"] is True
     assert cap["can_price"] is True
+
+
+@requires_nttagg
+@requires_exact_tail
+def test_an_exact_compound_lists_the_exact_tail_chart(client):
+    """An ``nttagg`` lists ``exact_tail``, and its primary chart is still ``agg``.
+
+    More / Exact tail gates on the chart name alone, so listing it is the whole
+    switch. The library registers it as never primary (``aggregate`` 1.5.0), so
+    Overview / Plot keeps drawing the ordinary ``agg`` chart for the kind.
+    Serving it is ``test_every_listed_chart_serves``'s job.
+    """
+    _, body = _build(client, "nttagg")
+    assert "exact_tail" in body["capability"]["charts"]
+    assert body["capability"]["primary_chart"] == "agg"
+
+
+@requires_exact_tail
+def test_a_plain_aggregate_does_not_list_the_exact_tail_chart(client):
+    """The float aggregate has no exact answer to draw, so its leaf is dark."""
+    _, body = _build(client, "agg")
+    assert "exact_tail" not in body["capability"]["charts"]

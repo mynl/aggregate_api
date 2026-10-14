@@ -41,6 +41,8 @@ DECLS = {
     "xpnl": ("xpnl CAP.Xpnl 1000 prem less "
              "agg CAP.XpnlL 1000 prem at 70% lr sev lognorm 100 cv 2 "
              "occurrence ceded to 500 xs 500 deposit 100 poisson"),
+    # The exact compound, so `check-nav.mjs` has a column for More / Exact tail.
+    "nttagg": "nttagg CAP.Ntt dfreq [1:6] dsev [1:6]",
 }
 
 OUT = Path(__file__).resolve().parents[1] / "fixtures" / "capability.json"

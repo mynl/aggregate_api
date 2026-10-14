@@ -355,10 +355,12 @@ export const NAV_GROUPS = {
             // with Density meant arriving on the heaviest thing in the app: a
             // bulk frame on the permanent grid path, and a data dump rather than
             // a diagnostic. Author's ruling at a161, Tail behavior leads. It is
-            // the cheapest of the seven, it holds before any grid is chosen so it
+            // the cheapest of the eight, it holds before any grid is chosen so it
             // is prior to everything else here, and it opens the run its own
-            // comment already names. Density sits second to last with Narrative,
-            // the two leaves in this group that are not diagnostics.
+            // comment already names. Narrative and Density, the two leaves here
+            // that are not diagnostics, follow the run, and Exact tail closes
+            // the row beside Density, since it is the density table's picture
+            // for an exact aggregate (1.13.0).
             //
             // Not Dependency first (a bivariate only, so it greys for most
             // objects) and not Narrative (true of everything, but it is a
@@ -432,10 +434,11 @@ export const NAV_GROUPS = {
                 hint: 'fit scores for every grid probed; lower is '
                     + 'better; the selected row is indicated',
             },
-            // The two that are not diagnostics, at the end. Density closes the
-            // row (author's edit at a191, so it is never the landing leaf): it
-            // is the heaviest leaf in the app and led this group through a160;
-            // see the ruling at the head of `leaves`.
+            // The two that are not diagnostics, at the end. Density closed the
+            // row from the author's edit at a191 until Exact tail joined after
+            // it at 1.13.0. It is never the landing leaf, being the heaviest
+            // leaf in the app (it led this group through a160); see the ruling
+            // at the head of `leaves`.
             narrative: {
                 label: 'Narrative',
                 hint: 'the object’s info and various attribute description strings',
@@ -443,6 +446,21 @@ export const NAV_GROUPS = {
             density: {
                 label: 'Density',
                 hint: 'binned probability mass, distribution, and survival functions',
+            },
+            // An nttagg's exact answer on a log10 scale, beside the float FFT,
+            // down to the last bucket of the support. Gated on the library's
+            // `exact_tail` chart alone, which it registers for an updated
+            // `AggregateNTT` and never as primary, so Overview / Plot is still
+            // `agg`. After Density rather than among the diagnostics: it is the
+            // picture of what the density table lists, and placing it last
+            // keeps Density off the landing slot (the a191 ruling above).
+            exact: {
+                label: 'Exact tail',
+                chart: 'exact_tail',
+                why: 'an exact (nttagg) aggregate only',
+                hint: 'the exact probability mass and exceedance probability on a log10 '
+                    + 'scale, beside the float FFT answer, down to the last bucket of '
+                    + 'the support',
             },
         },
     },

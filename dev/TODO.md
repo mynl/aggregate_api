@@ -6,6 +6,15 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Exact-Tail-Leaf]** DONE (`1.13.0`), plan
+  `dev/done/plan-1.13.0-exact-tail-leaf.md`, the api half of the library's
+  [NTT-Exact-Tail-Chart] (`aggregate` 1.5.0). More ▸ Exact tail draws the
+  nttagg's exact mass and survival as base-10 exponents beside the float FFT;
+  the adapter learns `log10_density` and `log10_probability`. Still owed: the
+  manual checks in the plan (browser draw time on `Wilson2017.DiceOfDice`
+  among them), and a ruling on the two `nttagg_gaps` smoke failures its
+  execution log describes.
+
 - **[Deep-Link-View]** DONE (`1.10.0` to `1.11.0`), plan
   `dev/done/plan-1.10.0-deep-link-view.md`, two steps. [view] (`1.10.0`):
   `view=<group>:<leaf>` lands a deep link's build on a named tab, keys or labels

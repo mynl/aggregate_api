@@ -38,6 +38,46 @@ export function fmt(value) {
     return value.toExponential(4);
 }
 
+/**
+ * The probability a base-10 exponent stands for, in scientific notation.
+ *
+ * Parameters
+ * ----------
+ * exponent : number
+ *     A base-10 logarithm, as the `log10_density` and `log10_probability`
+ *     chart units carry: `-467.7` stands for about `2.0e-468`.
+ * digits : number
+ *     Digits after the mantissa's point, as `toExponential` takes them.
+ *
+ * Returns
+ * -------
+ * string
+ *     `'1.995e-468'`, or `''` for a missing or non-finite exponent.
+ *
+ * Notes
+ * -----
+ * The probability is never formed as `10 ** exponent`. In binary64 that is
+ * subnormal below about -307.65 and zero below about -323.6, so the deep tail
+ * this exists to read would print `0`. Instead the exponent splits into its
+ * integer floor `e` and a mantissa `m = 10 ** (exponent - e)` in `[1, 10)`,
+ * and the two are printed side by side.
+ *
+ * The mantissa carries. When `m` rounds to `10` at the requested digits
+ * (`-400.00001` gives `m = 9.99997...`), it prints as `1.000` with the exponent
+ * one higher, never as `10.000e-401`.
+ */
+export function log10ProbabilityText(exponent, digits = 3) {
+    if (exponent == null || !Number.isFinite(Number(exponent))) return '';
+    const v = Number(exponent);
+    let e = Math.floor(v);
+    let mantissa = (10 ** (v - e)).toFixed(digits);
+    if (Number(mantissa) >= 10) {
+        mantissa = (1).toFixed(digits);
+        e += 1;
+    }
+    return `${mantissa}e${e < 0 ? '-' : '+'}${Math.abs(e)}`;
+}
+
 /** True if the value should align right in a table (numeric-ish). */
 export function isNumeric(value) {
     if (typeof value === 'number') return Number.isFinite(value);

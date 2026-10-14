@@ -1686,6 +1686,8 @@ const LOADERS = {
     'more:sharpen': () => loadExhibitLeaf('pane-more', 'sharpen',
         ['more', 'sharpen']),
     'more:narrative': () => loadNarrative(),
+    // A chart leaf, the library's `exact_tail`. See `loadExactTail`.
+    'more:exact': () => loadExactTail(),
 };
 
 // The rules, bound to the one capability object. `state.caps` is already the
@@ -3622,7 +3624,7 @@ async function loadReinsExhibit(block, leaf) {
 // The navigation is two levels, groups and then each group's sub-tab row, and
 // `dev/scripts/check-nav.mjs` asserts that shape, so a third level has to live
 // in the pane. It is also the better reading: these are two views of one
-// question, so they keep one address, and the More row stays at seven pills
+// question, so they keep one address, and the More row stays at eight pills
 // instead of growing an `Approx plot` and an `Approx summary` that would sort
 // apart from each other the moment another leaf lands between them.
 //
@@ -3756,6 +3758,35 @@ async function loadApproximation() {
     try {
         moreChart = await mountChart(host,
                                      { id: state.id, chart: APPROXIMATION_CHART[half] });
+    } catch { failed = true; }
+    if (!moreChart) {
+        empty(host);
+        host.appendChild(failed ? fetchFailed() : notDrawable());
+    }
+}
+
+/**
+ * More / Exact tail: the library's `exact_tail` chart for an nttagg.
+ *
+ * The `loadApproximation` plot path without the switch. The document is two
+ * panels over one loss axis (the exact and float mass, then the exact and float
+ * survival, both as base-10 exponents), so the host takes the full pane rather
+ * than `plot-half`. Every reading, log on x and the full range among them,
+ * arrives with the document through the mount; nothing about the picture is
+ * decided here.
+ */
+async function loadExactTail() {
+    const root = el('div');
+    const lede = ledeFor('more', 'exact');
+    if (lede) root.appendChild(lede);
+    const host = el('div', { className: 'overview-plot' });
+    root.appendChild(host);
+    // Before the mount, so `disposePaneChart` drops any instance the previous
+    // visit left rather than this assigning over it.
+    replacePane('pane-more', root);
+    let failed = false;
+    try {
+        moreChart = await mountChart(host, { id: state.id, chart: 'exact_tail' });
     } catch { failed = true; }
     if (!moreChart) {
         empty(host);

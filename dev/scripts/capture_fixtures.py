@@ -44,6 +44,12 @@ CASES = {
     # A reinsured book, which publishes 'reins' alongside its own chart.
     "reins": ("agg FIX.Re 100 claims 1000 xs 0 sev lognorm 90 cv 1.5 "
               "occurrence net of 500 xs 500 poisson"),
+    # Two exact compounds, for `exact_tail` and its two exponent units. The
+    # second has interior exact zeros (support 2, 4, 5, 7, 10, so buckets 3, 6,
+    # 8 and 9 carry nothing), which is the case the markers-only drawing of the
+    # mass panel exists for.
+    "nttagg": "nttagg FIX.Ntt dfreq [1:3] dsev [1:3] [1/3 5/8 1/24]",
+    "nttagg_gaps": "nttagg FIX.NttGaps dfreq [1 2] dsev [2 5]",
 }
 
 # One more document for a chart that takes a content option, filed under a

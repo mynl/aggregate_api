@@ -54,6 +54,40 @@ requires_nttagg = pytest.mark.skipif(
 )
 
 
+def _exact_tail_is_supported() -> bool:
+    """Whether the installed ``aggregate`` registers the ``exact_tail`` chart.
+
+    Returns
+    -------
+    bool
+        True when ``exact_tail`` is in the public ``aggregate.charts.CHARTS``
+        registry.
+
+    Notes
+    -----
+    The same capability probe as ``_nttagg_is_supported`` and for the same
+    reason: the chart arrived in ``aggregate`` 1.5.0, the pin stays
+    ``>=1.0.1,<2``, and against an older library the More / Exact tail leaf is
+    simply dark, so the tests that assert the chart is listed have to skip
+    rather than fail.
+    """
+    try:
+        from aggregate.charts import CHARTS
+    except Exception:
+        return False
+    return "exact_tail" in CHARTS
+
+
+#: Gate for the tests asserting an nttagg lists the exact log10 chart.
+EXACT_TAIL_SUPPORTED = _exact_tail_is_supported()
+
+#: Marker form of the gate above.
+requires_exact_tail = pytest.mark.skipif(
+    not EXACT_TAIL_SUPPORTED,
+    reason="the installed aggregate has no 'exact_tail' chart (arrived in 1.5.0)",
+)
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     """Fresh app + cache per test, audit DB in tmp_path."""

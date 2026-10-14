@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.13.0
+
+[Exact-Tail-Leaf] **More ▸ Exact tail draws an nttagg's exact probabilities on a log10 scale, beside the float FFT.** Plan `dev/done/plan-1.13.0-exact-tail-leaf.md`.
+
+- New leaf at the end of More, lit when the library publishes `exact_tail` (`aggregate` 1.5.0 or later) for an nttagg; greyed with "an exact (nttagg) aggregate only" everywhere else. Overview ▸ Plot is unchanged.
+- The chart adapter reads the axis units `log10_density` (markers only, so exact zero buckets stay empty) and `log10_probability` (right-continuous steps). Ticks print the exponent itself (`-400`); the readout gives the exponent and the probability, e.g. `-462.51 (3.112e-463)`, which no longer underflows to `0` below about `1e-308`.
+- The Help panel's More line lists the row as it is.
+- Dev harnesses: `smoke-charts.mjs` expected IR version 3 and failed every document; it now expects 4. `check-nav.mjs` and both capture scripts gain nttagg cases.
+
 ## 1.12.0
 
 [Full-Precision-Grids] **Full precision shows raw values on the density grids.** Plan `dev/done/plan-1.12.0-raw-display-large-grids.md`.

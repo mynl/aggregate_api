@@ -57,8 +57,8 @@ const caps = Object.fromEntries(
 // because a check that recomputes the thing it is checking proves nothing. The
 // left column is `group:leaf`; a kind listed means that leaf is live for it.
 const EXPECTED = {
-    'overview:plot': ['agg', 'agg_reins', 'port', 'sev', 'distortion', 'bvagg', 'pnl', 'xpnl'],
-    'overview:summary': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl'],
+    'overview:plot': ['agg', 'agg_reins', 'port', 'sev', 'distortion', 'bvagg', 'pnl', 'xpnl', 'nttagg'],
+    'overview:summary': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl', 'nttagg'],
     // A P&L joined this row at library a388 ([Overview-Engine]), where the
     // generic `tail` exhibit stopped serving the ledger's closing margin and
     // started serving the **wrapped book's** ladder, which is what the other
@@ -66,17 +66,17 @@ const EXPECTED = {
     // Summary's, Validation's and Stats's, and that identity is the point: the
     // whole group describes one object. The ledger's own ladder is
     // `economics:tail`, below.
-    'overview:tail': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl'],
+    'overview:tail': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl', 'nttagg'],
     // Moved out of More at a55: it is the verdict on what the three leaves above
     // it just showed, so it belongs beside them rather than in the specialist
     // menu. The live set is unchanged by the move, which is the point of
     // asserting it here.
-    'overview:validation': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl'],
+    'overview:validation': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl', 'nttagg'],
     // Moved out of More at a125, the same move Validation made and asserted the
     // same way. This row is byte-identical to the two above it, which is the
     // whole argument for the move: the live set is unchanged, so the Overview
     // row lights nothing new and the More row darkens nothing.
-    'overview:stats': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl'],
+    'overview:stats': ['agg', 'agg_reins', 'port', 'distortion', 'bvagg', 'pnl', 'xpnl', 'nttagg'],
     'economics:ledger': ['pnl', 'xpnl'],
     'economics:ratios': ['pnl', 'xpnl'],
     'economics:waterfall': ['xpnl'],
@@ -110,8 +110,8 @@ const EXPECTED = {
     // Calibrate and Stand-alone gate together on `canPrice`: they are two
     // readings of one calibration and one press fills both, so a live Calibrate
     // with a dark Stand-alone would be a promise the pane cannot keep.
-    'pricing:calibrate': ['agg', 'agg_reins', 'port'],
-    'pricing:standalone': ['agg', 'agg_reins', 'port'],
+    'pricing:calibrate': ['agg', 'agg_reins', 'port', 'nttagg'],
+    'pricing:standalone': ['agg', 'agg_reins', 'port', 'nttagg'],
     // Allocate and Plot need parts to split a premium across, which is a book
     // of units or an occurrence cession. A plain aggregate has one part and it
     // is the whole, so both are dark there while the two beside them are lit:
@@ -124,7 +124,7 @@ const EXPECTED = {
     // wrapped engine, so it lights too, which is why this row is Allocate's
     // set plus `xpnl` rather than equal to it.
     'pricing:plot': ['agg_reins', 'port', 'xpnl'],
-    'pricing:evaluate': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl'],
+    'pricing:evaluate': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl', 'nttagg'],
     // Pr Ruin is a chart leaf and lights from `ruin`, whose predicate is the
     // library's frequency test: Poisson or renewal, on an aggregate alone.
     // Both captured aggregates are Poisson books, so both light; a portfolio
@@ -137,14 +137,14 @@ const EXPECTED = {
     // premium. Allocation is the narrower gate, needing the per-unit
     // conditional expectations only a portfolio's density frame carries, so it
     // stays a portfolio's alone.
-    'bounds:bounds': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl'],
-    'bounds:pricing': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl'],
+    'bounds:bounds': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl', 'nttagg'],
+    'bounds:pricing': ['agg', 'agg_reins', 'port', 'pnl', 'xpnl', 'nttagg'],
     'bounds:allocation': ['port'],
-    'more:density': ['agg', 'agg_reins', 'port', 'sev', 'distortion', 'bvagg', 'pnl', 'xpnl'],
+    'more:density': ['agg', 'agg_reins', 'port', 'sev', 'distortion', 'bvagg', 'pnl', 'xpnl', 'nttagg'],
     // Same set as overview:tail, and for the same reason: both need a full loss
     // distribution. They answer different questions about it, which is why they
     // are two leaves rather than two blocks in one pane.
-    'more:behavior': ['agg', 'agg_reins', 'port'],
+    'more:behavior': ['agg', 'agg_reins', 'port', 'nttagg'],
     // The leaf lights from the `approximation` exhibit, which the library
     // registers for an updated Aggregate or Portfolio, so this row equals the
     // two around it. The pane's Plot half gates separately on the
@@ -152,15 +152,20 @@ const EXPECTED = {
     // inside the pane rather than in the navigation: `agg` and `agg_reins` get
     // both pills, `port` gets Summary with Plot greyed. This grid is leaves, so
     // it cannot say that; `main.js::approximationCanPlot` is where it lives.
-    'more:approximation': ['agg', 'agg_reins', 'port'],
-    'more:window': ['agg', 'agg_reins', 'port', 'bvagg'],
+    'more:approximation': ['agg', 'agg_reins', 'port', 'nttagg'],
+    'more:window': ['agg', 'agg_reins', 'port', 'bvagg', 'nttagg'],
     'more:dependency': ['bvagg'],
     // Dark for every kind here, and that is the assertion, not an omission.
     // The Sharpen leaf shows an audit that only exists once the probe has run,
     // and `capture-capability.py` builds each fixture and stops. An object that
     // has been sharpened lights it; nothing captured has been.
     'more:sharpen': [],
-    'more:narrative': ['agg', 'agg_reins', 'port', 'sev', 'distortion', 'bvagg', 'pnl', 'xpnl'],
+    'more:narrative': ['agg', 'agg_reins', 'port', 'sev', 'distortion', 'bvagg', 'pnl', 'xpnl', 'nttagg'],
+    // A chart leaf on `exact_tail`, which the library (1.5.0) registers for an
+    // updated nttagg alone: the exact answer on a log10 scale needs one. The
+    // nttagg column elsewhere is a plain aggregate's less Pr Ruin (no Poisson
+    // or renewal frequency), since the kind is an Aggregate.
+    'more:exact': ['nttagg'],
 };
 
 const findings = [];
@@ -222,7 +227,7 @@ if (caps[GROSS_AGG]) {
         findings.push('reinsurance: the group must stay live so cover can be added');
     }
 }
-for (const k of ['port', 'pnl', 'sev', 'distortion', 'bvagg']) {
+for (const k of ['port', 'pnl', 'sev', 'distortion', 'bvagg', 'nttagg']) {
     if (caps[k] && groupAvailable(caps[k], 'reinsurance')) {
         findings.push(`reinsurance: ${k} cannot cede, so the group should be dark`);
     }

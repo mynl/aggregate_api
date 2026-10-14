@@ -17,7 +17,7 @@
 // it has no pixel rung, and it draws a joint density flat rather than as a
 // projection.
 
-import { fmt } from '../utils/format.js';
+import { fmt, log10ProbabilityText } from '../utils/format.js';
 import {
     coordX, coordY, decodeSurfaceGrid, densityAt, findSurfaceSeries, xCoords,
     yCoords, zExtent,
@@ -1093,7 +1093,16 @@ function atomsInView(x, window) {
  *                      room to see them, steps centered on the grid point once
  *                      there is not
  *
- * @returns {'stem'|'step-mid'|'step-pre'|'step-post'|'line'}
+ * and the two exponent units of the library's `exact_tail` (1.5.0):
+ *
+ *   log10_density      a mass written as its base-10 exponent, positive
+ *                      buckets only, so the omitted ones are exact zeros:
+ *                      markers and nothing else, since a line or a step would
+ *                      bridge them and a log scale has no floor for a stem
+ *   log10_probability  a survival written as its exponent, which is still a
+ *                      right-continuous step, so it takes `probability`'s rung
+ *
+ * @returns {'stem'|'step-mid'|'step-pre'|'step-post'|'line'|'points'}
  */
 function drawingFor(support, xAxis, yAxis, seen) {
     // An **ordinal** x axis first, because none of the readings below applies
@@ -1102,8 +1111,11 @@ function drawingFor(support, xAxis, yAxis, seen) {
     // `ph` and `wang` for a level to hold over. What a reader wants across
     // ordered categories is the trend, so the points are marked and joined.
     if (xAxis && xAxis.kind === 'category') return 'line';
+    // Before the `continuous` rule, so it holds whatever `support` says: the
+    // gaps are in the law, not in the sampling.
+    if (yAxis.unit === 'log10_density') return 'points';
     if (support === 'continuous') return 'line';
-    if (yAxis.unit === 'probability') return 'step-post';
+    if (yAxis.unit === 'probability' || yAxis.unit === 'log10_probability') return 'step-post';
     if (xAxis.unit === 'probability' || xAxis.unit === 'return_period') return 'step-pre';
     if (yAxis.unit === 'density' && seen <= LOLLIPOP_ATOMS) return 'stem';
     return 'step-mid';
@@ -1394,8 +1406,23 @@ function expLabel(v) {
     return Number(v).toExponential(1);
 }
 
+/**
+ * A base-10 exponent as a tick label: `-400`, `-1200`, `-467.5`.
+ *
+ * The exponent itself, ungrouped. The axis label already says log10, so
+ * printing `1e-400` would state the transform twice and contradict the label;
+ * the readout carries the translation to a probability.
+ */
+function exponentLabel(v) {
+    const n = Number(v);
+    return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
 /** The tick formatter for an axis, by what it measures. */
 function labelFormatter(axis, scale) {
+    if (axis.unit === 'log10_density' || axis.unit === 'log10_probability') {
+        return exponentLabel;
+    }
     if (axis.unit === 'probability') {
         return (v) => (v >= 0.01 || v === 0 ? String(v) : expLabel(v));
     }
@@ -1771,6 +1798,21 @@ function xyPanel(doc, panel, i, axes, view, zoom, ctx) {
                     emphasis: { focus: 'series' }, z: 3,
                 },
             );
+            legend.push(s.name);
+            continue;
+        }
+        if (style === 'points') {
+            // Markers alone: the stem's dot series without its stems. Still a
+            // `type: 'line'` with a zero width line, so nothing beyond
+            // `LineChart` is registered, and `minmax` sampling keeps each
+            // pixel column's extremes, which stays honest for markers too.
+            series.push({
+                type: 'line', name: s.name, xAxisIndex: i, yAxisIndex: i,
+                data: points, showSymbol: true, symbolSize: 3, connectNulls: false,
+                sampling: gapFree(points) ? SAMPLING : undefined,
+                lineStyle: { width: 0 }, itemStyle: { color },
+                emphasis: { focus: 'series' },
+            });
             legend.push(s.name);
             continue;
         }
@@ -3020,6 +3062,11 @@ function readValue(v, unit) {
     if (unit === 'probability') return Number(v).toExponential(3);
     if (unit === 'return_period') return `1-in-${compactPeriod(v)}`;
     if (unit === 'density') return Number(v).toExponential(3);
+    // The exponent, then the probability it stands for at the four significant
+    // figures the `probability` readout uses: `-467.70 (1.995e-468)`.
+    if (unit === 'log10_density' || unit === 'log10_probability') {
+        return `${Number(v).toFixed(2)} (${log10ProbabilityText(v)})`;
+    }
     return fmt(v);
 }
 
