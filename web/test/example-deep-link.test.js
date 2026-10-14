@@ -12,7 +12,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { readDeepLink, withoutDeepLink } from '../src/examples.js';
+import { linkFor, readDeepLink, withoutDeepLink } from '../src/examples.js';
 
 test('both parameters', () => {
     assert.deepEqual(readDeepLink('?database=aas-paper&example=Fig3'),
@@ -64,4 +64,26 @@ test('clearing removes the three link parameters and keeps the rest', () => {
     assert.equal(withoutDeepLink('http://h/lite.html?lite=1&example=E'),
         '/lite.html?lite=1');
     assert.equal(withoutDeepLink('http://h/?full=1&view=pnl:pentagon'), '/?full=1');
+});
+
+test('a copied link reads back as the parameters it was written from', () => {
+    const roundTrip = (base, link) => readDeepLink(new URL(linkFor(base, link)).search);
+    for (const link of [
+        { database: 'library', example: 'Capstone.Capped', view: 'economics:pentagon' },
+        { database: 'reproductions', example: 'A name with a space', view: 'overview:plot' },
+        { database: 'library', example: 'BasicBook', view: null },
+    ]) {
+        assert.deepEqual(roundTrip('https://agg.mynl.com/', link), link);
+    }
+});
+
+test('a copied link drops the base query and hash and keeps its path', () => {
+    const href = linkFor('http://127.0.0.1:8001/app/?full=1#x',
+        { database: 'library', example: 'BasicBook', view: 'pnl:pentagon' });
+    const url = new URL(href);
+    assert.equal(url.pathname, '/app/');
+    assert.equal(url.hash, '');
+    assert.equal(url.searchParams.get('full'), null);
+    assert.equal(href,
+        'http://127.0.0.1:8001/app/?database=library&example=BasicBook&view=pnl%3Apentagon');
 });

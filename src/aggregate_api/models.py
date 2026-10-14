@@ -1395,6 +1395,9 @@ class MetaResponse(BaseModel):
     # the SPA knows at boot whether its `?` and menu item can open anything,
     # for the reason `plugins` gives. Empty before `aggregate` 1.2.0.
     decl_help: list[str] = []
+    # Where Menu > Copy link points its links (`AGGAPI_PUBLIC_URL`); null when
+    # a deployment set it empty, and the SPA then uses its own origin.
+    public_url: str | None = None
 
 
 class StatusResponse(BaseModel):

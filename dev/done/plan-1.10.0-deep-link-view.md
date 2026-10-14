@@ -326,3 +326,13 @@ Landed as specified, with these divergences:
 4. Browser checks needed the worktree `aggregate` (1.3.0) installed editable, since `Capstone.Capped` is not in the released 1.0.1 library; the restore under "Relationship to `aggregate`" in `CLAUDE.md` was run.
 
 Verified in the browser (DOM state, 1400×900 iframes): the motivating link, `economics:pentagon` and `PnL:Pentagon` land on PnL ▸ Pentagon with the figure drawn and the address bar at `/`, one `POST /v1/objects` followed directly by `/pnl/pentagon`, no Overview chart request; `view=pnl` lands on Summary; `BasicBook` with the Pentagon view, `view=nope` and `NoSuchThing` give exactly the plan's notes with the fold open; `overview:tail` lands on Tail; Build after landing stays on the Pentagon; the phone page with the motivating link and `lite=1` builds `Capstone.Capped` with no script error.
+
+### [copy-link], 1.11.0, 2026-10-14
+
+Landed as specified, with these divergences:
+
+1. **`noteLinkProblem` became `noteLink`**, since it now also carries `link copied: <url>`, which is not a problem. One helper, as the plan wanted, under a name that fits both callers.
+2. **`_linkable` is also cleared when the help loads a program** (the Help panel's sample, and a Load from the DecL anatomy), so the menu then reads `links name an entry from the Examples menu`, as the plan lists for the Help sample, rather than `the program was edited after it was picked`. A history walk leaves it alone: walking back to the entry's program makes the link live again, and anything else reads as edited.
+3. **The `link copied` path is unverified.** The Chrome tab was hidden and unfocused, so `navigator.clipboard.writeText` refused every time and the note read `copy this link: <url>`. That exercised the fallback, with the right link, but the success path, and the VPN-address case, are owed to a check by eye.
+
+Verified: `uv run --no-sync pytest` (522) and `npm test` (302) green; `/v1/meta` reports `https://agg.mynl.com/` by default. In the browser (DOM state): on a fresh page the item greys with `links name an entry from the Examples menu`; after the motivating link it is live with `this example, on this tab` and writes `https://agg.mynl.com/?database=library&example=Capstone.Capped&view=economics%3Apentagon`; one typed character greys it with `the program was edited after it was picked`, and deleting the character makes it live again. Restarted with `AGGAPI_PUBLIC_URL=http://127.0.0.1:8001/`, the copied link starts with that address, and opening it lands on PnL ▸ Pentagon.

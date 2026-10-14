@@ -25,7 +25,7 @@ import { createEditor, emacsEnabledDefault, modifierName } from './editor.js';
 import {
     mountExamples, mountPalette, loadExamples, visibleExamples,
     onExamplesViewChange, loadDatabases, selectDatabase, selectedDatabase,
-    readDeepLink, clearDeepLink, findLinkedExample,
+    readDeepLink, clearDeepLink, findLinkedExample, linkFor,
 } from './examples.js';
 import { renderInfo } from './renderers.js';
 import { fetchFailed, mountChart, mountChartDoc, notDrawable } from './charts/mount.js';
@@ -262,6 +262,18 @@ function recordProgram(text) {
 // editor against this and rebuilds first when they differ.
 let _builtDecl = null;
 
+// The library entry last put in the editor, for Menu > Copy link (1.11.0):
+// `{database, name, decl}`, where `database` is the file it came from (null for
+// the default) as it stood at the pick, since the reader may change the menu's
+// file afterward. Set by `pickExample` and `exampleStep`, the two routes a
+// library entry takes into the box, and cleared when the help loads a program.
+// Typing does not clear it: the menu compares the box with `decl` when it
+// opens, so an undone edit makes the link live again.
+let _linkable = null;
+// Where copied links point, from `/v1/meta` (`AGGAPI_PUBLIC_URL`); null until
+// the meta fetch answers, or when a deployment cleared it.
+let _publicUrl = null;
+
 // The two step buttons, which are the walk's only route on a touch device: an
 // iPad's on-screen keyboard has no arrow keys, so through a115 the readout
 // described a control the reader could not operate.
@@ -375,6 +387,7 @@ function loadFromHelp(program) {
     walkMode = 'history';
     history.resetCursor();
     captionExample(null);
+    _linkable = null;
     loadExample(program);
     renderHistoryNav();
     const box = $('editor-box');
@@ -4725,6 +4738,15 @@ function captionExample(item) {
 }
 
 /**
+ * Remember a library entry as the one Menu > Copy link would name.
+ *
+ * @param {object} item a row from `/v1/examples`, carrying `name` and `decl`.
+ */
+function rememberLinkable(item) {
+    _linkable = { database: selectedDatabase(), name: item.name, decl: item.decl.trim() };
+}
+
+/**
  * Load a library entry into the editor and build it.
  *
  * Parameters
@@ -4748,6 +4770,7 @@ function pickExample(item, { anchor = true } = {}) {
     walkMode = 'examples';
     exampleRing.cursor = visibleExamples().indexOf(item);
     captionExample(item);
+    rememberLinkable(item);
     loadExample(item.decl, true, anchor);
     // Explicitly, rather than relying on the `setText` inside `loadExample` to
     // fire `onEdit`: picking the row the editor already holds changes no text
@@ -4914,21 +4937,23 @@ async function loadLanding() {
         pendingView = null;
     }
     if (missing) {
-        noteLinkProblem(`example "${link.example}" not found in ${found.source}`);
+        noteLink(`example "${link.example}" not found in ${found.source}`);
     } else if (viewProblem) {
-        noteLinkProblem(viewProblem);
+        noteLink(viewProblem);
     }
 }
 
 /**
- * Say on the strip what part of a deep link could not be honored.
+ * Say on the strip something about a deep link: a part of one received that
+ * could not be honored, or one Copy link just wrote.
  *
  * Opens the fold, since a note behind a chevron is a broken link nobody sees.
  * It stays open afterwards, as it would had the reader pressed it.
  *
- * @param {string} text the message, naming the parameter and its value.
+ * @param {string} text the message, naming the parameter and its value, or
+ *     carrying the link itself.
  */
-function noteLinkProblem(text) {
+function noteLink(text) {
     noteDerivation(text);
     if (!$('summary-more').hidden) {
         $('summary').classList.add('expanded');
@@ -4979,6 +5004,7 @@ function exampleStep(dir) {
     walkMode = 'examples';
     const item = items[exampleRing.cursor];
     captionExample(item);
+    rememberLinkable(item);
     loadExample(item.decl);
     renderHistoryNav();
     // The ring builds too, once the flicking settles: each step resets the
@@ -5002,6 +5028,8 @@ if (helpLoad) {
         const panel = $('helpPanel');
         panel.addEventListener('hidden.bs.offcanvas',
             () => editor.focus(), { once: true });
+        // The sample is not a library entry, so there is nothing to link to.
+        _linkable = null;
         loadExample(sample, false);
         bootstrap.Offcanvas.getOrCreateInstance(panel).hide();
     });
@@ -5035,6 +5063,7 @@ api.meta().then((meta) => {
     if (strip) strip.textContent = `agg ${meta.aggregate_version} · api ${meta.version}`;
     installPlugins(meta.plugins || []);
     _aggregateVersion = meta.aggregate_version;
+    _publicUrl = meta.public_url || null;
     declHelp.offer(meta);
 }).catch(() => {
     $('about-api').textContent = '(api offline)';
@@ -5086,6 +5115,69 @@ function installPlugins(plugins) {
 // object cache, and the two sat next to each other in the menu asking a reader
 // to know the difference; the canonical one is the one that reloads.
 $('dl-agg')?.addEventListener('click', () => window.open(api.sessionModelsUrl('agg')));
+
+// ----------------------------------------------------------------------
+// Copy link: a deep link to the entry and tab on screen (1.11.0)
+// ----------------------------------------------------------------------
+
+/**
+ * Why Copy link cannot write a link for what is on screen, or null when it can.
+ *
+ * A link names a library entry, so what is on screen must be one: picked from
+ * the Examples menu (or the ring), unedited, and built. Worked out when the menu
+ * opens rather than tracked across every edit.
+ *
+ * @returns {string|null} the reason, in the reader's terms.
+ */
+function copyLinkBlocked() {
+    if (!_linkable) return 'links name an entry from the Examples menu';
+    if (editor.getText().trim() !== _linkable.decl) {
+        return 'the program was edited after it was picked';
+    }
+    if (_builtDecl !== _linkable.decl) return 'build the entry first';
+    return null;
+}
+
+/**
+ * Write the link and put it on the clipboard, or on the strip to copy by hand.
+ *
+ * Always names `database`, the default's own stem included, because otherwise
+ * the recipient's stored file decides where `example` is looked up. The view is
+ * written in keys, the stable vocabulary, not labels. The clipboard API is
+ * missing on a plain-http origin that is not localhost (the VPN address), so
+ * the link then stays on screen to select.
+ */
+async function copyLink() {
+    if (copyLinkBlocked()) return;
+    let database = _linkable.database;
+    if (!database) {
+        const listed = await loadDatabases().catch(() => null);
+        database = listed?.find((d) => d.default)?.name || 'library';
+    }
+    const group = activeTabName();
+    const href = linkFor(_publicUrl || `${location.origin}${location.pathname}`, {
+        database,
+        example: _linkable.name,
+        view: `${group}:${activeLeaf(group)}`,
+    });
+    try {
+        await navigator.clipboard.writeText(href);
+        noteLink(`link copied: ${href}`);
+    } catch {
+        noteLink(`copy this link: ${href}`);
+    }
+}
+
+{
+    const item = $('copy-link-item');
+    const why = $('copy-link-why');
+    document.querySelector('.hamburger-btn')?.addEventListener('show.bs.dropdown', () => {
+        const blocked = copyLinkBlocked();
+        item.disabled = Boolean(blocked);
+        why.textContent = blocked || 'this example, on this tab';
+    });
+    item.addEventListener('click', copyLink);
+}
 
 // ----------------------------------------------------------------------
 // PWA service worker (production bundle only)

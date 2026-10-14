@@ -173,6 +173,17 @@ class Settings(BaseSettings):
     # order, so this only removes the catch-all at the end.
     serve_spa: bool = True
 
+    # The address Menu > Copy link writes its links against (1.11.0). A link
+    # copied while working on 127.0.0.1 is useless to anyone else, so by default
+    # it points at the public deploy, which then needs no setting of its own.
+    # This is the project's published address, already named in its docs, not
+    # a location on any machine. Override it in two cases: a deployment of this
+    # package elsewhere sets its own address, or its copied links point at
+    # agg.mynl.com; and testing a link round trip against local work sets the
+    # local address (http://127.0.0.1:8001/). Set empty to fall back to whatever
+    # origin the page was loaded from.
+    public_url: str = "https://agg.mynl.com/"
+
     # ------------------------------------------------------------------
     # The library
     # ------------------------------------------------------------------

@@ -497,6 +497,30 @@ export function withoutDeepLink(href) {
 }
 
 /**
+ * Write a deep link to `base` for one library entry, on one view.
+ *
+ * Pure, and exported for the test; `readDeepLink` of the result's query gives
+ * the parameters back. The base's own query and hash are dropped, so a page
+ * loaded as `/?full=1` still copies a clean link. `URLSearchParams` does the
+ * encoding, so a colon in `view` arrives as `%3A`; copied links need not be
+ * human readable, and every reader decodes it.
+ *
+ * @param {string} base an absolute URL, the public site or the page's origin.
+ * @param {{database: string|null, example: string|null, view: string|null}} link
+ *     the parameters; a null is left out.
+ * @returns {string} the link, absolute.
+ */
+export function linkFor(base, { database, example, view }) {
+    const url = new URL(base);
+    url.search = '';
+    url.hash = '';
+    for (const [name, value] of Object.entries({ database, example, view })) {
+        if (value) url.searchParams.set(name, value);
+    }
+    return url.href;
+}
+
+/**
  * Take the deep link out of the address bar once it has been applied.
  *
  * The file choice is already stored, so nothing is lost. Leaving the

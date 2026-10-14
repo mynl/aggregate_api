@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.11.0
+
+[Deep-Link-View] **Menu ▸ Copy link writes a link to the example and tab on screen.** Plan `dev/done/plan-1.10.0-deep-link-view.md`, step [copy-link], the second of two.
+
+- The item is live when what is on screen is a library entry, picked from the Examples menu or the ring, unedited and built. Otherwise it greys with the reason as a line under the label.
+- The link always names `database` (the default file's stem included) and writes the view in keys, `view=economics:pentagon`, not labels.
+- Links point at the public site by default: new setting `AGGAPI_PUBLIC_URL`, default `https://agg.mynl.com/`, reported as `public_url` on `/v1/meta`. Set it to `http://127.0.0.1:8001/` to test a round trip against local work; set it empty to use the page's own origin.
+- Where the clipboard API is missing or refuses (plain http over the VPN address), the note slot shows `copy this link: <url>` to select by hand.
+- Until a release carrying 1.10.0 is deployed at agg.mynl.com, a copied link builds the entry there but stays on Overview.
+
 ## 1.10.0
 
 [Deep-Link-View] **a deep link can name the tab its build lands on**: `/?database=library&example=Capstone.Capped&view=pnl:pentagon` builds the capped exploded P&L and opens PnL ▸ Pentagon, scrolled into view. Plan `dev/plan-1.10.0-deep-link-view.md`, step [view], the first of two.

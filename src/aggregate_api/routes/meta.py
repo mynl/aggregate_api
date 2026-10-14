@@ -186,6 +186,7 @@ async def meta() -> dict:
         "cache_max": settings.cache_max,
         "plugins": _plugin_manifest(),
         "decl_help": decl_help.available_forms(),
+        "public_url": settings.public_url.strip() or None,
     }
 
 

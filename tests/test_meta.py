@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 
 def test_health(client):
     r = client.get("/v1/health")
@@ -123,6 +125,30 @@ def test_meta_reports_the_ntt_engine_only_when_it_imports(client, monkeypatch):
     fake.__version__ = "9.9.9"
     monkeypatch.setitem(sys.modules, "aggregate_ntt", fake)
     assert client.get("/v1/meta").json()["ntt_version"] == "9.9.9"
+
+
+@pytest.mark.parametrize(
+    "env, expected",
+    [
+        (None, "https://agg.mynl.com/"),
+        ("http://127.0.0.1:8001/", "http://127.0.0.1:8001/"),
+        ("", None),
+    ],
+)
+def test_meta_reports_the_public_url(client, monkeypatch, env, expected):
+    """Where Copy link points: the public deploy by default, the
+    ``AGGAPI_PUBLIC_URL`` override when set, and null when set empty."""
+    from aggregate_api.config import get_settings
+
+    if env is None:
+        monkeypatch.delenv("AGGAPI_PUBLIC_URL", raising=False)
+    else:
+        monkeypatch.setenv("AGGAPI_PUBLIC_URL", env)
+    get_settings.cache_clear()
+    try:
+        assert client.get("/v1/meta").json()["public_url"] == expected
+    finally:
+        get_settings.cache_clear()
 
 
 # ----------------------------------------------------------------------

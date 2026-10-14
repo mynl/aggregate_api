@@ -6,12 +6,15 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
-- **[Deep-Link-View]** [view] DONE (`1.10.0`), plan
-  `dev/plan-1.10.0-deep-link-view.md`, the first of two steps. `view=<group>:<leaf>`
-  lands a deep link's build on a named tab, keys or labels in any case, with a
-  note in the strip when the view cannot be shown. Still owed: [copy-link]
-  (`1.11.0`, Menu ▸ Copy link and `AGGAPI_PUBLIC_URL`), and the scroll anchor
-  checked by eye in a visible window (see the plan's execution log).
+- **[Deep-Link-View]** DONE (`1.10.0` to `1.11.0`), plan
+  `dev/done/plan-1.10.0-deep-link-view.md`, two steps. [view] (`1.10.0`):
+  `view=<group>:<leaf>` lands a deep link's build on a named tab, keys or labels
+  in any case, with a note in the strip when the view cannot be shown.
+  [copy-link] (`1.11.0`): Menu ▸ Copy link writes a link to the entry and tab on
+  screen, against `AGGAPI_PUBLIC_URL` (default `https://agg.mynl.com/`). Still
+  owed, by eye in a visible window (the plan's execution log says why): the
+  scroll anchor on a view link, tall and short, and the `link copied` clipboard
+  path. Deploying to the public site is the author's.
 
 - **[Pentagon-Readout]** DONE (`1.8.0`), plan
   `dev/plan-1.6.0-pentagon-readout.md` (in `dev/` until the author retires
