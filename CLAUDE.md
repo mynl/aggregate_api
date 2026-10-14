@@ -83,48 +83,56 @@ released build back.
 
 ## Commands
 
-Use `uv` for all environment and dependency management. No `UV_LINK_MODE`
-setting is needed: the repo's `.venv` is a junction to `V:\dev\venvs\aggregate_api`
-and `UV_CACHE_DIR` is `V:\uv\cache`, so cache and environment sit on one volume
-and uv's default hardlink mode works. The old `$env:UV_LINK_MODE = "copy"`
-instruction dates from when the environment really lived under `T:` and
-hardlinks could not reach it.
-
-Two traps the junction sets, both worth knowing before diagnosing anything here.
-`sys.prefix` reports the `T:` path, because it resolves *through* the junction,
-so the environment looks like it never moved. And `uv sync` fails with
-`os error 32` on `Scripts/aggregate-api.exe` while a server is running, since
-uv rebuilds the editable package and cannot replace a locked executable. Stop
-the server, or use `uv run --no-sync` when only source has changed, which is
-always enough for an editable install.
-
-A third trap, now closed. The junction was **committed**, through a52: git saw
-it as a symlink and stored a `120000` blob holding the literal Windows path, so
-checking the repo out anywhere else (a Linux box, most obviously) produced a
-dangling `.venv`. `.gitignore` had said `.venv/`, and a trailing slash matches
-directories only, so the pattern never applied to it. It is untracked now and
-the pattern is `.venv`, which matches a directory, a file and a link alike.
-Note that ignoring a path does nothing about one already tracked; that took
-`git rm --cached .venv`, which leaves the junction on disk.
-
-The junction itself is a local convenience and nothing in the repo depends on
-it. To put the environment elsewhere on another machine, set
+Use `uv` for all environment and dependency management. The environment is a
+plain `.venv` directory inside the checkout, gitignored, per the dev tree's rule
+that build churn lives in the checkout on `V:`. `UV_CACHE_DIR` is `V:\uv\cache`,
+on the same volume, so uv's default hardlink mode works and no `UV_LINK_MODE`
+setting is needed. To put the environment elsewhere on another machine, set
 `UV_PROJECT_ENVIRONMENT`, which uv honors directly and leaves nothing in the
 tree for git to pick up.
 
-**Sync environment (with dev extras):**
+**`--no-sync`, always, in this checkout.** The co-development installs
+(worktree `aggregate`, the relativity plugin) are not in `uv.lock`, and any sync
+replaces or removes them. That includes the inexact sync a plain `uv run` does:
+a dry run on 2026-10-14 showed it swapping the worktree `aggregate` for the
+released 1.0.1. A real sync, for a dependency change, is followed by the restore
+under "Relationship to `aggregate`".
+
+`uv sync` also fails with `os error 32` on `Scripts/aggregate-api.exe` while a
+server is running, since uv rebuilds the editable package and cannot replace a
+locked executable. Stop the server first.
+
+**`uv pip list` can show old versions, and that is harmless.** An editable
+install records its version once, at install time, so after a bump the list
+lags the source; nothing at runtime reads it, since every reported version is a
+live `__version__`. To make the list current, reinstall the editables without
+touching dependencies:
+
+```
+uv pip install --no-deps -e . -e V:/worktrees/aggregate_REFACTOR -e V:/dev/aggregate-relativity
+```
+
+History, so it is not repeated: through a52 `.venv` was a junction to an
+environment outside the tree, and git stored it as a `120000` symlink blob
+holding the literal Windows path, which dangled on any other machine. The
+`.gitignore` pattern is now `.venv` (not `.venv/`, whose trailing slash matches
+directories only and so never matched the link).
+
+**Sync environment (with dev extras)**, on a fresh clone or a dependency change
+only, then restore the co-development installs:
 ```
 uv sync --extra dev
 ```
 
 **Run the test suite** (FastAPI `TestClient`, no live server needed):
 ```
-uv run pytest
+uv run --no-sync pytest
 ```
 
-**Run the api locally:**
+**Run the api locally** (`--reload` watches this repo only, so an edit to the
+library or the plugin needs a manual restart):
 ```
-uv run aggregate-api --port 8001 --reload
+uv run --no-sync aggregate-api --port 8001 --reload
 ```
 Swagger UI at `/docs`, OpenAPI at `/openapi.json`, routes under `/v1`.
 

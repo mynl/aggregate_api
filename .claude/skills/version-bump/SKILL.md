@@ -42,8 +42,11 @@ The API has **two** test suites and both are the gate. The JS one is easy to
 forget because the Commands section of `CLAUDE.md` does not name it as a gate.
 
 ```
-uv run pytest
+uv run --no-sync pytest
 ```
+
+`--no-sync` matters: a plain `uv run` swaps the worktree `aggregate` for the
+released build (see `CLAUDE.md`, Commands).
 
 FastAPI `TestClient`, no live server needed, 17 files under `tests/`.
 

@@ -154,7 +154,7 @@ failure.
 
 - **Phase by phase, in the plan's order. One phase, one bump, one commit.**
   Never batch two phases into one commit, and never defer a bump to the end.
-- **Run the suite that covers what you touched** while iterating, `uv run pytest`
+- **Run the suite that covers what you touched** while iterating, `uv run --no-sync pytest`
   for the backend or `cd web; npm test` for the SPA. Both run at the bump.
 - **Docstrings on everything new or modified**, NumPy style.
 - **House style in everything authored.** No dashes as punctuation, ever. US

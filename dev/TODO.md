@@ -25,22 +25,29 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
   scroll anchor on a view link, tall and short, and the `link copied` clipboard
   path. Deploying to the public site is the author's.
 
-- **[Pentagon-Readout]** DONE (`1.8.0`), plan
-  `dev/plan-1.6.0-pentagon-readout.md` (in `dev/` until the author retires
-  it; numbered 1.6.0 when drafted, landed after the DecL help took 1.6.0 and
-  1.7.0). The PnL group's Pentagon notes moved from Bootstrap tooltips to one
+- **[Version-Source]** DONE (`1.9.1`), plan
+  `dev/done/plan-1.9.1-version-source.md`, shared with `aggregate` 1.2.1,
+  `aggregate-relativity` 0.10.0 and `aggregate-ntt`. Every version the server
+  reports is read live from `__version__`, so a bump runs no `uv sync`.
+
+- **[NTT-Version]** DONE (`1.9.0`), plan `dev/done/plan-1.9.0-ntt-version.md`.
+  About lists `aggregate-ntt` when the compiled engine is installed, from
+  `/v1/meta.ntt_version`.
+
+- **[Pentagon-Readout]** DONE (`1.8.0`, tweak `1.8.1`), plan
+  `dev/done/plan-1.6.0-pentagon-readout.md` (numbered 1.6.0 when drafted,
+  landed after the DecL help took 1.6.0 and 1.7.0). The PnL group's Pentagon notes moved from Bootstrap tooltips to one
   fixed readout in the figure's lower-left corner, driven by hover, focus and
   tap. Still owed: the iPad check on a real device.
 
 - **[DecL-Help]** DONE (`1.6.0` to `1.7.0`), plan
-  `dev/plan-1.7.0-decl-help.md` (in `dev/` until the author retires it), two
-  steps, the api half of the library's [DecL-Help-Pages] (`aggregate`
+  `dev/done/plan-1.7.0-decl-help.md`, two steps, the api half of the library's [DecL-Help-Pages] (`aggregate`
   1.2.0a15). [anatomy] (`1.6.0`): a `?` above the `✕` in the program box opens
   the library's anatomy page in a popover over the dimmed output, with Load
   buttons that fill the editor without building; `GET /v1/decl/help` and
   `/v1/meta.decl_help`. [card] (`1.7.0`): Menu ▸ DecL on one page, the card on
   a sheet that prints to one Letter landscape page. Both one below the plan's
-  numbers, since `plan-1.6.0-pentagon-readout.md` has not landed. Still owed,
+  numbers, since the pentagon readout plan had not landed. Still owed,
   outside the plan: the help reaches PyPI users only once `aggregate` 1.2.0
   ships, and the pin floor moves only if the author wants it guaranteed.
 

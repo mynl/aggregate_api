@@ -61,7 +61,7 @@ mirrors the main `aggregate` project: every plan-based change bumps the
 
 ## 1.9.0
 
-[NTT-Version] **About lists `aggregate-ntt` when the compiled engine is installed.** Plan `dev/plan-1.9.0-ntt-version.md`.
+[NTT-Version] **About lists `aggregate-ntt` when the compiled engine is installed.** Plan `dev/done/plan-1.9.0-ntt-version.md`.
 
 - `/v1/meta` carries `ntt_version`, the engine module's own version, or null when it does not import.
 - The About row appears under `aggregate` only when the engine is present; a stock install looks as before.
@@ -73,7 +73,7 @@ mirrors the main `aggregate` project: every plan-based change bumps the
 
 ## 1.8.0
 
-[Pentagon-Readout] **the Pentagon's notes appear in a fixed readout at the figure's lower left** instead of as tooltips over the figure. Plan `dev/plan-1.6.0-pentagon-readout.md` (landed as 1.8.0; 1.6.0 and 1.7.0 went to the DecL help).
+[Pentagon-Readout] **the Pentagon's notes appear in a fixed readout at the figure's lower left** instead of as tooltips over the figure. Plan `dev/done/plan-1.6.0-pentagon-readout.md` (landed as 1.8.0; 1.6.0 and 1.7.0 went to the DecL help).
 
 - Hover, focus or tap a node or chip and its name and note fill the empty lower-left corner, and that node takes a thin ink outline; leaving the figure restores a faint hint. Nothing pops up over the numbers any more.
 - Tapping works on an iPad (a tap on empty figure restores the hint), and every node is reachable by Tab.
@@ -81,7 +81,7 @@ mirrors the main `aggregate` project: every plan-based change bumps the
 
 ## 1.7.0
 
-[DecL-Help] **Menu ▸ DecL on one page** opens the library's DecL reference card, which prints to one Letter page. Plan `dev/plan-1.7.0-decl-help.md`, step [card], the second of two.
+[DecL-Help] **Menu ▸ DecL on one page** opens the library's DecL reference card, which prints to one Letter page. Plan `dev/done/plan-1.7.0-decl-help.md`, step [card], the second of two.
 
 - The card opens on a sheet sized to it, directly after Help in the hamburger, with Print or save as PDF; the `✕` and Esc close it.
 - The printout is exactly one Letter landscape page, colors intact, with nothing else from the app on it. Ctrl+P anywhere else prints as before.
@@ -90,7 +90,7 @@ mirrors the main `aggregate` project: every plan-based change bumps the
 
 ## 1.6.0
 
-[DecL-Help] **a `?` in the program box opens DecL help**, one statement taken apart slot by slot, written by the `aggregate` library. Plan `dev/plan-1.7.0-decl-help.md`, step [anatomy], the first of two (numbered one below the plan, since the pentagon readout plan has not landed).
+[DecL-Help] **a `?` in the program box opens DecL help**, one statement taken apart slot by slot, written by the `aggregate` library. Plan `dev/done/plan-1.7.0-decl-help.md`, step [anatomy], the first of two (numbered one below the plan, since the pentagon readout plan has not landed).
 
 - The `?` sits above the `✕` in the editor's margin column; the history arrows move down and an empty editor is seven lines tall.
 - The help opens over the dimmed output with the editor live above it. Hover a slot to light up the forms it accepts.

@@ -6,7 +6,7 @@
 // opens and how it closes, the `in-lab` class that shows the Lab's own notes, a
 // Load button on every example the anatomy marks loadable, and printing the card.
 //
-// Plan `dev/plan-1.7.0-decl-help.md`, steps [anatomy] and [card].
+// Plan `dev/done/plan-1.7.0-decl-help.md`, steps [anatomy] and [card].
 
 /** The text on the `?` when the installed library has no help. */
 export const UNAVAILABLE = 'DecL help arrives with aggregate 1.2.0';
