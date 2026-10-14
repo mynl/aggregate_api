@@ -2089,6 +2089,10 @@ let moreChart = null;
 // sort, per-column filter, fzf search, copy and save. It is the instrument for
 // finding a number in a frame too big to read.
 //
+// A bare frame (the densities, and the fallbacks for a truncated or missing
+// document) is a grid under all three readings. Full precision switches it to
+// CsvGrid's raw display, every digit of each value, in place.
+//
 // The choice is one value for the whole page rather than per tab or per table,
 // which is the author's call and the right one: a per-table switch is a lot of
 // chrome for a preference nobody changes twice in a session. Sticky per browser,
@@ -2104,6 +2108,38 @@ let moreChart = null;
 const TABLE_VIEW_KEY = 'aggapi.tableView';
 /** Is this table-view value one of the static readings? */
 function isStatic(mode) { return mode === 'static' || mode === 'precise'; }
+
+/** The CsvGrid lens for a frame-only grid: full precision reads raw. */
+function gridDisplayMode(mode) { return mode === 'precise' ? 'raw' : 'auto'; }
+
+/**
+ * What a table pane registers for a view change: an in-place lens change when
+ * it holds a frame-only grid, else its full redraw.
+ *
+ * Parameters
+ * ----------
+ * grid : CsvGrid or null or undefined
+ *     What `mountTable` returned: the live grid for a frame source, nothing for
+ *     a document source or a grid that did not mount.
+ * draw : function
+ *     The pane's full redraw.
+ *
+ * Returns
+ * -------
+ * function
+ *     The listener to hand `onTableViewChange`.
+ *
+ * Notes
+ * -----
+ * A frame-only grid is a grid under all three readings, so a view change only
+ * moves its lens, and `setDisplayMode` does that without rebuilding: sort,
+ * column filters, search text, selection and scroll survive. Redrawing instead
+ * would throw all of them away to show the same rows. A document table has to
+ * rebuild, because static and interactive are different renderers.
+ */
+function tableViewRedraw(grid, draw) {
+    return grid ? () => grid.setDisplayMode(gridDisplayMode(_tableView)) : draw;
+}
 
 /** A frame document. One per frame: the precision is decided at render time. */
 function frameDoc(which) {
@@ -2240,8 +2276,8 @@ function setPerspective(mode) {
 
 // The header dropdown's Tables and Perspective sections. One sync for both,
 // since both are the same checked-item pattern and a tick that follows the
-// value however it moved is the whole contract. Tables has a second affordance
-// on the Overview, which is why this reads the value rather than the click.
+// value however it moved is the whole contract. The menu and Ctrl+Shift+U both
+// set Tables, which is why this reads the value rather than the click.
 function syncPreferenceMenu() {
     for (const item of document.querySelectorAll('[data-table-view]')) {
         item.classList.toggle('active', item.dataset.tableView === _tableView);
@@ -2263,7 +2299,9 @@ function syncPreferenceMenu() {
  * held out of the keystroke through a133 and reachable from the menu only. It
  * earns its place here because it answers the same question the other two do,
  * how should this table read, and because checking a printed digit against all
- * of them is exactly a thing done while reading.
+ * of them is exactly a thing done while reading. On a frame-only grid the
+ * keystroke moves the lens in place, raw under full precision, so the reader's
+ * sort, filters, search and scroll survive it.
  *
  * **Capture phase, and `stopPropagation`, and this is the whole trick.**
  * CodeMirror drops the Shift when it matches a character key held with Ctrl, so
@@ -2371,6 +2409,14 @@ syncPreferenceMenu();
  * gridOpts : object, optional
  *     CsvGrid options for the interactive view.
  *
+ * Returns
+ * -------
+ * CsvGrid or null or undefined
+ *     For a `{frame}` source, the grid, mounted in the current lens, or null
+ *     when the host has left the page. For a `{doc}` source, undefined: that
+ *     grid mounts asynchronously, and a document table rebuilds on a view
+ *     change anyway, since static and interactive are different renderers.
+ *
  * Notes
  * -----
  * One document per table, not a document and a frame. `irToGridInput` derives
@@ -2386,9 +2432,9 @@ function mountTable(paneId, host, source, gridOpts = GRID_FULL) {
     const wantStatic = isStatic(_tableView);
 
     const asGrid = (f, opts) => {
-        if (!host.isConnected) return;   // the pane moved on while we waited
+        if (!host.isConnected) return null;  // the pane moved on while we waited
         host.className = 'grid-host';
-        mountGrid(paneId, host, f, opts);
+        return mountGrid(paneId, host, f, opts);
     };
     const unavailable = () => {
         if (!host.isConnected) return;
@@ -2401,15 +2447,16 @@ function mountTable(paneId, host, source, gridOpts = GRID_FULL) {
             'This table could not be rendered.'));
     };
 
-    if (!doc) {                          // bulk path, unchanged
-        asGrid(frame, gridOpts);
-        return;
+    if (!doc) {                          // bulk path, in the current lens
+        // Caller options still win, as on the document path; none passes one.
+        return asGrid(frame, { displayMode: gridDisplayMode(_tableView), ...gridOpts });
     }
     // The adapter's formats and align come out of the document, so the grid
     // renders the same numbers the walker would. Caller options still win, since
     // a call site may know something the frame does not carry. Always the
     // *unmodified* document: the grid sorts and filters on the raw values and
-    // formats them itself, so full precision is a static-view question only.
+    // formats them itself, so for a document table full precision is a
+    // static-view question only.
     // The `catch` is not defensive decoration. `irToGrid` reports null for a
     // document it cannot adapt, which `unavailable()` already answers, but
     // `asGrid` runs the CsvGrid constructor, and that throws outright on a
@@ -2758,13 +2805,13 @@ async function replacePaneTable(paneId, which, opts = GRID_FULL, bulk = null,
         const host = el('div');
         root.appendChild(host);
         replacePane(paneId, root);        // tears down the previous mode first
-        mountTable(paneId, host, source, opts);
+        const grid = mountTable(paneId, host, source, opts);
         // Re-register against the node just created, not against the pane. The
         // pane outlives everything, so a listener keyed on it would survive a
         // rebuild and redraw the *previous* object's frame on the next flip.
         // This node is dropped by `clearPanes`, and a disconnected node is what
-        // prunes the listener.
-        onTableViewChange(paneId, draw, root);
+        // prunes the listener. A frame source changes lens in place instead.
+        onTableViewChange(paneId, tableViewRedraw(grid, draw), root);
     };
     draw();
 }
@@ -4318,10 +4365,10 @@ function renderBoundsTable(payload, which) {
         root.appendChild(el('div', { className: 'exhibit-caption mb-2' }, caption));
         const host = el('div');
         root.appendChild(host);
-        mountTable(paneId, host,
+        const grid = mountTable(paneId, host,
             ir.table ? { doc: ir.table } : { frame: payload.table },
             { ...GRID_FULL, maxRows: 30 });
-        onTableViewChange(paneId, draw, root);
+        onTableViewChange(paneId, tableViewRedraw(grid, draw), root);
     };
     draw();
 }

@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.12.0
+
+[Full-Precision-Grids] **Full precision shows raw values on the density grids.** Plan `dev/done/plan-1.12.0-raw-display-large-grids.md`.
+
+- More ▸ Density, Reinsurance ▸ Density and any table that falls back to a bare frame switch to CsvGrid's raw display under Static, full precision (menu or Ctrl+Shift+U): every digit of each value, such as `0.9999999999998224`, instead of the automatic format. Static and Interactive keep the automatic format.
+- The grid changes lens in place, so sort, column filters, search text and scroll survive the keystroke. A column dragged wider snaps back to fit, since widths are re-measured for the new text.
+- A page loaded with full precision stored opens those grids raw from the start. Copy and Save export the values as before, whichever lens is on.
+- Document tables (Overview Summary and the rest) behave exactly as before. The default is unchanged.
+
 ## 1.11.0
 
 [Deep-Link-View] **Menu ▸ Copy link writes a link to the example and tab on screen.** Plan `dev/done/plan-1.10.0-deep-link-view.md`, step [copy-link], the second of two.
