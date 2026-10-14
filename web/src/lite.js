@@ -20,16 +20,15 @@ import {
 import { clearGrids } from './grid.js';
 import { mountIrTable } from './tables.js';
 
-// The curated chips, in display order. A starter list, ruled 2026-09-28;
-// editing it is this one line. A name that stops resolving against the library
-// logs and drops rather than breaking the row.
-const CURATED = [
-    'DiceOfDice',
-    'BasicBook',
-    'Capstone.Gross',
-    'Capstone.XOL',
-    'Capstone.FullProgram',
-];
+// The curated chips, in display order. One chip plus All examples is what fits
+// a phone row (author, 1.13.3); more wrapped and looked wrong. A name that
+// stops resolving against the library logs and drops rather than breaking the
+// row.
+const CURATED = ['Capstone.FullProgram'];
+
+// What the page shows and builds when it opens without a deep link, as the
+// desktop landing does. Not a chip: it is already on screen.
+const LANDING = 'BasicBook';
 
 // The library's kind vocabulary, spelled for a reader. A local copy of the
 // map in `main.js`, which cannot be imported from here without dragging the
@@ -142,9 +141,11 @@ async function initChips() {
     more.textContent = 'All examples…';
     more.addEventListener('click', openSheet);
     row.appendChild(more);
-    // Land on the first curated example so the page never opens empty.
+    // Land on the landing entry so the page never opens empty, or on the first
+    // curated chip should the library ever lose it.
     const first = row.querySelector('.p-chip:not(.more)');
-    if (first) pick(byName.get(first.dataset.name));
+    const landing = byName.get(LANDING) || (first && byName.get(first.dataset.name));
+    if (landing) pick(landing);
 }
 
 // ---- The example sheet: frame 3, the whole menu of the lite app ----
@@ -468,7 +469,11 @@ function init() {
         : Promise.resolve(null);
     linked.then(async (found) => {
         await initChips();
-        if (!link) return;
+        if (!link) {
+            // Open built, not one tap short of it (author, 1.13.3).
+            if (current) build();
+            return;
+        }
         clearDeepLink();
         if (found.item) {
             pick(found.item);

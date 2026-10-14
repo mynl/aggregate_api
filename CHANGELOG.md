@@ -4,6 +4,13 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.13.3
+
+[Phone-Landing] **The phone page opens on BasicBook, built, under two chips.** No plan doc: the author's request.
+
+- `lite.html` shows and builds `BasicBook` on open, as the desktop landing does. A deep link still wins.
+- The chip row is **Capstone.FullProgram** and **All examples…**, which fits a phone. The other curated chips are gone; every entry is still in the sheet.
+
 ## 1.13.2
 
 [Copy-Link-Fixes] **Copy link is one line, always.** No plan doc: the author's 1.13.1 tire-kicking.
