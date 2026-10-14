@@ -1,11 +1,10 @@
 ---
 name: version-bump
 description: Bump the aggregate_api version and commit it as one batch:
-  both test suites run (pytest and the web JS suite), pyproject.toml, uv.lock,
+  both test suites run (pytest and the web JS suite), __version__, uv.lock,
   the CHANGELOG section, dev/TODO.md, the plan doc moved to dev/done/, a
-  one-line commit, the SPA rebuild that stops the page being older than the
-  version it reports, and the re-sync that stops /v1/meta reporting a stale
-  version. Use when a plan-based change is finished, when asked to bump, ship,
+  one-line commit, and the SPA rebuild that stops the page being older than the
+  version it reports. No sync: the version is read live. Use when a plan-based change is finished, when asked to bump, ship,
   cut a version or commit a version, and to decide whether a change bumps at
   all.
 argument-hint: [terse summary]
@@ -75,7 +74,10 @@ Two environment traps while doing this:
 One commit carrying the whole batch:
 
 - Source and tests.
-- `pyproject.toml`, the `version` line. Read the current value, do not assume it.
+- `src/aggregate_api/__init__.py`, the `__version__ = "x.y.z"` literal, the
+  **one** place the version is written since 1.9.1. `pyproject.toml` reads it
+  (`dynamic = ["version"]`) and has no version line. Read the current value, do
+  not assume it.
 
   **The scheme changed at 1.0.0**, which shipped on 2026-10-07. Through
   `1.0.0a202` a bump was one more alpha serial. Released, it is SemVer per the
@@ -150,8 +152,8 @@ green on `npm test`, `check-nav.mjs` and `smoke-charts.mjs`, and be completely
 invisible in the running app. Not one of those checks can catch this.
 
 **It is worse than an ordinary stale page**, which is why the step is here
-rather than left to deploy. Section 8's re-sync makes `/v1/meta` report the new
-version at once, so the number and the interface end up describing different
+rather than left to deploy. `/v1/meta` reads `__version__` live, so it reports
+the new version as soon as the server restarts, and the number and the interface end up describing different
 builds: the About panel says `a141` while the page it is sitting on predates
 `a139`. Reported at a141 as "where is the Re change, I am only seeing 141 with
 Reinsurance"; the bundle on disk was six weeks old. The version is exactly what
@@ -164,32 +166,20 @@ whenever `web/` moved, and do not run it otherwise.
 **The output still never enters the commit.** `src/aggregate_api/static/` is
 gitignored and section 4 is unchanged: this builds the artifact, it does not
 stage it. Building before or after the commit makes no difference to what is
-staged, so it sits here, beside the re-sync, where the two "make the running
-thing match what was just committed" steps belong together.
+staged, so it sits here, as the step that makes the running thing match what
+was just committed.
 
 Then tell the author to hard refresh. Vite hashes the bundle filename, so a
 cached `index.html` is the one thing that can still hide a correct build.
 
-## 8. Re-sync, or `/v1/meta` lies
+## 8. No sync
 
-```
-uv sync --extra dev
-```
-
-`version` is read with `importlib.metadata.version`, which returns what was
-recorded when the editable install was built, not what `pyproject.toml` says
-now. Bump the version and the running server keeps reporting the old one in
-`/v1/health`, `/v1/meta` and the About panel.
-
-This step is easy to skip because nothing fails. It just reports a stale number
-until someone notices.
-
-**Since 1.0.0, `uv sync` also replaces an editable `aggregate` with the released
-build**, because the path source is gone. So a re-sync in the middle of library
-co-development silently drops the worktree install and `/v1/meta` starts
-reporting the PyPI version. Put it back with
-`uv pip install -e V:/worktrees/aggregate_REFACTOR`, and say so in the report
-rather than leaving the author to find out from `aggregate_version`.
+**A bump runs no `uv sync`.** Through 1.9.0 one followed every bump, purely to
+rewrite the editable install's recorded version, and it wiped the co-development
+environment each time: the relativity plugin, the worktree `aggregate`, the
+`aggregate-ntt` engine. Since 1.9.1 every version the server reports is a live
+`__version__`, so there is nothing to refresh. A sync is for a dependency change
+only, followed by the restore in `CLAUDE.md`.
 
 ## 8a. If this bump is a release
 
@@ -214,5 +204,5 @@ Publishing, tagging and the GitHub release are the **author's**, never yours.
 
 State the new version, both suite results, what went into the commit, whether
 the SPA was rebuilt (and say plainly that it was not, when `web/` did not move,
-rather than leaving it unmentioned), whether the re-sync ran, and anything left
-uncommitted for the author.
+rather than leaving it unmentioned), and anything left uncommitted for the
+author.

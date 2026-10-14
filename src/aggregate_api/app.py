@@ -25,7 +25,6 @@ Swagger UI (``/docs``) are added by FastAPI automatically.
 from __future__ import annotations
 
 import logging
-from importlib.metadata import version as _pkg_version
 from pathlib import Path
 
 from aggregate import plugins as agg_plugins
@@ -33,6 +32,7 @@ from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from . import __version__ as api_version
 from . import resources, status
 from .config import Settings, get_settings
 from .cors import install_cors
@@ -126,7 +126,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "Stand up DecL parsing, FFT-based compound distributions, "
             "and risk-pricing as a web service."
         ),
-        version=_pkg_version("aggregate_api"),
+        version=api_version,
         # Disable the default Pydantic-validation 422 schema in
         # OpenAPI -- it's noisy and we override the parse path
         # with our own ErrorReport response model.

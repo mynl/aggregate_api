@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.9.1
+
+[Version-Source] **every version the server reports is read live, so a bump needs no `uv sync`.** Plan `dev/done/plan-1.9.1-version-source.md`, shared with `aggregate` 1.2.1, `aggregate-relativity` 0.10.0 and `aggregate-ntt`.
+
+- `aggregate_api.__version__` is a literal in `src/aggregate_api/__init__.py`, the one place the version is written; `pyproject.toml` reads it (`dynamic = ["version"]`).
+- `/v1/health`, `/v1/meta`, `/v1/status`, the OpenAPI version, the `greater-tables` asset ETag and the DecL help 404 read `__version__` from each package, never `importlib.metadata`, which an editable install leaves stale after a bump.
+- The bump procedure drops its `uv sync`, which wiped the co-development environment (plugin, worktree `aggregate`, ntt engine) on every bump. A sync is now for dependency changes only.
+- `scripts/release-check.ps1` reads the version from `__init__.py`.
+
 ## 1.9.0
 
 [NTT-Version] **About lists `aggregate-ntt` when the compiled engine is installed.** Plan `dev/plan-1.9.0-ntt-version.md`.

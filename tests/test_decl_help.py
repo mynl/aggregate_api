@@ -53,10 +53,10 @@ def test_help_form_defaults_to_anatomy(client, with_help):
 
 
 def test_help_absent_is_404_naming_the_library(client, without_help):
-    from importlib.metadata import version
+    import aggregate
     r = client.get("/v1/decl/help?form=anatomy")
     assert r.status_code == 404
-    assert version("aggregate") in r.json()["detail"]
+    assert aggregate.__version__ in r.json()["detail"]
     meta = client.get("/v1/meta").json()
     assert meta["decl_help"] == []
 

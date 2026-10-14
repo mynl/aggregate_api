@@ -32,7 +32,6 @@ wheels = [
 
 [[package]]
 name = "aggregate-api"
-version = "1.9.0"
 source = { editable = "." }
 dependencies = [
     { name = "aggregate" },

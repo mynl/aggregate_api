@@ -64,13 +64,15 @@ import sys
 import time
 from collections import Counter
 from datetime import datetime, timezone
-from importlib.metadata import version as _pkg_version
 from importlib.resources import files
 from pathlib import Path
 
+import aggregate
+import greater_tables
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 
+from .. import __version__ as api_version
 from .. import models
 from .. import resources as resource_block
 from .. import status as status_state
@@ -214,20 +216,20 @@ def _identity(settings: Settings) -> dict:
 
     Notes
     -----
-    Both package versions come from ``importlib.metadata``, which reports what
-    was recorded when the editable install was built rather than what
-    ``pyproject.toml`` says now. That is the standing trap in both repos'
-    CLAUDE.md: a library bump without ``uv sync --extra dev`` leaves the server
-    reporting stale versions indefinitely. Showing both beside the process start
-    time is what turns that from an hour of confusion into a glance.
+    Every package version is its live ``__version__``, not
+    ``importlib.metadata``, which reports what was recorded when an editable
+    install was built and so went stale at every bump until a sync. What can
+    still be stale is the process itself: a server started before an edit
+    reports the version it imported. Showing the versions beside the process
+    start time is what makes that a glance rather than an hour of confusion.
     """
     facts = status_state.process_facts()
     uw = _loaded_underwriter()
     recipes = _recipe_count(uw)
     return {
-        "version": _pkg_version("aggregate_api"),
-        "aggregate_version": _pkg_version("aggregate"),
-        "tables_version": _pkg_version("greater-tables"),
+        "version": api_version,
+        "aggregate_version": aggregate.__version__,
+        "tables_version": greater_tables.__version__,
         "python": sys.version.split()[0],
         "platform": platform.platform(terse=True),
         "host": settings.host,

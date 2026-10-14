@@ -24,13 +24,19 @@ These are cheap reads; they don't touch the cache or audit log.
 from __future__ import annotations
 
 from functools import lru_cache
-from importlib.metadata import version as _pkg_version
 from importlib.resources import files
 
+import aggregate
+import greater_tables
 from aggregate import plugins as agg_plugins
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
+# Every version here is a package's live ``__version__``, never
+# ``importlib.metadata``: an editable install records its metadata once, at
+# install time, so after a bump metadata reports the old number until a
+# reinstall, while the attribute is what the source says now.
+from .. import __version__ as api_version
 from .. import decl_help, models
 from ..config import get_settings
 
@@ -61,8 +67,8 @@ async def health() -> dict:
     """
     return {
         "ok": True,
-        "version": _pkg_version("aggregate_api"),
-        "aggregate_version": _pkg_version("aggregate"),
+        "version": api_version,
+        "aggregate_version": aggregate.__version__,
     }
 
 
@@ -170,9 +176,9 @@ async def meta() -> dict:
     """
     settings = get_settings()
     return {
-        "version": _pkg_version("aggregate_api"),
-        "aggregate_version": _pkg_version("aggregate"),
-        "tables_version": _pkg_version("greater-tables"),
+        "version": api_version,
+        "aggregate_version": aggregate.__version__,
+        "tables_version": greater_tables.__version__,
         "ntt_version": _ntt_version(),
         "log2_cap": settings.log2_cap,
         "log2_default": settings.log2_default,
@@ -303,7 +309,7 @@ def asset(name: str, request: Request) -> Response:
             status_code=404,
             detail=f"unknown asset {name!r}; expected one of {sorted(_ASSETS)}",
         )
-    etag = f'"{_pkg_version("greater-tables")}"'
+    etag = f'"{greater_tables.__version__}"'
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
     return Response(

@@ -4,7 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aggregate_api"
-version = "1.9.0"
+# Written once, as the literal `__version__` in src/aggregate_api/__init__.py,
+# and read from there by [tool.setuptools.dynamic]. A bump edits that one line
+# and touches no environment.
+dynamic = ["version"]
 description = "aggregate Loss Lab (aLL): FastAPI service and single-page web app for the aggregate actuarial library."
 readme = "README.md"
 authors = [
@@ -144,16 +147,27 @@ aggregate-api = "aggregate_api.__main__:main"
 # name it carried for a day; that is deliberate and the path above is correct.
 #
 # Either swap lasts until the next `uv sync`, which reinstalls from the lock and
-# silently puts the released build back without saying so. That matters because
-# the release workflow runs `uv sync` on every version bump, so a bump in the
-# middle of co-development drops the editable install. `uv run --no-sync` is the
-# way to work in between, and it is what this repo uses anyway.
+# silently puts the released build back without saying so. Since 1.9.1 a
+# version bump runs no sync, so that happens only on a dependency change, after
+# which the swaps are restored by hand. `uv run --no-sync` is the way to work in
+# between, and it is what this repo uses anyway.
 # ---------------------------------------------------------------------------
+
+# uv caches a local project's metadata keyed on pyproject.toml alone. With the
+# version dynamic it must also watch the file the version lives in, or a lock or
+# an install can carry the previous number.
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/aggregate_api/__init__.py" }]
 
 [tool.setuptools]
 include-package-data = true
 package-dir = {"" = "src"}
 packages = ["aggregate_api", "aggregate_api.routes"]
+
+# Read statically: setuptools parses the literal rather than importing the
+# package, which would pull in aggregate and FastAPI at build time.
+[tool.setuptools.dynamic]
+version = { attr = "aggregate_api.__version__" }
 
 [tool.setuptools.package-data]
 # The built SPA bundle (index.html + assets/) is dropped here by the web

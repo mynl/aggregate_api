@@ -3,8 +3,7 @@ name: execute-plan
 description: Review a dev plan and, if it is sound, execute it end to end with
   house hygiene: phase by phase, both gates green (pytest and the web JS suite),
   one version bump commit per phase, execution notes recording every divergence,
-  the re-sync that stops /v1/meta reporting a stale version, dev/TODO.md,
-  dev-files.md, and the finished plan retired to dev/done/. If the plan is not
+  dev/TODO.md, dev-files.md, and the finished plan retired to dev/done/. If the plan is not
   sound, stop and ask in one batch rather than guess. Use when asked to review a
   plan and execute it if it is ok, to run, work, do or implement a
   dev/plan-*.md, or to pick up a plan whose phases are specified but not yet
@@ -20,8 +19,8 @@ written out so it never has to be re-asked. The cadence mirrors the LIB skill of
 the same name; the gates, the commit format and the review criteria are this
 repo's.
 
-The `version-bump` skill owns both gates, the CHANGELOG, the commit and the
-re-sync. It is **called**, not restated. Read it when its moment arrives rather
+The `version-bump` skill owns both gates, the CHANGELOG and the commit. It is
+**called**, not restated. Read it when its moment arrives rather
 than working from a recollection of what it says.
 
 **Review only mode.** If `$ARGUMENTS` ends with `review`, stop after section 4
@@ -69,16 +68,17 @@ Then read everything the plan is attached to, because a plan is rarely alone:
 ```
 git -C V:/dev/aggregate-api status
 git -C V:/dev/aggregate-api log --oneline -8
-grep -n '^version' pyproject.toml
-grep -n '^version' V:/worktrees/aggregate_REFACTOR/pyproject.toml
+grep -n '^__version__' src/aggregate_api/__init__.py
+uv pip list | grep -i aggregate
 ```
 
-The last line matters more here than anywhere else. This repo depends on LIB as
-an editable path source and reads versions through `importlib.metadata`, which
-returns what was recorded at install time. If LIB has moved since the last sync,
-this checkout is stale against it and any plan phase that consumes a new
-upstream surface will fail in a way that looks like a bug in the plan. Run
-`uv sync --extra dev` first when that is the case.
+The last line matters more here than anywhere else. A plan phase that consumes
+a new LIB surface needs the worktree `aggregate` installed editable, and any
+`uv sync` silently replaces it with the released build. If the list does not
+show `aggregate` pointing at `V:\worktrees\aggregate_REFACTOR`, restore it per
+`CLAUDE.md` before believing anything about the upstream surface; otherwise the
+phase fails in a way that looks like a bug in the plan. Every version is read
+live as `__version__`, so the numbers in `/v1/meta` are never stale.
 
 Note what is already modified in the tree that is **not** part of this plan.
 That is the author's and it stays behind, uncommitted, at every bump.
@@ -98,7 +98,7 @@ the choices below are rulings rather than proposals.
 **Order of work, and the upstream half.** Cross-repo plans state it, and it is
 usually LIB first and in full, then this side. Verify the upstream phases
 actually landed: read the LIB CHANGELOG sections that claim them, not the plan's
-prediction that they would. Then confirm the sync in section 2 has happened.
+prediction that they would. Then confirm the editable install in section 2.
 
 **The purist ruling holds, and it is the main review criterion here.** The
 library owns meaning; the app draws what it is served. A plan phase that has the
@@ -170,9 +170,8 @@ failure.
 ## 6. Hygiene at each bump
 
 Call the `version-bump` skill and follow it. It owns both gates, the
-`pyproject.toml` line, `uv.lock`, the CHANGELOG section, `dev/TODO.md`, the
-`[aNNN] terse summary` commit, the post-bump `uv sync --extra dev`, and the
-never-push rule.
+`__version__` line, `uv.lock`, the CHANGELOG section, `dev/TODO.md`, the
+`[x.y.z] terse summary` commit, and the never-push rule. A bump runs no sync.
 
 Two things worth repeating because they are the ones that get missed:
 
@@ -182,7 +181,7 @@ Two things worth repeating because they are the ones that get missed:
   is gitignored. It is still **rebuilt at the bump** whenever `web/` moved, per
   `version-bump` section 7: every gate and harness reads `web/src/` directly, so
   an SPA-only phase can pass all of them and be invisible in the running app,
-  while the re-sync makes `/v1/meta` report the new version regardless. Build
+  while `/v1/meta` reports the new version regardless. Build
   the artifact, never stage it.
 
 And two this skill adds:
@@ -209,7 +208,6 @@ In the final phase's commit, and not before:
 - The version range, and what landed in each bump.
 - **Both** suite results, with the actual commands. A failure is reported with
   its output, never summarized as mostly green.
-- Whether the re-sync ran.
 - **Every divergence**, with a pointer to where it is recorded.
 - Anything owed upstream: a gap that should become a round note ask rather than
   an app-side workaround.

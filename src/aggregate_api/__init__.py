@@ -36,6 +36,12 @@ endpoint) rather than read out of ``request.json``; the model is a
 function parameter and FastAPI deserializes for you.
 """
 
-from .app import create_app
+# The one place the version is written. A plain literal on purpose: setuptools
+# reads it statically for the wheel, and the running server reports it live, so
+# a bump needs no sync and an editable install is never stale. It must stay
+# above the import below, which reaches modules that read it.
+__version__ = "1.9.1"
+
+from .app import create_app  # noqa: E402
 
 __all__ = ["create_app"]

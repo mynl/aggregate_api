@@ -55,7 +55,8 @@ function Write-Good([string]$text) { Write-Host "   ok: $text" -ForegroundColor 
 
 Push-Location $repoRoot
 try {
-    $version = (Select-String -Path "pyproject.toml" -Pattern '^version\s*=\s*"(.+)"' |
+    # The one place the version is written since 1.9.1; pyproject.toml reads it.
+    $version = (Select-String -Path "src/aggregate_api/__init__.py" -Pattern '^__version__\s*=\s*"(.+)"' |
         Select-Object -First 1).Matches[0].Groups[1].Value
     Write-Host "aggregate_api $version, rehearsing a release" -ForegroundColor White
 

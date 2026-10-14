@@ -26,12 +26,12 @@ Routes
 
 from __future__ import annotations
 
-from importlib.metadata import version as _pkg_version
 from importlib.resources import files
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
+import aggregate
 from aggregate.parser_errors import format_error
 
 from .. import decl_help, models
@@ -364,7 +364,7 @@ def decl_help_page(form: str = "anatomy", v: str | None = None) -> HTMLResponse:
     """
     forms = decl_help.available_forms()
     if form not in forms:
-        installed = _pkg_version("aggregate")
+        installed = aggregate.__version__
         reason = (f"aggregate {installed} has no DecL help" if not forms
                   else f"aggregate {installed} has no {form!r} help; "
                        f"it offers {', '.join(forms)}")

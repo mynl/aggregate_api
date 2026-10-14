@@ -13,6 +13,25 @@ def test_health(client):
     assert isinstance(body["version"], str) and body["version"]
 
 
+def test_versions_are_read_live_from_the_packages(client, monkeypatch):
+    """`/v1/health` and `/v1/meta` report each package's `__version__`.
+
+    Never `importlib.metadata`, which an editable install records once, at
+    install time, so a bump would read stale until a sync. Patching the
+    library's attribute proves the read is live rather than merely equal today.
+    """
+    import aggregate
+
+    import aggregate_api
+
+    for path in ("/v1/health", "/v1/meta"):
+        body = client.get(path).json()
+        assert body["version"] == aggregate_api.__version__
+        assert body["aggregate_version"] == aggregate.__version__
+    monkeypatch.setattr(aggregate, "__version__", "9.9.9")
+    assert client.get("/v1/meta").json()["aggregate_version"] == "9.9.9"
+
+
 def test_meta(client):
     r = client.get("/v1/meta")
     assert r.status_code == 200
@@ -82,10 +101,10 @@ def test_greater_tables_is_the_new_generation():
 def test_meta_reports_the_table_engine_version(client):
     """The About panel's number, which is a front-end version as much as a
     backend one: the same install serves the walker the SPA loads."""
-    from importlib.metadata import version
+    import greater_tables
 
     body = client.get("/v1/meta").json()
-    assert body["tables_version"] == version("greater-tables")
+    assert body["tables_version"] == greater_tables.__version__
 
 
 def test_meta_reports_the_ntt_engine_only_when_it_imports(client, monkeypatch):

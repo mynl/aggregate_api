@@ -52,17 +52,19 @@ it was necessary rather than merely tidy.
 
 **Consequence for co-development, and it is easy to trip over.** `uv sync` now
 installs the *released* library, so working against the sibling worktree is an
-explicit extra step and any `uv sync`, including the one every version bump
-runs, silently undoes it:
+explicit extra step and any `uv sync` silently undoes it. Since 1.9.1 a version
+bump runs no sync, so a sync happens only on a **dependency change**, and the
+restore follows it:
 
 ```
-uv pip install -e V:/worktrees/aggregate_REFACTOR     # after a sync
+uv pip install -e V:/worktrees/aggregate_REFACTOR     # after a dependency sync
+uv pip install -e V:/dev/aggregate-relativity         # the plugin, likewise
 uv run --no-sync ...                                  # to work in between
 ```
 
-`/v1/meta` reports `aggregate_version` from `importlib.metadata`, so that is
-where to look when behavior does not match the worktree. This is the same recipe
-`greater-tables` has used since a53.
+`/v1/meta` reports `aggregate_version` as the live `aggregate.__version__`, so
+that is where to look when behavior does not match the worktree. This is the
+same recipe `greater-tables` has used since a53.
 
 Do **not** copy library internals into this repo; depend on them and, if
 something is missing or awkward to import, raise it as an upstream change in
@@ -76,8 +78,8 @@ pinned `>=6.0.0`. The floor matters. PyPI also carries 5.3, the previous
 generation under the same name, and it has no `build`, `canonical_json` or
 `IR_VERSION`, so resolving to it fails at import rather than at install. To
 co-develop it for a session, `uv pip install -e c:/s/ai/greatest-tables` after a
-sync; the next `uv sync` silently puts the released build back, which matters
-because every version bump runs one.
+sync; the next `uv sync` (a dependency change, never a bump) silently puts the
+released build back.
 
 ## Commands
 
@@ -225,10 +227,12 @@ or behavior change takes the minor (1.0.0 to 1.1.0 to 1.2.0), a fix takes the
 patch. Do not crawl, and do not go back to serials.
 
 - **Every plan-based change bumps the version.** Any code change executed from a
-  `dev/plan-*.md` bumps `version` in `pyproject.toml`. Pure tidying (file moves,
-  comment or doc-only edits with no behavior change) does not.
+  `dev/plan-*.md` bumps the version. It is written in **one** place, the literal
+  `__version__` in `src/aggregate_api/__init__.py`; `pyproject.toml` reads it
+  (`dynamic = ["version"]`) and carries no version line. Pure tidying (file
+  moves, comment or doc-only edits with no behavior change) does not bump.
 - **Commit each version bump.** Commit the whole batch (source + tests +
-  `CHANGELOG.md` + the plan doc + `dev/TODO.md` + `pyproject.toml` + `uv.lock`)
+  `CHANGELOG.md` + the plan doc + `dev/TODO.md` + `__init__.py` + `uv.lock`)
   in one commit with a **one-line** message. The matching `CHANGELOG.md` section
   is the commit's detailed description, so the subject shouldn't restate it. The
   git-log convention is the bracketed version, which carried 200 commits as
@@ -241,20 +245,14 @@ patch. Do not crawl, and do not go back to serials.
   wheel in a clean environment, which is the only check that sees what an
   installer actually receives. `V:\dev\RELEASE-PROCESS.md` is the checklist.
 - **Rebuild the SPA at the bump when `web/` moved.** `.\scripts\build-web.ps1`,
-  after the commit and beside the re-sync below. Every gate and harness reads
-  `web/src/` directly, so an SPA-only bump can be green everywhere and be
-  invisible in the running app, while the re-sync makes `/v1/meta` report the
-  new version anyway: the About panel then says `a141` over a page that predates
+  after the commit. Every gate and harness reads `web/src/` directly, so an
+  SPA-only bump can be green everywhere and be invisible in the running app,
+  while `/v1/meta` reports the new version anyway, since it reads
+  `__version__` live: the About panel then says `a141` over a page that predates
   `a139`. The version is what you read to know which build you are on, so that
   pairing is worse than a plain stale page. Build the artifact, never stage it.
 - **One plan doc per step.** Work proceeds from a `dev/plan-NNNN-*.md`. When it
   lands, move it to `dev/done/` and tick the matching `dev/TODO.md` entry.
-- **Re-sync after a version bump, or `/v1/meta` lies.** `version` is read with
-  `importlib.metadata.version`, which returns what was recorded when the
-  editable install was built, not what `pyproject.toml` says now. Bump the
-  version and the running server keeps reporting the old one in `/v1/health`,
-  `/v1/meta` and the About panel. `uv sync --extra dev` re-records it. The same
-  trap applies to `aggregate_version` when the sibling checkout moves.
 - **Keep `CHANGELOG.md` current.** Each version bump adds a `## <version>`
   section describing what landed and any breaking changes. Write it at the close
   of the iteration; don't defer.
