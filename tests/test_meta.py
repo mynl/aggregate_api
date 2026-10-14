@@ -88,6 +88,24 @@ def test_meta_reports_the_table_engine_version(client):
     assert body["tables_version"] == version("greater-tables")
 
 
+def test_meta_reports_the_ntt_engine_only_when_it_imports(client, monkeypatch):
+    """`ntt_version` is the compiled module's own version, or null when absent.
+
+    A ``None`` entry in ``sys.modules`` makes the import raise, and a stand-in
+    module makes it succeed, so both cases run whatever this environment has.
+    """
+    import sys
+    import types
+
+    monkeypatch.setitem(sys.modules, "aggregate_ntt", None)
+    assert client.get("/v1/meta").json()["ntt_version"] is None
+
+    fake = types.ModuleType("aggregate_ntt")
+    fake.__version__ = "9.9.9"
+    monkeypatch.setitem(sys.modules, "aggregate_ntt", fake)
+    assert client.get("/v1/meta").json()["ntt_version"] == "9.9.9"
+
+
 # ----------------------------------------------------------------------
 # GET /v1/assets/{name}  -- the table-document walker
 # ----------------------------------------------------------------------

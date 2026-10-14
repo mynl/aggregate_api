@@ -4,6 +4,14 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.9.0
+
+[NTT-Version] **About lists `aggregate-ntt` when the compiled engine is installed.** Plan `dev/plan-1.9.0-ntt-version.md`.
+
+- `/v1/meta` carries `ntt_version`, the engine module's own version, or null when it does not import.
+- The About row appears under `aggregate` only when the engine is present; a stock install looks as before.
+- It reports presence, not use: the library ignores an engine on a different seam protocol, and saying which awaits a public status call in `aggregate`.
+
 ## 1.8.1
 
 [Pentagon-Readout] **the Pentagon's readout sits on the floor of its corner**, level with gross premium, rather than hanging from the top just under the P:Q chip, which crowded it. The hairline rule rides on top of the text. A tweak after kicking the tires on 1.8.0.

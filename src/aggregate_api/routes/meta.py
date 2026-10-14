@@ -173,6 +173,7 @@ async def meta() -> dict:
         "version": _pkg_version("aggregate_api"),
         "aggregate_version": _pkg_version("aggregate"),
         "tables_version": _pkg_version("greater-tables"),
+        "ntt_version": _ntt_version(),
         "log2_cap": settings.log2_cap,
         "log2_default": settings.log2_default,
         "build_timeout_s": settings.build_timeout_s,
@@ -180,6 +181,35 @@ async def meta() -> dict:
         "plugins": _plugin_manifest(),
         "decl_help": decl_help.available_forms(),
     }
+
+
+def _ntt_version() -> str | None:
+    """The optional compiled NTT engine's version, or ``None`` if absent.
+
+    Returns
+    -------
+    str or None
+        ``aggregate_ntt.__version__`` when the package imports, else ``None``.
+
+    Notes
+    -----
+    ``aggregate`` discovers the engine with a plain ``import aggregate_ntt``
+    in this same process, so this import sees exactly the module the library
+    sees: same interpreter, same environment, same ``sys.modules`` entry.
+
+    The version is the compiled module's own ``__version__`` rather than the
+    package metadata, following the engine's convention, so a stale binary
+    under fresh metadata is visible.
+
+    Installed is not the same as used: the library ignores an engine whose
+    seam protocol it does not speak. That check is private to the library,
+    so this reports presence only.
+    """
+    try:
+        import aggregate_ntt
+    except ImportError:
+        return None
+    return getattr(aggregate_ntt, "__version__", None)
 
 
 def _plugin_manifest() -> list[dict]:

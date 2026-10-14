@@ -1377,6 +1377,9 @@ class MetaResponse(BaseModel):
     # much as a backend one: the same install serves the walker the SPA loads
     # from /v1/assets, so this one number covers both halves.
     tables_version: str
+    # The optional compiled exact-compound engine, `aggregate-ntt`, when it
+    # imports in this process; null otherwise, which hides its About row.
+    ntt_version: str | None = None
     log2_cap: int
     log2_default: int
     build_timeout_s: float

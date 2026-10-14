@@ -4906,6 +4906,12 @@ api.meta().then((meta) => {
     // Not a build-time constant like the rest: the static-table walker is served
     // from the installed Python package, so the server is what knows its version.
     $('about-tables').textContent = meta.tables_version;
+    // The optional compiled engine gets a row only when it is installed.
+    if (meta.ntt_version) {
+        $('about-ntt').textContent = meta.ntt_version;
+        $('about-ntt-label').hidden = false;
+        $('about-ntt').hidden = false;
+    }
     // The same two in the header, where they can be read without opening
     // anything. `agg` first, because which library built the numbers is the
     // question this answers most often.
