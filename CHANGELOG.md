@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.10.0
+
+[Deep-Link-View] **a deep link can name the tab its build lands on**: `/?database=library&example=Capstone.Capped&view=pnl:pentagon` builds the capped exploded P&L and opens PnL ▸ Pentagon, scrolled into view. Plan `dev/plan-1.10.0-deep-link-view.md`, step [view], the first of two.
+
+- `view=<group>:<leaf>` takes keys or labels in any case (`pnl:pentagon`, `economics:pentagon`, `PnL:Pentagon`); a bare group (`view=pnl`) lands on its first live leaf.
+- The view replaces Overview's load for the linked build, so the Overview chart is never fetched and discarded. It applies once: a later Build stays where the reader is.
+- A view the object cannot show, or one that names nothing, leaves the page on Overview and says why in the note slot (`view "pnl:pentagon" not available: a P&L only`). A missing example drops the view, so the not-found note is the one message.
+- The phone page ignores `view` and still builds the entry. Links name library entries only; per-leaf state (the Pentagon's level, a form's inputs) is not carried.
+- A linked pick with a view no longer scrolls to the editor first, so the tab's anchor is the one scroll that lands.
+
 ## 1.9.1
 
 [Version-Source] **every version the server reports is read live, so a bump needs no `uv sync`.** Plan `dev/done/plan-1.9.1-version-source.md`, shared with `aggregate` 1.2.1, `aggregate-relativity` 0.10.0 and `aggregate-ntt`.

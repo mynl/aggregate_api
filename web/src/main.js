@@ -40,6 +40,7 @@ import {
     groupAvailable as navGroupAvailable,
     activeLeaf as navActiveLeaf,
     capsFromResponse,
+    resolveView,
     whyLeaf,
     whyGroup,
 } from './nav.js';
@@ -418,7 +419,10 @@ function adoptBuild(res) {
     applyCapability(res.capability);
     renderSummary(res);
     clearPanes();
-    loadActiveTab();
+    // A deep link's `view=` replaces the active tab's load rather than
+    // following it, so the Overview chart is never fetched and thrown away.
+    // Here is the first moment the page knows what the object can show.
+    if (!applyPendingView()) loadActiveTab();
 }
 
 /** Forget the object: a failed build leaves nothing that can answer anything. */
@@ -539,7 +543,9 @@ async function build() {
     // No scroll here, deliberately: `loadLanding` builds on page load and the
     // first paint must not move. The gesture sites (the button, Ctrl+Enter,
     // an example pick, the ring) each call `anchorEditor()` beside this, so
-    // the scroll belongs to the gesture and never to the build itself.
+    // the scroll belongs to the gesture and never to the build itself. The one
+    // exception is a deep link naming a view (1.10.0): the reader asked to see
+    // that tab, so `applyPendingView` anchors it as a tab click would.
     buildBtn.disabled = true;
     buildBtn.textContent = 'Building…';
     try {
@@ -1898,6 +1904,68 @@ document.querySelectorAll('.out-tabs [data-tab]').forEach((btn) => {
         }
     });
 });
+
+// A deep link's `view=` (1.10.0): set by `loadLanding` around the linked build
+// only, and consumed by the first `adoptBuild`, so a later Build stays where the
+// reader is. `viewProblem` is what `loadLanding` puts in the note slot when the
+// view could not be shown.
+let pendingView = null;
+let viewProblem = null;
+
+/**
+ * Land a freshly adopted build on the tab a deep link named.
+ *
+ * Takes `pendingView` and clears it first, so it applies once whatever happens.
+ * Runs inside `adoptBuild`, after the capability is applied and before any tab
+ * loads, which is the only moment that is both informed and in time: before a
+ * build every group carries Bootstrap's `.disabled`, which its Tab plugin
+ * refuses to activate.
+ *
+ * Returns
+ * -------
+ * bool
+ *     True when the view was applied and its tab is loading, so the caller
+ *     skips its own load. False when there was no view or it could not be
+ *     shown, in which case `viewProblem` says why and Overview loads as usual.
+ *
+ * Notes
+ * -----
+ * A group that is not yet active goes through the pending-gesture token, as a
+ * live click does: `showTab` fires `shown.bs.tab`, whose handler loads the tab
+ * and anchors once it settles. Calling `loadTab` after `showTab` would not
+ * work, because `loadLeaf` marks the leaf rendered before its fetch finishes,
+ * so the second call returns at once and the anchor would fire on an empty
+ * pane. A group already active fires no shown event, so it loads and anchors
+ * directly.
+ */
+function applyPendingView() {
+    const text = pendingView;
+    pendingView = null;
+    if (!text) return false;
+    const view = resolveView(text);
+    if (!view) {
+        viewProblem = `view "${text}" not recognized`;
+        return false;
+    }
+    const { group, leaf } = view;
+    if (!groupAvailable(group)) {
+        viewProblem = `view "${text}" not available: ${whyGroup(group)}`;
+        return false;
+    }
+    if (leaf && !leafAvailable(group, leaf)) {
+        viewProblem = `view "${text}" not available: ${whyLeaf(group, leaf)}`;
+        return false;
+    }
+    // A bare group lands on its first live leaf, whatever it last remembered.
+    state.leaf[group] = leaf || navActiveLeaf(state.caps, null, group);
+    if (activeTabName() === group) {
+        anchorNavSettled(paneOf(group), loadTab(group));
+    } else {
+        pendingNav = { group, scrollY: window.scrollY };
+        showTab(group);
+    }
+    return true;
+}
 
 // ----------------------------------------------------------------------
 // Keyboard navigation over the two strips
@@ -4612,8 +4680,9 @@ function examplePosition() {
 // normalize: the old post-load /v1/decl/format round-trip is gone. Pass
 // `formatted: false` for hand-written text (the Help panel's sample) to take
 // that trip anyway. The Overview lead is read off the built object, so no note
-// has to ride along here.
-function loadExample(decl, formatted = true) {
+// has to ride along here. `anchor: false` is for a deep link naming a view,
+// whose tab anchor is the one scroll that should land (see `pickExample`).
+function loadExample(decl, formatted = true, anchor = true) {
     editor.setText(decl);
     // A different program, so the cession draft written for the last one goes.
     clearCessionDraft();
@@ -4622,7 +4691,7 @@ function loadExample(decl, formatted = true) {
     // Examples menu, the palette, or the Ctrl+Shift ring alike. After the
     // focus on purpose: the focus scroll is instant, so the smooth anchor
     // here is the one that lands.
-    anchorEditor();
+    if (anchor) anchorEditor();
     if (formatted) return;
     const at = exampleRing.cursor;
     api.formatDecl(decl).then((res) => {
@@ -4655,11 +4724,31 @@ function captionExample(item) {
     renderNote();
 }
 
-function pickExample(item) {
+/**
+ * Load a library entry into the editor and build it.
+ *
+ * Parameters
+ * ----------
+ * item : object
+ *     A row from `/v1/examples`.
+ * options.anchor : bool, default true
+ *     Scroll to the editor, as every pick from the menu or the palette does.
+ *     `loadLanding` passes false for a deep link naming a view: the editor's
+ *     smooth scroll would still be running when the view's tab anchor settles,
+ *     which `anchorNavSettled` reads as the reader taking control, so the tab
+ *     anchor was skipped on a short window.
+ *
+ * Returns
+ * -------
+ * Promise
+ *     `build()`'s, for `loadLanding`, which waits on the linked build; the menu
+ *     and the palette ignore it.
+ */
+function pickExample(item, { anchor = true } = {}) {
     walkMode = 'examples';
     exampleRing.cursor = visibleExamples().indexOf(item);
     captionExample(item);
-    loadExample(item.decl);
+    loadExample(item.decl, true, anchor);
     // Explicitly, rather than relying on the `setText` inside `loadExample` to
     // fire `onEdit`: picking the row the editor already holds changes no text
     // and so fires nothing, and that is exactly the press whose number the
@@ -4669,8 +4758,8 @@ function pickExample(item) {
     // and the palette build at once. The ring steps through `exampleStep`,
     // which debounces the same call instead, since a reader flicking along
     // the shelf has not settled on a book yet.
-    anchorEditor();
-    build();
+    if (anchor) anchorEditor();
+    return build();
 }
 
 mountExamples($('examples-menu'), pickExample);
@@ -4788,6 +4877,13 @@ onExamplesViewChange(syncDatabaseMenu);
 // the landing program as usual and says so on the strip, so a broken link in a
 // printed paper is visible rather than silently replaced. A link carrying only
 // `database` selects the file and lands normally.
+//
+// **`view=<group>:<leaf>` lands that build on a named tab** (1.10.0), scrolled
+// into view, which is the one exception to the landing build never moving the
+// page. It applies to the linked build alone: `pendingView` is cleared once that
+// build settles, so a later Build stays where the reader is. A view that cannot
+// be shown leaves the page on Overview and says why in the note slot; a missing
+// example drops the view, so the not-found note is the one message.
 async function loadLanding() {
     const link = readDeepLink(window.location.search);
     if (!link) {
@@ -4805,15 +4901,35 @@ async function loadLanding() {
         found = { item: null, source: link.database ? `${link.database}.agg` : 'the library' };
     }
     clearDeepLink();
-    if (found.item) {
-        pickExample(found.item);
-        return;
+    // A view rides on the entry it was written for, or on the landing program
+    // when the link named no entry; never on a fallback for a missing one.
+    const missing = Boolean(link.example && !found.item);
+    pendingView = missing ? null : link.view;
+    viewProblem = null;
+    try {
+        await (found.item
+            ? pickExample(found.item, { anchor: !pendingView })
+            : build());
+    } finally {
+        pendingView = null;
     }
-    await build();
-    if (!link.example) return;
-    noteDerivation(`example "${link.example}" not found in ${found.source}`);
-    // Open the fold, since a note behind a chevron is a broken link nobody
-    // sees. It stays open afterwards, as it would had the reader pressed it.
+    if (missing) {
+        noteLinkProblem(`example "${link.example}" not found in ${found.source}`);
+    } else if (viewProblem) {
+        noteLinkProblem(viewProblem);
+    }
+}
+
+/**
+ * Say on the strip what part of a deep link could not be honored.
+ *
+ * Opens the fold, since a note behind a chevron is a broken link nobody sees.
+ * It stays open afterwards, as it would had the reader pressed it.
+ *
+ * @param {string} text the message, naming the parameter and its value.
+ */
+function noteLinkProblem(text) {
+    noteDerivation(text);
     if (!$('summary-more').hidden) {
         $('summary').classList.add('expanded');
         $('summary-more').setAttribute('aria-expanded', 'true');

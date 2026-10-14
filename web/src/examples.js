@@ -449,15 +449,17 @@ export function selectDatabase(name) {
 }
 
 // ----------------------------------------------------------------------
-// Deep links: /?database=<stem>&example=<name>
+// Deep links: /?database=<stem>&example=<name>&view=<group>:<leaf>
 // ----------------------------------------------------------------------
 // A link printed beside a figure in a paper opens the app with that figure's
 // program built. `database` selects the file exactly as the menu does, and is
-// stored the same way; `example` names an entry in it. Either may appear alone.
-// Desktop (`main.js`) and phone (`lite.js`) both read the link through these.
+// stored the same way; `example` names an entry in it. `view` names the tab the
+// build lands on (1.10.0), resolved by `nav.js` `resolveView`, and only the
+// desktop page reads it. Any of the three may appear alone. Desktop (`main.js`)
+// and phone (`lite.js`) both read the link through these.
 
 /** The query parameters a deep link carries, and nothing else. */
-const DEEP_LINK_PARAMS = ['database', 'example'];
+const DEEP_LINK_PARAMS = ['database', 'example', 'view'];
 
 /**
  * Parse a deep link out of a query string.
@@ -468,14 +470,15 @@ const DEEP_LINK_PARAMS = ['database', 'example'];
  * name carries any and a link pasted out of a PDF sometimes does.
  *
  * @param {string} search `location.search`, with or without its `?`.
- * @returns {{database: string|null, example: string|null}|null} null when the
- *     string carries neither parameter.
+ * @returns {{database: string|null, example: string|null, view: string|null}|null}
+ *     null when the string carries none of the three parameters.
  */
 export function readDeepLink(search) {
     const q = new URLSearchParams(search || '');
     const database = (q.get('database') || '').trim() || null;
     const example = (q.get('example') || '').trim() || null;
-    return (database || example) ? { database, example } : null;
+    const view = (q.get('view') || '').trim() || null;
+    return (database || example || view) ? { database, example, view } : null;
 }
 
 /**
@@ -518,7 +521,8 @@ export function clearDeepLink() {
  * The entry is matched by exact name, the first in file order winning (only
  * `decl-testers.agg` reuses a name).
  *
- * @param {{database: string|null, example: string|null}} link from `readDeepLink`.
+ * @param {{database: string|null, example: string|null}} link from
+ *     `readDeepLink`; its `view` is not read here.
  * @returns {Promise<{item: object|null, source: string}>} the entry, or null
  *     when there is none to find, and the file it was looked for in, as a
  *     reader names it, for the not-found message.

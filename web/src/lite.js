@@ -459,7 +459,9 @@ function init() {
 
     // A deep link selects its file before the chips load, so the search sheet
     // reads that file, and then shows and builds the linked entry, exactly as
-    // the desktop page does. See `findLinkedExample`.
+    // the desktop page does. See `findLinkedExample`. `view` is a desktop
+    // parameter and is ignored here: this page has no group tabs. A view-only
+    // link clears the address bar and does nothing else.
     const link = readDeepLink(location.search);
     const linked = link
         ? findLinkedExample(link).catch(() => ({ item: null, source: 'the library' }))

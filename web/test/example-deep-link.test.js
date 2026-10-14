@@ -2,9 +2,10 @@
 //
 // A link printed beside a figure in a paper has to keep working for as long as
 // the paper is read, so the two pure halves are pinned here: reading
-// `?database=<stem>&example=<name>` out of a query string, and taking exactly
-// those two parameters back out of the address bar while leaving every other
-// one (`?full=1`, `?lite=1`) where it was.
+// `?database=<stem>&example=<name>&view=<group>:<leaf>` out of a query string,
+// and taking exactly those three parameters back out of the address bar while
+// leaving every other one (`?full=1`, `?lite=1`) where it was. How `view`
+// resolves to a tab is `view-link.test.js`.
 //
 // Run: `npm test` from `web/`, or `node --test web/test/` from the repo root.
 
@@ -15,14 +16,14 @@ import { readDeepLink, withoutDeepLink } from '../src/examples.js';
 
 test('both parameters', () => {
     assert.deepEqual(readDeepLink('?database=aas-paper&example=Fig3'),
-        { database: 'aas-paper', example: 'Fig3' });
+        { database: 'aas-paper', example: 'Fig3', view: null });
 });
 
 test('either parameter alone', () => {
     assert.deepEqual(readDeepLink('?database=reproductions'),
-        { database: 'reproductions', example: null });
+        { database: 'reproductions', example: null, view: null });
     assert.deepEqual(readDeepLink('?example=BasicBook'),
-        { database: null, example: 'BasicBook' });
+        { database: null, example: 'BasicBook', view: null });
 });
 
 test('neither parameter is no link', () => {
@@ -40,18 +41,27 @@ test('a dotted name needs no escaping, and an escaped one arrives decoded', () =
 
 test('the leading question mark is optional and other parameters are ignored', () => {
     assert.deepEqual(readDeepLink('lite=1&database=x&example=y'),
-        { database: 'x', example: 'y' });
+        { database: 'x', example: 'y', view: null });
 });
 
 test('surrounding whitespace from a pasted link is dropped', () => {
     assert.deepEqual(readDeepLink('?database=%20reproductions%20&example=Fig3%0A'),
-        { database: 'reproductions', example: 'Fig3' });
+        { database: 'reproductions', example: 'Fig3', view: null });
 });
 
-test('clearing removes the two link parameters and keeps the rest', () => {
+test('view alone is a link, and rides beside the other two', () => {
+    assert.deepEqual(readDeepLink('?view=pnl:pentagon'),
+        { database: null, example: null, view: 'pnl:pentagon' });
+    assert.deepEqual(readDeepLink('?database=library&example=Capstone.Capped&view=pnl%3Apentagon'),
+        { database: 'library', example: 'Capstone.Capped', view: 'pnl:pentagon' });
+    assert.equal(readDeepLink('?view=%20'), null);
+});
+
+test('clearing removes the three link parameters and keeps the rest', () => {
     assert.equal(withoutDeepLink('http://h/?database=r&example=E'), '/');
     assert.equal(withoutDeepLink('http://h/app/?full=1&database=r&example=E#x'),
         '/app/?full=1#x');
     assert.equal(withoutDeepLink('http://h/lite.html?lite=1&example=E'),
         '/lite.html?lite=1');
+    assert.equal(withoutDeepLink('http://h/?full=1&view=pnl:pentagon'), '/?full=1');
 });

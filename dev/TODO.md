@@ -6,6 +6,13 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Deep-Link-View]** [view] DONE (`1.10.0`), plan
+  `dev/plan-1.10.0-deep-link-view.md`, the first of two steps. `view=<group>:<leaf>`
+  lands a deep link's build on a named tab, keys or labels in any case, with a
+  note in the strip when the view cannot be shown. Still owed: [copy-link]
+  (`1.11.0`, Menu ▸ Copy link and `AGGAPI_PUBLIC_URL`), and the scroll anchor
+  checked by eye in a visible window (see the plan's execution log).
+
 - **[Pentagon-Readout]** DONE (`1.8.0`), plan
   `dev/plan-1.6.0-pentagon-readout.md` (in `dev/` until the author retires
   it; numbered 1.6.0 when drafted, landed after the DecL help took 1.6.0 and

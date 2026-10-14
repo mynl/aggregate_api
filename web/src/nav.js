@@ -563,6 +563,56 @@ export function leafOf(group, key) {
 }
 
 /**
+ * The key in `entries` that `token` names, by key first and then by label.
+ *
+ * Both comparisons ignore case. Key first because keys are the stable
+ * vocabulary; a label is editorial and may one day collide with another
+ * entry's key, and then the key should win. A test asserts no label shadows a
+ * different key today, so the order decides nothing yet.
+ */
+function matchKey(entries, token) {
+    const want = token.trim().toLowerCase();
+    if (!want) return null;
+    const keys = Object.keys(entries || {});
+    return keys.find((key) => key.toLowerCase() === want)
+        || keys.find((key) => (entries[key].label || '').toLowerCase() === want)
+        || null;
+}
+
+/**
+ * Resolve a deep link's `view=<group>:<leaf>` to keys.
+ *
+ * Pure apart from reading `NAV_GROUPS` at call time, which is what lets a Lab
+ * leaf resolve once `installLabLeaves` has run. Keys and labels are both
+ * accepted, so `pnl:pentagon`, `economics:pentagon` and `PnL:Pentagon` are one
+ * view. A colon separates the two because `LOADERS` is keyed `group:leaf`, and a
+ * dot would read badly beside a dotted entry name such as `Capstone.Capped`.
+ *
+ * Parameters
+ * ----------
+ * text : string
+ *     The parameter's value. Split on the first colon; the leaf is optional.
+ *
+ * Returns
+ * -------
+ * object or null
+ *     `{group, leaf}` in keys, `leaf` null for a bare group (the caller lands
+ *     on its first live leaf, which `activeLeaf` already does). Null when the
+ *     group or a given leaf matches nothing.
+ */
+export function resolveView(text) {
+    const raw = String(text || '');
+    const at = raw.indexOf(':');
+    const groupToken = at < 0 ? raw : raw.slice(0, at);
+    const leafToken = at < 0 ? '' : raw.slice(at + 1);
+    const group = matchKey(NAV_GROUPS, groupToken);
+    if (!group) return null;
+    if (!leafToken.trim()) return { group, leaf: null };
+    const leaf = matchKey(NAV_GROUPS[group].leaves, leafToken);
+    return leaf ? { group, leaf } : null;
+}
+
+/**
  * Why a leaf is dark, in the reader's terms rather than the gate's.
  *
  * The rules above already know every one of these; until a47 they simply never
