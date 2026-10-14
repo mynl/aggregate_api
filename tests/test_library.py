@@ -134,6 +134,31 @@ def test_a_missing_library_warns_and_falls_back(tmp_path, monkeypatch):
         get_underwriter.cache_clear()
 
 
+def test_the_factory_reads_the_library_before_serving(tmp_path, monkeypatch):
+    """A session fork taken straight after startup holds the whole base.
+
+    Through 1.13.3 the first request read the library, and a second request
+    arriving mid-read forked a half-filled base: ``Capstone.ExposureRating``
+    then failed to find ``Capstone.Gross`` for that session's lifetime. The
+    witness is that entry, which sits in the back half of ``library.agg``.
+    """
+    monkeypatch.setenv("AGGAPI_AUDIT_DB", str(tmp_path / "audit.db"))
+    monkeypatch.setenv("AGGAPI_CORS_ORIGINS", "")
+    monkeypatch.delenv("AGGAPI_LIBRARY", raising=False)
+    monkeypatch.delenv("AGGAPI_EXAMPLES_FILE", raising=False)
+
+    from aggregate_api.app import create_app
+    from aggregate_api.library import get_underwriter
+    from aggregate_api.sessions import SessionRegistry
+
+    create_app()
+    assert get_underwriter.cache_info().currsize == 1
+    base = get_underwriter()
+    fork = SessionRegistry().underwriter("warm-start", base)
+    assert len(fork._recipes) == len(base._recipes)
+    assert ("agg", "Capstone.Gross") in fork._recipes
+
+
 def test_the_old_env_var_still_works_and_says_it_is_deprecated(tmp_path, monkeypatch):
     """``AGGAPI_EXAMPLES_FILE`` is accepted for one release.
 

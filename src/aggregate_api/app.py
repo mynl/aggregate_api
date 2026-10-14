@@ -108,6 +108,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # setting, and a test that just changed that setting would otherwise get the
     # base built for the previous case.
     get_underwriter.cache_clear()
+    # Then read it, here, before uvicorn serves anything. ``Underwriter.load()``
+    # marks itself loaded before it reads, with no lock, so a second request
+    # arriving during a first-request read gets a half-filled base and its
+    # session forks that half for the TTL. The SPA's first page load fires two
+    # requests at once, which is exactly that. Reading in the factory leaves
+    # nothing to race. dev/done/plan-1.13.4-warm-library-at-startup.md.
+    get_underwriter()
     # Process-lifetime facts for GET /v1/status. Both are idempotent and both
     # are here rather than at import time, because a module-level record would
     # be made when the first import happens rather than when the process starts

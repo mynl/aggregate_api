@@ -56,16 +56,20 @@ def get_underwriter():
     :func:`aggregate_api.__main__.resolve_library` for why the asymmetry is
     intended rather than an oversight.
 
-    **The load is explicit and timed**, for ``GET /v1/status``. ``load()`` with
-    no argument is idempotent (it returns an empty list once the configured
-    request has been read), so calling it here costs nothing when the base is
-    already loaded and moves nothing when it is not: every caller reaches this
-    base through ``fork()``, which loads the parent itself. What it buys is a
-    number. The recorded figure is what *this* call paid, so a process reading
-    the shipped library reports a near-zero time, correctly: the read happened
-    when ``aggregate`` was imported, not here. A custom ``.agg`` reports the
-    real cost of reading it, which is the case where the number is worth
-    knowing.
+    **The load is explicit and timed**, for ``GET /v1/status``. Importing
+    ``aggregate`` does not read ``library.agg``: ``build`` arrives with no
+    recipes, and the first ``load()`` is the read, about three seconds. That
+    first call is made by :func:`aggregate_api.app.create_app`, before the
+    server accepts a request, so the recorded figure is the real read time of
+    whichever library the process serves. Later calls hit the cache, and a
+    later ``load()`` is the idempotent no-op it is meant to be.
+
+    **Why at startup and not on first request.** ``Underwriter.load()`` sets
+    its loaded flag before reading and holds no lock, and ``lru_cache`` is not
+    a lock either: a call made while the first is still computing runs the body
+    again. A request arriving mid-read therefore sees a "loaded" base with half
+    its recipes, and a session fork taken then keeps that half. Reading before
+    serving leaves nothing to race; the library fix is upstream.
     """
     from .config import get_settings
 

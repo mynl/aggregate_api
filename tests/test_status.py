@@ -220,12 +220,8 @@ def test_the_payload_reports_its_own_cost(status_client):
     assert 0 < payload["generated_in_ms"] < 250
 
 
-def test_the_library_is_not_loaded_just_to_report_on_it(status_client):
-    """A cold process must not pay a library read to render its own status."""
-    payload = status_client.get("/v1/status").json()
-    assert payload["identity"]["library_loaded"] is False
-    assert payload["identity"]["library_recipes"] is None
-    status_client.post("/v1/objects", json={"decl": PROGRAM, "log2": 12})
+def test_a_fresh_app_reports_the_library_loaded_before_any_build(status_client):
+    """The factory reads the library, so status says so before the first build."""
     payload = status_client.get("/v1/status").json()
     assert payload["identity"]["library_loaded"] is True
     assert payload["identity"]["library_recipes"] > 0

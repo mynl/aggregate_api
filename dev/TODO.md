@@ -6,6 +6,13 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Warm-Library]** DONE (`1.13.4`), plan
+  `dev/done/plan-1.13.4-warm-library-at-startup.md`. `create_app()` reads the
+  library before serving, so a fresh server's first page load can no longer
+  fork a half-read base (`Capstone.ExposureRating` failing on `Capstone.Gross`).
+  Still owed: the manual restart check in the plan, and the library half,
+  `aggregate` `dev/plan-thread-safe-load.md`.
+
 - **[Exact-Tail-Leaf]** DONE (`1.13.0`), plan
   `dev/done/plan-1.13.0-exact-tail-leaf.md`, the api half of the library's
   [NTT-Exact-Tail-Chart] (`aggregate` 1.5.0). More ▸ Exact tail draws the

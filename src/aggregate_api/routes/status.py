@@ -203,8 +203,11 @@ def _loaded_underwriter():
     A page that changes what it measures is not an instrument.
 
     ``lru_cache`` publishes ``cache_info()``, so "has anything loaded this yet"
-    is answerable without touching it. Before the first build the page says the
-    library is not loaded, which is a true and useful thing to say.
+    is answerable without touching it. In a served process the answer is always
+    yes, because :func:`aggregate_api.app.create_app` reads the library before
+    the first request can arrive; "not loaded" is a state only a test that
+    clears the cache can reach. The guard stays, because it is still correct
+    and costs nothing.
     """
     if get_underwriter.cache_info().currsize == 0:
         return None

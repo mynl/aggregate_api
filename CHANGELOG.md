@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.13.4
+
+[Warm-Library] **A freshly started server reads the whole library before it serves.** Plan `dev/done/plan-1.13.4-warm-library-at-startup.md`.
+
+- Fixed: right after a restart, building `Capstone.ExposureRating` could fail with no recipe named `Capstone.Gross`, and every later build in that tab that named a back-half `library.agg` entry failed the same way. The first page load's two simultaneous requests raced the library read, and the session forked a half-read base for its eight-hour life.
+- `create_app()` now reads the library before uvicorn accepts a request. Startup takes about three seconds longer; the first request is that much faster.
+- `/v1/status` reports the library loaded from the start, and its load time is the real read time. The library-side fix (a lock in `Underwriter.load()`) is the companion `aggregate` plan.
+- A server already running with an affected tab recovers on restart onto this build.
+
 ## 1.13.3
 
 [Phone-Landing] **The phone page opens on BasicBook, built, under two chips.** No plan doc: the author's request.
