@@ -4,6 +4,12 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.13.2
+
+[Copy-Link-Fixes] **Copy link is one line, always.** No plan doc: the author's 1.13.1 tire-kicking.
+
+- Menu ▸ Copy link to example & tab is greyed when it cannot write a link and says nothing more. The reason line under the label is gone.
+
 ## 1.13.1
 
 [Copy-Link-Fixes] **Copy link works over plain http, and sits first in the menu.** No plan doc: the author's 1.13.0 tire-kicking.

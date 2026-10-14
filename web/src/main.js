@@ -5303,14 +5303,10 @@ async function copyLink() {
 
 {
     const item = $('copy-link-item');
-    const why = $('copy-link-why');
     document.querySelector('.hamburger-btn')?.addEventListener('show.bs.dropdown', () => {
-        const blocked = copyLinkBlocked();
-        item.disabled = Boolean(blocked);
-        // One line when live (the label says what it does); the reason below
-        // it only when greyed (author, 1.13.1).
-        why.textContent = blocked || '';
-        why.hidden = !blocked;
+        // Greyed when it cannot write a link, and nothing more: no reason
+        // under the label (author, 1.13.2).
+        item.disabled = Boolean(copyLinkBlocked());
     });
     item.addEventListener('click', copyLink);
 }
