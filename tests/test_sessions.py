@@ -260,7 +260,7 @@ def test_a_self_contained_program_is_built_once_for_the_room(library_client):
     assert first["cached"] is False
     assert second["cached"] is True
     assert first["id"] == second["id"]
-    assert scope_of(library_client, decl) == "shared"
+    assert scope_of(library_client, decl) == "library"
 
 
 def test_a_program_leaning_on_the_library_still_shares(library_client):
@@ -271,7 +271,7 @@ def test_a_program_leaning_on_the_library_still_shares(library_client):
     second = build(library_client, "session-yyyyyyyy", decl)
     assert second["cached"] is True
     assert first["id"] == second["id"]
-    assert scope_of(library_client, decl) == "shared"
+    assert scope_of(library_client, decl) == "library"
 
 
 def test_alice_and_bob(library_client):
@@ -291,7 +291,7 @@ def test_alice_and_bob(library_client):
 
     assert alice["id"] != bob["id"]
     assert bob["cached"] is False
-    assert scope_of(library_client, outer) == "session"
+    assert scope_of(library_client, outer) == "own"
     # And the answers really differ: same program, different severity.
     assert alice["mean"] != pytest.approx(bob["mean"], rel=1e-6)
 
@@ -312,7 +312,7 @@ def test_overwriting_a_library_name_makes_it_a_session_name(library_client):
 
     assert private["id"] != shared["id"]
     assert private["cached"] is False
-    assert scope_of(library_client, decl) == "session"
+    assert scope_of(library_client, decl) == "own"
     assert private["mean"] != pytest.approx(shared["mean"], rel=1e-6)
 
 
@@ -331,7 +331,7 @@ def test_the_deferred_reference_form_qualifies_too(library_client):
     y_outer = build(library_client, "session-yyyyyyyy", outer)
 
     assert x_outer["id"] != y_outer["id"]
-    assert scope_of(library_client, outer) == "session"
+    assert scope_of(library_client, outer) == "own"
 
 
 def test_a_bare_library_name_shares_and_a_shadowed_one_does_not(library_client):
@@ -345,13 +345,13 @@ def test_a_bare_library_name_shares_and_a_shadowed_one_does_not(library_client):
     y = build(library_client, "session-yyyyyyyy", "FixtureAggregate")
     assert x["id"] == y["id"]
     assert y["cached"] is True
-    assert scope_of(library_client, "FixtureAggregate") == "shared"
+    assert scope_of(library_client, "FixtureAggregate") == "library"
 
     build(library_client, "session-zzzzzzzz",
           "agg FixtureAggregate 5 claims sev lognorm 3000 cv 2 poisson")
     z = build(library_client, "session-zzzzzzzz", "FixtureAggregate")
     assert z["id"] != x["id"]
-    assert scope_of(library_client, "FixtureAggregate") == "session"
+    assert scope_of(library_client, "FixtureAggregate") == "own"
 
 
 def test_a_cache_hit_still_registers(library_client):
@@ -392,7 +392,134 @@ def test_a_bare_name_route_does_not_refile_a_library_entry(library_client):
     x = build(library_client, "session-xxxxxxxx", decl)
     y = build(library_client, "session-yyyyyyyy", decl)
     assert x["id"] == y["id"]
-    assert scope_of(library_client, decl) == "shared"
+    assert scope_of(library_client, decl) == "library"
+
+
+# ----------------------------------------------------------------------
+# The key hashes the parsed program (1.14.0)
+# ----------------------------------------------------------------------
+
+def test_a_rebound_name_builds_a_fresh_object(library_client):
+    """The repro that motivated the key: redefine A, rebuild P, get the new P.
+
+    Under the text key both P builds hashed the same text and session, so the
+    second was served the first's object, mean 35, when A's mean had doubled.
+    """
+    session = "session-rebinding"
+    build(library_client, session, "agg A 2 claims sev lognorm 10 cv 1 poisson")
+    build(library_client, session, "agg B 3 claims sev gamma 5 cv 0.5 poisson")
+    first = build(library_client, session, "port P agg.A agg.B")
+    assert first["mean"] == pytest.approx(35, rel=1e-6)
+
+    build(library_client, session, "agg A 2 claims sev lognorm 20 cv 1 poisson")
+    second = build(library_client, session, "port P agg.A agg.B")
+    assert second["id"] != first["id"]
+    assert second["cached"] is False
+    assert second["mean"] == pytest.approx(55, rel=1e-6)
+
+
+def test_a_rebound_severity_chain_builds_a_fresh_object(library_client):
+    """``sev agg.X`` resolves at build time, so the key reads X's stored spec."""
+    session = "session-sevchain"
+    build(library_client, session,
+          "agg In 3 claims sev lognorm 10 cv 1 poisson hints{log2=8; bs=1}")
+    first = build(library_client, session, "agg Out 2 claims sev agg.In poisson")
+    build(library_client, session,
+          "agg In 3 claims sev lognorm 20 cv 1 poisson hints{log2=8; bs=1}")
+    second = build(library_client, session, "agg Out 2 claims sev agg.In poisson")
+    assert second["id"] != first["id"]
+    assert second["cached"] is False
+
+
+def test_a_dotted_reference_is_a_copy_taken_at_registration(library_client):
+    """The library copies ``sev.Cat`` into A when A is registered.
+
+    So redefining Cat does not change what a fresh build of P reads, and the id
+    must not move either; rebuilding A takes the new copy, and then it does.
+    """
+    session = "session-copyatreg"
+    build(library_client, session, "sev Cat lognorm 10 cv 1")
+    build(library_client, session, "agg A 2 claims sev.Cat poisson")
+    id1 = build(library_client, session, "port P agg.A")["id"]
+
+    build(library_client, session, "sev Cat lognorm 30 cv 1")
+    again = build(library_client, session, "port P agg.A")
+    assert again["id"] == id1 and again["cached"] is True
+
+    build(library_client, session, "agg A 2 claims sev.Cat poisson")
+    fresh = build(library_client, session, "port P agg.A")
+    assert fresh["id"] != id1
+
+
+def test_identical_own_declarations_share_across_sessions(library_client):
+    """Meaning, not session, decides the slot: x and y declare the same inner."""
+    inner = "agg Twin 4 claims sev lognorm 25 cv 1 poisson"
+    outer = "port TwinBook agg.Twin"
+    build(library_client, "session-xxxxxxxx", inner)
+    x = build(library_client, "session-xxxxxxxx", outer)
+    build(library_client, "session-yyyyyyyy", inner)
+    y = build(library_client, "session-yyyyyyyy", outer)
+    assert x["id"] == y["id"]
+    assert y["cached"] is True
+    assert scope_of(library_client, outer) == "own"
+
+
+def test_library_references_only_refuses_an_own_declaration(library_client):
+    """The flag Excel sends: an own name is refused, a library name is not."""
+    session = "session-libonly"
+    build(library_client, session, "agg A 2 claims sev lognorm 10 cv 1 poisson")
+    r = library_client.post(
+        "/v1/objects", headers={SEV: session},
+        json={"decl": "port P agg.A", "log2": 12, "library_references_only": True})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert detail["error"] == "session_reference"
+    assert (detail["kind"], detail["name"]) == ("agg", "A")
+    assert detail["message"].startswith("agg.A is one of your own declarations")
+
+    ok = library_client.post(
+        "/v1/objects", headers={SEV: session},
+        json={"decl": "agg L 4 claims sev.FixtureSeverity poisson", "log2": 12,
+              "library_references_only": True})
+    assert ok.status_code == 200, ok.json()
+
+
+def test_a_program_the_preview_refuses_is_not_built(library_client):
+    """A 422 with the parse report, and an audit row that records no build."""
+    decl = "agg Typo 1 claim sev lognorm 10 cv 1 poisson oops"
+    r = library_client.post("/v1/objects", json={"decl": decl, "log2": 12},
+                            headers={SEV: "session-xxxxxxxx"})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert detail["line"] == 1 and detail["got"] == "oops"
+
+    from aggregate_api.config import get_settings
+    from aggregate_api.routes.objects import _get_audit
+
+    rows = [row for row in _get_audit(get_settings()).recent(20)
+            if row["decl"] == decl]
+    assert [row["status"] for row in rows] == ["parse_error"]
+    assert rows[0]["object_id"] is None
+
+
+def test_a_rounded_spec_value_does_not_merge_two_programs():
+    """A copula's ``str`` rounds, so the key hashes the statement text as well.
+
+    ``spec_to_payload`` can only write a library object as its ``str``, and a
+    Clayton copula at tau 0.3123456 and at 0.3123459 both print
+    ``clayton(tau=0.312346)``. Keyed on the spec alone the two programs would
+    share an object. Checked on the key function, so no bivariate is built.
+    """
+    from aggregate import build as uw
+    from aggregate_api.routes.objects import _cache_key
+
+    uw.load()
+    template = ("bivariate BvRound 25 claims agg Wind dfreq [0 1] [0.3 0.7] "
+                "sev lognorm 40 cv 1.2 agg Flood dfreq [0 1] [0.2 0.8] "
+                "sev lognorm 60 cv 1.5 copula clayton {tau}")
+    one, _ = _cache_key(uw.preview(template.format(tau="0.3123456")), uw, 0, 0.0)
+    two, _ = _cache_key(uw.preview(template.format(tau="0.3123459")), uw, 0, 0.0)
+    assert one != two
 
 
 def test_the_download_is_scoped_to_the_caller(library_client):

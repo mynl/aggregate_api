@@ -399,38 +399,18 @@ function builds(d) {
     ]);
 }
 
+// Since 1.14.0 one key hashes the parsed program, so the scope says how much
+// traffic leans on readers' own declarations rather than which key it took.
 function keyScope(d) {
     const k = d.key_scope;
-    const bad = k.reasons.preview_unavailable > 0;
-    return section('key scope', 'shared against session qualified, since boot', [
+    return section('key scope', 'library only against own references, since boot', [
         kv([
-            ['shared', num(k.shared)],
-            ['session qualified', num(k.session)],
-            ['session rate', rate(k.session_rate)],
-            ['reason: session reference', num(k.reasons.session_reference)],
-            ['reason: preview unavailable', num(k.reasons.preview_unavailable),
-                bad ? 'warn' : null],
+            ['library only', num(k.library)],
+            ['own references', num(k.own)],
+            ['own rate', rate(k.own_rate)],
             ['preview calls', num(k.preview_calls)],
             ['preview mean', ms(k.preview_mean_ms)],
             ['preview p95', ms(k.preview_p95_ms)],
-            ['refused by preview, built anyway', num(k.unpreviewable_builds),
-                k.unpreviewable_builds ? 'bad' : 'good'],
-        ]),
-        el('h2', {
-            text: 'programs the previewer refused and the builder accepted',
-        }),
-        el('p', {
-            class: 'empty',
-            text: 'each of these took a private cache slot it did not need. '
-                + 'They are an upstream ask against Underwriter.preview, which '
-                + 'is why they are kept verbatim.',
-        }),
-        table([
-            { label: 'when' }, { label: 'session' }, { label: 'kind' },
-            { label: 'elapsed', num: true }, { label: 'program' },
-        ], k.recent_unpreviewable, (r) => [
-            when(r.at), sess(r.session_id), r.kind || '–',
-            ms(r.elapsed_ms), program(r.program, r.truncated),
         ]),
     ]);
 }

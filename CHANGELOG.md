@@ -4,6 +4,17 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.14.0
+
+[Server-Parsed-Key] **An object id names what a program means, so a redefined name builds a fresh object.** Plan `dev/done/plan-cache-key-from-parsed-program.md`.
+
+- Fixed: redefine `agg A`, rebuild `port P agg.A agg.B`, and the SPA served the old P (mean 35 when it should be 55). The id now hashes each parsed statement and its text, the stored spec of every entry it leans on (`sev agg.X` chains included), the grid, the `aggregate` and plugin versions, and a digest of the library file.
+- The session id left the key: identical meaning shares one object across sessions, own declarations included. Every id changes once at this upgrade.
+- `POST /v1/objects` takes `library_references_only`; when true, a program naming one of your own declarations answers 422 `session_reference`. For the Excel add-in.
+- A program the preview cannot read is refused with 422 (the parse report when there is one) instead of being built under a private key.
+- A missing name defined in another shipped file says so: `agg.ASV.Inner is defined in decl-testers, which builds do not read.`
+- Status page: key scope reads `library` / `own`; the "refused by preview, built anyway" table is gone, since that path no longer exists.
+
 ## 1.13.4
 
 [Warm-Library] **A freshly started server reads the whole library before it serves.** Plan `dev/done/plan-1.13.4-warm-library-at-startup.md`.

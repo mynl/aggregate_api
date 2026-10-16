@@ -51,8 +51,9 @@ Build pipeline (POST /v1/objects)
 ---------------------------------
 
 1. Validate ``log2`` against the cap. Reject early.
-2. Compute the content-hash id for the (canonical_decl, log2, bs)
-   triple.
+2. Preview the program in the caller's fork; a program the preview refuses
+   answers 422 here. Compute the id from the parsed program (see
+   ``_cache_key``).
 3. If cached: bump LRU, audit ``status='ok'``, return slim response.
 4. Otherwise: acquire the build semaphore (single concurrent
    build), submit to a thread-pool with a wall-clock timeout, and
@@ -96,6 +97,7 @@ from datetime import datetime, timezone
 from pathlib import PurePath
 from typing import Annotated, Any, Literal
 
+import aggregate
 import anyio
 import pandas as pd
 
@@ -108,6 +110,7 @@ from lark.exceptions import UnexpectedInput, VisitError
 from aggregate import Distortion, Severity
 from aggregate import charts as agg_charts
 from aggregate import exhibits as agg_exhibits
+from aggregate import plugins as agg_plugins
 from aggregate.constants import FIRST_CLASS_CLASSES, NEAR_FIRST_CLASS
 from aggregate.parser import UnderwritingLexer
 from aggregate.parser_errors import ErrorReport, format_error
@@ -115,9 +118,7 @@ from aggregate.underwriter import RecipeNotFound
 
 from .. import models
 from ..audit import AuditLog
-from ..cache import (
-    CacheEntry, ObjectCache, canonicalize_decl, object_id, qualified_object_id,
-)
+from ..cache import CacheEntry, ObjectCache, object_id
 from ..bounds import run_allocation, run_envelope, run_pricing_bounds
 from ..capability import (
     PNL_PREMIUM_STYLE_SUPPORTED, can_sharpen, capability_for, narrative_for,
@@ -125,7 +126,9 @@ from ..capability import (
 from ..config import Settings, get_settings
 from ..layer_pricing import (
     indication as layer_indication, policy_limit, price_clause)
-from ..library import get_underwriter
+from ..library import (
+    default_database_name, defining_database, get_underwriter, library_digest,
+)
 from ..library_notes import from_library
 from ..net import client_address
 from ..sessions import SESSION_HEADER, SessionRegistry, normalize_session_id
@@ -254,7 +257,7 @@ def _get_session_uw(
     Notes
     -----
     Returns the fork itself rather than the id, because every caller wants the
-    base. Where the id is also wanted (the audit row, the qualified cache key)
+    base. Where the id is also wanted (the audit row, the status page)
     the route reads it through :func:`session_id_of` off the same request.
     """
     sid = normalize_session_id(request.headers.get(SESSION_HEADER) or session)
@@ -305,7 +308,7 @@ class RevalidationCache:
     A key carries everything that changes the bytes, which is what makes it the
     same key the ETag answers for. The cache sits *above* the object cache and
     can never cause a build, so no document parameter is ever a reason to re-run
-    an FFT. An ``oid`` is the content hash of ``(decl, log2, bs)``, cached
+    an FFT. An ``oid`` is a hash of what the program means, cached
     objects are immutable and the builds are deterministic, so an entry cannot
     go stale under its own key: the only way to get different numbers is a
     different key.
@@ -516,81 +519,188 @@ def _run_build(uw, decl: str, log2: int, bs: float):
 
 
 def _preview(uw, text: str):
-    """What ``text`` resolves to in ``uw``, or ``None`` if it will not say.
+    """What ``text`` resolves to in ``uw``, raising whatever the preview raises.
 
-    Raises only :class:`aggregate.underwriter.RecipeNotFound`. A program that
-    cannot be previewed for any other reason is one that cannot be keyed
-    either, and the answer to that is to give it a private key and let the
-    build path report the real error, which it does better than this could: a
-    parse failure comes back as the library's ``ErrorReport``, with line,
-    column and caret.
-
-    The missing name is the exception, and it is let through on purpose. It is
-    the shape an expired session takes: the fork holding what this user built
-    has been evicted, so their own ``agg.NAME`` now names nothing. Swallowing
-    it here would qualify the key and then possibly find an object still
-    cached under it, answering a program whose reference no longer resolves.
-    Better to say what is missing.
+    Raises
+    ------
+    aggregate.underwriter.RecipeNotFound
+        A reference names nothing in the caller's base. The common cause is an
+        expired session: the fork holding what this user built was evicted, so
+        their own ``agg.NAME`` now names nothing.
+    ValueError
+        A parse failure, with the library's ``ErrorReport`` on ``err.report``
+        exactly as ``build`` attaches it, or a validation error raised while
+        parsing. See :func:`_unpreviewable_detail`.
 
     Notes
     -----
-    This runs **outside** the build slot, which is new. Every parse used to be
-    serialized by accident, being inside the one-worker executor. The library
-    documents ``preview`` as holding no instance state (a private parser, a
-    private cycle guard) and the Lark grammar it leans on is a module
-    singleton, so concurrent previews are safe by construction rather than by
-    luck; ``tests/test_sessions.py`` pins it.
+    **A program the preview cannot read is refused, not built.** Through 1.13
+    such a program was given a session qualified key and built anyway, but its
+    references cannot be checked and it cannot be keyed by meaning, so since
+    1.14.0 it answers 422 with the preview's own error (author, 2026-10-16).
+
+    This runs **outside** the build slot. The library documents ``preview`` as
+    holding no instance state (a private parser, a private cycle guard) and the
+    Lark grammar it leans on is a module singleton, so concurrent previews are
+    safe by construction rather than by luck; ``tests/test_sessions.py`` pins
+    it.
     """
-    try:
-        return uw.preview(text)
-    except RecipeNotFound:
-        raise
-    except Exception:  # noqa: BLE001 -- fail closed, see the docstring
-        return None
+    return uw.preview(text)
+
+
+def _unpreviewable_detail(decl: str, exc: Exception) -> tuple[str, Any, str]:
+    """The audit status, 422 detail and message for a program preview refused.
+
+    Parameters
+    ----------
+    decl : str
+        The program as submitted, which is what a caret is measured against.
+    exc : Exception
+        What :func:`_preview` raised, other than ``RecipeNotFound``.
+
+    Returns
+    -------
+    tuple
+        ``(status, detail, message)``. A parse failure is ``'parse_error'``
+        with the ``ErrorReport`` dict as detail, the same body a build's parse
+        failure has always returned. Anything else is ``'build_error'`` with
+        the message as detail, matching the build path's handling of the same
+        exception family: a ``VisitError``'s ``orig_exc``, and a ``KeyError``'s
+        first argument rather than its re-quoted ``str``.
+    """
+    if (isinstance(getattr(exc, "report", None), ErrorReport)
+            or isinstance(exc, UnexpectedInput)
+            or isinstance(exc.__cause__, UnexpectedInput)):
+        report = format_error(decl, exc)
+        return "parse_error", report.to_dict(), report.message
+    if isinstance(exc, VisitError):
+        exc = getattr(exc, "orig_exc", None) or exc
+    message = (exc.args[0] if isinstance(exc, KeyError) and exc.args
+               else str(exc))
+    return "build_error", str(message), str(message)
 
 
 def _is_library_entry(source) -> bool:
-    """True when a resolved reference means the same thing to everybody.
+    """True when a resolved reference is a library entry, not the caller's own.
 
     The library records provenance as the ``.agg`` file an entry was read from,
     or the sentinel string ``'session'`` for one a build wrote. So the test is
     "did this come from a file", and it is written that way round on purpose:
-    anything unrecognized answers False and the program gets a private key.
-    Failing toward a redundant build costs one build; failing toward a shared
-    one serves somebody else's answer.
+    anything unrecognized answers False and counts as the caller's own. Since
+    1.14.0 that no longer moves the key, which hashes the stored spec either
+    way; it decides the audit's scope label and what
+    ``library_references_only`` refuses, and refusing too much is the safe
+    side of that.
     """
     return isinstance(source, PurePath)
 
 
-def _cache_key(preview, session_id: str, canonical: str, log2: int, bs: float):
-    """The cache id for this request, and which rule produced it.
-
-    A program that resolved nothing, or resolved only entries read from the
-    library file, means the same thing in every session: the shared key, one
-    build for the whole room. A program that touched anything its own session
-    declared, **including a library name that session overwrote**, is private:
-    the session id joins the hash.
+def _key_environment() -> dict:
+    """What a program was resolved against, beyond its own text and references.
 
     Returns
     -------
-    (str, str, str or None)
-        The id, ``'shared'`` or ``'session'`` for the audit row, and why the
-        session key was taken. The reason is ``None`` for a shared key, and
-        otherwise one of two that mean opposite things. ``'session_reference'``
-        is the rule working: the program touched a name its own session
-        declared, so it cannot share a slot. ``'preview_unavailable'`` is the
-        previewer declining to speak about the program at all, which is usually
-        a program about to fail its build and is occasionally the previewer
-        refusing what the builder accepts. Only the second is a finding, and
-        ``GET /v1/status`` counts them apart for that reason.
+    dict
+        ``aggregate``, the live library version; ``plugins``, ``[name,
+        version]`` per loaded plugin, sorted by name; ``library``, the digest
+        of the library file (:func:`aggregate_api.library.library_digest`).
+
+    Notes
+    -----
+    In the key so an id saved outside the process, in an Excel workbook for
+    one, cannot silently change meaning across an upgrade or a library edit: a
+    different environment gives a different id, and the client can tell.
     """
-    if preview is None:
-        return (qualified_object_id(session_id, canonical, log2, bs),
-                "session", "preview_unavailable")
-    if all(_is_library_entry(ref.source) for ref in preview.resolved):
-        return object_id(canonical, log2, bs), "shared", None
-    return (qualified_object_id(session_id, canonical, log2, bs),
-            "session", "session_reference")
+    return {
+        "aggregate": aggregate.__version__,
+        "plugins": sorted(([p.name, p.version]
+                           for p in agg_plugins.loaded_plugins()),
+                          key=lambda row: row[0]),
+        "library": library_digest(),
+    }
+
+
+def _cache_key(preview, uw, log2: int, bs: float) -> tuple[str, str]:
+    """The cache id for a previewed program, and its scope for the audit row.
+
+    Parameters
+    ----------
+    preview : aggregate.underwriter.ProgramPreview
+        The program, previewed in the caller's own fork.
+    uw : aggregate.underwriter.Underwriter
+        That fork, from which each resolved entry's stored spec is read.
+    log2, bs : int, float
+        The requested grid, 0 meaning "the library picks".
+
+    Returns
+    -------
+    (str, str)
+        The id from :func:`aggregate_api.cache.object_id`, and ``'library'``
+        when the program touched no declaration of the caller's, else
+        ``'own'``. The scope is reporting only: it no longer changes the key.
+
+    Notes
+    -----
+    **Why the parsed program and not its text.** The library binds references
+    at two times. A dotted reference (``sev.Cat`` in an agg, ``agg.A`` in a
+    port) is copied into the spec when the statement is parsed, and a stored
+    recipe keeps the copy it took when it was registered, so a recipe's text
+    does not determine its spec. A ``sev agg.X`` is resolved afresh at every
+    build from the current base. The complete description of a build is
+    therefore the parsed spec of each statement plus the stored spec of every
+    entry ``preview.resolved`` lists, which follows ``sev agg.X`` chains to the
+    end. Through 1.13 the key hashed the text and, for a program touching the
+    caller's own names, the session id, so redefining ``agg A`` and rebuilding
+    ``port P agg.A agg.B`` served the stale P.
+
+    **Accepted gap.** The key comes from the preview and the build re-parses
+    the text. A redefinition in the same session landing between the two would
+    file an object under a key describing the other spec. The SPA sends one
+    build at a time and Excel resolves library entries only, so this is
+    documented rather than locked.
+    """
+    statements = [(s.kind, s.name, s.program, s.spec) for s in preview.statements]
+    references = []
+    for ref in preview.resolved:
+        entry = uw.recipe(ref.name, ref.kind)
+        references.append((ref.kind, ref.name, entry.program, entry.spec))
+    scope = ("library"
+             if all(_is_library_entry(ref.source) for ref in preview.resolved)
+             else "own")
+    return object_id(statements, references, log2, bs, _key_environment()), scope
+
+
+def _own_reference(preview):
+    """The first resolved entry that is one of the caller's declarations, or None."""
+    return next((ref for ref in preview.resolved
+                 if not _is_library_entry(ref.source)), None)
+
+
+def _session_reference_detail(ref) -> dict:
+    """The 422 body refusing an own reference under ``library_references_only``.
+
+    Parameters
+    ----------
+    ref : aggregate.underwriter.ResolvedReference
+        The first resolved entry that is not from a library file.
+
+    Returns
+    -------
+    dict
+        ``error`` (``'session_reference'``), ``kind``, ``name`` and a
+        ``message`` saying how to write the program so the client can track it.
+    """
+    return {
+        "error": "session_reference",
+        "kind": ref.kind,
+        "name": ref.name,
+        "message": (
+            f"{ref.kind}.{ref.name} is one of your own declarations, and this "
+            "client resolves only library entries. Write it inline, for "
+            "example 'port P agg A 2 claims ... agg B ...', or add it to a "
+            "library."
+        ),
+    }
 
 
 def _register(uw, preview) -> None:
@@ -609,6 +719,12 @@ def _register(uw, preview) -> None:
     filing it again would re-mark a library entry as this session's, which is
     exactly the flag the cache rule reads. ``expr`` is skipped for the reason
     the library skips it, being an answer rather than a declaration.
+
+    **The filed spec is the served object's.** Since 1.14.0 the key is a hash
+    of the previewed specs, so a hit means the preview parsed to exactly what
+    built the cached object. Under the text key a hit after a redefinition
+    filed the new spec beside a stale object, and the session base and the
+    served object disagreed.
     """
     if preview is None or preview.route != "program":
         return
@@ -634,14 +750,32 @@ def _missing_entry_detail(exc: RecipeNotFound) -> dict:
     -------
     dict
         ``error``, ``kind``, ``name`` and ``message``. The ``message`` is the
-        library's own sentence, kept verbatim: it already explains the case
-        where the name parsed and then went away.
+        library's own sentence, which already explains the case where the name
+        parsed and then went away, unless the name lives in another shipped
+        file.
+
+    Notes
+    -----
+    **A name defined in a file builds do not read** gets a sentence of its own,
+    because the library's ("no recipe named 'ASV.Inner' of kind 'agg'") is
+    true and misleading: ``ASV.NoLayer`` from the Examples menu refers to
+    ``agg.ASV.Inner``, which exists in ``decl-testers.agg``, and builds resolve
+    only the library file and the caller's own declarations.
     """
+    kind = getattr(exc, "kind", None)
+    name = getattr(exc, "name", "") or ""
+    message = getattr(exc, "message", None) or str(exc)
+    where = defining_database(kind, name) if name else None
+    if where:
+        dotted = f"{kind}.{name}" if kind else name
+        message = (f"{dotted} is defined in {where}, which builds do not read. "
+                   f"Builds resolve {default_database_name()}.agg and your own "
+                   "declarations.")
     return {
         "error": "recipe_not_found",
-        "kind": getattr(exc, "kind", None),
-        "name": getattr(exc, "name", "") or "",
-        "message": getattr(exc, "message", None) or str(exc),
+        "kind": kind,
+        "name": name,
+        "message": message,
     }
 
 
@@ -1349,9 +1483,9 @@ def post_object(
 ) -> dict:
     """Build (or retrieve from cache) an aggregate object.
 
-    Returns the slim manifest; the SPA fetches heavier panes on
-    demand via the per-button GETs. Same (decl, log2, bs) is
-    idempotent -- the second call returns ``cached=True`` with
+    Returns the slim manifest; the SPA fetches heavier panes on demand via the
+    per-button GETs. A program that means the same thing at the same grid is
+    idempotent, in any session: the second call returns ``cached=True`` with
     the same ``id``.
 
     Notes
@@ -1361,7 +1495,9 @@ def post_object(
     caller's own recipe base rather than about the text, so the text alone
     cannot decide which cache slot the answer belongs in. The order is
     therefore preview, key, look up, build; :func:`_cache_key` holds the rule
-    and the reasoning.
+    and the reasoning. A program the preview refuses is answered 422 there,
+    and ``library_references_only`` refuses one that names the caller's own
+    declarations, both before any build work.
 
     **What it costs.** A cache hit now pays a parse it did not pay before, tens
     of milliseconds against builds measured in hundreds, and a miss parses
@@ -1423,7 +1559,6 @@ def post_object(
             detail=f"log2 {effective_log2} exceeds AGGAPI_LOG2_CAP={settings.log2_cap}",
         )
 
-    canonical = canonicalize_decl(req.decl)
     preview_t0 = time.monotonic()
     try:
         preview = _preview(uw, req.decl)
@@ -1436,10 +1571,41 @@ def post_object(
             elapsed_ms=elapsed, session_id=sid,
         )
         raise HTTPException(status_code=422, detail=detail) from None
+    except Exception as exc:  # noqa: BLE001 (refused, see _preview)
+        # Nothing is built. The audit row says why, under the status the build
+        # path would have used for the same failure.
+        outcome, detail, message = _unpreviewable_detail(req.decl, exc)
+        elapsed = int((time.monotonic() - t0) * 1000)
+        audit.record_build(
+            ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
+            status=outcome, error_msg=message,
+            elapsed_ms=elapsed, session_id=sid,
+        )
+        raise HTTPException(status_code=422, detail=detail) from None
     status_state.record_preview_ms((time.monotonic() - preview_t0) * 1000)
-    oid, key_scope, key_reason = _cache_key(
-        preview, sid, canonical, eff_log2, eff_bs)
-    status_state.record_key_scope(key_scope, key_reason)
+
+    # A client that cannot track a reference by name (a spreadsheet cell does
+    # not depend on the cell that built the referent) asks for library entries
+    # only. Refused before any build work, and not counted as a keying.
+    own = _own_reference(preview) if req.library_references_only else None
+    if own is not None:
+        detail = _session_reference_detail(own)
+        elapsed = int((time.monotonic() - t0) * 1000)
+        audit.record_build(
+            ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
+            status="build_error", error_msg=detail["message"],
+            elapsed_ms=elapsed, session_id=sid, key_scope="own",
+        )
+        raise HTTPException(status_code=422, detail=detail)
+
+    try:
+        oid, key_scope = _cache_key(preview, uw, eff_log2, eff_bs)
+    except RecipeNotFound as exc:
+        # A referent dropped between the preview and this read: the accepted
+        # gap in ``_cache_key``, answered like any other missing name.
+        detail = _missing_entry_detail(exc)
+        raise HTTPException(status_code=422, detail=detail) from None
+    status_state.record_key_scope(key_scope)
 
     # Cache hit -- return slim manifest immediately.
     cached_entry = cache.get(oid)
@@ -1663,15 +1829,6 @@ def post_object(
     cache.put(oid, entry)
     elapsed = int((time.monotonic() - t0) * 1000)
     sessions.record_build(sid)
-    if preview is None:
-        # The previewer refused a program the builder then accepted, so a
-        # shareable object took a private slot and a room pays a build each
-        # instead of one between them. Kept verbatim because that is an upstream
-        # ask against the library's ``preview`` and an ask needs the program.
-        # The previewed-None-and-then-failed case is an ordinary parse error and
-        # is deliberately not kept: the audit log already has it, with a better
-        # message.
-        status_state.record_unpreviewable_build(req.decl, sid, kind, elapsed)
     audit.record_build(
         ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
         status="ok", object_id=oid, kind=kind, elapsed_ms=elapsed,
@@ -3252,23 +3409,25 @@ def post_sharpen(
             status_code=422,
             detail="the probe ran but this object carries no program to pin")
 
-    # The id is computed over the **collapsed** text, and stays that way. An
-    # ordinary build of the returned program goes through ``post_object``, which
-    # collapses before it hashes (see ``:504``), so hashing the spread form here
-    # would re-file this entry under an id no build could ever ask for and the
-    # editor's rebuild would miss its own cache slot. What the reader gets and
-    # what the cache is keyed on differ only in whitespace, which is exactly the
-    # difference ``collapse_program`` exists to make irrelevant.
-    #
-    # Through the same rule as a build, for the same reason: the sharpened text
-    # carries whatever references the original had, so if a rebuild of it would
-    # be keyed privately then this entry has to be filed privately too, or the
-    # rebuild misses the slot this just wrote.
+    # The id is computed over the **collapsed** text, previewed in the caller's
+    # fork, and through the same rule as a build, so an ordinary build of the
+    # returned program (which ``post_object`` collapses first) is a hit on the
+    # slot this writes rather than a second probe.
     # Not counted toward the key-scope panel, deliberately. That panel measures
-    # how often a *submitted program* shares, and a derived id re-keyed here
-    # would double-count the program the reader is about to submit anyway.
-    new_oid, _, _ = _cache_key(_preview(uw, program), session_id_of(request),
-                            canonicalize_decl(program), 0, 0.0)
+    # how often a *submitted program* leans on the caller's own names, and a
+    # derived id keyed here would double-count the program the reader is about
+    # to submit anyway.
+    try:
+        new_oid, _ = _cache_key(_preview(uw, program), uw, 0, 0.0)
+    except Exception as exc:  # noqa: BLE001 (reported to the user)
+        # Since 1.14.0 a program the preview refuses has no key. The library
+        # wrote this one, so this is a library defect or an expired session
+        # rather than anything the reader typed.
+        message = getattr(exc, "message", None) or str(exc)
+        raise HTTPException(
+            status_code=422,
+            detail=f"the probe ran but its program cannot be keyed: {message}",
+        ) from None
     # A new entry, with its own lock. The sharpened object is a different object
     # from the one still serving under ``oid``, so sharing a lock between them
     # would serialize two unrelated readers for nothing.

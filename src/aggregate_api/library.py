@@ -26,6 +26,7 @@ work; this module answers only "which library", and answers it once.
 
 from __future__ import annotations
 
+import hashlib
 import time
 import warnings
 from functools import lru_cache
@@ -95,7 +96,58 @@ def get_underwriter():
             uw = Underwriter(databases=(str(path),))
     uw.load()
     status.record_library_load((time.monotonic() - started) * 1000)
+    global _library_digest
+    _library_digest = _digest_of(uw.databases)
     return uw
+
+
+# Set by :func:`get_underwriter`, read by :func:`library_digest`.
+_library_digest: str | None = None
+
+
+def _digest_of(paths) -> str:
+    """SHA-256 over the bytes of every file in `paths`, in load order.
+
+    Parameters
+    ----------
+    paths : iterable of path-like
+        What ``Underwriter.load`` read, from its ``databases`` attribute.
+
+    Returns
+    -------
+    str
+        The hex digest. Each file contributes its name and its length before
+        its bytes, so moving text from one file to the next changes the digest.
+    """
+    sha = hashlib.sha256()
+    for path in paths:
+        data = Path(path).read_bytes()
+        sha.update(f"{Path(path).name}|{len(data)}|".encode("utf-8"))
+        sha.update(data)
+    return sha.hexdigest()
+
+
+def library_digest() -> str:
+    """The digest of the library file this process resolves against.
+
+    Returns
+    -------
+    str
+        SHA-256 of ``library.agg``, or of the ``--library`` file, computed once
+        when :func:`get_underwriter` reads it, which ``create_app`` does before
+        serving.
+
+    Notes
+    -----
+    Part of every object id (see :func:`aggregate_api.cache.object_id`), so an
+    id saved outside the process, in an Excel workbook for one, cannot silently
+    change meaning after the library file is edited. Read from the files the
+    load actually opened rather than from the configured path, which is the
+    same answer except when a configured path is missing and the shipped file
+    was used instead.
+    """
+    get_underwriter()
+    return _library_digest or ""
 
 
 # The stem the shipped singleton is read from, and so the default database when
@@ -199,3 +251,46 @@ def get_database_underwriter(name: str):
             uw.load()
             return uw
     raise KeyError(name)
+
+
+def default_database_name() -> str:
+    """The stem of the file builds resolve against: ``library`` or the custom one."""
+    return shipped_databases()[0]["name"]
+
+
+def defining_database(kind: str | None, name: str) -> str | None:
+    """Which other shipped ``.agg`` file defines ``kind.name``, if any.
+
+    Parameters
+    ----------
+    kind : str or None
+        The entry kind the missing reference named. ``None`` matches any kind.
+    name : str
+        The entry name.
+
+    Returns
+    -------
+    str or None
+        The stem of the first non-default shipped file holding the entry, in
+        :func:`shipped_databases` order, or ``None`` when none does.
+
+    Notes
+    -----
+    For the error a build returns on a missing name. ``agg.ASV.Inner`` exists,
+    in ``decl-testers.agg``, and a reader who loaded ``ASV.NoLayer`` from the
+    Examples menu deserves to be told that builds never read that file, rather
+    than that the name does not exist. Only the error path pays for this, and
+    :func:`get_database_underwriter` caches each file's load. A file that will
+    not load is skipped, since the question is where the name lives, not
+    whether every file is well formed.
+    """
+    for row in shipped_databases():
+        if row["default"]:
+            continue
+        try:
+            uw = get_database_underwriter(row["name"])
+            uw.recipe(name, kind or "")
+        except Exception:  # noqa: BLE001 (not here, or the file will not load)
+            continue
+        return row["name"]
+    return None

@@ -24,9 +24,11 @@ structural and cannot be forgotten at a call site. Everything else, the build
 statistics and the cache and session rows, is a query against something already
 bounded and is not retained here at all.
 
-The budget is roughly 250 kB: fifty programs at two kilobytes, five hundred
-float samples, twenty refusal records, and a few dozen integers. A future panel
-that cannot fit that is a query and not a buffer.
+The budget is a few tens of kilobytes: five hundred float samples, twenty
+refusal records, and a few dozen integers. Until 1.14.0 it also held fifty
+programs the previewer refused and the builder accepted; that path no longer
+exists, because a program the preview refuses is answered 422 and never built.
+A future panel that cannot fit the budget is a query and not a buffer.
 
 **This does not touch the audit log.** That is SQLite on disk and survives
 restarts, which is the point of an audit log. Section 8 question 4 of
@@ -51,9 +53,8 @@ import time
 from collections import Counter, deque
 from datetime import datetime, timezone
 
-#: How many programs the key-scope buffer keeps, and how much of each. Fifty at
-#: two kilobytes is the bulk of this module's memory budget.
-PROGRAM_BUFFER = 50
+#: How much of a program the page shows, in the cache table's rows. Those rows
+#: are read from the cache at request time, so nothing here retains them.
 PROGRAM_CHARS = 2000
 
 #: How many gate refusals to keep. Address and timestamp only, no bodies.
@@ -91,7 +92,6 @@ _counts: Counter = Counter()
 # Bounded buffers
 # ----------------------------------------------------------------------
 _preview_ms: deque = deque(maxlen=PREVIEW_SAMPLES)
-_programs: deque = deque(maxlen=PROGRAM_BUFFER)
 _refusals: deque = deque(maxlen=REFUSAL_BUFFER)
 
 
@@ -157,30 +157,25 @@ def process_facts() -> dict:
 # ----------------------------------------------------------------------
 # Key scope, section 4.5 of the plan
 # ----------------------------------------------------------------------
-def record_key_scope(scope: str, reason: str | None = None) -> None:
+def record_key_scope(scope: str) -> None:
     """Count one keying decision from ``routes/objects.py::_cache_key``.
 
     Parameters
     ----------
-    scope : {'shared', 'session'}
-        Which key builder the request used.
-    reason : {'session_reference', 'preview_unavailable'}, optional
-        Why the session key was taken. Ignored for ``'shared'``.
+    scope : {'library', 'own'}
+        ``library`` when the program touched no declaration of the caller's,
+        ``own`` when it did.
 
     Notes
     -----
-    The two reasons mean opposite things and are counted apart for that reason.
-    ``session_reference`` is the rule working: the program touched a name its own
-    session declared, so it cannot share a slot. ``preview_unavailable`` is the
-    previewer declining to speak about the program at all, which is a fail-closed
-    path that is usually a program about to fail its build and is occasionally a
-    previewer refusing what the builder accepts. Only the second is a finding,
-    and telling them apart is the whole value of the panel.
+    Since 1.14.0 the scope no longer changes the key, which hashes the parsed
+    program either way, so this is a description of the traffic rather than a
+    count of private slots: how much of it leans on readers' own building
+    blocks. The ``preview_unavailable`` reason went with that change, because a
+    program the preview refuses is now answered 422 and never keyed.
     """
     with _lock:
         _counts[f"key_{scope}"] += 1
-        if scope == "session" and reason:
-            _counts[f"key_reason_{reason}"] += 1
 
 
 def record_preview_ms(elapsed_ms: float) -> None:
@@ -200,72 +195,23 @@ def record_preview_ms(elapsed_ms: float) -> None:
         _preview_ms.append(float(elapsed_ms))
 
 
-def record_unpreviewable_build(program: str, session_id: str, kind: str | None,
-                               elapsed_ms: int) -> None:
-    """Keep a program the previewer refused and the builder then accepted.
-
-    Parameters
-    ----------
-    program : str
-        The DecL as it arrived. Truncated to :data:`PROGRAM_CHARS`.
-    session_id : str
-        The caller's session. Shortened on the way in by
-        :func:`short_session_id`, so nothing here ever holds a full one.
-    kind : str or None
-        What the build produced.
-    elapsed_ms : int
-        What the request cost.
-
-    Notes
-    -----
-    **This narrow class is the only text this module keeps.** A program that
-    previewed ``None`` and then failed its build is an ordinary parse error and
-    is already in the audit log with a better message. A program that previewed
-    ``None`` and then **built** is the previewer refusing what the builder
-    accepted: a shareable object took a private cache slot, so a room pays a
-    build each instead of one between them. That is an upstream ask against the
-    library's ``Underwriter.preview``, and an ask needs the program verbatim,
-    which is why author ruling 3 of 2026-08-18 lets this page hold program text.
-    """
-    text, truncated = truncate(program, PROGRAM_CHARS)
-    with _lock:
-        _counts["unpreviewable_builds"] += 1
-        _programs.append({
-            "at": _now_iso(),
-            "session_id": short_session_id(session_id),
-            "kind": kind,
-            "elapsed_ms": elapsed_ms,
-            "program": text,
-            "truncated": truncated,
-        })
-
-
 def key_scope_state() -> dict:
-    """The key-scope panel: counts, rate, reasons, preview timing, programs."""
+    """The key-scope panel: library against own counts, and preview timing."""
     with _lock:
-        shared = _counts["key_shared"]
-        session = _counts["key_session"]
-        reasons = {
-            "session_reference": _counts["key_reason_session_reference"],
-            "preview_unavailable": _counts["key_reason_preview_unavailable"],
-        }
+        library = _counts["key_library"]
+        own = _counts["key_own"]
         calls = _counts["preview_calls"]
         total_us = _counts["preview_total_us"]
         samples = list(_preview_ms)
-        programs = list(_programs)
-        unpreviewable_builds = _counts["unpreviewable_builds"]
-    keyed = shared + session
+    keyed = library + own
     return {
-        "shared": shared,
-        "session": session,
-        "session_rate": round(session / keyed, 4) if keyed else None,
-        "reasons": reasons,
+        "library": library,
+        "own": own,
+        "own_rate": round(own / keyed, 4) if keyed else None,
         "preview_calls": calls,
         "preview_mean_ms": round(total_us / calls / 1000, 2) if calls else None,
         "preview_p95_ms": percentile(samples, 0.95),
         "preview_sample_size": len(samples),
-        "unpreviewable_builds": unpreviewable_builds,
-        "recent_unpreviewable": list(reversed(programs)),
     }
 
 
@@ -532,5 +478,4 @@ def reset() -> None:
     with _lock:
         _counts.clear()
         _preview_ms.clear()
-        _programs.clear()
         _refusals.clear()

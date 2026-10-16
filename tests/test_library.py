@@ -111,6 +111,33 @@ def test_the_download_lists_the_same_base(library_client):
     assert "Probe" in r.text
 
 
+def test_editing_the_library_file_moves_every_id(tmp_path, monkeypatch):
+    """The library file's digest is in the key, so an edit cannot go unnoticed.
+
+    The same self-contained program, under two library files that differ by one
+    note. Nothing the program says changed; what an id saved outside the
+    process (an Excel workbook) can promise did.
+    """
+    from aggregate_api.app import create_app
+    from aggregate_api.library import library_digest
+
+    program = "agg Same 3 claims sev lognorm 10 cv 1 poisson"
+    monkeypatch.setenv("AGGAPI_AUDIT_DB", str(tmp_path / "audit.db"))
+    monkeypatch.setenv("AGGAPI_CORS_ORIGINS", "")
+    ids, digests = [], []
+    for i, text in enumerate((FIXTURE_LIBRARY,
+                              FIXTURE_LIBRARY.replace("for the fixture",
+                                                      "for the edited fixture"))):
+        path = tmp_path / f"fixture{i}.agg"
+        path.write_text(text, encoding="utf-8")
+        monkeypatch.setenv("AGGAPI_LIBRARY", str(path))
+        with TestClient(create_app()) as client:
+            ids.append(client.post("/v1/objects", json={"decl": program}).json()["id"])
+            digests.append(library_digest())
+    assert digests[0] != digests[1]
+    assert ids[0] != ids[1]
+
+
 def test_a_missing_library_warns_and_falls_back(tmp_path, monkeypatch):
     """A stale setting on a server is not a reason to refuse every route.
 

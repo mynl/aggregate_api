@@ -6,6 +6,14 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Server-Parsed-Key]** DONE (`1.14.0`), plan
+  `dev/done/plan-cache-key-from-parsed-program.md`. The object id hashes the
+  parsed program, its references' stored specs, the grid, versions and the
+  library digest, so a redefined name builds a fresh object and an id means the
+  same thing in any process. Adds `library_references_only` for Excel. Still
+  owed: an upstream ask for a lossless `str` on `Distortion` and `Copula` (see
+  the plan's execution log, divergence 1).
+
 - **[Warm-Library]** DONE (`1.13.4`), plan
   `dev/done/plan-1.13.4-warm-library-at-startup.md`. `create_app()` reads the
   library before serving, so a fresh server's first page load can no longer

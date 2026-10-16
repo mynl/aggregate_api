@@ -68,6 +68,16 @@ class BuildRequest(BaseModel):
         gt=0,
         description="Bucket size. None means 'let the library pick'.",
     )
+    library_references_only: bool = Field(
+        False,
+        description=(
+            "Refuse, with a 422 'session_reference', a program that refers by "
+            "name to one of the caller's own declarations. For a client that "
+            "cannot track such a dependency, such as a spreadsheet, where the "
+            "cell that built the referent is invisible to the cell that names "
+            "it."
+        ),
+    )
 
 
 class ExhibitCapability(BaseModel):

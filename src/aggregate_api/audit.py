@@ -195,11 +195,11 @@ class AuditLog:
         session_id : str|None
             The caller's session, or ``'anonymous'`` for a headerless client.
         key_scope : str|None
-            ``'shared'`` or ``'session'``: which cache key this request used.
-            Recorded because it is the one number that says whether the
-            qualification rule is working. A demo where nearly every build is
-            ``'session'`` means the rule is firing on programs that do not need
-            it, and the room is paying for builds it could have shared.
+            ``'library'`` when the program touched no declaration of the
+            caller's, ``'own'`` when it did. Rows written before 1.14.0 carry
+            ``'shared'`` and ``'session'``, which named two cache keys; since
+            then one key hashes the parsed program and the column describes the
+            traffic, not the key.
         """
         # ISO 8601 with UTC; chosen for sortability and unambiguous TZ.
         ts = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
@@ -316,7 +316,9 @@ class AuditLog:
 
         ``by_key_scope`` covers only rows written since a110, which is when the
         column arrived. Older rows read ``NULL`` and are grouped under
-        ``'unknown'`` rather than silently folded into either scope.
+        ``'unknown'`` rather than silently folded into either scope. A window
+        spanning the 1.14.0 upgrade shows both vocabularies, ``shared`` and
+        ``session`` before it and ``library`` and ``own`` after.
         """
         if conn is None:
             with closing(self._connect()) as owned:

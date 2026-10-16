@@ -276,6 +276,81 @@ def test_build_is_idempotent(client):
 
 
 # ----------------------------------------------------------------------
+# The key is a pure function of the program (1.14.0)
+# ----------------------------------------------------------------------
+
+def test_every_library_spec_serializes_to_the_same_bytes_twice():
+    """The key's canonical JSON, over every entry in the two files that matter.
+
+    ``library.agg`` is what builds resolve, and ``decl-testers.agg`` is the
+    widest spread of syntax the library ships. A spec value written by object
+    identity (an address in a ``repr``) or by set order would fail here.
+    """
+    import json
+
+    from aggregate import build
+    from aggregate_api.library import get_database_underwriter
+    from aggregate_api.serializers import spec_to_payload
+
+    build.load()
+    for uw in (build, get_database_underwriter("decl-testers")):
+        for kind, name in uw.recipes.reset_index()[["kind", "name"]].itertuples(
+                index=False):
+            spec = uw.recipe(name, kind).spec
+            once = json.dumps(spec_to_payload(spec), sort_keys=True,
+                              separators=(",", ":"))
+            twice = json.dumps(spec_to_payload(spec), sort_keys=True,
+                               separators=(",", ":"))
+            assert once == twice, f"{kind}.{name}"
+            assert not re.search(r"0x[0-9a-fA-F]{6,}", once), f"{kind}.{name}"
+
+
+def test_an_id_is_the_same_in_a_separate_process(client, tmp_path):
+    """What lets a spreadsheet keep a handle across a server restart."""
+    import os
+    import subprocess
+    import sys
+
+    script = (
+        "import json, sys\n"
+        "from fastapi.testclient import TestClient\n"
+        "from aggregate_api.app import create_app\n"
+        "with TestClient(create_app()) as c:\n"
+        "    r = c.post('/v1/objects', json={'decl': sys.argv[1]})\n"
+        "    print(json.dumps(r.json()['id']))\n"
+    )
+    env = {**os.environ, "AGGAPI_AUDIT_DB": str(tmp_path / "other.db"),
+           "AGGAPI_CORS_ORIGINS": ""}
+    env.pop("AGGAPI_LIBRARY", None)
+    here = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    there = subprocess.run(
+        [sys.executable, "-c", script, _DICE], env=env, capture_output=True,
+        text=True, timeout=120, check=True).stdout.strip().splitlines()[-1]
+    assert there == f'"{here}"'
+
+
+def test_a_missing_name_says_which_file_defines_it(client):
+    """``ASV.NoLayer`` refers to ``agg.ASV.Inner``, which lives in decl-testers."""
+    r = client.post("/v1/objects", json={
+        "decl": "agg ASV.NoLayer 10 claims sev agg.ASV.Inner poisson"})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert detail["error"] == "recipe_not_found"
+    assert (detail["kind"], detail["name"]) == ("agg", "ASV.Inner")
+    assert detail["message"] == (
+        "agg.ASV.Inner is defined in decl-testers, which builds do not read. "
+        "Builds resolve library.agg and your own declarations.")
+
+
+def test_a_missing_name_defined_nowhere_keeps_the_library_sentence(client):
+    """No shipped file holds it, so the library's own words stand."""
+    r = client.post("/v1/objects", json={"decl": "port Ghost agg.NoSuchEntryAnywhere"})
+    assert r.status_code == 422
+    assert r.json()["detail"]["message"] == (
+        "no recipe named 'NoSuchEntryAnywhere' of kind 'agg'")
+
+
+# ----------------------------------------------------------------------
 # Comments, empty programs, and a program that means a number
 # ----------------------------------------------------------------------
 # ``collapse_program`` folds the program onto one line before anything parses

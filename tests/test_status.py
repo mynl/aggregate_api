@@ -243,17 +243,17 @@ def test_a_build_moves_the_counters(status_client):
     assert payload["sessions"]["live"] == 1
     assert payload["sessions"]["rows"][0]["builds"] == 1
 
-    assert payload["key_scope"]["shared"] == 1
-    assert payload["key_scope"]["session"] == 0
+    assert payload["key_scope"]["library"] == 1
+    assert payload["key_scope"]["own"] == 0
     assert payload["key_scope"]["preview_calls"] == 1
 
     assert payload["builds"]["hour"]["total"] == 1
     assert payload["builds"]["hour"]["by_status"] == {"ok": 1}
-    assert payload["builds"]["hour"]["by_key_scope"] == {"shared": 1}
+    assert payload["builds"]["hour"]["by_key_scope"] == {"library": 1}
 
 
-def test_a_session_reference_qualifies_and_is_counted(status_client):
-    """Building on a name the session declared keys private, for the right reason."""
+def test_an_own_reference_is_counted(status_client):
+    """Building on a name the session declared is counted under ``own``."""
     session = {"X-Aggregate-Session": "2026-08-18T10:00:00.000Z-abcdefab-1234-5678-9abc-def012345678"}
     status_client.post("/v1/objects", headers=session,
                        json={"decl": "agg StatusInner 10 claims sev lognorm 100 cv 2 poisson",
@@ -261,9 +261,12 @@ def test_a_session_reference_qualifies_and_is_counted(status_client):
     status_client.post("/v1/objects", headers=session,
                        json={"decl": "port StatusBook agg.StatusInner", "log2": 12})
     payload = status_client.get("/v1/status").json()
-    assert payload["key_scope"]["session"] >= 1
-    assert payload["key_scope"]["reasons"]["session_reference"] >= 1
-    assert payload["key_scope"]["reasons"]["preview_unavailable"] == 0
+    assert payload["key_scope"]["library"] == 1
+    assert payload["key_scope"]["own"] == 1
+    assert payload["key_scope"]["own_rate"] == 0.5
+    assert set(payload["key_scope"]) == {
+        "library", "own", "own_rate", "preview_calls", "preview_mean_ms",
+        "preview_p95_ms", "preview_sample_size"}
 
 
 def test_a_session_id_never_appears_in_full(status_client):
@@ -298,7 +301,7 @@ def test_nothing_under_status_mutates_anything(status_client):
     for panel in ("cache", "key_scope", "chart_cache"):
         moved = {k: (before[panel][k], after[panel][k])
                  for k in before[panel]
-                 if k not in ("rows", "recent_unpreviewable")
+                 if k != "rows"
                  and before[panel][k] != after[panel][k]}
         assert not moved, f"{panel} moved: {moved}"
     assert before["sessions"]["taken"] == after["sessions"]["taken"]
@@ -308,36 +311,32 @@ def test_nothing_under_status_mutates_anything(status_client):
 # ----------------------------------------------------------------------
 # The retention invariant, section 4.8 of the plan
 # ----------------------------------------------------------------------
-def test_the_program_buffer_is_capped():
-    """500 in, 50 retained. The cap is ``deque(maxlen=...)`` and is structural."""
+def test_the_preview_samples_are_capped():
+    """5,000 in, 512 retained. The cap is ``deque(maxlen=...)`` and is structural."""
     status_state.reset()
-    for i in range(500):
-        status_state.record_unpreviewable_build(f"agg P{i} 1 claim dsev[1] fixed",
-                                                "anonymous", "agg", 1)
+    for i in range(5000):
+        status_state.record_preview_ms(float(i))
     state = status_state.key_scope_state()
-    assert state["unpreviewable_builds"] == 500
-    assert len(state["recent_unpreviewable"]) == status_state.PROGRAM_BUFFER
-    # Newest first, so the last one pushed reads first.
-    assert "agg P499 " in state["recent_unpreviewable"][0]["program"]
+    assert state["preview_calls"] == 5000
+    assert state["preview_sample_size"] == status_state.PREVIEW_SAMPLES
 
 
-def test_a_long_program_is_stored_truncated_and_marked():
-    """50,000 characters in, 2,000 stored, and the flag says so."""
-    status_state.reset()
-    status_state.record_unpreviewable_build("x" * 50_000, "anonymous", "agg", 1)
-    kept = status_state.key_scope_state()["recent_unpreviewable"][0]
-    assert len(kept["program"]) == status_state.PROGRAM_CHARS
-    assert kept["truncated"] is True
+def test_a_long_program_is_shown_truncated_and_marked():
+    """50,000 characters in, 2,000 shown, and the flag says so."""
+    text, truncated = status_state.truncate("x" * 50_000, status_state.PROGRAM_CHARS)
+    assert len(text) == status_state.PROGRAM_CHARS
+    assert truncated is True
 
 
 def test_reset_clears_every_counter_and_buffer():
     """Restarting the process clears the lot, and ``reset`` is the test's stand-in."""
-    status_state.record_key_scope("session", "preview_unavailable")
+    status_state.record_key_scope("own")
+    status_state.record_preview_ms(3.0)
     status_state.record_refusal("203.0.113.7", "/v1/status")
     status_state.reset()
     state = status_state.key_scope_state()
-    assert state["shared"] == 0 and state["session"] == 0
-    assert state["recent_unpreviewable"] == []
+    assert state["library"] == 0 and state["own"] == 0
+    assert state["preview_sample_size"] == 0
     assert status_state.gate_state() == {"refusals": 0, "recent": []}
 
 

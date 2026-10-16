@@ -1,9 +1,10 @@
 """In-memory LRU cache for built ``Aggregate`` / ``Portfolio`` objects.
 
-The api's "Option X" cache design: a single, bounded, LRU dict
-keyed by *content hash* of the DecL program. Same DecL +
-``log2`` + ``bs`` → same id → same cached object. Building is
-idempotent for the cache lifetime of one server process.
+The api's "Option X" cache design: a single, bounded, LRU dict keyed by a hash
+of what a program **means**: its parsed statements, the stored spec of every
+entry it leans on, the grid it asked for, and the versions and library file it
+was resolved against. Same meaning, same id, same cached object, whichever
+session asked. See :func:`object_id`.
 
 Why bother
 ----------
@@ -12,7 +13,7 @@ Building a moderately sized portfolio takes seconds; FFTs over
 2**18 points across many lines aren't free. The cache lets the
 SPA's "per-button-fetch UX" (info, summary, stats_df, plot,
 kappa, pricing) all run as O(1) lookups against the prebuilt
-object, with the heavy lift paid only once per (decl, log2, bs).
+object, with the heavy lift paid only once per program and grid.
 
 Why not lru_cache
 -----------------
@@ -41,94 +42,86 @@ so weakref would have no live referents and evict immediately.
 from __future__ import annotations
 
 import hashlib
-import re
+import json
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-
-# DecL comments run from ``#`` to end-of-line. We strip them before
-# hashing so trivially commented-out / annotated variants of the same
-# program produce the same object id.
-_COMMENT = re.compile(r"#[^\n]*")
+from .serializers import _spec_value, spec_to_payload
 
 
-def canonicalize_decl(decl: str) -> str:
-    """Strip comments and trailing whitespace for content hashing.
-
-    Note that interior whitespace is *preserved* -- two programs
-    that differ only in indentation hash differently. A stronger
-    normalization (whitespace-insensitive via Lark tree round-trip)
-    is flagged in the plan as a future enhancement.
+def object_id(statements: list, references: list, log2: int, bs: float,
+              environment: dict) -> str:
+    """The cache id for a parsed program: a hash of what it means.
 
     Parameters
     ----------
-    decl : str
-        Raw DecL source.
+    statements : list of tuple
+        ``(kind, name, program, spec)`` per previewed statement, in program
+        order. ``program`` is the statement's preprocessed text and ``spec`` the
+        parser's output, which already holds a copy of every dotted reference.
+    references : list of tuple
+        ``(kind, name, program, spec)`` per entry the preview resolved, as the
+        caller's own recipe base stores it. This is what covers a
+        ``sev agg.NAME`` chain, which the parse records symbolically and the
+        build resolves afresh.
+    log2, bs : int, float
+        The requested grid, 0 meaning "the library picks".
+    environment : dict
+        The ``aggregate`` version, each plugin's version and a digest of the
+        library file, so an id saved outside the process cannot silently change
+        meaning across an upgrade or a library edit.
 
     Returns
     -------
     str
-        Canonicalized form suitable for hashing.
-    """
-    no_comments = _COMMENT.sub("", decl)
-    return no_comments.rstrip()
-
-
-def object_id(decl: str, log2: int, bs: float) -> str:
-    """Compute the cache id for a (decl, log2, bs) triple.
-
-    16-hex-char prefix of SHA-256. Collision probability is
-    negligible at our scale (target ≤ 10k builds per session).
-
-    Parameters
-    ----------
-    decl : str
-        Already-canonicalized DecL.
-    log2, bs : int, float
-        Build knobs that affect the resulting object.
-    """
-    # ``bs!r`` because bs is a float; repr() pins exact bit pattern
-    # so e.g. 0.1 and 0.1000000000001 hash differently (they would
-    # build differently too).
-    payload = f"{decl}|{log2}|{bs!r}".encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()[:16]
-
-
-def qualified_object_id(session_id: str, decl: str, log2: int, bs: float) -> str:
-    """The cache id for a program private to one session.
-
-    Same hash, one more field. A program that resolved a name its own session
-    declared does not mean the same thing to anyone else, so it cannot share a
-    slot with the identical text typed by a different session: Alice's
-    ``port Book agg.Line`` and Bob's are the same eight words over different
-    inners, and one of them would be served the other's answer.
-
-    Parameters
-    ----------
-    session_id : str
-        The caller's session, from ``aggregate_api.sessions``.
-    decl : str
-        Already-canonicalized DecL.
-    log2, bs : int, float
-        Build knobs, as in :func:`object_id`.
-
-    Returns
-    -------
-    str
+        The first 16 hex characters of SHA-256 over the canonical JSON of the
+        five inputs.
 
     Notes
     -----
-    Which of the two builders a request uses is decided by what its parse
-    resolved, not by anything in the text: see ``_cache_key`` in
-    ``routes/objects.py``. A self-contained program, or one leaning only on
-    library entries, keeps the shared key and is built once for everybody, which
-    is the case a room on one hero example is made of.
+    **Canonical JSON** is :func:`aggregate_api.serializers.spec_to_payload` per
+    spec, then ``json.dumps(sort_keys=True, separators=(",", ":"))``. Floats
+    are written by ``repr``, so 0.1 and 0.1000000000001 key apart, as they
+    build apart. Every spec in ``library.agg`` and ``decl-testers.agg``
+    serializes to the same bytes in two separate processes.
+
+    **Why the statement text is hashed as well as its spec.** A few spec values
+    are library objects that ``spec_to_payload`` can only write as their
+    ``str``, and that string rounds: a copula prints ``clayton(tau=0.312346)``
+    for ``0.3123456`` and ``0.3123459`` alike, and a distortion inside a mixture
+    prints ``PH(0.667)``. The spec alone would then file two programs that build
+    differently under one id. The text cannot round, so with it the key can only
+    split ids that the spec would merge, never merge ids it would split. The
+    remaining gap is three levels deep: a referenced entry whose text is
+    unchanged and whose stored spec changed only in such a rounded value.
+
+    **No session id.** Identical meaning shares one object across sessions,
+    which is correct, and the preview already ran against the caller's fork,
+    so the caller's own declarations are in ``statements`` and ``references``.
+
+    Sixty-four bits rather than the document itself, because the document can
+    run to kilobytes and the id travels in URLs, cache keys, audit rows and
+    spreadsheet cells.
     """
-    payload = f"{session_id}|{decl}|{log2}|{bs!r}".encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()[:16]
+    def rows(items):
+        # An ``expr`` statement's spec is the number itself, not a dict.
+        return [[kind, name, program,
+                 spec_to_payload(spec) if isinstance(spec, dict)
+                 else _spec_value(spec)]
+                for kind, name, program, spec in items]
+
+    document = {
+        "statements": rows(statements),
+        "references": rows(references),
+        "log2": log2,
+        "bs": float(bs),
+        "environment": environment,
+    }
+    payload = json.dumps(document, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass
@@ -185,7 +178,7 @@ class CacheEntry:
 
 
 class ObjectCache:
-    """Bounded LRU keyed by content hash.
+    """Bounded LRU keyed by :func:`object_id`.
 
     Methods are coarsely thread-safe via a single lock. Reads
     move the entry to MRU; writes evict the LRU when full. The
