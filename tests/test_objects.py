@@ -2069,15 +2069,15 @@ def test_decl_format_leaves_an_unreadable_program_exactly_as_it_arrived(client):
     assert out == decl
 
 
-def test_decl_format_declines_a_program_that_names_its_own_first_statement(
+def test_decl_format_renders_a_program_that_names_its_own_first_statement(
         client):
-    """Two statements, the second naming the first, come back untouched.
+    """Two statements, the second naming the first, both render.
 
-    The writer renders statement by statement against the default underwriter,
-    which has never read statement one, so it canonicalizes that and drops the
-    second to the fallback. The program builds, so this is a working program the
-    button cannot help with; what it must not do is flatten it. Tracked upstream
-    in ``dev/TODO.md``.
+    Through 1.14 the writer rendered each statement against the default
+    underwriter, which had never read statement one, so the route declined the
+    program and echoed it. Since 1.15.0 the route previews in the caller's fork,
+    which resolves a program's own earlier declarations, and renders each
+    statement's spec: the second arrives with the severity inlined.
     """
     decl = ("sev FormatProbeSev lognorm 50 cv 1.5\n"
             "\n"
@@ -2086,7 +2086,11 @@ def test_decl_format_declines_a_program_that_names_its_own_first_statement(
             "  sev.FormatProbeSev\n"
             "  poisson")
     out = client.post("/v1/decl/format", json={"decl": decl}).json()["decl"]
-    assert out == decl
+    first, second = out.split("\n\n")
+    assert first.startswith("sev FormatProbeSev")
+    assert second.startswith("agg FormatProbeAgg")
+    assert "sev.FormatProbeSev" not in second
+    assert "lognorm 50 cv 1.5" in second
 
 
 

@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.15.0
+
+[Session-Parse] **Reformat inlines your own declarations, not only the library's.** Plan `dev/done/plan-reformat-explodes-session-references.md`.
+
+- After you build `agg A`, Reformat on `port P agg.A agg.Capstone.Gross` writes both units out in full; `sev.Cat` after your own `sev Cat` arrives as Cat's clauses. Through 1.14 the program came back untouched.
+- A program whose second statement names the first (`sev MySev ...` then `agg A ... sev.MySev ...`) now renders whole.
+- `sev agg.X` stays a reference, as it must. `note{}`, `tags{}` and `hints{}` survive as before.
+- Any failure still echoes the input exactly. `MixtureDistortion`, which used to come back as a collapsed copy, now echoes too.
+
 ## 1.14.0
 
 [Server-Parsed-Key] **An object id names what a program means, so a redefined name builds a fresh object.** Plan `dev/done/plan-cache-key-from-parsed-program.md`.

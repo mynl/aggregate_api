@@ -6,6 +6,12 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Session-Parse]** DONE (`1.15.0`), plan
+  `dev/done/plan-reformat-explodes-session-references.md`. Reformat previews
+  the program in the caller's fork and renders each statement's spec, so own
+  declarations inline like library entries and a second statement may name the
+  first. No `web/` change.
+
 - **[Server-Parsed-Key]** DONE (`1.14.0`), plan
   `dev/done/plan-cache-key-from-parsed-program.md`. The object id hashes the
   parsed program, its references' stored specs, the grid, versions and the
@@ -1378,7 +1384,9 @@ one version bump each.
       did to the API's Reformat button, guarded app side at a137 by asking the
       parser first (`routes/decl.py::_every_statement_parses`). Ask: keep the
       source slice and return that, or report which statements fell back so a
-      caller can decline the answer. The guard retires the moment either lands.
+      caller can decline the answer. The API no longer needs it: since 1.15.0
+      Reformat renders previewed specs and never reaches the text fallback, and
+      the guard is gone. The ask stands for `pprogram` and other text callers.
 - [ ] **`format_program` drops `note{}` and `tags{}`, on every program.** Not a
       fallback case and not confined to any kind: the writer renders no trailer
       at all, so `agg A 5 claims sev lognorm 10 cv 1.2 poisson note{keep me}
@@ -1393,15 +1401,14 @@ one version bump each.
       dropped parses perfectly well. No workaround app side: writing back what
       the library serves is the purist ruling, and the app holds no note of its
       own to put back.
-- [ ] **`format_program` cannot read a program whose second statement names
+- [x] **`format_program` cannot read a program whose second statement names
       something the first defines.** It renders statement by statement against
       `aggregate.build` alone, so `sev MySev lognorm 50 cv 1.5` followed by
       `agg A 100 claims sev.MySev poisson` canonicalizes the first and drops the
-      second to the fallback above, though the program builds. Ask: resolve
-      against the statements already read in the same call, the way `build` does
-      when it reads a file. Until then the API declines to reformat such a
-      program at all, which is honest but is a working program the button
-      cannot help with.
+      second to the fallback above, though the program builds. Resolved app
+      side in 1.15.0 ([Session-Parse]): the API previews in the caller's fork,
+      which resolves a program's own earlier statements, and hands the writer
+      specs. The text route keeps the limitation for other callers.
 
 - [ ] **The portfolio's density ordinate should declare its full extent, as the
       aggregate's now does.** `aggregate 1.0.0a314` (L3 of

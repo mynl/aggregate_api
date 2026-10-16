@@ -16,7 +16,8 @@ Routes
   statement. Added at a192 for an external client that needs the
   structure of a program and must not read it back out of text.
 * ``POST /v1/decl/format``: accepts ``decl`` and returns the program
-  re-rendered canonically, echoing the input on any failure.
+  re-rendered canonically in the caller's session, every dotted reference
+  inlined, echoing the input on any failure.
 * ``GET  /v1/decl/grammar``: serves ``decl.lark`` verbatim as
   ``text/plain``. Lets a future docs page embed the live grammar without a
   build-time include step.
@@ -27,8 +28,9 @@ Routes
 from __future__ import annotations
 
 from importlib.resources import files
+from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
 import aggregate
@@ -37,6 +39,7 @@ from aggregate.parser_errors import format_error
 from .. import decl_help, models
 from ..completion import complete, lex
 from ..serializers import spec_to_payload
+from .objects import _get_session_uw
 
 
 router = APIRouter()
@@ -97,8 +100,9 @@ def _parse_statements(decl: str) -> list[tuple[str, str, dict]]:
     statement.
 
     Each statement is parsed against ``aggregate.build`` alone, so a name a
-    statement declares is not in scope for the statements after it. See
-    :func:`_every_statement_parses`, which is where that costs something.
+    statement declares is not in scope for the statements after it. Reformat
+    stopped sharing that limit at 1.15.0, by previewing in the caller's fork:
+    see :func:`_format_decl`.
     """
     try:
         from aggregate import build
@@ -115,77 +119,45 @@ def _parse_statements(decl: str) -> list[tuple[str, str, dict]]:
     return parsed
 
 
-def _every_statement_parses(decl: str) -> bool:
-    """Whether every statement in ``decl`` parses, which is what Reformat needs.
+def _format_decl(decl: str, uw) -> str:
+    """Canonicalize a DecL program in the caller's fork, echoing it on any failure.
 
     Parameters
     ----------
     decl : str
-        A DecL program, one statement or several.
+        The program as the editor holds it.
+    uw : aggregate.underwriter.Underwriter
+        The caller's own fork, from ``_get_session_uw``.
 
     Returns
     -------
-    bool
-        True when the writer will canonicalize the whole program, False when
-        at least one statement will come back as source text instead.
+    str
+        Every statement rendered by ``format_program`` from its previewed spec,
+        joined by a blank line, or ``decl`` byte for byte when anything fails.
 
     Notes
     -----
-    **This exists because ``format_program``'s fallback is not the no-op it
-    reads as, and a137 is where that cost the author a program.** The writer
-    renders statement by statement through ``_render_statement``, which catches
-    every exception and returns the statement instead of a render node. The
-    statement it returns is not the source, though: it is the source after
-    ``UnderwritingLexer.preprocess``, which is what splits the program at all,
-    and preprocessing folds every newline and every run of indentation into one
-    space. So a program the writer cannot read comes back **collapsed onto one
-    line**, the SPA sees text that differs from what it sent, writes it into the
-    editor, and the reader's carefully spread program is gone. Pressing the
-    button that formats a program is how you lose its formatting.
+    **Rendered from the preview, not from the text.** ``uw.preview`` parses the
+    program in a private fork of the caller's base and registers nothing, so
+    every dotted reference resolves the way a build would resolve it: library
+    entries, the caller's own declarations (``port P agg.A`` after an own
+    ``agg A``), and names an earlier statement of the same program declares.
+    Each statement's spec, which already holds those references inlined, goes
+    to ``format_program`` as a ``(kind, name, spec)`` tuple. A ``sev agg.X``
+    stays a reference, because the spec keeps it symbolic: it stands for the
+    referent's computed output and has no inline spelling. Through 1.14 the
+    route rendered the text against ``aggregate.build`` alone, so an own
+    reference, or a second statement naming the first, came back untouched.
 
-    Three ways in, all reachable from an ordinary session: a statement using a
-    spelling a grammar change retired, a statement naming something the default
-    underwriter cannot resolve, and, the one that surprises, a second statement
-    referring to a name the **first** statement defines. The writer parses each
-    statement against ``aggregate.build`` alone, so ``sev MySev ...`` followed by
-    ``agg A ... sev.MySev ...`` renders the first and collapses the second.
-
-    Asking the same parser the same question first is what makes the route's
-    standing promise ("a malformed program reformats to itself") true. It parses
-    the program twice on the way to a canonical answer, which is the right
-    trade for a button a reader presses by hand: correctness for a few
-    milliseconds nobody can perceive.
-
-    ``UnderwritingLexer.preprocess`` and ``Underwriter.parser`` are both public
-    names, and they are the two the writer itself uses, so this predicts the
-    fallback rather than guessing at it. The remaining gap is a statement that
-    parses and then fails while rendering; that is a library defect when it
-    happens rather than a program the reader can fix, and it is raised upstream
-    rather than guarded here.
-    """
-    try:
-        _parse_statements(decl)
-    except _StatementParseError:
-        return False
-    return True
-
-
-def _format_decl(decl: str) -> str:
-    """Canonicalize a DecL program, echoing the original on any failure.
-
-    ``format_program`` lives in ``aggregate.decl_writer`` and parses and builds
-    the program internally, so it can raise on malformed input. That must never
-    500 the format helper, so a failure falls back to the input and a malformed
-    program reformats to itself.
-
-    Notes
-    -----
-    **The gate in front of it, which is what a137 added.** The echo has to be
-    the text that came in, and until a137 it was not: the writer answers an
-    unreadable statement with its own preprocessed copy, which is the statement
-    with every line break folded into a space, and the SPA wrote that into the
-    editor. See :func:`_every_statement_parses` for the three ways a program
-    reaches that path and why the answer is to ask the parser first.
+    **The promise: a failure echoes the input byte for byte.** a137 learned why
+    that has to be enforced here. The writer's text route answers a statement
+    it cannot read with its *preprocessed* copy, every line break folded into a
+    space, and the SPA writes the answer over the editor, so pressing Reformat
+    was how a reader lost their layout. a137 guarded that by parsing first; the
+    spec route never reaches the writer's fallback at all, and any exception,
+    from the preview or from rendering, returns ``decl``. A bare name (the
+    preview's ``'name'`` route) is echoed too, as it always was: it is a lookup,
+    not a program to lay out.
 
     **``trailer=True``, which is the whole of what a126 changed here.** The
     writer's signature is
@@ -208,13 +180,17 @@ def _format_decl(decl: str) -> str:
     ``[Unparser-Reference-Gaps]``; it is why the Examples menu serves
     ``Recipe.as_read`` instead of coming through here.
     """
-    if not _every_statement_parses(decl):
-        return decl
     try:
         from aggregate.decl_writer import format_program
-        out = format_program(decl, fmt="text", trailer=True)
+
+        preview = uw.preview(decl)
+        if preview.route != "program":
+            return decl
+        out = "\n\n".join(
+            format_program((s.kind, s.name, s.spec), fmt="text", trailer=True)
+            for s in preview.statements)
         return out or decl
-    except Exception:  # noqa: BLE001 (formatting is best-effort)
+    except Exception:  # noqa: BLE001 (formatting is best-effort, see Notes)
         return decl
 
 
@@ -239,11 +215,16 @@ def decl_lex(req: models.DeclLexRequest) -> dict:
 
 
 @router.post("/decl/format", response_model=models.DeclFormatResponse)
-def decl_format(req: models.DeclFormatRequest) -> dict:
-    """Return ``req.decl`` re-rendered in canonical form.
+def decl_format(req: models.DeclFormatRequest,
+                uw: Any = Depends(_get_session_uw)) -> dict:
+    """Return ``req.decl`` re-rendered in canonical form, in the caller's fork.
 
     Notes
     -----
+    Takes the session the way the build route does (``X-Aggregate-Session``,
+    which ``web/src/api.js`` sends on every request), so the caller's own
+    declarations are inlined like library entries. See :func:`_format_decl`.
+
     Two callers, and neither is the one this docstring used to name. It said
     the SPA standardizes a program loaded from the Examples library, which
     stopped being true at a122: a library entry now arrives as its own file's
@@ -254,7 +235,7 @@ def decl_format(req: models.DeclFormatRequest) -> dict:
 
     Best-effort: malformed input echoes back unchanged.
     """
-    return {"decl": _format_decl(req.decl)}
+    return {"decl": _format_decl(req.decl, uw)}
 
 
 @router.post("/decl/parse", response_model=models.DeclParseResponse)
@@ -284,13 +265,13 @@ def decl_parse(req: models.DeclParseRequest) -> dict:
     over several indented lines is one statement and two programs separated by
     an empty line are two.
 
-    **Each statement resolves against the default underwriter**, as
-    :func:`_every_statement_parses` and ``format_program`` both do, so a
+    **Each statement resolves against the default underwriter**, so a
     ``sev.X`` or ``agg.X`` reference into the recipe base resolves and a
     builtin reference resolves inline. The consequence worth stating: a program
     whose second statement refers to a name its **first** statement declares
     does not parse, because nothing here feeds the first statement's result
-    back into scope for the second.
+    back into scope for the second. Reformat no longer shares this: since
+    1.15.0 it previews in the caller's fork (see :func:`_format_decl`).
 
     **A parse failure is the structured error path**, not a 200 with an empty
     list: HTTP 422 whose ``detail`` is the ``aggregate.parser_errors``

@@ -100,3 +100,122 @@ def test_complete_empty_for_unparseable_prefix(client):
     assert r.status_code == 200
     # Either empty or non-error; the contract is "no crash".
     assert isinstance(r.json()["completions"], list)
+
+
+# ----------------------------------------------------------------------
+# Reformat in the caller's fork (1.15.0)
+# ----------------------------------------------------------------------
+# The route previews the program in the caller's session and renders each
+# statement's spec, so the caller's own declarations inline like library
+# entries. Each test uses its own session id, because a fork is per session.
+
+SEV = "X-Aggregate-Session"
+
+
+def _declare(client, session, decl):
+    """Build ``decl`` as ``session``, which registers it in that fork."""
+    r = client.post("/v1/objects", json={"decl": decl, "log2": 10},
+                    headers={SEV: session})
+    assert r.status_code == 200, r.json()
+    return r.json()
+
+
+def _reformat(client, session, decl):
+    """POST Reformat as ``session`` and return the text it answers."""
+    r = client.post("/v1/decl/format", json={"decl": decl}, headers={SEV: session})
+    assert r.status_code == 200, r.text
+    return r.json()["decl"]
+
+
+def test_reformat_inlines_an_own_declaration_and_a_library_entry(client):
+    """``port P agg.A agg.Capstone.Gross`` after an own ``agg A``: both inline."""
+    session = "session-reformat-own"
+    _declare(client, session, "agg A 2 claims sev lognorm 10 cv 1 poisson")
+    out = _reformat(client, session, "port P agg.A agg.Capstone.Gross")
+    assert out != "port P agg.A agg.Capstone.Gross"
+    assert "agg.A" not in out and "agg.Capstone.Gross" not in out
+    assert "agg A" in out and "agg Capstone.Gross" in out
+
+
+def test_reformat_inlines_an_own_severity(client):
+    """``sev.Cat`` after an own ``sev Cat`` arrives as Cat's own clauses."""
+    session = "session-reformat-sev"
+    _declare(client, session, "sev Cat lognorm 17 cv 1.3")
+    out = _reformat(client, session, "agg R 2 claims sev sev.Cat poisson")
+    assert "sev.Cat" not in out
+    assert "lognorm 17 cv 1.3" in out
+
+
+def test_reformat_leaves_a_severity_reference_to_an_aggregate(client):
+    """``sev agg.X`` stands for X's computed output and has no inline form."""
+    session = "session-reformat-sevref"
+    _declare(client, session,
+             "agg A 2 claims sev lognorm 10 cv 1 poisson hints{log2=10; bs=1}")
+    out = _reformat(client, session, "agg Q 2 claims sev agg.A poisson")
+    assert "sev agg.A" in out
+
+
+def test_reformat_still_echoes_an_unknown_reference(client):
+    """A name this session never declared is a failure, and failures echo."""
+    decl = "port P\n  agg.NeverDeclaredHere\n  agg.Capstone.Gross"
+    assert _reformat(client, "session-reformat-unknown", decl) == decl
+
+
+def test_reformat_renders_a_program_whose_second_statement_names_the_first(client):
+    """The two statements render whole, and neither collapses."""
+    decl = ("sev MySev lognorm 10 cv 1\n"
+            "\n"
+            "agg A 2 claims sev sev.MySev poisson")
+    out = _reformat(client, "session-reformat-two", decl)
+    first, second = out.split("\n\n")
+    assert first.startswith("sev MySev")
+    assert second.startswith("agg A\n")
+    assert "sev.MySev" not in second and "lognorm 10 cv 1" in second
+
+
+def test_reformat_keeps_the_hints_sharpen_wrote(client):
+    """Sharpen pins the grid in ``hints{}``; a Reformat straight after keeps it."""
+    session = "session-reformat-sharpen"
+    built = _declare(client, session,
+                     "agg Sharp 10 claims sev lognorm 100 cv 1.5 poisson")
+    r = client.post(f"/v1/objects/{built['id']}/sharpen", json={},
+                    headers={SEV: session})
+    assert r.status_code == 200, r.text
+    program = r.json()["program"]
+    assert "hints{" in program
+    out = _reformat(client, session, program)
+    hints = program[program.index("hints{"):].split("}")[0]
+    for clause in hints.removeprefix("hints{").split(";"):
+        assert clause.strip() in out
+
+
+def test_reformat_echoes_a_bare_name(client):
+    """A bare name is a lookup, not a program to lay out, as it always was."""
+    assert _reformat(client, "session-reformat-bare", "Capstone.Gross") == "Capstone.Gross"
+
+
+def test_reformat_renders_library_programs_as_the_text_route_did():
+    """Every ``library.agg`` entry renders byte for byte as it did through 1.14.
+
+    Through 1.14 the route handed the text to ``format_program``; it now hands
+    each previewed spec. For a library-only program the two must agree. The two
+    combinator distortions are the exception, in the promised direction: the
+    writer cannot render them from a spec, so the route echoes the input, where
+    the text route answered the writer's collapsed copy of it.
+    """
+    from aggregate import build
+    from aggregate.decl_writer import format_program
+
+    from aggregate_api.routes.decl import _format_decl
+
+    build.load()
+    echoed = set()
+    for kind, name in build.recipes.reset_index()[["kind", "name"]].itertuples(
+            index=False):
+        program = build.recipe(name, kind).program
+        new = _format_decl(program, build)
+        if new == program:
+            echoed.add(name)
+            continue
+        assert new == format_program(program, fmt="text", trailer=True), name
+    assert echoed <= {"MinimumDistortion", "MixtureDistortion"}, echoed

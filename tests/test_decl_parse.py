@@ -232,12 +232,12 @@ def test_parsing_creates_no_object(client):
 
 
 def test_reformat_still_echoes_a_malformed_program_unchanged(client):
-    """The a137 promise, which the shared helper must not have disturbed.
+    """The a137 promise: an unreadable program comes back as it was sent.
 
-    ``_every_statement_parses`` is now expressed in terms of the same helper
-    the parse route uses. Its job is unchanged: a program the writer cannot
-    read comes back as the text that was sent, not as its preprocessed copy
-    with every line break folded into a space.
+    Not as its preprocessed copy with every line break folded into a space.
+    Through 1.14 the vehicle here was a second statement naming the first,
+    which Reformat could not read then and renders since 1.15.0, so the
+    program now carries a real typo in its second statement.
     """
     spread = (
         "sev P.MySev lognorm 50 cv 1.5\n"
@@ -245,7 +245,7 @@ def test_reformat_still_echoes_a_malformed_program_unchanged(client):
         "agg P.Uses 100 claims\n"
         "    1000 xs 0\n"
         "    sev.P.MySev\n"
-        "    poisson"
+        "    poison"
     )
     r = client.post("/v1/decl/format", json={"decl": spread})
     assert r.status_code == 200, r.text
