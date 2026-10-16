@@ -1,0 +1,268 @@
+{
+ "blocks": [
+  {
+   "body": [
+    {
+     "cells": [
+      "Freq",
+      {
+       "raw": 250.0,
+       "text": "250"
+      },
+      {
+       "raw": 15.811388300841896,
+       "text": "15.81139"
+      },
+      {
+       "raw": 0.06324555320336758,
+       "text": "6.3%"
+      },
+      {
+       "raw": 0.06324555320336758,
+       "text": "0.0632"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 0,
+     "cells": [
+      "Sev",
+      {
+       "raw": 98.13651627393187,
+       "text": "98.13652"
+      },
+      {
+       "raw": 128.9140574657019,
+       "text": "128.9141"
+      },
+      {
+       "raw": 1.3136196633051411,
+       "text": "131.4%"
+      },
+      {
+       "raw": 3.5092094161719904,
+       "text": "3.51"
+      },
+      {
+       "raw": 4.0,
+       "text": "4"
+      },
+      {
+       "raw": 55.0,
+       "text": "55"
+      },
+      {
+       "raw": 693.0,
+       "text": "693"
+      }
+     ]
+    },
+    {
+     "break_depth": 0,
+     "cells": [
+      "Agg",
+      {
+       "raw": 24534.12906848255,
+       "text": "24,534.13"
+      },
+      {
+       "raw": 2561.7186632559,
+       "text": "2,561.719"
+      },
+      {
+       "raw": 0.10441449362662637,
+       "text": "10.4%"
+      },
+      {
+       "raw": 0.19861974642078603,
+       "text": "0.199"
+      },
+      {
+       "raw": 18954.0,
+       "text": "18,954"
+      },
+      {
+       "raw": 24449.0,
+       "text": "24,449"
+      },
+      {
+       "raw": 30862.0,
+       "text": "30,862"
+      }
+     ]
+    }
+   ],
+   "caption": "Headline moments and key percentiles by component: count risk (Freq), single claim severity (Sev) and total loss (Agg), one block per unit on a portfolio. Percentiles are exact grid values. Frequency percentiles are blank by design, because frequency enters through its PGF and no count distribution is ever materialized.",
+   "columns": [
+    {
+     "align": "l",
+     "dtype": "string",
+     "key": "c0",
+     "level": 0,
+     "name": [
+      "X"
+     ],
+     "role": "stub",
+     "wrap": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c1",
+     "name": [
+      "Mean"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c2",
+     "name": [
+      "SD"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 1,
+      "kind": "pct"
+     },
+     "key": "c3",
+     "name": [
+      "CV"
+     ],
+     "raw": true,
+     "tag": "ratio"
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 3,
+      "kind": "gen"
+     },
+     "key": "c4",
+     "name": [
+      "Skew"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c5",
+     "name": [
+      "P01"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c6",
+     "name": [
+      "Median"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c7",
+     "name": [
+      "P99"
+     ],
+     "raw": true
+    }
+   ],
+   "generator": "greater_tables 6.0.0",
+   "hash": "a8e2daa7700f",
+   "head": [
+    [
+     {
+      "text": "X"
+     },
+     {
+      "text": "Mean"
+     },
+     {
+      "text": "SD"
+     },
+     {
+      "text": "CV"
+     },
+     {
+      "text": "Skew"
+     },
+     {
+      "text": "P01"
+     },
+     {
+      "text": "Median"
+     },
+     {
+      "text": "P99"
+     }
+    ]
+   ],
+   "ir_version": 1,
+   "n_head_levels": 1,
+   "n_stub_levels": 1
+  }
+ ],
+ "hash": "6091e8fb3726",
+ "meta": {
+  "blocks": [
+   "summary_df"
+  ],
+  "captions": {
+   "summary_df": "Headline moments and key percentiles by component: count risk (Freq), single claim severity (Sev) and total loss (Agg), one block per unit on a portfolio. Percentiles are exact grid values. Frequency percentiles are blank by design, because frequency enters through its PGF and no count distribution is ever materialized."
+  },
+  "kind": "Aggregate",
+  "label": "BasicBook",
+  "object": "BasicBook"
+ },
+ "name": "summary",
+ "perspective": "raw",
+ "title": "Summary: BasicBook"
+}

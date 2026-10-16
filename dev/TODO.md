@@ -6,6 +6,13 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Excel-Core]** DONE (`1.16.0`), plan `dev/done/plan-excel-core.md`. The
+  `excel/` add-in: `AGG.BUILD`, `AGG.EXHIBITS`, `AGG.EXHIBIT`, `AGG.Q` and
+  `AGG.VERSION` over a local server, with the recipe table, session id, memo
+  and request limit. Still owed: the plan's acceptance list in desktop Excel
+  (`npm start`), which nothing here could run. Later: `[excel-pane]`,
+  `[excel-types]`, `AGG.FRAME`.
+
 - **[Session-Parse]** DONE (`1.15.0`), plan
   `dev/done/plan-reformat-explodes-session-references.md`. Reformat previews
   the program in the caller's fork and renders each statement's spec, so own

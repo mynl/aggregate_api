@@ -47,6 +47,10 @@ hacks/
 web/node_modules/
 web/dist/
 
+# Excel add-in build artifacts
+excel/node_modules/
+excel/dist/
+
 # The built SPA lands in src/aggregate_api/static/ (output of
 # `npm run build`); not committed. Only the icons + webmanifest are.
 src/aggregate_api/static/assets/

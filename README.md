@@ -32,6 +32,10 @@ same-origin.
   `csv-grid`). A DecL editor with syntax highlighting, autocomplete and history,
   a landing gallery of showcase examples, tabbed risk output, interactive and
   native plots, and a rich parse-error pane.
+- **Excel add-in** (`excel/`): custom functions that put the API in worksheet
+  cells. `=AGG.BUILD(decl)` returns a handle; `=AGG.EXHIBIT(handle, "summary")`
+  and `=AGG.Q(handle, p)` spill values from it. See
+  [excel/README.md](excel/README.md).
 
 ### Tables: one payload, two renderers
 

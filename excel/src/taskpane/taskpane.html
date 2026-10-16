@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Aggregate</title>
+
+    <!-- Office JavaScript API. The shared runtime loads this page, so the
+         custom functions run beside it and share its Office.js. -->
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+
+    <link href="taskpane.css" rel="stylesheet" type="text/css" />
+</head>
+
+<body>
+    <header>
+        <img width="48" height="48" src="../../assets/icon-128.png" alt="" />
+        <h1>Aggregate</h1>
+    </header>
+    <main>
+        <p>Build aggregate distributions from DecL and read them in cells.</p>
+        <dl>
+            <dt>=AGG.BUILD(decl, [log2], [bs])</dt>
+            <dd>A handle such as <code>agg.A#4f40714271198d8f</code>.</dd>
+            <dt>=AGG.EXHIBITS(handle)</dt>
+            <dd>The exhibits it can show.</dd>
+            <dt>=AGG.EXHIBIT(handle, name, [perspective], [block], [headers])</dt>
+            <dd>One exhibit, as values.</dd>
+            <dt>=AGG.Q(handle, p)</dt>
+            <dd>Quantiles; <code>p</code> a number or a range.</dd>
+            <dt>=AGG.VERSION()</dt>
+            <dd>The server's version and the library's.</dd>
+        </dl>
+        <p>References resolve to library entries only. Combine your own programs
+            through text: <code>=AGG.BUILD("port P " &amp; A1 &amp; " " &amp; B1)</code>.</p>
+        <p class="warn">Every program goes to the server and into its audit log.
+            On a public server, never put real data in DecL.</p>
+        <p id="server"></p>
+    </main>
+</body>
+
+</html>

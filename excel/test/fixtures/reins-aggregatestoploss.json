@@ -1,0 +1,1061 @@
+{
+ "blocks": [
+  {
+   "body": [
+    {
+     "cells": [
+      {
+       "rowspan": 8,
+       "text": "meta"
+      },
+      "share",
+      {
+       "raw": 1.0,
+       "text": "1.000\u00a0"
+      },
+      {
+       "raw": 1.0,
+       "text": "1.000\u00a0"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "limit",
+      {
+       "raw": 1000.0,
+       "text": "1.000k"
+      },
+      {
+       "raw": 1930.0,
+       "text": "1.930k"
+      },
+      {
+       "raw": 1930.0,
+       "text": "1.930k"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "attach",
+      {
+       "raw": 0.0,
+       "text": "0.000\u00a0"
+      },
+      {
+       "raw": 9870.0,
+       "text": "9.870k"
+      },
+      {
+       "raw": 9870.0,
+       "text": "9.870k"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "pr_attach",
+      {
+       "raw": 0.9999782859878436,
+       "text": "999.978m"
+      },
+      {
+       "raw": 0.40085847094802785,
+       "text": "400.858m"
+      },
+      {
+       "raw": 1.0,
+       "text": "1.000\u00a0"
+      },
+      {
+       "raw": 1.0,
+       "text": "1.000\u00a0"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "pr_detach",
+      {
+       "raw": 0.007160104238732387,
+       "text": "7.160m"
+      },
+      {
+       "raw": 0.10171981452199257,
+       "text": "101.720m"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "pr_loss",
+      {
+       "raw": 1.0,
+       "text": "1.000\u00a0"
+      },
+      {
+       "raw": 0.400858470948236,
+       "text": "400.858m"
+      },
+      {
+       "raw": 0.40085847094820715,
+       "text": "400.858m"
+      },
+      {
+       "raw": 1.0,
+       "text": "1.000\u00a0"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "lol",
+      {
+       "raw": 9.526989385020084,
+       "text": "9.527\u00a0"
+      },
+      {
+       "raw": 0.2300784228796639,
+       "text": "230.078m"
+      },
+      {
+       "raw": 0.23007842287984426,
+       "text": "230.078m"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "output",
+      {
+       "raw": 1.0,
+       "text": "1.000\u00a0"
+      },
+      {
+       "raw": 0.0,
+       "text": "0.000\u00a0"
+      },
+      {
+       "raw": 0.0,
+       "text": "0.000\u00a0"
+      },
+      {
+       "raw": 1.0,
+       "text": "1.000\u00a0"
+      }
+     ]
+    },
+    {
+     "break_depth": 0,
+     "cells": [
+      {
+       "rowspan": 6,
+       "text": "freq"
+      },
+      "ex1",
+      {
+       "raw": 100.0,
+       "text": "100.000\u00a0"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "ex2",
+      {
+       "raw": 10100.0,
+       "text": "10.100k"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "ex3",
+      {
+       "raw": 1030100.0,
+       "text": "1.030M"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "mean",
+      {
+       "raw": 100.0,
+       "text": "100.000\u00a0"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "cv",
+      {
+       "raw": 0.1,
+       "text": "100.000m"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "skew",
+      {
+       "raw": 0.1,
+       "text": "100.000m"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 0,
+     "cells": [
+      {
+       "rowspan": 6,
+       "text": "sev"
+      },
+      "ex1",
+      {
+       "raw": 95.26989385025198,
+       "text": "95.270\u00a0"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "ex2",
+      {
+       "raw": 30404.193469933547,
+       "text": "30.404k"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "ex3",
+      {
+       "raw": 18088312.795140043,
+       "text": "18.088M"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "mean",
+      {
+       "raw": 95.26989385025198,
+       "text": "95.270\u00a0"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "cv",
+      {
+       "raw": 1.532913905309316,
+       "text": "1.533\u00a0"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "skew",
+      {
+       "raw": 3.5726718077968567,
+       "text": "3.573\u00a0"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 0,
+     "cells": [
+      {
+       "rowspan": 6,
+       "text": "agg"
+      },
+      "ex1",
+      {
+       "raw": 9526.989385020084,
+       "text": "9.527k"
+      },
+      {
+       "raw": 444.05135615775134,
+       "text": "444.051\u00a0"
+      },
+      {
+       "raw": 444.0513561580994,
+       "text": "444.051\u00a0"
+      },
+      {
+       "raw": 9082.938028862327,
+       "text": "9.083k"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "ex2",
+      {
+       "raw": 93803946.08923522,
+       "text": "93.804M"
+      },
+      {
+       "raw": 670737.8951576359,
+       "text": "670.738k"
+      },
+      {
+       "raw": 670737.8951583076,
+       "text": "670.738k"
+      },
+      {
+       "raw": 83981282.43114765,
+       "text": "83.981M"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "ex3",
+      {
+       "raw": 953410115632.2516,
+       "text": "953.410G"
+      },
+      {
+       "raw": 1130280935.6611407,
+       "text": "1.130G"
+      },
+      {
+       "raw": 1130280935.662437,
+       "text": "1.130G"
+      },
+      {
+       "raw": 789058085987.5679,
+       "text": "789.058G"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "mean",
+      {
+       "raw": 9526.989385020084,
+       "text": "9.527k"
+      },
+      {
+       "raw": 444.05135615775134,
+       "text": "444.051\u00a0"
+      },
+      {
+       "raw": 444.0513561580994,
+       "text": "444.051\u00a0"
+      },
+      {
+       "raw": 9082.938028862327,
+       "text": "9.083k"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "cv",
+      {
+       "raw": 0.1830252726004344,
+       "text": "183.025m"
+      },
+      {
+       "raw": 1.5497177351584461,
+       "text": "1.550\u00a0"
+      },
+      {
+       "raw": 1.5497177351578246,
+       "text": "1.550\u00a0"
+      },
+      {
+       "raw": 0.13400693997253418,
+       "text": "134.007m"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "skew",
+      {
+       "raw": 0.3411912053503819,
+       "text": "341.191m"
+      },
+      {
+       "raw": 1.263877869743465,
+       "text": "1.264\u00a0"
+      },
+      {
+       "raw": 1.2638778697423603,
+       "text": "1.264\u00a0"
+      },
+      {
+       "flags": [
+        "neg"
+       ],
+       "raw": -0.3614498896888767,
+       "text": "-361.450m"
+      }
+     ]
+    }
+   ],
+   "caption": "The program layer by layer, by view: the moments of what is subject to each layer, what it cedes and what is retained. Per layer columns are conditional on a loss reaching the layer; the Ceded and Net totals are not.",
+   "columns": [
+    {
+     "align": "l",
+     "dtype": "string",
+     "key": "c0",
+     "level": 0,
+     "name": [
+      "component"
+     ],
+     "role": "stub",
+     "wrap": true
+    },
+    {
+     "align": "l",
+     "dtype": "string",
+     "key": "c1",
+     "level": 1,
+     "name": [
+      "measure"
+     ],
+     "role": "stub",
+     "wrap": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 3,
+      "kind": "si"
+     },
+     "key": "c2",
+     "name": [
+      "occ",
+      "Gross"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "break_depth": 0,
+     "dtype": "float",
+     "format": {
+      "digits": 3,
+      "kind": "si"
+     },
+     "key": "c3",
+     "name": [
+      "agg",
+      "layer.1"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 3,
+      "kind": "si"
+     },
+     "key": "c4",
+     "name": [
+      "agg",
+      "Ceded"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 3,
+      "kind": "si"
+     },
+     "key": "c5",
+     "name": [
+      "agg",
+      "Net"
+     ],
+     "raw": true
+    }
+   ],
+   "generator": "greater_tables 6.0.0",
+   "hash": "1b24477eaf18",
+   "head": [
+    [
+     {
+      "colspan": 2,
+      "text": ""
+     },
+     {
+      "text": "occ"
+     },
+     {
+      "colspan": 3,
+      "text": "agg"
+     }
+    ],
+    [
+     {
+      "text": "component"
+     },
+     {
+      "text": "measure"
+     },
+     {
+      "text": "Gross"
+     },
+     {
+      "text": "layer.1"
+     },
+     {
+      "text": "Ceded"
+     },
+     {
+      "text": "Net"
+     }
+    ]
+   ],
+   "ir_version": 1,
+   "n_head_levels": 2,
+   "n_stub_levels": 2
+  },
+  {
+   "body": [
+    {
+     "cells": [
+      {
+       "rowspan": 3,
+       "text": "agg"
+      },
+      "subject",
+      "agg",
+      {
+       "raw": 9526.989385020084,
+       "text": "9,526.989"
+      },
+      {
+       "raw": 9526.989385020084,
+       "text": "9,526.989"
+      },
+      {
+       "raw": 0.0,
+       "text": "0.00000"
+      },
+      {
+       "raw": 0.1830252726004344,
+       "text": "18.3%"
+      },
+      {
+       "raw": 0.1830252726004344,
+       "text": "18.3%"
+      },
+      {
+       "raw": 0.0,
+       "text": "0.000"
+      },
+      {
+       "raw": 0.3411912053503819,
+       "text": "0.341"
+      },
+      {
+       "raw": 0.3411912053503819,
+       "text": "0.341"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "ceded",
+      "agg",
+      {
+       "raw": 9526.989385020084,
+       "text": "9,526.989"
+      },
+      {
+       "raw": 444.0513561580994,
+       "text": "444.0514"
+      },
+      {
+       "flags": [
+        "neg"
+       ],
+       "raw": -0.9533901699464145,
+       "text": "-0.95339"
+      },
+      {
+       "raw": 0.1830252726004344,
+       "text": "18.3%"
+      },
+      {
+       "raw": 1.5497177351578246,
+       "text": "155.0%"
+      },
+      {
+       "raw": 7.467233585500729,
+       "text": "7.467"
+      },
+      {
+       "raw": 0.3411912053503819,
+       "text": "0.341"
+      },
+      {
+       "raw": 1.2638778697423603,
+       "text": "1.26"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "net",
+      "agg",
+      {
+       "raw": 9526.989385020084,
+       "text": "9,526.989"
+      },
+      {
+       "raw": 9082.938028862327,
+       "text": "9,082.938"
+      },
+      {
+       "flags": [
+        "neg"
+       ],
+       "raw": -0.04660983005354957,
+       "text": "-0.04661"
+      },
+      {
+       "raw": 0.1830252726004344,
+       "text": "18.3%"
+      },
+      {
+       "raw": 0.13400693997253418,
+       "text": "13.4%"
+      },
+      {
+       "flags": [
+        "neg"
+       ],
+       "raw": -0.2678227543739983,
+       "text": "-0.268"
+      },
+      {
+       "raw": 0.3411912053503819,
+       "text": "0.341"
+      },
+      {
+       "flags": [
+        "neg"
+       ],
+       "raw": -0.3614498896888767,
+       "text": "-0.361"
+      }
+     ]
+    }
+   ],
+   "caption": "What each stage of the program does to the book, stage by stage, in the eight column validation layout.",
+   "columns": [
+    {
+     "align": "l",
+     "dtype": "string",
+     "key": "c0",
+     "level": 0,
+     "name": [
+      "stage"
+     ],
+     "role": "stub",
+     "wrap": true
+    },
+    {
+     "align": "l",
+     "dtype": "string",
+     "key": "c1",
+     "level": 1,
+     "name": [
+      "view"
+     ],
+     "role": "stub",
+     "wrap": true
+    },
+    {
+     "align": "l",
+     "dtype": "string",
+     "key": "c2",
+     "level": 2,
+     "name": [
+      "component"
+     ],
+     "role": "stub",
+     "wrap": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c3",
+     "name": [
+      "EX"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c4",
+     "name": [
+      "Est EX"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 5,
+      "group": true,
+      "kind": "dec"
+     },
+     "key": "c5",
+     "name": [
+      "Change EX"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 1,
+      "kind": "pct"
+     },
+     "key": "c6",
+     "name": [
+      "CV"
+     ],
+     "raw": true,
+     "tag": "ratio"
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 1,
+      "kind": "pct"
+     },
+     "key": "c7",
+     "name": [
+      "Est CV"
+     ],
+     "raw": true,
+     "tag": "ratio"
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 3,
+      "group": true,
+      "kind": "dec"
+     },
+     "key": "c8",
+     "name": [
+      "Change CV"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 3,
+      "kind": "gen"
+     },
+     "key": "c9",
+     "name": [
+      "Sk"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 3,
+      "kind": "gen"
+     },
+     "key": "c10",
+     "name": [
+      "Est Sk"
+     ],
+     "raw": true
+    }
+   ],
+   "generator": "greater_tables 6.0.0",
+   "hash": "40cbb160eb85",
+   "head": [
+    [
+     {
+      "text": "stage"
+     },
+     {
+      "text": "view"
+     },
+     {
+      "text": "component"
+     },
+     {
+      "text": "EX"
+     },
+     {
+      "text": "Est EX"
+     },
+     {
+      "text": "Change EX"
+     },
+     {
+      "text": "CV"
+     },
+     {
+      "text": "Est CV"
+     },
+     {
+      "text": "Change CV"
+     },
+     {
+      "text": "Sk"
+     },
+     {
+      "text": "Est Sk"
+     }
+    ]
+   ],
+   "ir_version": 1,
+   "n_head_levels": 1,
+   "n_stub_levels": 3
+  }
+ ],
+ "hash": "317061a30b8d",
+ "meta": {
+  "blocks": [
+   "reins_stats_df",
+   "reins_summary_df"
+  ],
+  "captions": {
+   "reins_stats_df": "The program layer by layer, by view: the moments of what is subject to each layer, what it cedes and what is retained. Per layer columns are conditional on a loss reaching the layer; the Ceded and Net totals are not.",
+   "reins_summary_df": "What each stage of the program does to the book, stage by stage, in the eight column validation layout."
+  },
+  "kind": "Aggregate",
+  "label": "AggregateStopLoss",
+  "object": "AggregateStopLoss"
+ },
+ "name": "reins",
+ "perspective": "raw",
+ "title": "Reinsurance: AggregateStopLoss"
+}

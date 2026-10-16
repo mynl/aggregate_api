@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.16.0
+
+[Excel-Core] **An Excel add-in puts the API in worksheet cells.** Plan `dev/done/plan-excel-core.md`. New subproject `excel/`; see `excel/README.md`.
+
+- `=AGG.BUILD(decl, [log2], [bs])` returns a handle such as `agg.A#4f40714271198d8f`; `=AGG.EXHIBITS`, `=AGG.EXHIBIT(handle, name, [perspective], [block], [headers])` and `=AGG.Q(handle, p)` spill values from it; `=AGG.VERSION()` names the server.
+- References resolve to library entries only. Combine your own programs through text, `=AGG.BUILD("port P " & A1 & " " & B1)`, which Excel tracks.
+- A workbook keeps how each handle was built, so a saved handle survives a server restart or eviction under the same id.
+- Development runs against a local server from desktop Excel (`npm start`); serving it from agg.mynl.com is the next plan.
+- Not yet checked in Excel itself: the plan's acceptance list is owed. Unit tests, typecheck, lint, build and a live smoke of the functions bundle pass.
+
 ## 1.15.0
 
 [Session-Parse] **Reformat inlines your own declarations, not only the library's.** Plan `dev/done/plan-reformat-explodes-session-references.md`.

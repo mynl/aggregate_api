@@ -1,0 +1,46 @@
+/* The About pane. Plain and small: it is read once. */
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  color: #212529;
+  background: #ffffff;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #f3f2f1;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+main {
+  padding: 0 16px 16px;
+}
+
+dt {
+  margin-top: 10px;
+  font-family: Consolas, monospace;
+  font-size: 13px;
+}
+
+dd {
+  margin: 2px 0 0 12px;
+}
+
+code {
+  font-family: Consolas, monospace;
+  font-size: 13px;
+}
+
+.warn {
+  color: #a4262c;
+}

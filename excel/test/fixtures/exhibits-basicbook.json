@@ -1,0 +1,60 @@
+{
+ "exhibits": [
+  {
+   "name": "summary",
+   "perspectives": [
+    "raw",
+    "insurer"
+   ],
+   "title": "Summary"
+  },
+  {
+   "name": "tail",
+   "perspectives": [
+    "raw",
+    "insurer"
+   ],
+   "title": "Return periods"
+  },
+  {
+   "name": "stats",
+   "perspectives": [
+    "raw",
+    "insurer"
+   ],
+   "title": "Statistics"
+  },
+  {
+   "name": "validation",
+   "perspectives": [
+    "raw",
+    "insurer"
+   ],
+   "title": "Validation"
+  },
+  {
+   "name": "bs_window",
+   "perspectives": [
+    "raw",
+    "insurer"
+   ],
+   "title": "Grid sizing"
+  },
+  {
+   "name": "tail_behavior",
+   "perspectives": [
+    "raw",
+    "insurer"
+   ],
+   "title": "Tail behavior"
+  },
+  {
+   "name": "approximation",
+   "perspectives": [
+    "raw",
+    "insurer"
+   ],
+   "title": "Approximation"
+  }
+ ]
+}

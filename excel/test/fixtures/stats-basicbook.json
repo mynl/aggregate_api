@@ -1,0 +1,1338 @@
+{
+ "blocks": [
+  {
+   "body": [
+    {
+     "cells": [
+      {
+       "rowspan": 8,
+       "text": "meta"
+      },
+      "limit",
+      {
+       "raw": 1000.0,
+       "text": "1,000"
+      },
+      {
+       "raw": 1000.0,
+       "text": "1,000"
+      },
+      {
+       "raw": 1000.0,
+       "text": "1,000"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "attachment",
+      {
+       "raw": 0.0,
+       "text": "0"
+      },
+      {
+       "raw": 0.0,
+       "text": "0"
+      },
+      {
+       "raw": 0.0,
+       "text": "0"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "el",
+      {
+       "raw": 24534.12890182953,
+       "text": "24,534.13"
+      },
+      {
+       "raw": 24534.12890182953,
+       "text": "24,534.13"
+      },
+      {
+       "raw": 24534.12890182953,
+       "text": "24,534.13"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "prem",
+      {
+       "raw": 0.0,
+       "text": "0"
+      },
+      {
+       "raw": 0.0,
+       "text": "0"
+      },
+      {
+       "raw": 0.0,
+       "text": "0"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "lr",
+      {
+       "raw": 0.0,
+       "text": "0"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "sevcv_param",
+      {
+       "raw": 1.5,
+       "text": "1.5"
+      },
+      {
+       "raw": 0.0,
+       "text": "0"
+      },
+      {
+       "raw": 0.0,
+       "text": "0"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "mix_cv",
+      {
+       "raw": 0.0,
+       "text": "0"
+      },
+      {
+       "raw": 0.0,
+       "text": "0"
+      },
+      {
+       "raw": 0.0,
+       "text": "0"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "wt",
+      {
+       "raw": 1.0,
+       "text": "1"
+      },
+      {
+       "raw": 1.0,
+       "text": "1"
+      },
+      {
+       "raw": 1.0,
+       "text": "1"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 0,
+     "cells": [
+      {
+       "rowspan": 6,
+       "text": "freq"
+      },
+      "ex1",
+      {
+       "raw": 250.0,
+       "text": "250"
+      },
+      {
+       "raw": 250.0,
+       "text": "250"
+      },
+      {
+       "raw": 250.0,
+       "text": "250"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "ex2",
+      {
+       "raw": 62750.0,
+       "text": "62,750"
+      },
+      {
+       "raw": 62750.0,
+       "text": "62,750"
+      },
+      {
+       "raw": 62750.0,
+       "text": "62,750"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "ex3",
+      {
+       "raw": 15812750.0,
+       "text": "1.581275e+07"
+      },
+      {
+       "raw": 15812750.0,
+       "text": "1.581275e+07"
+      },
+      {
+       "raw": 15812750.0,
+       "text": "1.581275e+07"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "mean",
+      {
+       "raw": 250.0,
+       "text": "250"
+      },
+      {
+       "raw": 250.0,
+       "text": "250"
+      },
+      {
+       "raw": 250.0,
+       "text": "250"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "cv",
+      {
+       "raw": 0.06324555320336758,
+       "text": "0.06324555"
+      },
+      {
+       "raw": 0.06324555320336758,
+       "text": "0.06324555"
+      },
+      {
+       "raw": 0.06324555320336758,
+       "text": "0.06324555"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "skew",
+      {
+       "raw": 0.06324555320336758,
+       "text": "0.06324555"
+      },
+      {
+       "raw": 0.06324555320336758,
+       "text": "0.06324555"
+      },
+      {
+       "raw": 0.06324555320336758,
+       "text": "0.06324555"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      }
+     ]
+    },
+    {
+     "break_depth": 0,
+     "cells": [
+      {
+       "rowspan": 6,
+       "text": "sev"
+      },
+      "ex1",
+      {
+       "raw": 98.13651560731812,
+       "text": "98.13652"
+      },
+      {
+       "raw": 98.13651560731812,
+       "text": "98.13652"
+      },
+      {
+       "raw": 98.13651560731812,
+       "text": "98.13652"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 98.13651627393187,
+       "text": "98.13652"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 98.13651627393187,
+       "text": "98.13652"
+      },
+      {
+       "raw": 6.792718831860611e-09,
+       "text": "6.7927e-09"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "ex2",
+      {
+       "raw": 26249.526147511904,
+       "text": "26,249.53"
+      },
+      {
+       "raw": 26249.526147511904,
+       "text": "26,249.53"
+      },
+      {
+       "raw": 26249.526147511904,
+       "text": "26,249.53"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 26249.61003865398,
+       "text": "26,249.61"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 26249.61003865398,
+       "text": "26,249.61"
+      },
+      {
+       "raw": 3.195910722508799e-06,
+       "text": "3.1959e-06"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "ex3",
+      {
+       "raw": 13355984.366368512,
+       "text": "1.335598e+07"
+      },
+      {
+       "raw": 13355984.366368512,
+       "text": "1.335598e+07"
+      },
+      {
+       "raw": 13355984.366368512,
+       "text": "1.335598e+07"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 13356009.25690994,
+       "text": "1.335601e+07"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 13356009.25690994,
+       "text": "1.335601e+07"
+      },
+      {
+       "raw": 1.8636246303938009e-06,
+       "text": "1.8636e-06"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "mean",
+      {
+       "raw": 98.13651560731812,
+       "text": "98.13652"
+      },
+      {
+       "raw": 98.13651560731812,
+       "text": "98.13652"
+      },
+      {
+       "raw": 98.13651560731812,
+       "text": "98.13652"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 98.13651627393187,
+       "text": "98.13652"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 98.13651627393187,
+       "text": "98.13652"
+      },
+      {
+       "raw": 6.792718831860611e-09,
+       "text": "6.7927e-09"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "cv",
+      {
+       "raw": 1.3136163618479304,
+       "text": "1.313616"
+      },
+      {
+       "raw": 1.3136163618479304,
+       "text": "1.313616"
+      },
+      {
+       "raw": 1.3136163618479304,
+       "text": "1.313616"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 1.3136196633051411,
+       "text": "1.31362"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 1.3136196633051411,
+       "text": "1.31362"
+      },
+      {
+       "raw": 2.5132582894826783e-06,
+       "text": "2.5133e-06"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "skew",
+      {
+       "raw": 3.509235863214683,
+       "text": "3.509236"
+      },
+      {
+       "raw": 3.509235863214683,
+       "text": "3.509236"
+      },
+      {
+       "raw": 3.509235863214683,
+       "text": "3.509236"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 3.5092094161719904,
+       "text": "3.509209"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 3.5092094161719904,
+       "text": "3.509209"
+      },
+      {
+       "flags": [
+        "neg"
+       ],
+       "raw": -7.536410695507811e-06,
+       "text": "-7.5364e-06"
+      }
+     ]
+    },
+    {
+     "break_depth": 0,
+     "cells": [
+      {
+       "rowspan": 6,
+       "text": "agg"
+      },
+      "ex1",
+      {
+       "raw": 24534.12890182953,
+       "text": "24,534.13"
+      },
+      {
+       "raw": 24534.12890182953,
+       "text": "24,534.13"
+      },
+      {
+       "raw": 24534.12890182953,
+       "text": "24,534.13"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 24534.12906848255,
+       "text": "24,534.13"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 24534.12906848255,
+       "text": "24,534.13"
+      },
+      {
+       "raw": 6.792701734426032e-09,
+       "text": "6.7927e-09"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "ex2",
+      {
+       "raw": 608485862.5084649,
+       "text": "6.084859e+08"
+      },
+      {
+       "raw": 608485862.5084649,
+       "text": "6.084859e+08"
+      },
+      {
+       "raw": 608485862.5084649,
+       "text": "6.084859e+08"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 608485891.6586341,
+       "text": "6.084859e+08"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 608485891.6586341,
+       "text": "6.084859e+08"
+      },
+      {
+       "raw": 4.790607466276242e-08,
+       "text": "4.7906e-08"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "ex3",
+      {
+       "raw": 15254014210872.693,
+       "text": "1.525401e+13"
+      },
+      {
+       "raw": 15254014210872.693,
+       "text": "1.525401e+13"
+      },
+      {
+       "raw": 15254014210872.693,
+       "text": "1.525401e+13"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 15254016064960.982,
+       "text": "1.525402e+13"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 15254016064960.982,
+       "text": "1.525402e+13"
+      },
+      {
+       "raw": 1.2154756534599187e-07,
+       "text": "1.2155e-07"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "mean",
+      {
+       "raw": 24534.12890182953,
+       "text": "24,534.13"
+      },
+      {
+       "raw": 24534.12890182953,
+       "text": "24,534.13"
+      },
+      {
+       "raw": 24534.12890182953,
+       "text": "24,534.13"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 24534.12906848255,
+       "text": "24,534.13"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 24534.12906848255,
+       "text": "24,534.13"
+      },
+      {
+       "raw": 6.792701734426032e-09,
+       "text": "6.7927e-09"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "cv",
+      {
+       "raw": 0.10441432748650156,
+       "text": "0.1044143"
+      },
+      {
+       "raw": 0.10441432748650156,
+       "text": "0.1044143"
+      },
+      {
+       "raw": 0.10441432748650156,
+       "text": "0.1044143"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 0.10441449362662637,
+       "text": "0.1044145"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 0.10441449362662637,
+       "text": "0.1044145"
+      },
+      {
+       "raw": 1.5911621404907095e-06,
+       "text": "1.5912e-06"
+      }
+     ]
+    },
+    {
+     "break_depth": 1,
+     "cells": [
+      "skew",
+      {
+       "raw": 0.198620328436504,
+       "text": "0.1986203"
+      },
+      {
+       "raw": 0.198620328436504,
+       "text": "0.1986203"
+      },
+      {
+       "raw": 0.198620328436504,
+       "text": "0.1986203"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 0.19861974642078603,
+       "text": "0.1986197"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": null,
+       "text": "\u2014"
+      },
+      {
+       "raw": 0.19861974642078603,
+       "text": "0.1986197"
+      },
+      {
+       "flags": [
+        "neg"
+       ],
+       "raw": -2.9302927981866844e-06,
+       "text": "-2.9303e-06"
+      }
+     ]
+    }
+   ],
+   "caption": "The canonical moment store: a meta block (limit, attachment, expected loss, premium, loss ratio, severity CV) over the moments at each stage of the calculation, from the analytic mix through any cession to the realized empirical grid, with the error between the last two.",
+   "columns": [
+    {
+     "align": "l",
+     "dtype": "string",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c0",
+     "level": 0,
+     "name": [
+      "component"
+     ],
+     "role": "stub",
+     "wrap": true
+    },
+    {
+     "align": "l",
+     "dtype": "string",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c1",
+     "level": 1,
+     "name": [
+      "measure"
+     ],
+     "role": "stub",
+     "wrap": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c2",
+     "name": [
+      "e0.m0"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c3",
+     "name": [
+      "mixed"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c4",
+     "name": [
+      "independent"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c5",
+     "name": [
+      "after_occ"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c6",
+     "name": [
+      "empirical"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c7",
+     "name": [
+      "occ_impact"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c8",
+     "name": [
+      "agg_impact"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 7,
+      "group": true,
+      "kind": "gen"
+     },
+     "key": "c9",
+     "name": [
+      "gross_empirical"
+     ],
+     "raw": true
+    },
+    {
+     "align": "r",
+     "dtype": "float",
+     "format": {
+      "digits": 5,
+      "kind": "gen"
+     },
+     "key": "c10",
+     "name": [
+      "error"
+     ],
+     "raw": true
+    }
+   ],
+   "generator": "greater_tables 6.0.0",
+   "hash": "875c6dcb7de2",
+   "head": [
+    [
+     {
+      "text": "component"
+     },
+     {
+      "text": "measure"
+     },
+     {
+      "text": "e0.m0"
+     },
+     {
+      "text": "mixed"
+     },
+     {
+      "text": "independent"
+     },
+     {
+      "text": "after_occ"
+     },
+     {
+      "text": "empirical"
+     },
+     {
+      "text": "occ_impact"
+     },
+     {
+      "text": "agg_impact"
+     },
+     {
+      "text": "gross_empirical"
+     },
+     {
+      "text": "error"
+     }
+    ]
+   ],
+   "ir_version": 1,
+   "n_head_levels": 1,
+   "n_stub_levels": 2
+  }
+ ],
+ "hash": "3400742bd12b",
+ "meta": {
+  "blocks": [
+   "stats_df"
+  ],
+  "captions": {
+   "stats_df": "The canonical moment store: a meta block (limit, attachment, expected loss, premium, loss ratio, severity CV) over the moments at each stage of the calculation, from the analytic mix through any cession to the realized empirical grid, with the error between the last two."
+  },
+  "kind": "Aggregate",
+  "label": "BasicBook",
+  "object": "BasicBook"
+ },
+ "name": "stats",
+ "perspective": "raw",
+ "title": "Statistics: BasicBook"
+}
