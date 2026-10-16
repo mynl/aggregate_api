@@ -6,6 +6,13 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Excel-Hosting]** DONE (`1.17.0`), plan `dev/done/plan-excel-hosting.md`.
+  `/excel` serves the add-in built by `scripts/build-excel.ps1` (or `.sh`),
+  `no-cache`, with a production manifest under `https://agg.mynl.com/excel`.
+  Still owed, the author's on the host: the Caddy limits, `AGGAPI_CACHE_MAX=100`,
+  the deploy, and the plan's acceptance list against agg.mynl.com (web in Edge
+  and Chrome, Windows desktop, a version bump reaching a reopened workbook).
+
 - **[Excel-Core]** DONE (`1.16.0`), plan `dev/done/plan-excel-core.md`. The
   `excel/` add-in: `AGG.BUILD`, `AGG.EXHIBITS`, `AGG.EXHIBIT`, `AGG.Q` and
   `AGG.VERSION` over a local server, with the recipe table, session id, memo

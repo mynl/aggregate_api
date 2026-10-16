@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.17.0
+
+[Excel-Hosting] **The server hands out the Excel add-in at `/excel`.** Plan `dev/done/plan-excel-hosting.md`.
+
+- `scripts/build-excel.ps1` (and `.sh` for the Linux host) builds the add-in into `src/aggregate_api/excel_static/` with a production manifest: URLs under `https://agg.mynl.com/excel` (or `-Base`), `<Version>` from `__version__`.
+- The server mounts `/excel` when that directory exists, ahead of the SPA, and every file there is `Cache-Control: no-cache`, so a deploy reaches a workbook when it reopens. The first deploy needs one restart.
+- Install from `https://agg.mynl.com/excel/manifest.xml` in Excel on the web or desktop; `excel/README.md` gives the steps.
+- For the author on the host: the lowered Caddy limits, `AGGAPI_CACHE_MAX=100`, then the plan's acceptance list against agg.mynl.com.
+
 ## 1.16.0
 
 [Excel-Core] **An Excel add-in puts the API in worksheet cells.** Plan `dev/done/plan-excel-core.md`. New subproject `excel/`; see `excel/README.md`.

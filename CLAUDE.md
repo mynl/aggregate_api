@@ -147,6 +147,17 @@ Or run the Vite dev server with hot reload (proxies `/v1` to `:8000`):
 cd web; npm install; npm run dev
 ```
 
+**Build the Excel add-in** (drops the bundle, with its production manifest, into
+`src/aggregate_api/excel_static/`, which the `/excel` mount serves; the
+manifest's `<Version>` is `__version__`):
+```
+.\scripts\build-excel.ps1                          # for https://agg.mynl.com/excel
+.\scripts\build-excel.ps1 -Base https://host/excel # another origin
+```
+Its checks run in `excel/`: `npm test` (node --test over `test/*.test.ts`),
+`npm run typecheck`, `npm run lint`. Development against a local server is
+`npm start` there; see `excel/README.md`.
+
 ## Architecture
 
 ### Backend: `src/aggregate_api/`
@@ -259,6 +270,9 @@ patch. Do not crawl, and do not go back to serials.
   `__version__` live: the About panel then says `a141` over a page that predates
   `a139`. The version is what you read to know which build you are on, so that
   pairing is worse than a plain stale page. Build the artifact, never stage it.
+  The same holds for the Excel add-in: `.\scripts\build-excel.ps1` after a bump
+  that moved `excel/`, and after any bump that is deployed, since its manifest
+  carries the version.
 - **One plan doc per step.** Work proceeds from a `dev/plan-NNNN-*.md`. When it
   lands, move it to `dev/done/` and tick the matching `dev/TODO.md` entry.
 - **Keep `CHANGELOG.md` current.** Each version bump adds a `## <version>`

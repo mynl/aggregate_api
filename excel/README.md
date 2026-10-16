@@ -15,6 +15,24 @@ other cells read its exhibits and quantiles as plain values.
 Desktop Excel on Windows and Mac, and Excel on the web. Not Excel on iPad,
 which has no custom functions.
 
+## Installing
+
+The add-in is served with the API, from `https://agg.mynl.com/excel/`, and
+calls the API on that same origin. Its manifest is
+`https://agg.mynl.com/excel/manifest.xml`.
+
+- **Excel on the web:** Home, Add-ins, More add-ins, then Upload My Add-in,
+  and give it the manifest (download it first: the dialog takes a file).
+- **Desktop Excel:** the same Upload My Add-in in current Microsoft 365 builds
+  (Home, Add-ins, More add-ins). In older builds, put the manifest in a shared
+  folder, add that folder under File, Options, Trust Center, Trust Center
+  Settings, Trusted Add-in Catalogs, restart Excel, and pick it from Shared
+  Folder in the add-ins dialog.
+
+The add-in's version is the server's: the build stamps `__version__` into the
+manifest, and every file is served `no-cache`, so a deploy is picked up when a
+workbook reopens. `=AGG.VERSION()` says which server a workbook is talking to.
+
 ## Using it
 
 `decl` is a cell or a range. A range's non-empty cells join with newlines in
@@ -97,6 +115,19 @@ npm run typecheck   tsc over src/
 npm run build       production bundle in dist/
 ```
 
+The bundle the server serves at `/excel` is built from the repository root:
+
+```
+.\scripts\build-excel.ps1                                    # Windows, for agg.mynl.com
+./scripts/build-excel.sh                                     # the Linux host
+.\scripts\build-excel.ps1 -Base https://other.host/excel     # another origin
+```
+
+It lands in `src/aggregate_api/excel_static/` (gitignored, and not in the
+wheel), with the production manifest: every URL under the base and the server's
+version. The server mounts `/excel` only when that directory exists, so the
+first deploy needs one restart.
+
 The tests read exhibit payloads captured from `library.agg` entries. To
 capture them again (after a change to the exhibit format), from the repository
 root:
@@ -112,5 +143,6 @@ uv run --no-sync python dev/capture_excel_fixtures.py
 | `src/functions/functions.ts` | the five functions, the request layer, the recipe table and the build memo |
 | `src/functions/core.ts` | the pure logic, unit tested: handles, exhibit flattening, error messages, the recipe table |
 | `src/taskpane/` | a short About page; the shared runtime loads it |
-| `manifest.xml` | the development manifest, at `https://localhost:3000` |
+| `manifest.xml` | the development manifest, at `https://localhost:3000`; a production build rewrites it |
+| `webpack.config.js` | the build, including the production manifest |
 | `test/` | unit tests and their fixtures |

@@ -2,8 +2,8 @@
 
 ``create_app()`` is the single entry point: it builds a fresh
 :class:`fastapi.FastAPI`, installs CORS if configured, mounts the
-``v1`` routers, and -- if the Plan D web bundle is present --
-serves it as static files at ``/``.
+``v1`` routers, serves the Excel add-in at ``/excel`` when it has been
+built, and serves the web bundle at ``/`` when it is present.
 
 Flask users
 -----------
@@ -169,6 +169,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # reached. See routes/status.py.
     app.include_router(status_routes.router, prefix="/v1", tags=["status"])
 
+    # The Excel add-in, when ``scripts/build-excel.ps1`` (or ``.sh``) has
+    # built it. **Before** the ``/`` mount: Starlette matches mounts in order,
+    # and ``/`` with ``html=True`` would answer ``/excel/...`` with the SPA's
+    # index.html. Conditional on the directory existing, like the SPA, so the
+    # first deploy needs one restart. Not gated on ``serve_spa``: a headless
+    # server may still hand Excel its add-in.
+    excel_dir = _resolve_excel_dir()
+    if excel_dir.exists():
+        app.mount("/excel", _NoCacheStaticFiles(directory=str(excel_dir)),
+                  name="excel")
+
     # Static-file mount for the SPA (Plan D). Conditional because
     # the api ships independently of the web build; if the web
     # bundle isn't present, the api is api-only and ``/`` returns
@@ -185,6 +196,45 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     return app
+
+
+class _NoCacheStaticFiles(StaticFiles):
+    """``StaticFiles`` whose every response says ``Cache-Control: no-cache``.
+
+    Notes
+    -----
+    For the Excel add-in. Office caches add-in files hard, so without this a
+    deploy would not reach a workbook until that cache expired. ``no-cache``
+    still lets the client keep a copy; it must revalidate first, and the
+    ``ETag`` ``StaticFiles`` sends makes that a 304 when nothing changed. So a
+    deploy is picked up when the workbook reopens, for the price of one
+    conditional request per file.
+    """
+
+    async def get_response(self, path, scope):
+        """Serve ``path`` as ``StaticFiles`` does, then mark it ``no-cache``."""
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+def _resolve_excel_dir() -> Path:
+    """Where ``scripts/build-excel.ps1`` writes the Excel add-in.
+
+    Returns
+    -------
+    pathlib.Path
+        ``excel_static/`` beside this file, which may not exist.
+
+    Notes
+    -----
+    A directory of its own rather than a subdirectory of ``static/``, because
+    the SPA's build empties ``static/assets`` and Vite owns that tree. It is
+    gitignored and kept out of the wheel: the production manifest inside it
+    names ``https://agg.mynl.com/excel``, which is right for one deployment
+    and wrong for every other.
+    """
+    return Path(__file__).resolve().parent / "excel_static"
 
 
 def _resolve_static_dir(settings: Settings) -> Path | None:

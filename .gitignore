@@ -47,9 +47,11 @@ hacks/
 web/node_modules/
 web/dist/
 
-# Excel add-in build artifacts
+# Excel add-in build artifacts. The production bundle lands in
+# src/aggregate_api/excel_static/ (scripts/build-excel.ps1), served at /excel.
 excel/node_modules/
 excel/dist/
+src/aggregate_api/excel_static/
 
 # The built SPA lands in src/aggregate_api/static/ (output of
 # `npm run build`); not committed. Only the icons + webmanifest are.
