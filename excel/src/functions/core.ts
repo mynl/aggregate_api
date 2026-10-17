@@ -442,6 +442,47 @@ export function flattenExhibit(payload: unknown, block = 0, headers = true): Gri
   return padded(rows.length ? rows : [[""]], width);
 }
 
+/** The formats `GET /v1/objects/{id}/frame/{which}.<format>` serves. */
+export const FRAME_FORMATS = ["csv", "parquet"];
+
+/**
+ * The frame format an argument names: `csv` when omitted or empty.
+ *
+ * @throws Error naming the argument when it is neither format.
+ */
+export function frameFormat(format: unknown): string {
+  if (format === undefined || format === null || format === "") return "csv";
+  const name = String(format).trim().toLowerCase();
+  if (!FRAME_FORMATS.includes(name)) {
+    throw new Error(`format must be ${FRAME_FORMATS.join(" or ")}; got ${String(format)}`);
+  }
+  return name;
+}
+
+/**
+ * The absolute URL that loads a whole frame: Data, From Web takes it as it is.
+ *
+ * @param base The API's origin, without a trailing slash (one is tolerated).
+ * @param id The object id.
+ * @param which The frame name, such as `density_df`.
+ * @param format `csv` or `parquet`, already checked by `frameFormat`.
+ */
+export function frameDownloadUrl(base: string, id: string, which: string, format = "csv"): string {
+  const origin = base.replace(/\/+$/, "");
+  return `${origin}/v1/objects/${encodeURIComponent(id)}/frame/${encodeURIComponent(which)}.${format}`;
+}
+
+/**
+ * The frames listing as a spill: a header row, then `name | rows | columns`.
+ *
+ * @param payload The body of `GET /v1/objects/{id}/frames`.
+ */
+export function frameRows(payload: unknown): Grid {
+  const body = (payload ?? {}) as { frames?: { name: string; rows: number; columns: number }[] };
+  const items = body.frames ?? [];
+  return [["name", "rows", "columns"], ...items.map((f) => [f.name, f.rows, f.columns])];
+}
+
 /**
  * A counting semaphore: at most `limit` tasks run at once, the rest wait in order.
  */

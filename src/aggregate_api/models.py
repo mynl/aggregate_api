@@ -700,6 +700,31 @@ class FrameShapeResponse(BaseModel):
     columns: int
 
 
+class FrameItem(BaseModel):
+    """One frame an object answers, by the name the ``frame/{which}`` routes take."""
+
+    model_config = _RESPONSE_CFG
+
+    name: str
+    rows: int
+    columns: int
+
+
+class FramesResponse(BaseModel):
+    """``GET /v1/objects/{id}/frames``: the frames this object has, with their shapes.
+
+    In the order the frame table declares them, and only the ones the object
+    answers: no reinsurance frames without a cession, no ledger without a PnL,
+    no sharpen frames before ``sharpen()`` runs. Before this route the only
+    listing was the 404 an unknown name draws, which names every frame whether
+    or not the object has it.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    frames: list[FrameItem]
+
+
 class FrameResponse(BaseModel):
     """Pandas DataFrame as ``(columns, rows)``.
 

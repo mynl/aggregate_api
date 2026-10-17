@@ -10,6 +10,8 @@ other cells read its exhibits and quantiles as plain values.
 =AGG.EXHIBITS(handle)                                           spill: name | title | perspectives
 =AGG.EXHIBIT(handle, name, [perspective], [block], [headers])   spill: the exhibit, as values
 =AGG.Q(handle, p)                                               quantiles; p a number or a range in [0, 1]
+=AGG.FRAMES(handle)                                             spill: name | rows | columns, the frames it has
+=AGG.FRAMEURL(handle, which, [format])                          the URL that loads a whole frame, csv or parquet
 ```
 
 Desktop Excel on Windows and Mac, and Excel on the web. Not Excel on iPad,
@@ -76,6 +78,12 @@ single cell, and a function reading a cell that holds such text repeats it, so
 the reason follows the program wherever it is used. Only transient failures
 (rate limited, timed out, server unreachable or faulting) show `#VALUE!`, with
 the reason on hover, since a recalculation can clear them.
+
+**Whole frames go by URL, not by spill.** `=AGG.FRAMES(C1)` lists the frames
+an object has with their shapes, and `=AGG.FRAMEURL(C1, "density_df")` is the
+URL that loads one: paste it into Data, From Web, and the frame arrives as a
+table, 65,536 rows and all. `format` is `csv` (the default) or `parquet`. The
+section below has the refreshable Power Query form.
 
 **Handles survive a restart.** The workbook keeps a table of how each handle
 was built, in its document settings (saved inside the .xlsx). When the server
@@ -190,7 +198,7 @@ uv run --no-sync python dev/capture_excel_fixtures.py
 
 | Path | Role |
 |---|---|
-| `src/functions/functions.ts` | the five functions, the request layer, the recipe table and the build memo |
+| `src/functions/functions.ts` | the functions, the request layer, the recipe table and the build memo |
 | `src/functions/core.ts` | the pure logic, unit tested: handles, exhibit flattening, error messages, the recipe table |
 | `src/taskpane/` | a short About page; the shared runtime loads it |
 | `manifest.xml` | the development manifest, at `https://localhost:3000`; a production build rewrites it |

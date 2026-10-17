@@ -439,3 +439,30 @@ Written as the steps run, one entry per bump, every divergence recorded.
 - The task pane had no `#DECL!` sentence to reword; it gained one on `#AGG!`.
 - Gates: pytest, web `npm test`, excel `npm test` (25), `npm run typecheck`,
   `npm run lint` (one prettier line break fixed).
+
+### [frames-route], 1.24.0, 2026-10-17
+
+- The route is `list_frames`, declared after `/frame/{which}/shape`. It
+  resolves each name through `_named_frame` (the plan's `_frame_or_404`) and
+  skips only the `HTTPException` that helper raises; any other failure
+  propagates, as from `/shape`. Timed at 11 ms first call and 6 ms after on
+  the dice, 15 ms and 6 ms on `Capstone.Gross`; the test clocks the second
+  call under 100 ms, since the first may materialize a frame.
+- Tests are a new file, `tests/test_frames_route.py` (6), rather than an
+  addition to `test_frame_shape.py`: a route of its own. The fixture for the
+  add-in is `frames-aggregatestoploss.json` (an object with a cession, so the
+  reinsurance frames are in it), captured by the extended
+  `dev/capture_excel_fixtures.py`.
+- `core.ts`: `frameDownloadUrl` (the plan's `frameUrl`, renamed at review),
+  `frameFormat` (the `csv` default and the check) and `frameRows` (the spill).
+  `functions.ts`: `readObject` split into `handleOf` plus `readFrom(handle,
+  path)`, so `AGG.FRAMEURL` resolves the handle once, checks the name through
+  `/shape`, and builds the URL from the id. `apiOrigin()` is the build-time
+  base or `globalThis.location.origin`.
+- The `format` check is local (`csv` or `parquet`), a refusal in the add-in's
+  own words; the server is not asked whether it has the parquet extra. The
+  README's function table and "Using it" gained the two functions; the
+  "Whole frames" section is the author's uncommitted edit and was not touched.
+- Gates: pytest (full), web `npm test`, excel `npm test` (27), `npm run
+  typecheck`, `npm run lint` (a `globalThis` global declaration and two
+  prettier wraps fixed).

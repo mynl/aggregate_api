@@ -30,6 +30,7 @@ CAPTURES = [
     ("stats-basicbook", "BasicBook", "exhibit/stats"),
     ("reins-aggregatestoploss", "AggregateStopLoss", "exhibit/reins"),
     ("quantiles-basicbook", "BasicBook", "quantiles?snap=false&p=0.5,0.99"),
+    ("frames-aggregatestoploss", "AggregateStopLoss", "frames"),
 ]
 
 

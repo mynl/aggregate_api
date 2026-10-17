@@ -1,4 +1,4 @@
-/* global AbortController, AbortSignal, CustomFunctions, Office, Response, crypto, fetch, setTimeout */
+/* global AbortController, AbortSignal, CustomFunctions, Office, Response, crypto, fetch, globalThis, setTimeout */
 
 /**
  * The AGG custom functions: aggregate_api in worksheet cells.
@@ -15,7 +15,7 @@
  * functions.json reads only literal types.
  */
 
-import type { CellValue, RecipeTable } from "./core";
+import type { CellValue, Handle, RecipeTable } from "./core";
 import {
   MAX_IN_FLIGHT,
   MESSAGES,
@@ -24,6 +24,9 @@ import {
   errorMessage,
   flattenExhibit,
   formatHandle,
+  frameDownloadUrl,
+  frameFormat,
+  frameRows,
   isMissingObject,
   isProgramRefusal,
   isRefusal,
@@ -45,6 +48,19 @@ import {
 /** The API base, fixed at build time: empty for the same origin. */
 declare const __API_BASE__: string;
 const API_BASE: string = __API_BASE__;
+
+/**
+ * The API's absolute origin, for a URL handed to something other than `fetch`.
+ *
+ * `fetch` resolves an empty base against the page, but a URL pasted into
+ * Data, From Web or a Power Query has to be absolute, so the empty production
+ * base becomes the origin the add-in was served from, which is the server.
+ */
+function apiOrigin(): string {
+  if (API_BASE) return API_BASE;
+  const location = (globalThis as { location?: { origin?: string } }).location;
+  return location?.origin ?? "";
+}
 
 const SESSION_HEADER = "X-Aggregate-Session";
 const SETTINGS_SESSION = "aggregate.session";
@@ -234,7 +250,11 @@ function postBuild(decl: string, log2: number, bs: number, signal?: AbortSignal)
  * names. A 429 and every 5xx stay Excel errors.
  */
 async function readObject(handleText: unknown, path: (id: string) => string): Promise<unknown> {
-  const handle = await handleOf(handleText);
+  return readFrom(await handleOf(handleText), path);
+}
+
+/** `readObject` for a handle already resolved; see there. */
+async function readFrom(handle: Handle, path: (id: string) => string): Promise<unknown> {
   let reply = await request("GET", path(handle.id));
   if (reply.status === 404 && isMissingObject(reply.body)) {
     const recipe = (await recipeTable())[handle.id];
@@ -431,4 +451,41 @@ export async function q(handle: any[][], p: number[][]): Promise<any[][]> {
       p
     );
   });
+}
+
+/**
+ * The frames an object has, with their shapes.
+ * @customfunction FRAMES
+ * @param handle A handle from AGG.BUILD, or a DecL program: a cell or a range.
+ * @returns One row per frame: name, rows, columns. #AGG! and the reason if the program is refused.
+ */
+export async function frames(handle: any[][]): Promise<any[][]> {
+  return rowsOrRefusal(async () =>
+    frameRows(await readObject(handle, (id) => `/v1/objects/${id}/frames`))
+  );
+}
+
+/**
+ * The URL that loads a whole frame: paste it into Data, From Web, or into a Power Query.
+ * @customfunction FRAMEURL
+ * @param handle A handle from AGG.BUILD, or a DecL program: a cell or a range.
+ * @param which The frame, such as density_df; AGG.FRAMES lists them.
+ * @param [format] csv (the default) or parquet.
+ * @returns The absolute URL of the frame. #AGG! and the reason if the program, the frame name or the format is refused.
+ */
+export async function frameUrl(handle: any[][], which: string, format?: string): Promise<any> {
+  const rows = await rowsOrRefusal(async () => {
+    let kind: string;
+    try {
+      kind = frameFormat(format);
+    } catch (error) {
+      return refuse((error as Error).message);
+    }
+    const made = await handleOf(handle);
+    // Ask for the shape first: an unknown name then reads the server's list of
+    // frames here, rather than a URL that 404s only once it has been pasted.
+    await readFrom(made, (id) => `/v1/objects/${id}/frame/${encodeURIComponent(which)}/shape`);
+    return [[frameDownloadUrl(apiOrigin(), made.id, which, kind)]];
+  });
+  return rows[0][0];
 }

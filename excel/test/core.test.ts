@@ -18,6 +18,9 @@ import {
   errorMessage,
   flattenExhibit,
   formatHandle,
+  frameDownloadUrl,
+  frameFormat,
+  frameRows,
   isMissingObject,
   isProgramRefusal,
   isRefusal,
@@ -180,6 +183,33 @@ test("a block that does not exist says how many there are", () => {
   assert.throws(() => flattenExhibit(payload, 3), /reins has 2 blocks; block must be 0 \(all\) or 1 to 2/);
   assert.throws(() => flattenExhibit(payload, -1));
   assert.throws(() => flattenExhibit(payload, 1.5));
+});
+
+// ----------------------------------------------------------------------
+// Frames
+// ----------------------------------------------------------------------
+
+test("the frames listing spills name, rows and columns under a header", () => {
+  const payload = fixture("frames-aggregatestoploss");
+  const rows = frameRows(payload);
+  assert.deepEqual(rows[0], ["name", "rows", "columns"]);
+  assert.equal(rows.length, payload.frames.length + 1);
+  assert.deepEqual(rows[1], ["summary", 3, 8]);
+  const density = rows.find((r) => r[0] === "reins_density_df");
+  assert.deepEqual(density, ["reins_density_df", 65536, 10]);
+  assert.deepEqual(frameRows({}), [["name", "rows", "columns"]]);
+});
+
+test("a frame url is absolute, encoded, and takes csv unless told parquet", () => {
+  assert.equal(frameDownloadUrl("https://agg.mynl.com", "4f40714271198d8f", "density_df"),
+               "https://agg.mynl.com/v1/objects/4f40714271198d8f/frame/density_df.csv");
+  assert.equal(frameDownloadUrl("http://localhost:19456/", "4f40714271198d8f", "reins_density_df", "parquet"),
+               "http://localhost:19456/v1/objects/4f40714271198d8f/frame/reins_density_df.parquet");
+  assert.equal(frameDownloadUrl("", "abc", "a b"), "/v1/objects/abc/frame/a%20b.csv");
+  assert.equal(frameFormat(undefined), "csv");
+  assert.equal(frameFormat(""), "csv");
+  assert.equal(frameFormat(" Parquet "), "parquet");
+  assert.throws(() => frameFormat("xlsx"), /format must be csv or parquet; got xlsx/);
 });
 
 // ----------------------------------------------------------------------

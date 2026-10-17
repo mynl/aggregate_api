@@ -4,6 +4,14 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.24.0
+
+[Frames-Route] **Which frames an object has, and the URL that loads one.** Plan `dev/plan-excel-library-and-frames.md`, third of five steps.
+
+- `GET /v1/objects/{id}/frames` lists the frames the object answers, each with its rows and columns, in the frame table's order: no reinsurance frames without a cession, no ledger without a PnL, no sharpen frames before a sharpen run. Six to fifteen milliseconds on a built object. Before it the only listing was the 404 an unknown frame name draws.
+- `=AGG.FRAMES(handle)` spills that listing as `name | rows | columns`, and `=AGG.FRAMEURL(handle, which, [format])` returns the absolute URL that loads a frame, `csv` by default or `parquet`, ready to paste into Data, From Web or a Power Query. A program in place of the handle builds first, so the id exists when the URL is pasted; an unknown frame name reads the server's list as `#AGG!` text rather than a URL that 404s once pasted.
+- `functions.json` changed, so a sideloaded add-in needs `npm stop` and `npm start`.
+
 ## 1.23.0
 
 [Readable-Arguments] **Every refusal in Excel reads as `#AGG!` text, and `p` takes the closed interval.** Plan `dev/plan-excel-library-and-frames.md`, second of five steps.

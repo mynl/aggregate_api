@@ -2774,6 +2774,39 @@ def get_frame_shape(
 
 
 # ----------------------------------------------------------------------
+# GET /v1/objects/{id}/frames  -- which frames this object has
+# ----------------------------------------------------------------------
+
+@router.get("/objects/{oid}/frames", response_model=models.FramesResponse)
+def list_frames(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
+    """The frames the object answers, each with its shape, in ``_CSV_FRAMES`` order.
+
+    Notes
+    -----
+    For a client about to load a whole frame by URL, which is the Excel
+    add-in's ``AGG.FRAMES`` and the task pane's frame dropdown. Each name is
+    resolved exactly as ``/shape`` resolves it, and a name that would draw the
+    400 or 404 ``_named_frame`` raises (no reinsurance, not a PnL, not
+    sharpened) is left out rather than listed with no shape. Any other failure
+    propagates, as it would from ``/shape``, since a resolver that raises is a
+    fault to see and not a frame to hide.
+
+    One pass over the frame table: every resolver is an attribute read or a
+    cached property on a built object, so the listing costs a few milliseconds
+    once the frames exist, and materializes any that do not yet, as the first
+    ``/shape`` would.
+    """
+    frames = []
+    for which in _CSV_FRAMES:
+        try:
+            df = reset_index_safe(_named_frame(entry, which))
+        except HTTPException:
+            continue
+        frames.append({"name": which, "rows": int(df.shape[0]), "columns": int(df.shape[1])})
+    return {"frames": frames}
+
+
+# ----------------------------------------------------------------------
 # GET /v1/objects/{id}/frame/{which}.parquet  -- full-frame download, binary
 # ----------------------------------------------------------------------
 

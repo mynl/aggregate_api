@@ -1,0 +1,49 @@
+{
+ "frames": [
+  {
+   "columns": 8,
+   "name": "summary",
+   "rows": 3
+  },
+  {
+   "columns": 6,
+   "name": "tail_df",
+   "rows": 19
+  },
+  {
+   "columns": 9,
+   "name": "validation_df",
+   "rows": 3
+  },
+  {
+   "columns": 11,
+   "name": "stats_df",
+   "rows": 17
+  },
+  {
+   "columns": 12,
+   "name": "density_df",
+   "rows": 65536
+  },
+  {
+   "columns": 12,
+   "name": "bs_window_df",
+   "rows": 4
+  },
+  {
+   "columns": 11,
+   "name": "reins_summary_df",
+   "rows": 3
+  },
+  {
+   "columns": 6,
+   "name": "reins_stats_df",
+   "rows": 17
+  },
+  {
+   "columns": 10,
+   "name": "reins_density_df",
+   "rows": 65536
+  }
+ ]
+}
