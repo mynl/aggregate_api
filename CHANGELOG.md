@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.20.0
+
+[Excel-Decl-Arguments] **Excel functions take a DecL program wherever they take a handle.** Plan `dev/done/plan-fast-frames.md`, last of five steps.
+
+- `=AGG.Q(A1, 0.99)`, `=AGG.EXHIBIT(A1, "summary")` and `=AGG.EXHIBITS(A1)` work with the program itself in A1, built on the default grid through the same path as `AGG.BUILD` (memo, recipe table, library references only). A program that is a number rather than an object says so.
+- Cells sharing one program post it once: a build in flight is shared, for `AGG.BUILD` too.
+- `excel/README.md` gives the Power Query that loads a whole frame as Parquet, building first so a refresh survives a server restart.
+- Owed by the author in desktop Excel: the plan's acceptance list, and whether Power Query reads the byte stream split encoding (if not, a patch drops the split).
+
 ## 1.19.0
 
 [Lab-All-Rows] **The Lab's density tables show every row on request.** Plan `dev/plan-fast-frames.md`, fourth of five steps.

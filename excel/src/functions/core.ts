@@ -42,7 +42,9 @@ export const RATE_LIMIT_RETRIES = 3;
 
 export const MESSAGES = {
   unreachable: "server unreachable",
-  notAHandle: "not an AGG.BUILD handle; expected something like agg.A#4f40714271198d8f",
+  notAHandle: "expected a handle such as agg.A#4f40714271198d8f, or a DecL program",
+  programIsValue:
+    "this program is a number, not an object; pass a handle from AGG.BUILD or a program that declares an agg, port, sev or distortion",
   unknownHandle: "handle unknown to this workbook; recalculate its AGG.BUILD cell",
   upgraded:
     "the server changed since this workbook was saved; press Ctrl+Alt+F9 to recalculate every cell",
@@ -76,6 +78,21 @@ export function parseHandle(text: unknown): Handle | null {
   if (typeof text !== "string") return null;
   const match = HANDLE.exec(text.trim());
   return match ? { kind: match[1], name: match[2], id: match[3] } : null;
+}
+
+/**
+ * Read a `handle` argument as a handle or as a DecL program.
+ *
+ * Every function that takes a handle takes a program in its place and builds
+ * it with the default grid, so `=AGG.Q(A1, 0.99)` works with the program itself
+ * in A1 and Excel tracks the dependency. A string that is not a handle is a
+ * program; anything else (a number, an empty cell) is neither.
+ */
+export function programOrHandle(text: unknown): { handle: Handle } | { program: string } | null {
+  const handle = parseHandle(text);
+  if (handle) return { handle };
+  if (typeof text !== "string" || !text.trim()) return null;
+  return { program: text.trim() };
 }
 
 /**

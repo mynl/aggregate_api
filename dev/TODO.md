@@ -6,11 +6,17 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
-- **[Fast-Frames]** IN PROGRESS, plan `dev/plan-fast-frames.md`, five steps:
-  `[orjson-frames]` DONE (`1.17.1`), `[gzip-level]` DONE (`1.17.2`),
-  `[parquet-route]` DONE (`1.18.0`), `[lab-all-rows]` DONE (`1.19.0`), then
-  `[excel-decl-arguments]`. Full density frames for the Lab
-  (All rows, 3.5M cell budget), Excel (Power Query over Parquet) and R.
+- **[Fast-Frames]** DONE (`1.17.1` to `1.20.0`), plan
+  `dev/done/plan-fast-frames.md`: `[orjson-frames]` 1.17.1, `[gzip-level]`
+  1.17.2, `[parquet-route]` 1.18.0, `[lab-all-rows]` 1.19.0,
+  `[excel-decl-arguments]` 1.20.0. Full density frames for the Lab (All rows,
+  3.5M cell budget), Excel (Power Query over Parquet) and R. Still owed, the
+  author's: the Excel acceptance list in desktop Excel (Power Query and byte
+  stream split among them), the host sync with `--extra parquet`, and the Caddy
+  check that a `.parquet` body is not re-encoded. Findings: csv-grid takes
+  about 8.5 s to parse and render 65,536 by 12 from CSV in the worker; the
+  `exeqa_` display binning (right edge, not mass-weighted) is still open; the
+  R client is its own plan, next.
 
 - **[Excel-Hosting]** DONE (`1.17.0`), plan `dev/done/plan-excel-hosting.md`.
   `/excel` serves the add-in built by `scripts/build-excel.ps1` (or `.sh`),

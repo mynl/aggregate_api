@@ -498,3 +498,23 @@ Minor bump.
 - Not run: Reinsurance / Density in the browser (the route and the shape are
   covered by tests; the leaf shares `loadAllRows` with More / Density), and the
   grid's Save compared byte for byte with the `.csv` route.
+
+### [excel-decl-arguments], 1.20.0, 2026-10-17
+
+- `programOrHandle` in `core.ts` is the pure helper (a handle, a program, or
+  null for a number or an empty cell), unit tested. `functions.ts` gains
+  `handleOf` and `buildOnce`; `AGG.BUILD` now goes through `buildOnce` too, so
+  the in-flight sharing covers it as well as the argument builds.
+- One edge recorded rather than engineered around: a build shared between an
+  `AGG.BUILD` cell and other cells is aborted for all of them if Excel cancels
+  the `AGG.BUILD` cell. They fail with the abort rather than a message, and a
+  recalculation posts again.
+- `MESSAGES.notAHandle` now names both forms; `programIsValue` is new.
+- `functions.json` regenerates from the JSDoc (`npm run build` through
+  `scripts/build-excel.ps1`); the three `handle` descriptions read "A handle
+  from AGG.BUILD, or a DecL program".
+- `excel/README.md`: the program-as-argument paragraph and the Power Query
+  section, with the data warning extended to queries.
+- Not run, the author's in desktop Excel: the acceptance list (the quantile
+  equality, twenty cells posting once by the audit count, the Power Query over
+  a log2 16 portfolio, the refresh after a restart, byte stream split).

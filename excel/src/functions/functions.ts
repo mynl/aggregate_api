@@ -31,6 +31,7 @@ import {
   mintSessionId,
   parseHandle,
   probabilities,
+  programOrHandle,
   readRecipeTable,
   rememberRecipe,
   reshape,
@@ -50,6 +51,9 @@ const slots = new Semaphore(MAX_IN_FLIGHT);
 
 /** `(decl, log2, bs)` to the value AGG.BUILD last returned, for this runtime. */
 const memo = new Map<string, string | number>();
+
+/** The same key while its build is in flight, so a sheet of cells sharing one program posts it once. */
+const inflight = new Map<string, Promise<string | number>>();
 
 let session: string | null = null;
 let recipes: RecipeTable | null = null;
@@ -189,8 +193,7 @@ function postBuild(decl: string, log2: number, bs: number, signal?: AbortSignal)
  * for a full recalculation.
  */
 async function readObject(handleText: unknown, path: (id: string) => string): Promise<unknown> {
-  const handle = parseHandle(handleText);
-  if (!handle) return fail(MESSAGES.notAHandle);
+  const handle = await handleOf(handleText);
   let reply = await request("GET", path(handle.id));
   if (reply.status === 404 && isMissingObject(reply.body)) {
     const recipe = (await recipeTable())[handle.id];
@@ -205,6 +208,58 @@ async function readObject(handleText: unknown, path: (id: string) => string): Pr
   }
   if (reply.status !== 200) return fail(errorMessage(reply.status, reply.body));
   return reply.body;
+}
+
+/**
+ * The handle a `handle` argument names: as given, or built from the program it holds.
+ *
+ * A program takes the default grid and goes through the same path as AGG.BUILD
+ * (the memo, the recipe table, library references only), so the cell then
+ * behaves exactly as if it held the handle AGG.BUILD would have returned.
+ */
+async function handleOf(handleText: unknown) {
+  const arg = programOrHandle(handleText);
+  if (!arg) return fail(MESSAGES.notAHandle);
+  if ("handle" in arg) return arg.handle;
+  const made = parseHandle(await buildOnce(arg.program, 0, 0));
+  if (!made) return fail(MESSAGES.programIsValue);
+  return made;
+}
+
+/**
+ * Build a program once per runtime: the memo, else the build in flight, else a POST.
+ *
+ * Concurrent callers with the same key share one promise, so a full
+ * recalculation of twenty cells over one program is one request. A shared
+ * refusal reaches every one of them as the same message.
+ */
+function buildOnce(
+  program: string,
+  log2: number,
+  bs: number,
+  signal?: AbortSignal
+): Promise<string | number> {
+  const key = memoKey(program, log2, bs);
+  const known = memo.get(key);
+  if (known !== undefined) return Promise.resolve(known);
+  let pending = inflight.get(key);
+  if (!pending) {
+    pending = (async () => {
+      const reply = await postBuild(program, log2, bs, signal);
+      if (reply.status !== 200) return fail(errorMessage(reply.status, reply.body));
+      const made = reply.body as { kind: string; name?: string; id?: string; value?: number };
+      if (made.kind === "value") {
+        memo.set(key, made.value as number);
+        return made.value as number;
+      }
+      const handle = formatHandle(made.kind, made.name ?? "", made.id as string);
+      await remember(made.id as string, program, log2, bs);
+      memo.set(key, handle);
+      return handle;
+    })().finally(() => inflight.delete(key));
+    inflight.set(key, pending);
+  }
+  return pending;
 }
 
 /**
@@ -237,31 +292,15 @@ export async function build(
 ): Promise<any> {
   const program = joinDecl(decl);
   if (!program) return fail(MESSAGES.emptyProgram);
-  const grid = log2 ?? 0;
-  const bucket = bs ?? 0;
-  const key = memoKey(program, grid, bucket);
-  const known = memo.get(key);
-  if (known !== undefined) return known;
-
   const controller = new AbortController();
   if (invocation) invocation.onCanceled = () => controller.abort();
-  const reply = await postBuild(program, grid, bucket, controller.signal);
-  if (reply.status !== 200) return fail(errorMessage(reply.status, reply.body));
-  const made = reply.body as { kind: string; name?: string; id?: string; value?: number };
-  if (made.kind === "value") {
-    memo.set(key, made.value as number);
-    return made.value;
-  }
-  const handle = formatHandle(made.kind, made.name ?? "", made.id as string);
-  await remember(made.id as string, program, grid, bucket);
-  memo.set(key, handle);
-  return handle;
+  return buildOnce(program, log2 ?? 0, bs ?? 0, controller.signal);
 }
 
 /**
  * The exhibits an object can show.
  * @customfunction EXHIBITS
- * @param handle A handle from AGG.BUILD.
+ * @param handle A handle from AGG.BUILD, or a DecL program.
  * @returns One row per exhibit: name, title, perspectives.
  */
 export async function exhibits(handle: string): Promise<any[][]> {
@@ -278,7 +317,7 @@ export async function exhibits(handle: string): Promise<any[][]> {
 /**
  * One exhibit, as values.
  * @customfunction EXHIBIT
- * @param handle A handle from AGG.BUILD.
+ * @param handle A handle from AGG.BUILD, or a DecL program.
  * @param name The exhibit, such as summary; AGG.EXHIBITS lists them.
  * @param [perspective] raw (the default) or insurer.
  * @param [block] 0 (the default) stacks every block under its caption; k returns block k alone.
@@ -307,7 +346,7 @@ export async function exhibit(
 /**
  * Quantiles of the object's total loss.
  * @customfunction Q
- * @param handle A handle from AGG.BUILD.
+ * @param handle A handle from AGG.BUILD, or a DecL program.
  * @param p A probability, or a range of them, each strictly between 0 and 1.
  * @returns The exact quantile at each p, in the shape of p.
  */

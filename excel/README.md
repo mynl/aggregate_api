@@ -53,6 +53,11 @@ E1: =AGG.EXHIBIT(C1, "summary")
 F1: =AGG.Q(C1, {0.5, 0.99})
 ```
 
+**A program goes wherever a handle goes.** `=AGG.Q(A1, 0.99)` with the
+program itself in A1 builds it on the default grid and reads the quantile, and
+Excel recalculates when A1 changes. Cells sharing one program post it once.
+`AGG.BUILD` is for when you want `log2` or `bs`, or a handle to reuse.
+
 `AGG.EXHIBIT` returns numbers, not formatted text. `block` 0 (the default)
 stacks every block under its caption with a blank row between; `block` k
 returns block k alone, without a caption, which is the form to use in
@@ -69,11 +74,41 @@ from that table and carries on under the same handle. If the server answers
 with a different id, its library or version changed: press Ctrl+Alt+F9 to
 recalculate every cell.
 
+## Whole frames through Power Query
+
+A density frame is `2**log2` rows by tens of columns, which is a table to load,
+not a spill. Power Query (Data, Get Data, From Other Sources, Blank Query, then
+Advanced Editor) loads it as Parquet with the query below. It reads the program
+from a cell named `Decl`, builds it (a program the server already holds comes
+straight back, so a refresh survives a restart), and loads the frame:
+
+```
+let
+    base  = "https://agg.mynl.com",
+    decl  = Excel.CurrentWorkbook(){[Name = "Decl"]}[Content]{0}[Column1],
+    built = Json.Document(Web.Contents(base, [RelativePath = "v1/objects",
+              Headers = [#"Content-Type" = "application/json"],
+              Content = Json.FromValue([decl = decl, log2 = 16,
+                                        library_references_only = true])])),
+    frame = Parquet.Document(Binary.Buffer(Web.Contents(base,
+              [RelativePath = "v1/objects/" & built[id]
+                              & "/frame/density_df.parquet"])))
+in
+    frame
+```
+
+`Binary.Buffer` is required: without it `Parquet.Document` fails with a
+"streamed binary values" error. Any name `GET /v1/objects/{id}/frame/{which}.csv`
+serves works in place of `density_df` (`reins_density_df`, `stats_df`, ...).
+Desktop Excel on Windows is the tested target. The server needs its `parquet`
+extra; `/v1/meta` lists `parquet` under `frame_formats` when it has it.
+
 ## Data
 
 Every program a formula builds goes to the server the add-in talks to and is
 written to that server's audit log. **On a public server, never put real data
-into DecL**, by typing it or by concatenating cells that hold it.
+into DecL**, by typing it, by concatenating cells that hold it, or through a
+Power Query.
 
 ## Development
 

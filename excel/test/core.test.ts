@@ -24,6 +24,7 @@ import {
   mintSessionId,
   parseHandle,
   probabilities,
+  programOrHandle,
   readRecipeTable,
   rememberRecipe,
   reshape,
@@ -50,6 +51,19 @@ test("a handle round trips", () => {
 test("anything that is not a handle parses to null", () => {
   for (const text of ["", "agg.A", "agg.A#123", "agg.A#4F40714271198D8F", "#4f40714271198d8f", 42, null]) {
     assert.equal(parseHandle(text), null, String(text));
+  }
+});
+
+test("a handle argument is a handle or a program, never both", () => {
+  const text = formatHandle("agg", "A", "4f40714271198d8f");
+  assert.deepEqual(programOrHandle(text), { handle: { kind: "agg", name: "A", id: "4f40714271198d8f" } });
+  assert.deepEqual(programOrHandle("  agg A 2 claims sev lognorm 10 cv 1 poisson "), {
+    program: "agg A 2 claims sev lognorm 10 cv 1 poisson",
+  });
+  // A near miss on the handle grammar is a program, and the server will say so.
+  assert.deepEqual(programOrHandle("agg.A#123"), { program: "agg.A#123" });
+  for (const text of ["", "   ", 42, null, undefined, true]) {
+    assert.equal(programOrHandle(text), null, String(text));
   }
 });
 
