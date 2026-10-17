@@ -2979,7 +2979,7 @@ def _snap(value: float, digits: int = 3) -> float:
 @router.get("/objects/{oid}/quantiles", response_model=models.QuantilesResponse)
 def get_quantiles(
     oid: str,
-    p: str = Query(..., description="Comma-separated probabilities in (0, 1)."),
+    p: str = Query(..., description="Comma-separated probabilities in [0, 1]."),
     snap: bool = Query(True, description="Round to 3 significant figures."),
     basis: str = Query(
         "aggregate",
@@ -3025,9 +3025,12 @@ def get_quantiles(
             status_code=422, detail=f"p must be numbers: {exc}") from exc
     if not ps:
         raise HTTPException(status_code=422, detail="p is empty")
-    if not all(0 < v < 1 for v in ps):
+    # The closed interval: ``q(0)`` and ``q(1)`` are the ends of the support
+    # and the library answers both (1.23.0; through 1.22.0 they were refused
+    # as "strictly inside (0, 1)", which Excel's AGG.Q repeated).
+    if not all(0 <= v <= 1 for v in ps):
         raise HTTPException(
-            status_code=422, detail="every p must lie strictly inside (0, 1)")
+            status_code=422, detail="every p must lie between 0 and 1 inclusive")
     name = "q_sev" if basis == "occurrence" else "q"
     q = getattr(entry.obj, name, None)
     # A pair carries no ``q`` of its own, but its total does: the joint's

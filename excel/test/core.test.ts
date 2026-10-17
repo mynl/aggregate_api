@@ -11,25 +11,26 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
-  DECL_ERROR,
   MESSAGES,
   RECIPE_LIMIT,
   Semaphore,
-  declErrorText,
+  REFUSAL,
   errorMessage,
   flattenExhibit,
   formatHandle,
-  isDeclError,
   isMissingObject,
   isProgramRefusal,
+  isRefusal,
   isSessionId,
   joinDecl,
+  localRefusalText,
   memoKey,
   mintSessionId,
   parseHandle,
   probabilities,
   programOrHandle,
   readRecipeTable,
+  refusalText,
   rememberRecipe,
   reshape,
   retryAfterSeconds,
@@ -66,22 +67,31 @@ test("a handle argument is a handle or a program, never both", () => {
   });
   // A near miss on the handle grammar is a program, and the server will say so.
   assert.deepEqual(programOrHandle("agg.A#123"), { program: "agg.A#123" });
-  for (const text of ["", "   ", 42, null, undefined, true, `${DECL_ERROR} line 1, col 3: oops`]) {
+  for (const text of ["", "   ", 42, null, undefined, true, `${REFUSAL} line 1, col 3: oops`]) {
     assert.equal(programOrHandle(text), null, String(text));
   }
 });
 
-test("a refused program becomes #DECL! text, a transient failure does not", () => {
+test("a refused program becomes #AGG! text, a transient failure does not", () => {
+  assert.equal(REFUSAL, "#AGG!");
   const body = { detail: { line: 1, column: 43, message: "Unexpected 'oops'." } };
-  const text = declErrorText(422, body);
-  assert.equal(text, "#DECL! line 1, col 43: Unexpected 'oops'.");
-  assert.ok(isDeclError(text));
-  assert.ok(isDeclError(`${DECL_ERROR} anything`));
-  for (const value of ["agg A 1 claim dsev [1] fixed", "#VALUE!", "", 42, null]) {
-    assert.equal(isDeclError(value), false, String(value));
+  const text = refusalText(422, body);
+  assert.equal(text, "#AGG! line 1, col 43: Unexpected 'oops'.");
+  assert.ok(isRefusal(text));
+  assert.ok(isRefusal(`${REFUSAL} anything`));
+  for (const value of ["agg A 1 claim dsev [1] fixed", "#VALUE!", "#DECL! gone", "", 42, null]) {
+    assert.equal(isRefusal(value), false, String(value));
   }
   for (const status of [400, 404, 422]) assert.ok(isProgramRefusal(status), String(status));
   for (const status of [200, 429, 500, 504]) assert.equal(isProgramRefusal(status), false, String(status));
+});
+
+test("an argument the add-in refuses itself reads under the same prefix", () => {
+  assert.equal(localRefusalText(MESSAGES.notAHandle), `#AGG! ${MESSAGES.notAHandle}`);
+  assert.ok(isRefusal(localRefusalText("every p must lie between 0 and 1 inclusive; got 1.5")));
+  // A route's 404 about the object reads the server's own sentence.
+  assert.equal(refusalText(404, { detail: "unknown frame 'nope'; expected one of ['density_df']" }),
+               "#AGG! unknown frame 'nope'; expected one of ['density_df']");
 });
 
 test("a range joins its non-empty cells in reading order", () => {
@@ -264,10 +274,12 @@ test("probabilities come in reading order and spill back in their shape", () => 
   assert.deepEqual(reshape([1, 2, 3, 4], [[0.1], [0.2], [0.3], [0.4]]), [[1], [2], [3], [4]]);
 });
 
-test("a probability outside (0, 1) is refused and named", () => {
-  for (const bad of [0, 1, 1.5, -0.1, "", "half", null]) {
-    assert.throws(() => probabilities([[0.5, bad]]), /strictly inside \(0, 1\)/, String(bad));
+test("p takes the closed interval, and anything outside it is refused and named", () => {
+  assert.deepEqual(probabilities([[0, 0.5, 1]]), [0, 0.5, 1]);
+  for (const bad of [1.5, -0.1, "", "half", null]) {
+    assert.throws(() => probabilities([[0.5, bad]]), /between 0 and 1 inclusive; got/, String(bad));
   }
+  assert.throws(() => probabilities(1.5), /got 1\.5$/);
 });
 
 test("the semaphore never runs more than its limit", async () => {

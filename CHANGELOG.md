@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.23.0
+
+[Readable-Arguments] **Every refusal in Excel reads as `#AGG!` text, and `p` takes the closed interval.** Plan `dev/plan-excel-library-and-frames.md`, second of five steps.
+
+- `AGG.Q` and `GET /v1/objects/{id}/quantiles` accept `p = 0` and `p = 1`, the ends of the support (three dice: 3 and 18). Both refused them as "strictly inside (0, 1)" before; the message is now "every p must lie between 0 and 1 inclusive".
+- One prefix for every readable refusal, `#AGG!`, replacing 1.21.0's `#DECL!`, which existed for one unreleased day and is not kept. It now covers the errors the add-in raises itself (a bad `p`, a block past the exhibit's last, an argument that is neither a handle nor a program, an empty program, a handle the workbook does not know) and a route's 4xx about the object (an exhibit name it does not have), each as cell text with the reason. Only transient failures and the recalculate instruction stay `#VALUE!`.
+- `core.ts`: `DECL_ERROR`, `isDeclError` and `declErrorText` are `REFUSAL`, `isRefusal` and `refusalText`, with `localRefusalText` for the add-in's own sentences. `functions.json` changed, so a sideloaded add-in needs `npm stop` and `npm start`.
+- `excel/README.md` and the task pane say what comes back as text.
+
 ## 1.22.0
 
 [Lab-All-Rows-Switch] **All rows is a page-wide switch in the header menu, and the density grids window their rows.** Plan `dev/plan-excel-library-and-frames.md`, first of five steps.

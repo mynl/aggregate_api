@@ -416,3 +416,26 @@ Written as the steps run, one entry per bump, every divergence recorded.
   Density on AggregateStopLoss, 65,536 by 10, the same.
 - `dev/done/plan-fast-frames.md` carries a dated correction of the 8.5 s
   finding, and the `[Fast-Frames]` Findings line in `dev/TODO.md` follows.
+
+### [readable-arguments], 1.23.0, 2026-10-17
+
+- The plan's rename kept `refusalText(status, body)` for the server form and
+  added `localRefusalText(message)` for the add-in's own sentences; both are
+  the one prefix. In `functions.ts` a `refuse(message)` helper throws the
+  `Refusal`.
+- **Wider than the plan's list, by the plan's own rule** ("`fail()` stays for
+  transient failures only"): a GET's 4xx other than the cache's own 404 and
+  429 is a `Refusal` carrying the server's sentence, so `AGG.EXHIBIT(h,
+  "nope")` reads the exhibit list and, in the next step, `AGG.FRAMEURL` with an
+  unknown frame reads the frame list. `MESSAGES.unknownHandle`,
+  `MESSAGES.programIsValue` and `MESSAGES.emptyProgram` are refusals too
+  (`AGG.BUILD` of an empty range returns the text). A rebuild from the recipe
+  table that the server refuses is a `Refusal`; one that faults stays an
+  error.
+- `probabilities` runs inside `rowsOrRefusal` now, so a bad `p` spills the
+  text rather than throwing `#VALUE!` before the spill began.
+- The quantiles route's `p` description reads `[0, 1]`; the refusal test
+  checks the new message and a new test asks for `p=0,1` on the dice.
+- The task pane had no `#DECL!` sentence to reword; it gained one on `#AGG!`.
+- Gates: pytest, web `npm test`, excel `npm test` (25), `npm run typecheck`,
+  `npm run lint` (one prettier line break fixed).

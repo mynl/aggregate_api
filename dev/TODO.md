@@ -9,9 +9,9 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 - **[Excel-Library-And-Frames]** IN PROGRESS, plan
   `dev/plan-excel-library-and-frames.md`, five steps, one bump each:
   `[lab-all-rows-switch]` 1.22.0 (All rows as a menu item and Ctrl+Shift+A,
-  the density grids window, nine seconds to one). Pending:
-  `[readable-arguments]`, `[frames-route]`, `[library-functions]`,
-  `[pane-frames]`.
+  the density grids window, nine seconds to one), `[readable-arguments]`
+  1.23.0 (`#AGG!` for every refusal, `p` on `[0, 1]`). Pending:
+  `[frames-route]`, `[library-functions]`, `[pane-frames]`.
 
 - **[Excel-Program-Ranges]** DONE (`1.21.0`), no plan: tire kicking after
   1.20.0. The three handle-taking functions accept a program as a range, a

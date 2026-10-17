@@ -673,13 +673,27 @@ def test_quantiles_snap_to_something_writable(client):
     assert raw["snapped"] == raw["q"], "snap=false leaves it alone"
 
 
-def test_quantiles_refuses_a_probability_outside_the_unit_interval(client):
+def test_quantiles_refuses_a_probability_outside_the_closed_unit_interval(client):
     oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
-    for bad in ("1.5", "0", "1", "-0.2"):
+    for bad in ("1.5", "-0.2", "0.5,1.01"):
         r = client.get(f"/v1/objects/{oid}/quantiles", params={"p": bad})
         assert r.status_code == 422, f"{bad}: {r.status_code}"
+        assert r.json()["detail"] == "every p must lie between 0 and 1 inclusive"
     assert client.get(f"/v1/objects/{oid}/quantiles",
                       params={"p": "nonsense"}).status_code == 422
+
+
+def test_quantiles_answer_at_the_ends_of_the_support(client):
+    """``p = 0`` and ``p = 1`` are the support's ends and the library answers both.
+
+    Three dice: the least total is 3 and the greatest 18. Both were refused
+    through 1.22.0 as "strictly inside (0, 1)", on each side of the Excel
+    add-in.
+    """
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/quantiles", params={"p": "0,1", "snap": "false"})
+    assert r.status_code == 200, r.text
+    assert [row["q"] for row in r.json()["quantiles"]] == [3.0, 18.0]
 
 
 def test_quantiles_read_the_tier_they_are_asked_for(client):

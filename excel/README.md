@@ -9,7 +9,7 @@ other cells read its exhibits and quantiles as plain values.
 =AGG.BUILD(decl, [log2], [bs])                                  a handle, such as agg.A#4f40714271198d8f
 =AGG.EXHIBITS(handle)                                           spill: name | title | perspectives
 =AGG.EXHIBIT(handle, name, [perspective], [block], [headers])   spill: the exhibit, as values
-=AGG.Q(handle, p)                                               quantiles; p a number or a range
+=AGG.Q(handle, p)                                               quantiles; p a number or a range in [0, 1]
 ```
 
 Desktop Excel on Windows and Mac, and Excel on the web. Not Excel on iPad,
@@ -66,14 +66,16 @@ returns block k alone, without a caption, which is the form to use in
 formulas. A label that spans several rows or columns is repeated into each of
 them, so every row and column of the spill says what it is.
 
-**A refused program returns its reason as text**, readable in the cell:
-`#DECL! line L, col C: ...` for a parse error, `#DECL!` and the server's own
-message for an unknown reference or a grid over the cap. A spilling function
-returns it as a single cell, and a function reading a cell that holds such
-text repeats it, so the reason follows the program wherever it is used. Only
-transient failures (rate limited, timed out, server unreachable or faulting)
-show `#VALUE!`, with the reason on hover, since a recalculation can clear
-them.
+**A refused program or argument returns its reason as text**, readable in the
+cell under one prefix: `#AGG! line L, col C: ...` for a parse error, `#AGG!`
+and the server's own message for an unknown reference, a grid over the cap or
+an exhibit the object does not have, and `#AGG!` and the add-in's own sentence
+for a `p` outside `[0, 1]`, a block past the exhibit's last, or an argument
+that is neither a handle nor a program. A spilling function returns it as a
+single cell, and a function reading a cell that holds such text repeats it, so
+the reason follows the program wherever it is used. Only transient failures
+(rate limited, timed out, server unreachable or faulting) show `#VALUE!`, with
+the reason on hover, since a recalculation can clear them.
 
 **Handles survive a restart.** The workbook keeps a table of how each handle
 was built, in its document settings (saved inside the .xlsx). When the server

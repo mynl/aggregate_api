@@ -54,15 +54,21 @@ export const MESSAGES = {
 };
 
 /**
- * The prefix of the text a cell holds when the server refused its program.
+ * The prefix of the text a cell holds when its program or an argument was refused.
  *
  * The author turned off Excel's error indicators, and a `#VALUE!` cell's
  * message shows only on hover, so a parse error was unreadable. The reason is
  * returned as the cell's value instead, under a prefix that reads like an Excel
  * error and that no DecL program or handle starts with, so the text is
- * recognized wherever it flows next.
+ * recognized wherever it flows next. One prefix for every readable refusal: a
+ * program the server refused, a route's 4xx, a bad `p`, a block past the
+ * exhibit's last, an argument that is neither a handle nor a program. Only a
+ * transient failure (unreachable, rate limited, timed out, server fault) and
+ * the recalculate instruction stay Excel errors, since a recalculation can
+ * clear them and dependents must not compute on them. `#DECL!` was the prefix
+ * for one unreleased day (1.21.0) and nothing is kept for it.
  */
-export const DECL_ERROR = "#DECL!";
+export const REFUSAL = "#AGG!";
 
 const HANDLE = /^([a-z]+)\.(.+)#([0-9a-f]{16})$/;
 const SESSION_ID = /^[A-Za-z0-9:.\-_]{8,200}$/;
@@ -102,13 +108,13 @@ export function parseHandle(text: unknown): Handle | null {
 export function programOrHandle(text: unknown): { handle: Handle } | { program: string } | null {
   const handle = parseHandle(text);
   if (handle) return { handle };
-  if (typeof text !== "string" || !text.trim() || isDeclError(text)) return null;
+  if (typeof text !== "string" || !text.trim() || isRefusal(text)) return null;
   return { program: text.trim() };
 }
 
-/** Whether a cell value is the text of a refused program. */
-export function isDeclError(value: unknown): boolean {
-  return typeof value === "string" && value.startsWith(DECL_ERROR);
+/** Whether a cell value is the text of a refusal. */
+export function isRefusal(value: unknown): boolean {
+  return typeof value === "string" && value.startsWith(REFUSAL);
 }
 
 /**
@@ -123,9 +129,14 @@ export function isProgramRefusal(status: number): boolean {
   return status >= 400 && status < 500 && status !== 429;
 }
 
-/** The cell text for a refused program: the prefix and the server's reason. */
-export function declErrorText(status: number, body: unknown): string {
-  return `${DECL_ERROR} ${errorMessage(status, body)}`;
+/** The cell text for a refusal the add-in raises itself: the prefix and the message. */
+export function localRefusalText(message: string): string {
+  return `${REFUSAL} ${message}`;
+}
+
+/** The cell text for a program or request the server refused: the prefix and its reason. */
+export function refusalText(status: number, body: unknown): string {
+  return localRefusalText(errorMessage(status, body));
 }
 
 /**
@@ -281,8 +292,11 @@ export function rememberRecipe(
 /**
  * Probabilities from a number or a range, in reading order, each checked.
  *
- * @throws Error naming the first value outside (0, 1), which the server would
- *   refuse anyway; refusing here saves the round trip and says which cell.
+ * The closed interval: `q(0)` and `q(1)` are the ends of the support and the
+ * server answers both.
+ *
+ * @throws Error naming the first value outside [0, 1], which the server would
+ *   refuse anyway; refusing here saves the round trip and says which value.
  */
 export function probabilities(p: CellValue[][] | CellValue): number[] {
   const rows: CellValue[][] = Array.isArray(p) ? p : [[p]];
@@ -290,8 +304,8 @@ export function probabilities(p: CellValue[][] | CellValue): number[] {
   for (const row of rows) {
     for (const cell of row) {
       const value = typeof cell === "number" ? cell : Number(cell);
-      if (cell === null || cell === undefined || cell === "" || !(value > 0 && value < 1)) {
-        throw new Error(`every p must lie strictly inside (0, 1); got ${String(cell)}`);
+      if (cell === null || cell === undefined || cell === "" || !(value >= 0 && value <= 1)) {
+        throw new Error(`every p must lie between 0 and 1 inclusive; got ${String(cell)}`);
       }
       values.push(value);
     }
