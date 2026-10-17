@@ -149,7 +149,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # round trip through zlib. Installed before CORS so the middleware stack
     # unwinds with CORS headers on the outside, where a browser needs them even
     # on a compressed response.
-    app.add_middleware(GZipMiddleware, minimum_size=1024)
+    #
+    # Level 6, not Starlette's default of 9. On a 52 MB portfolio density
+    # frame level 9 took 1.7 s for 16.11 MB and level 6 took 0.75 s for
+    # 16.23 MB: half the CPU for under 1% more on the wire. Once the frame
+    # itself serializes in 0.08 s, the compressor was most of the request.
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
 
     install_cors(app, settings.cors_origins)
 

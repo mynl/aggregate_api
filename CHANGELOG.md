@@ -4,6 +4,13 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.17.2
+
+[Gzip-Level] **Response compression drops from gzip level 9 to 6.** Plan `dev/plan-fast-frames.md`, second of five steps.
+
+- Starlette's default level 9 took 1.7 s to compress a 52 MB density frame; level 6 takes 0.75 s for a body under 1% larger (16.23 MB against 16.11 MB). After the orjson step, the compressor was most of a full-frame request.
+- New `tests/test_compression.py` pins the level and that frames gzip while small bodies and `identity` requests do not; the suite had no compression test before.
+
 ## 1.17.1
 
 [Orjson-Frames] **Frame routes serialize through orjson, straight from the array.** Plan `dev/plan-fast-frames.md`, first of five steps.

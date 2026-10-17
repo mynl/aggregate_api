@@ -442,3 +442,12 @@ Minor bump.
 - `dev/TODO.md` had no entry for this plan; a `[Fast-Frames]` entry was added
   under Landed, ticked step by step. `T:/worktrees/dev-files.md` does not
   exist, so no control-list row.
+
+### [gzip-level], 1.17.2, 2026-10-17
+
+- Landed as written: `compresslevel=6`.
+- The plan said "the existing compression tests still pass"; there were none.
+  `tests/test_compression.py` is new: a density frame gzips, `/v1/health` and
+  an `identity` request do not, and the installed level is 6.
+- Sizes from the benchmark: level 9 16.11 MB, level 6 16.23 MB (0.7% larger),
+  level 1 26.26 MB. Times 1,707 ms, 754 ms, 185 ms.
