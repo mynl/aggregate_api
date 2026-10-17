@@ -6,6 +6,11 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Fast-Frames]** IN PROGRESS, plan `dev/plan-fast-frames.md`, five steps:
+  `[orjson-frames]` DONE (`1.17.1`), then `[gzip-level]`, `[parquet-route]`,
+  `[lab-all-rows]`, `[excel-decl-arguments]`. Full density frames for the Lab
+  (All rows, 3.5M cell budget), Excel (Power Query over Parquet) and R.
+
 - **[Excel-Hosting]** DONE (`1.17.0`), plan `dev/done/plan-excel-hosting.md`.
   `/excel` serves the add-in built by `scripts/build-excel.ps1` (or `.sh`),
   `no-cache`, with a production manifest under `https://agg.mynl.com/excel`.

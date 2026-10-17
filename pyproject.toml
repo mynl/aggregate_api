@@ -82,6 +82,11 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
     "pydantic-settings>=2.4",
+    # Frame routes hand orjson the frame's numpy array directly. Serializing a
+    # 65,536 by 43 density frame took 2.2 s through the per-cell coercion,
+    # pydantic and json.dumps; orjson does the same bytes in under 0.1 s. See
+    # dev/done/plan-fast-frames.md, [orjson-frames].
+    "orjson>=3.10",
 ]
 license = "BSD-3-Clause"
 # Was >=3.11 through a31. `greater-tables` declares >=3.13 and that floor is

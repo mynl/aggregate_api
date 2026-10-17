@@ -143,7 +143,7 @@ from ..serializers import (
     bin_density,
     bivariate_marginal_frame,
     display_log2_for,
-    frame_to_payload,
+    frame_response,
     info_to_payload,
     mass_columns,
     pnl_density_frame,
@@ -2172,7 +2172,7 @@ def get_summary(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
     # named index in the payload too, so promote it to a column when
     # possible (reset_index_safe handles index/column collisions).
     df = reset_index_safe(df)
-    return frame_to_payload(df)
+    return frame_response(df)
 
 
 # ----------------------------------------------------------------------
@@ -2201,7 +2201,7 @@ def get_tail_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
             status_code=400,
             detail=f"tail_df not available for {entry.kind!r}",
         )
-    return frame_to_payload(reset_index_safe(df))
+    return frame_response(reset_index_safe(df))
 
 
 # ----------------------------------------------------------------------
@@ -2223,7 +2223,7 @@ def get_validation_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> d
             status_code=400,
             detail=f"validation_df not available for {entry.kind!r}",
         )
-    return frame_to_payload(reset_index_safe(df))
+    return frame_response(reset_index_safe(df))
 
 
 # ----------------------------------------------------------------------
@@ -2238,7 +2238,7 @@ def get_stats_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> dict:
             status_code=400,
             detail=f"stats_df not available for {entry.kind!r}",
         )
-    return frame_to_payload(reset_index_safe(_drop_raw_moments(df)))
+    return frame_response(reset_index_safe(_drop_raw_moments(df)))
 
 
 # ----------------------------------------------------------------------
@@ -2313,7 +2313,7 @@ def get_density_df(
         df = bivariate_marginal_frame(entry.obj)
         if col_list:
             df = df[[c for c in col_list if c in df.columns]]
-        return frame_to_payload(df)
+        return frame_response(df)
 
     if entry.kind == "sev":
         # A Severity has no density_df at all; sample the frozen variable onto a
@@ -2322,7 +2322,7 @@ def get_density_df(
         df = severity_density_frame(entry.obj)
         if col_list:
             df = df[[c for c in col_list if c in df.columns]]
-        return frame_to_payload(df)
+        return frame_response(df)
 
     if entry.kind == "pnl":
         # A PnL's density_df is a dict of per-leg GridDistributions, not a
@@ -2335,11 +2335,11 @@ def get_density_df(
         if col_list:
             df = df[[c for c in col_list if c in df.columns]]
         if not binned:
-            return frame_to_payload(df)
+            return frame_response(df)
         sum_cols = mass_columns(df)
         display_log2 = display_log2_for(len(df.columns))
         source_log2 = max(display_log2, (len(df) - 1).bit_length())
-        return frame_to_payload(
+        return frame_response(
             bin_density(df, source_log2, sum_cols=sum_cols, display_log2=display_log2)
         )
 
@@ -2365,19 +2365,19 @@ def get_density_df(
     if source_log2 is not None and binned:
         # Bin the full grid down: p_* columns sum, loss/F/S right-edge.
         sum_cols = mass_columns(df)
-        return frame_to_payload(
+        return frame_response(
             bin_density(
                 df, source_log2, sum_cols=sum_cols,
                 display_log2=display_log2_for(len(df.columns)),
             )
         )
     if source_log2 is not None:
-        return frame_to_payload(df)
+        return frame_response(df)
 
     # No build grid: leave the frame as-is and honor the legacy slice params.
     if nonzero and "p_total" in df.columns:
         df = df[df["p_total"] > 0]
-    return frame_to_payload(
+    return frame_response(
         df, cols=col_list, start=start, stop=stop, downsample=downsample,
     )
 
@@ -2445,12 +2445,12 @@ def get_unit_density_df(
 
     source_log2 = getattr(obj, "log2", None)
     if source_log2 is None or resolution == "full":
-        return frame_to_payload(df.reset_index(drop=True))
+        return frame_response(df.reset_index(drop=True))
     # The widest density payload the api serves: 2 * units + 3 columns. The cell
     # budget trades rows for those columns so a 12-unit portfolio ships the same
     # number of JSON numbers as a 2-unit one.
     sum_cols = mass_columns(df)
-    return frame_to_payload(
+    return frame_response(
         bin_density(
             df, source_log2, sum_cols=sum_cols,
             display_log2=display_log2_for(len(df.columns)),
@@ -2486,7 +2486,7 @@ def get_kappa(
             df, source_log2, sum_cols=set(),
             display_log2=display_log2_for(len(df.columns)),
         )
-    return frame_to_payload(df, downsample=downsample)
+    return frame_response(df, downsample=downsample)
 
 
 # ----------------------------------------------------------------------
@@ -2518,7 +2518,7 @@ def get_bs_window_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> di
         raise HTTPException(
             status_code=400, detail="bs window summary not available for this object"
         )
-    return frame_to_payload(reset_index_safe(df))
+    return frame_response(reset_index_safe(df))
 
 
 # ----------------------------------------------------------------------
@@ -2572,7 +2572,7 @@ def get_reins_summary_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -
     df = _frame_attr(entry.obj, "reins_summary_df")
     if df is None:
         raise HTTPException(status_code=400, detail="no reinsurance on this object")
-    return frame_to_payload(reset_index_safe(df))
+    return frame_response(reset_index_safe(df))
 
 
 @router.get("/objects/{oid}/reins_stats_df", response_model=models.FrameResponse)
@@ -2581,7 +2581,7 @@ def get_reins_stats_df(oid: str, entry: CacheEntry = Depends(_locked_entry)) -> 
     df = _frame_attr(entry.obj, "reins_stats_df")
     if df is None:
         raise HTTPException(status_code=400, detail="no reinsurance on this object")
-    return frame_to_payload(reset_index_safe(_drop_raw_moments(df)))
+    return frame_response(reset_index_safe(_drop_raw_moments(df)))
 
 
 @router.get("/objects/{oid}/reins_density_df", response_model=models.FrameResponse)
@@ -2608,16 +2608,16 @@ def get_reins_density_df(
     source_log2 = getattr(entry.obj, "log2", None)
     if source_log2 is not None and resolution == "display":
         sum_cols = mass_columns(df)
-        return frame_to_payload(
+        return frame_response(
             bin_density(
                 df, source_log2, sum_cols=sum_cols,
                 display_log2=display_log2_for(len(df.columns)),
             )
         )
     if source_log2 is not None:
-        return frame_to_payload(df)
+        return frame_response(df)
     # No build grid to reason about: fall back to a small even-spaced preview.
-    return frame_to_payload(df, downsample=DENSITY_PREVIEW_ROWS)
+    return frame_response(df, downsample=DENSITY_PREVIEW_ROWS)
 
 
 # ----------------------------------------------------------------------

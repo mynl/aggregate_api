@@ -4,6 +4,14 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.17.1
+
+[Orjson-Frames] **Frame routes serialize through orjson, straight from the array.** Plan `dev/plan-fast-frames.md`, first of five steps.
+
+- Every `FrameResponse` route (`density_df`, `unit_density_df`, `kappa`, the reinsurance frames, `summary`, `stats_df`, `tail_df`, `validation_df`, `bs_window_df`) returns a finished `application/json` body built by `orjson` from the frame's numpy array. The document is unchanged: same columns and rows, non-finite floats still `null`.
+- A 65,536 by 43 portfolio density frame serialized in 2.2 s (per-cell coercion, pydantic, `json.dumps`); it now takes 0.08 s. Frames with text or bool columns keep the per-cell coercion, encoded by orjson.
+- `orjson` is a new runtime dependency. `dev/bench_frame_encodings.py` reproduces the stage timings, the gzip levels and the wire-format table (JSON, CSV, Parquet, Arrow) on a synthetic portfolio.
+
 ## 1.17.0
 
 [Excel-Hosting] **The server hands out the Excel add-in at `/excel`.** Plan `dev/done/plan-excel-hosting.md`.
