@@ -1,4 +1,4 @@
-/* The About pane. Plain and small: it is read once. */
+/* The task pane: the About list, then the Whole frames section. Plain and small. */
 html, body {
   margin: 0;
   padding: 0;
@@ -43,4 +43,108 @@ code {
 
 .warn {
   color: #a4262c;
+}
+
+/* Whole frames */
+.frames {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid #e1dfdd;
+}
+
+.frames h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.frames h3 {
+  margin: 14px 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.frames label {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #605e5c;
+}
+
+.frames .row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+  margin-top: 4px;
+}
+
+.frames input[type="text"],
+.frames select,
+.frames textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid #8a8886;
+  border-radius: 2px;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  color: #212529;
+  background: #ffffff;
+}
+
+.frames input[readonly],
+.frames textarea[readonly] {
+  background: #faf9f8;
+}
+
+.frames textarea {
+  resize: vertical;
+  white-space: pre;
+  overflow: auto;
+}
+
+.frames select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.frames button {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border: 1px solid #8a8886;
+  border-radius: 2px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.frames button:hover:not(:disabled) {
+  background: #f3f2f1;
+}
+
+.frames button:disabled {
+  color: #a19f9d;
+  cursor: default;
+}
+
+.frames ol {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+.frames li {
+  margin: 2px 0;
+}
+
+.frames .note,
+.frames .status {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #605e5c;
+}
+
+.frames .status:empty {
+  display: none;
 }

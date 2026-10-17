@@ -33,6 +33,7 @@ import {
   mintSessionId,
   noLibraryEntry,
   parseHandle,
+  powerQuery,
   probabilities,
   programOrHandle,
   readRecipeTable,
@@ -241,6 +242,19 @@ test("the library spills name and kind in file order under a header", () => {
 
 test("a missing entry's refusal names it and points at the listing", () => {
   assert.equal(noLibraryEntry(" Nope "), "no library entry named Nope; AGG.LIBRARY() lists them");
+});
+
+test("the power query carries the base and the frame and reads Decl", () => {
+  const query = powerQuery("https://agg.mynl.com/", "reins_density_df");
+  const lines = query.split("\n");
+  assert.equal(lines[0], "let");
+  assert.equal(lines[1], '    base  = "https://agg.mynl.com",');
+  assert.ok(query.includes('{[Name = "Decl"]}'), "reads the program from the Decl cell");
+  assert.ok(query.includes('"/frame/reins_density_df.csv"'), "the CSV route, which Power Query can read");
+  assert.ok(query.includes("library_references_only = true"));
+  assert.ok(query.includes("Number.NegativeInfinity"), "-inf as a number");
+  assert.equal(lines.at(-2), "in");
+  assert.equal(lines.at(-1), "    typed");
 });
 
 // ----------------------------------------------------------------------

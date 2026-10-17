@@ -487,3 +487,41 @@ Written as the steps run, one entry per bump, every divergence recorded.
   `=AGG.PROGRAM("BasicBook")`); the author's, with `npm stop` and `npm start`.
 - Gates: pytest (full), web `npm test`, excel `npm test` (30), `npm run
   typecheck`, `npm run lint`.
+
+### [pane-frames], 1.26.0, 2026-10-17
+
+- `powerQuery(base, which)` in `core.ts` is the README's CSV query (the
+  author's 2026-10-17 revision, which replaced the Parquet form because
+  Excel's Power Query has no Parquet connector) with `base` and the frame
+  filled in; one test pins its shape. `frameDownloadUrl` serves the From Web
+  box. The pane imports both plus `joinDecl` and `parseHandle` from `core.ts`,
+  which webpack bundles into the taskpane entry; `core.ts` holds no module
+  state, so the second copy is harmless.
+- The manifest gained `<Set Name="ExcelApi" MinVersion="1.1"/>`. The
+  generator's shared-runtime template lists `SharedRuntime` alone and
+  `Excel.run` works under it, so the set is explicit rather than required;
+  `npm run validate` passes and the production manifest transform is
+  unaffected.
+- The pane posts a program with `library_references_only`, as the functions
+  do, and sends the workbook's `X-Aggregate-Session` when the functions have
+  minted one (read from the same document setting), so one rate-limit budget
+  covers both. A selected range joins as `joinDecl` joins a `decl` range.
+- The Frame dropdown shows each frame's shape beside its name. The -inf line
+  and the `Decl` naming step are in the pane's text, as the plan asked.
+- `excel/README.md`: the Layout row for `src/taskpane/`. The "Whole frames
+  through Power Query" section is the author's uncommitted edit and was not
+  touched; the pane's query text is a copy of it in `core.ts`, so if that
+  section changes again the two must move together.
+- Not run: the pane in desktop Excel (fill from the selected cell, both Copy
+  buttons, both paste routes), the author's with `npm stop` and `npm start`.
+- Gates: pytest (full), web `npm test`, excel `npm test` (31), `npm run
+  typecheck`, `npm run lint`, `npm run validate`, `npm run build`. The
+  deployable bundle was rebuilt with `.\scripts\build-excel.ps1` after the
+  commit (excel/ moved in 1.23.0 to 1.26.0); the SPA was not, since `web/`
+  did not move after 1.22.0.
+
+### Closing
+
+- Version range 1.22.0 to 1.26.0, one commit per step. Plan retired to
+  `dev/done/` in the 1.26.0 commit; `dev/TODO.md` ticked DONE with what the
+  author still owes.

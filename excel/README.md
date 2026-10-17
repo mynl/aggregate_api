@@ -212,7 +212,7 @@ uv run --no-sync python dev/capture_excel_fixtures.py
 |---|---|
 | `src/functions/functions.ts` | the functions, the request layer, the recipe table and the build memo |
 | `src/functions/core.ts` | the pure logic, unit tested: handles, exhibit flattening, error messages, the recipe table |
-| `src/taskpane/` | a short About page; the shared runtime loads it |
+| `src/taskpane/` | the About list and the Whole frames section (the From Web URL and the Power Query, ready to paste); the shared runtime loads it |
 | `manifest.xml` | the development manifest, at `https://localhost:3000`; a production build rewrites it |
 | `webpack.config.js` | the build, including the production manifest |
 | `test/` | unit tests and their fixtures |

@@ -4,6 +4,14 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.26.0
+
+[Pane-Frames] **The task pane hands out a frame's URL and its Power Query, ready to paste.** Plan `dev/done/plan-excel-library-and-frames.md`, last of five steps.
+
+- The pane grows a **Whole frames** section: a Handle box prefilled from the selected cell (a program is accepted and built), a Frame dropdown filled from `/frames` with `density_df` selected when present, the From Web URL with a Copy button and its three steps, and the refreshable M query from `excel/README.md` with the base and the frame filled in, its Copy button and its steps. Copy says Copied for two seconds, or asks for Ctrl+C where the web view refuses the clipboard.
+- The manifest asks for `ExcelApi 1.1` beside `SharedRuntime 1.1`, since the pane reads the selected cell with `Excel.run`.
+- The pane's URL and query builders live in `core.ts` and are unit tested; the pane imports those and nothing from the functions module.
+
 ## 1.25.0
 
 [Library-Functions] **The library from a cell: `AGG.LIBRARY` and `AGG.PROGRAM`.** Plan `dev/plan-excel-library-and-frames.md`, fourth of five steps.

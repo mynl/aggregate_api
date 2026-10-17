@@ -473,6 +473,46 @@ export function frameDownloadUrl(base: string, id: string, which: string, format
 }
 
 /**
+ * The refreshable Power Query that loads a whole frame, with `base` and the
+ * frame name filled in.
+ *
+ * The query in `excel/README.md`, "Whole frames through Power Query": it reads
+ * the program from a cell named `Decl`, builds it at log2 16 (a program the
+ * server already holds comes straight back, so a refresh survives a restart),
+ * loads the frame from the `.csv` route and types every column as a number,
+ * reading `inf` and `-inf` as infinities. Excel's Power Query has no Parquet
+ * connector, so the CSV route is the one it takes.
+ *
+ * @param base The API's origin, without a trailing slash (one is tolerated).
+ * @param which The frame name, such as `density_df`.
+ */
+export function powerQuery(base: string, which: string): string {
+  const origin = base.replace(/\/+$/, "");
+  return [
+    "let",
+    `    base  = "${origin}",`,
+    '    decl  = Excel.CurrentWorkbook(){[Name = "Decl"]}[Content]{0}[Column1],',
+    '    built = Json.Document(Web.Contents(base, [RelativePath = "v1/objects",',
+    '              Headers = [#"Content-Type" = "application/json"],',
+    "              Content = Json.FromValue([decl = decl, log2 = 16,",
+    "                                        library_references_only = true])])),",
+    "    raw   = Csv.Document(Web.Contents(base,",
+    `              [RelativePath = "v1/objects/" & built[id] & "/frame/${which}.csv"]),`,
+    '              [Delimiter = ",", Encoding = TextEncoding.Utf8, QuoteStyle = QuoteStyle.Csv]),',
+    "    named = Table.PromoteHeaders(raw, [PromoteAllScalars = true]),",
+    "    toNumber = (t) =>",
+    '              if t = "inf" then Number.PositiveInfinity',
+    '              else if t = "-inf" then Number.NegativeInfinity',
+    '              else if t = "" or t = "nan" then null',
+    '              else Number.From(t, "en-US"),',
+    "    typed = Table.TransformColumns(named,",
+    "              List.Transform(Table.ColumnNames(named), each {_, toNumber, type number}))",
+    "in",
+    "    typed",
+  ].join("\n");
+}
+
+/**
  * The frames listing as a spill: a header row, then `name | rows | columns`.
  *
  * @param payload The body of `GET /v1/objects/{id}/frames`.

@@ -46,6 +46,56 @@
         <p>A refused program or argument comes back as <code>#AGG!</code> and the
             reason, as text you can read in the cell. Only a transient failure
             (unreachable, rate limited, timed out) shows <code>#VALUE!</code>.</p>
+
+        <!-- Whole frames: a density frame is tens of thousands of rows, a table
+             to load rather than a spill. Two paste routes, both needing text
+             nobody can type: the CSV URL for Data, From Web, and the M query
+             for a refreshable Power Query. The pane hands both out ready to
+             paste. The handle comes from the selected cell; a program in the
+             cell is accepted and built, as everywhere. -->
+        <section class="frames" id="frames">
+            <h2>Whole frames</h2>
+            <p>A density frame is a table to load, not a spill. Pick the handle
+                cell (a program is fine too), choose the frame, then paste one of
+                the two texts below.</p>
+            <label for="handle">Handle</label>
+            <div class="row">
+                <input type="text" id="handle" spellcheck="false" placeholder="agg.A#4f40714271198d8f, or a program" />
+                <button type="button" id="use-selection">Use selected cell</button>
+            </div>
+            <label for="frame">Frame</label>
+            <select id="frame" disabled><option value="">pick a handle first</option></select>
+            <p class="status" id="frames-status"></p>
+
+            <h3>From Web</h3>
+            <div class="row">
+                <input type="text" id="from-web" readonly spellcheck="false" />
+                <button type="button" id="copy-from-web" disabled>Copy</button>
+            </div>
+            <ol>
+                <li>Data, From Web.</li>
+                <li>Paste the URL, OK.</li>
+                <li>Load.</li>
+            </ol>
+            <p class="note">Cells reading <code>-inf</code> load as errors: right-click the
+                column, Replace Errors, leave the value empty.</p>
+
+            <h3>Refreshable query</h3>
+            <div class="row">
+                <textarea id="query" rows="8" readonly spellcheck="false"></textarea>
+            </div>
+            <div class="row">
+                <button type="button" id="copy-query" disabled>Copy</button>
+            </div>
+            <ol>
+                <li>Name the cell holding the program <code>Decl</code> (Name Box, top left).</li>
+                <li>Data, Get Data, From Other Sources, Blank Query.</li>
+                <li>Advanced Editor, paste, Done, then Close &amp; Load.</li>
+            </ol>
+            <p class="note">The query builds the program in <code>Decl</code> at log2 16 on every
+                refresh, so it survives a server restart and follows an edit to the program.</p>
+        </section>
+
         <p class="warn">Every program goes to the server and into its audit log.
             On a public server, never put real data in DecL.</p>
         <p id="server"></p>

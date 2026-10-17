@@ -6,13 +6,17 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
-- **[Excel-Library-And-Frames]** IN PROGRESS, plan
-  `dev/plan-excel-library-and-frames.md`, five steps, one bump each:
+- **[Excel-Library-And-Frames]** DONE (`1.22.0` to `1.26.0`), plan
+  `dev/done/plan-excel-library-and-frames.md`, five steps, one bump each:
   `[lab-all-rows-switch]` 1.22.0 (All rows as a menu item and Ctrl+Shift+A,
   the density grids window, nine seconds to one), `[readable-arguments]`
   1.23.0 (`#AGG!` for every refusal, `p` on `[0, 1]`), `[frames-route]`
   1.24.0 (`GET /frames`, `AGG.FRAMES`, `AGG.FRAMEURL`), `[library-functions]`
-  1.25.0 (`AGG.LIBRARY`, `AGG.PROGRAM`). Pending: `[pane-frames]`.
+  1.25.0 (`AGG.LIBRARY`, `AGG.PROGRAM`), `[pane-frames]` 1.26.0 (the pane's
+  Whole frames section). Still owed, the author's: the Excel acceptance list
+  in desktop Excel (`npm stop`, `npm start`, then the plan's four items), the
+  Ctrl+Shift+A check in Edge and Firefox, and the deploy. Upstream ask for
+  `csv-grid`: refresh the status line after `_applyHeight`.
 
 - **[Excel-Program-Ranges]** DONE (`1.21.0`), no plan: tire kicking after
   1.20.0. The three handle-taking functions accept a program as a range, a
