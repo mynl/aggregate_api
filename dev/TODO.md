@@ -11,8 +11,8 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
   `[lab-all-rows-switch]` 1.22.0 (All rows as a menu item and Ctrl+Shift+A,
   the density grids window, nine seconds to one), `[readable-arguments]`
   1.23.0 (`#AGG!` for every refusal, `p` on `[0, 1]`), `[frames-route]`
-  1.24.0 (`GET /frames`, `AGG.FRAMES`, `AGG.FRAMEURL`). Pending:
-  `[library-functions]`, `[pane-frames]`.
+  1.24.0 (`GET /frames`, `AGG.FRAMES`, `AGG.FRAMEURL`), `[library-functions]`
+  1.25.0 (`AGG.LIBRARY`, `AGG.PROGRAM`). Pending: `[pane-frames]`.
 
 - **[Excel-Program-Ranges]** DONE (`1.21.0`), no plan: tire kicking after
   1.20.0. The three handle-taking functions accept a program as a range, a

@@ -33,6 +33,11 @@ CAPTURES = [
     ("frames-aggregatestoploss", "AggregateStopLoss", "frames"),
 ]
 
+#: How many library entries ``examples-few.json`` keeps. The whole listing is
+#: 150 KB and the add-in's lookup is exact on ``name``, so a handful of entries
+#: in file order is the test.
+LIBRARY_ITEMS = 5
+
 
 def main() -> None:
     """Build each entry through the app and write each route's body."""
@@ -58,6 +63,15 @@ def main() -> None:
             path.write_text(json.dumps(reply.json(), indent=1, sort_keys=True) + "\n",
                             encoding="utf-8")
             print(f"{path.name}: {path.stat().st_size:,} bytes")
+        # The library listing is not an object route: the first few entries,
+        # with the fields the add-in reads.
+        listing = client.get("/v1/examples")
+        listing.raise_for_status()
+        few = {"items": [{k: item[k] for k in ("name", "kind", "decl")}
+                         for item in listing.json()["items"][:LIBRARY_ITEMS]]}
+        path = OUT / "examples-few.json"
+        path.write_text(json.dumps(few, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        print(f"{path.name}: {path.stat().st_size:,} bytes")
 
 
 if __name__ == "__main__":

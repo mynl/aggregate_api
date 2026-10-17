@@ -15,7 +15,7 @@
  * functions.json reads only literal types.
  */
 
-import type { CellValue, Handle, RecipeTable } from "./core";
+import type { CellValue, Handle, LibraryItem, RecipeTable } from "./core";
 import {
   MAX_IN_FLIGHT,
   MESSAGES,
@@ -32,9 +32,12 @@ import {
   isRefusal,
   isSessionId,
   joinDecl,
+  libraryEntry,
+  libraryRows,
   localRefusalText,
   memoKey,
   mintSessionId,
+  noLibraryEntry,
   parseHandle,
   probabilities,
   programOrHandle,
@@ -74,6 +77,9 @@ const memo = new Map<string, string | number>();
 
 /** The same key while its build is in flight, so a sheet of cells sharing one program posts it once. */
 const inflight = new Map<string, Promise<string | number>>();
+
+/** The library's entries per database stem (`""` the default), fetched once per runtime. */
+const libraries = new Map<string, Promise<LibraryItem[]>>();
 
 let session: string | null = null;
 let recipes: RecipeTable | null = null;
@@ -486,6 +492,71 @@ export async function frameUrl(handle: any[][], which: string, format?: string):
     // frames here, rather than a URL that 404s only once it has been pasted.
     await readFrom(made, (id) => `/v1/objects/${id}/frame/${encodeURIComponent(which)}/shape`);
     return [[frameDownloadUrl(apiOrigin(), made.id, which, kind)]];
+  });
+  return rows[0][0];
+}
+
+/**
+ * The library's entries, fetched once per runtime per database and kept.
+ *
+ * About 150 KB for the default library's two hundred entries, so one fetch
+ * serves every cell. An unknown stem is a 422 whose text points at the
+ * listing, and it is kept like a memoized refusal so a sheet of cells naming
+ * the same wrong database asks once; a transient failure is forgotten so the
+ * next cell can try again.
+ */
+function libraryItems(database: unknown): Promise<LibraryItem[]> {
+  const key = String(database ?? "").trim();
+  let pending = libraries.get(key);
+  if (!pending) {
+    pending = (async () => {
+      const path = key ? `/v1/examples?database=${encodeURIComponent(key)}` : "/v1/examples";
+      const reply = await request("GET", path);
+      if (isProgramRefusal(reply.status)) throw new Refusal(refusalText(reply.status, reply.body));
+      if (reply.status !== 200) return fail(errorMessage(reply.status, reply.body));
+      const items = (reply.body as { items?: LibraryItem[] }).items ?? [];
+      return items.map(({ name, kind, decl }) => ({ name, kind, decl }));
+    })();
+    pending.catch((error) => {
+      if (!(error instanceof Refusal)) libraries.delete(key);
+    });
+    libraries.set(key, pending);
+  }
+  return pending;
+}
+
+/**
+ * A library entry's handle, or the whole library as name and kind.
+ * @customfunction LIBRARY
+ * @param [name] A library entry, such as Capstone.Gross. Omit to list every entry.
+ * @param [database] A database stem from the server's listing. Omit for the default library.
+ * @returns With name, the entry's handle, built as AGG.BUILD of its program would be; without, one row per entry: name, kind. #AGG! and the reason if the entry, the database or the program is refused.
+ */
+export async function library(name?: string, database?: string): Promise<any[][]> {
+  return rowsOrRefusal(async () => {
+    const items = await libraryItems(database);
+    if (String(name ?? "").trim() === "") return libraryRows(items);
+    const entry = libraryEntry(items, name);
+    if (!entry) return refuse(noLibraryEntry(name));
+    // The program's text, not the `kind.Name` reference: the memo, the recipe
+    // table and the in-flight sharing all apply, and an entry from another
+    // database builds too when it is self-contained.
+    return [[await buildOnce(entry.decl, 0, 0)]];
+  });
+}
+
+/**
+ * A library entry's DecL program, as its file spells it.
+ * @customfunction PROGRAM
+ * @param name A library entry, such as BasicBook; AGG.LIBRARY() lists them.
+ * @param [database] A database stem from the server's listing. Omit for the default library.
+ * @returns The program's text, newlines kept (Wrap Text shows them), ready to edit and pass to AGG.BUILD. #AGG! and the reason if the entry or the database is refused.
+ */
+export async function program(name: string, database?: string): Promise<any> {
+  const rows = await rowsOrRefusal(async () => {
+    const entry = libraryEntry(await libraryItems(database), name);
+    if (!entry) return refuse(noLibraryEntry(name));
+    return [[entry.decl]];
   });
   return rows[0][0];
 }

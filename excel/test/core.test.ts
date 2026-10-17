@@ -26,9 +26,12 @@ import {
   isRefusal,
   isSessionId,
   joinDecl,
+  libraryEntry,
+  libraryRows,
   localRefusalText,
   memoKey,
   mintSessionId,
+  noLibraryEntry,
   parseHandle,
   probabilities,
   programOrHandle,
@@ -210,6 +213,34 @@ test("a frame url is absolute, encoded, and takes csv unless told parquet", () =
   assert.equal(frameFormat(""), "csv");
   assert.equal(frameFormat(" Parquet "), "parquet");
   assert.throws(() => frameFormat("xlsx"), /format must be csv or parquet; got xlsx/);
+});
+
+// ----------------------------------------------------------------------
+// The library
+// ----------------------------------------------------------------------
+
+test("a library entry is found by its exact name, and only that", () => {
+  const items = fixture("examples-few").items;
+  const entry = libraryEntry(items, "BasicBook");
+  assert.equal(entry?.kind, "agg");
+  assert.ok(entry?.decl.startsWith("agg BasicBook\n"), "the program as the file spells it");
+  assert.equal(libraryEntry(items, "  DiceOneDie.Sev ")?.name, "DiceOneDie.Sev");
+  for (const miss of ["basicbook", "DiceOneDie.", "Nope", "", null, undefined]) {
+    assert.equal(libraryEntry(items, miss), null, String(miss));
+  }
+});
+
+test("the library spills name and kind in file order under a header", () => {
+  const items = fixture("examples-few").items;
+  const rows = libraryRows(items);
+  assert.deepEqual(rows[0], ["name", "kind"]);
+  assert.deepEqual(rows.slice(1).map((r) => r[0]), items.map((i: { name: string }) => i.name));
+  assert.ok(rows.every((r) => r.length === 2));
+  assert.deepEqual(libraryRows([]), [["name", "kind"]]);
+});
+
+test("a missing entry's refusal names it and points at the listing", () => {
+  assert.equal(noLibraryEntry(" Nope "), "no library entry named Nope; AGG.LIBRARY() lists them");
 });
 
 // ----------------------------------------------------------------------

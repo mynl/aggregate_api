@@ -466,3 +466,24 @@ Written as the steps run, one entry per bump, every divergence recorded.
 - Gates: pytest (full), web `npm test`, excel `npm test` (27), `npm run
   typecheck`, `npm run lint` (a `globalThis` global declaration and two
   prettier wraps fixed).
+
+### [library-functions], 1.25.0, 2026-10-17
+
+- `AGG.LIBRARY` is declared as a spilling function (`any[][]`) in both uses:
+  with a name it returns a one-cell spill holding the handle (or the number a
+  value program means, or the refusal text), which reads and references like
+  a scalar. One declared return type rather than two functions.
+- `core.ts` gained `LibraryItem`, `libraryEntry` (exact match, trimmed),
+  `libraryRows` and `noLibraryEntry` (the refusal sentence, so the test pins
+  it). `functions.ts` keeps `libraries`, a `Map` of stem to the listing's
+  promise: a refused stem (422) stays cached like a memoized refusal, a
+  transient failure is dropped so the next cell retries.
+- The fixture is `examples-few.json`: the first five entries of the default
+  library with `name`, `kind` and `decl` only, written by a new step at the
+  end of `dev/capture_excel_fixtures.py` (`LIBRARY_ITEMS = 5`), since the
+  listing is not an object route and the whole payload is 150 KB.
+- Not run: the desktop Excel acceptance (`=AGG.LIBRARY()` spilling 198 rows,
+  the handle reading through `AGG.EXHIBIT`, the two readable refusals,
+  `=AGG.PROGRAM("BasicBook")`); the author's, with `npm stop` and `npm start`.
+- Gates: pytest (full), web `npm test`, excel `npm test` (30), `npm run
+  typecheck`, `npm run lint`.

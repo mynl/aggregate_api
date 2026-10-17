@@ -1,0 +1,29 @@
+{
+ "items": [
+  {
+   "decl": "agg BasicBook\n  250 claims\n  1000 xs 0\n  sev lognorm 100 cv 1.5\n  poisson",
+   "kind": "agg",
+   "name": "BasicBook"
+  },
+  {
+   "decl": "agg DiceOneDie\n  dfreq [1 2 3 4 5 6]\n  dsev [1]",
+   "kind": "agg",
+   "name": "DiceOneDie"
+  },
+  {
+   "decl": "agg DiceOneDie.Sev\n  dfreq [1]\n  dsev [1 2 3 4 5 6]",
+   "kind": "agg",
+   "name": "DiceOneDie.Sev"
+  },
+  {
+   "decl": "agg DiceTwoDice\n  dfreq [2]\n  dsev [1:6]",
+   "kind": "agg",
+   "name": "DiceTwoDice"
+  },
+  {
+   "decl": "agg DiceThreeEvenDice\n  dfreq [3]\n  dsev [2:12:2]",
+   "kind": "agg",
+   "name": "DiceThreeEvenDice"
+  }
+ ]
+}

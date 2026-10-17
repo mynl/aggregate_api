@@ -483,6 +483,31 @@ export function frameRows(payload: unknown): Grid {
   return [["name", "rows", "columns"], ...items.map((f) => [f.name, f.rows, f.columns])];
 }
 
+/** One library entry, as much of `GET /v1/examples` as the add-in reads. */
+export interface LibraryItem {
+  name: string;
+  kind: string;
+  /** The program as its `.agg` file spells it, trailers included. */
+  decl: string;
+}
+
+/** The entry named exactly `name`, or `null`. Names are unique within a file. */
+export function libraryEntry(items: LibraryItem[], name: unknown): LibraryItem | null {
+  const wanted = String(name ?? "").trim();
+  if (!wanted) return null;
+  return items.find((item) => item.name === wanted) ?? null;
+}
+
+/** The library as a spill: a header row, then `name | kind` in file order. */
+export function libraryRows(items: LibraryItem[]): Grid {
+  return [["name", "kind"], ...items.map((item) => [item.name, item.kind])];
+}
+
+/** The refusal for a library name no entry carries. */
+export function noLibraryEntry(name: unknown): string {
+  return `no library entry named ${String(name ?? "").trim()}; AGG.LIBRARY() lists them`;
+}
+
 /**
  * A counting semaphore: at most `limit` tasks run at once, the rest wait in order.
  */

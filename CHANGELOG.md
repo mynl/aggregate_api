@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.25.0
+
+[Library-Functions] **The library from a cell: `AGG.LIBRARY` and `AGG.PROGRAM`.** Plan `dev/plan-excel-library-and-frames.md`, fourth of five steps.
+
+- `=AGG.LIBRARY()` spills the server's library as `name | kind` in file order (198 entries on the default library), and `=AGG.LIBRARY("Capstone.Gross")` is that entry's handle, built from the entry's program text through the same path as `AGG.BUILD`, so the memo, the recipe table and the in-flight sharing apply. An unknown name says so and points at the listing.
+- `=AGG.PROGRAM("BasicBook")` returns the entry's DecL as its file spells it, newlines kept, so a library entry becomes a starting point for editing in a cell and passing to `AGG.BUILD`.
+- Both take an optional `database` stem for another shipped `.agg` file; an unknown stem returns the server's 422 text, which names the listing route. The listing is fetched once per runtime per database and kept.
+- `functions.json` changed, so a sideloaded add-in needs `npm stop` and `npm start`.
+
 ## 1.24.0
 
 [Frames-Route] **Which frames an object has, and the URL that loads one.** Plan `dev/plan-excel-library-and-frames.md`, third of five steps.

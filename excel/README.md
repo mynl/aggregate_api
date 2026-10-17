@@ -12,6 +12,8 @@ other cells read its exhibits and quantiles as plain values.
 =AGG.Q(handle, p)                                               quantiles; p a number or a range in [0, 1]
 =AGG.FRAMES(handle)                                             spill: name | rows | columns, the frames it has
 =AGG.FRAMEURL(handle, which, [format])                          the URL that loads a whole frame, csv or parquet
+=AGG.LIBRARY([name], [database])                                a library entry's handle; or spill: name | kind
+=AGG.PROGRAM(name, [database])                                  a library entry's DecL program, as text
 ```
 
 Desktop Excel on Windows and Mac, and Excel on the web. Not Excel on iPad,
@@ -78,6 +80,16 @@ single cell, and a function reading a cell that holds such text repeats it, so
 the reason follows the program wherever it is used. Only transient failures
 (rate limited, timed out, server unreachable or faulting) show `#VALUE!`, with
 the reason on hover, since a recalculation can clear them.
+
+**The library is a cell away.** `=AGG.LIBRARY()` spills every entry of the
+server's library as `name | kind`, in file order; `=AGG.LIBRARY("Capstone.Gross")`
+is that entry's handle, built exactly as `AGG.BUILD` of its program would be.
+`=AGG.PROGRAM("BasicBook")` is the entry's DecL text, newlines kept (Wrap Text
+shows them), so a library entry can be dropped into a cell, edited, and passed
+to `AGG.BUILD`. Both take a `database` stem from the server's listing
+(`GET /v1/examples/databases`) for another shipped `.agg` file; an entry from
+another file builds when it is self-contained, and one that refers to a
+sibling in its file says so.
 
 **Whole frames go by URL, not by spill.** `=AGG.FRAMES(C1)` lists the frames
 an object has with their shapes, and `=AGG.FRAMEURL(C1, "density_df")` is the
