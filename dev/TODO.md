@@ -6,6 +6,13 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Excel-Library-And-Frames]** IN PROGRESS, plan
+  `dev/plan-excel-library-and-frames.md`, five steps, one bump each:
+  `[lab-all-rows-switch]` 1.22.0 (All rows as a menu item and Ctrl+Shift+A,
+  the density grids window, nine seconds to one). Pending:
+  `[readable-arguments]`, `[frames-route]`, `[library-functions]`,
+  `[pane-frames]`.
+
 - **[Excel-Program-Ranges]** DONE (`1.21.0`), no plan: tire kicking after
   1.20.0. The three handle-taking functions accept a program as a range, a
   refused program returns `#DECL!` and the reason as cell text, and the
@@ -18,10 +25,11 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
   3.5M cell budget), Excel (Power Query over Parquet) and R. Still owed, the
   author's: the Excel acceptance list in desktop Excel (Power Query and byte
   stream split among them), the host sync with `--extra parquet`, and the Caddy
-  check that a `.parquet` body is not re-encoded. Findings: csv-grid takes
-  about 8.5 s to parse and render 65,536 by 12 from CSV in the worker; the
-  `exeqa_` display binning (right edge, not mass-weighted) is still open; the
-  R client is its own plan, next.
+  check that a `.parquet` body is not re-encoded. Findings: the 8.5 s All rows
+  took on 65,536 by 12 was the grid rendering every row unwindowed, not the
+  parse, fixed in 1.22.0 (`[Excel-Library-And-Frames]`); the `exeqa_` display
+  binning (right edge, not mass-weighted) is still open; the R client is its
+  own plan, next.
 
 - **[Excel-Hosting]** DONE (`1.17.0`), plan `dev/done/plan-excel-hosting.md`.
   `/excel` serves the add-in built by `scripts/build-excel.ps1` (or `.sh`),

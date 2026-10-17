@@ -131,6 +131,17 @@
                             <li><button type="button" class="dropdown-item menu-check-item" data-table-view="interactive">
                                 <i class="bi bi-check2"></i><span>Interactive</span>
                                 <small class="text-muted">sort, filter, search</small></button></li>
+                            <!-- All rows: a boolean beside the trio, so one item
+                                 that toggles rather than a fourth choice. It is
+                                 the density tables' whole frame against their
+                                 binned display grid, a page-wide preference
+                                 like the three above and persisted like them.
+                                 Ctrl+Shift+A is the other way to set it. Off by
+                                 default: on the public server a whole portfolio
+                                 frame is a 16 MB download. -->
+                            <li><button type="button" class="dropdown-item menu-check-item" data-density-rows="all">
+                                <i class="bi bi-check2"></i><span>All rows in density tables</span>
+                                <small class="text-muted">every row of density_df, scroll to read</small></button></li>
                             <li><hr class="dropdown-divider"></li>
                             <!-- Perspective: which business reading of an
                                  exhibit to serve. The library owns the
@@ -392,7 +403,7 @@
                 <!-- `.mod-key` is rewritten at startup to whichever modifier
                      CodeMirror's `Mod-` resolves to here, which is Cmd on a Mac
                      and on an iPad. See `modifierName` in editor.js. -->
-                <span class="fb-text"><span class="mod-key">Ctrl</span>+↑↓ history<span class="sep">·</span>Ctrl+Shift+U tables</span>
+                <span class="fb-text"><span class="mod-key">Ctrl</span>+↑↓ history<span class="sep">·</span>Ctrl+Shift+U tables<span class="sep">·</span>Ctrl+Shift+A all rows</span>
             </span>
         </div>
 
@@ -806,6 +817,7 @@
                 <span><kbd class="mod-key">Ctrl</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span><span>step through history (or the two arrows in the editor's right margin)</span>
                 <span><kbd class="mod-key">Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span><span>step through the example library (loads, does not build); the counter beside the editor says where you are, and walks whatever the Examples menu is filtered and searched down to</span>
                 <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd></span><span>flip every table between static and interactive</span>
+                <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd></span><span>toggle All rows in the density tables: the whole frame, every row, against the binned display grid</span>
                 <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd></span><span>flip every exhibit between the raw frame and the insurer reading; the pair beside the versions says which one you are on</span>
                 <span><kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>6</kbd></span><span>jump to an output group, numbered in the order they are listed below</span>
                 <span><kbd>←</kbd> <kbd>→</kbd> <kbd>Home</kbd> <kbd>End</kbd></span><span>walk a group or leaf row once it has focus, skipping whatever is dark</span>
@@ -875,7 +887,10 @@
                     from the menu or with Ctrl+Shift+U. An interactive grid sorts, filters and
                     searches, and its toolbar copies or saves the underlying values rather than the
                     printed text. The density grids are always interactive; under full precision they
-                    show every digit of each value instead of the automatic format</li>
+                    show every digit of each value instead of the automatic format. All rows in
+                    density tables, from the menu or with Ctrl+Shift+A, loads the whole frame into
+                    them in place of the binned display grid, every row within a cell budget, and
+                    the grid's Copy and Save then export exactly that frame</li>
                 <li><span class="t">Perspective</span>: Raw is the frame as computed, Insurer is the
                     business reading of it. The two words beside the versions are a readout and a
                     switch at once</li>

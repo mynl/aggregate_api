@@ -14,6 +14,53 @@
 /** Cells (rows times columns) All rows will put in one grid. */
 export const ALL_ROWS_CELL_BUDGET = 3_500_000;
 
+/** The `localStorage` key of the page-wide All rows preference. */
+export const DENSITY_ROWS_KEY = 'aggapi.densityRows';
+
+/**
+ * Read the All rows preference: `'all'` or `'display'`, the default.
+ *
+ * A page-wide preference like Tables and Perspective, persisted so a reader who
+ * wants every row sets it once. Display grid is the default because on the
+ * public server a whole portfolio frame is a multi-megabyte download. Anything
+ * stored that is not `'all'` (an old key, a hand edit) reads as the default.
+ *
+ * @param {{getItem: function(string): (string|null)}} storage `localStorage`,
+ *     or a stub under test. A storage that throws (private mode) reads as the
+ *     default too.
+ * @returns {'all'|'display'}
+ */
+export function readDensityRows(storage) {
+    try { return storage.getItem(DENSITY_ROWS_KEY) === 'all' ? 'all' : 'display'; }
+    catch { return 'display'; }
+}
+
+/**
+ * Persist the All rows preference, silently when the storage refuses.
+ *
+ * @param {{setItem: function(string, string)}} storage `localStorage`, or a stub.
+ * @param {'all'|'display'} value the view to keep.
+ */
+export function writeDensityRows(storage, value) {
+    try { storage.setItem(DENSITY_ROWS_KEY, value === 'all' ? 'all' : 'display'); }
+    catch { /* private mode: the choice lasts the page */ }
+}
+
+/**
+ * The one muted line shown while the grid fetches a whole frame.
+ *
+ * From the shape already in hand, so the reader knows what is coming before a
+ * byte of it has arrived.
+ *
+ * @param {{rows: number, columns: number}} shape what `frame/{which}/shape` said.
+ * @returns {string}
+ */
+export function loadingLine(shape) {
+    const rows = Number(shape && shape.rows) || 0;
+    const columns = Number(shape && shape.columns) || 0;
+    return `Loading ${rows.toLocaleString('en-US')} rows by ${columns.toLocaleString('en-US')} columns…`;
+}
+
 function millions(n) {
     return `${(n / 1e6).toFixed(1)}M`;
 }

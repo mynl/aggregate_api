@@ -489,7 +489,13 @@ Minor bump.
   (11.5 MB; the server writes it in 0.4 s). The worker was in use (verified on
   the instance). So about 8.5 s is csv-grid's parse, inference and render of
   786k cells, which is slower than the author expected of it and is a finding
-  for `csv-grid`, not for this repo. A five-unit portfolio at log2 16 took the
+  for `csv-grid`, not for this repo. **Corrected 2026-10-17 (1.22.0,
+  `dev/done/plan-excel-library-and-frames.md`): the 8.5 s was not the parse.**
+  `loadAllRows` mounted the grid with `renderCap: shape.rows` and no bounded
+  height, and csv-grid windows rows only inside a bounded scroll box, so it
+  built 65,536 `<tr>` elements at once. With `maxRows` the grid windows and
+  the click-to-grid time is the fetch. Not a csv-grid finding after all. A
+  five-unit portfolio at log2 16 took the
   fallback: 65,536 rows by 4 columns with the budget line and the whole-frame
   link.
 - The lede under the switch still reads "binned probability mass, distribution,

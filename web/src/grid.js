@@ -80,6 +80,11 @@ export function destroyAllGrids() {
  * opts : object, optional
  *     CsvGrid options. ``worker`` is the bundled worker's URL (see module
  *     note); a caller can still pass ``false``.
+ *
+ * Returns
+ * -------
+ * CsvGrid
+ *     The grid, with ``loaded`` set to the promise its data load returns.
  */
 export function mountGrid(paneId, host, frame, opts = {}) {
     const { columns = [], rows = [], url = null, name = '' } = frame || {};
@@ -102,11 +107,18 @@ export function mountGrid(paneId, host, frame, opts = {}) {
     // two tabs of one page and the reader had to notice a column count to
     // predict which. The author's call is one toolbar everywhere. Callers can
     // still override via opts, and nothing does.
-    const grid = new CsvGrid(host, data, {
+    const grid = new CsvGrid(host, null, {
         worker: workerUrl,
         expandButtons: false,
         ...opts,
     });
+    // The constructor would call `setData` itself and drop the promise. Calling
+    // it here keeps the promise, which settles when the grid is installed in the
+    // host, or when a `{url}` fetch or parse fails and the grid has shown its
+    // own error box. The All rows view holds a "Loading" line up until then.
+    // Either way the promise is the caller's to await; an unawaited rejection
+    // is already swallowed by csv-grid.
+    grid.loaded = grid.setData(data);
     unformattedExport(host);
     registerPaneTeardown(paneId, grid);
     return grid;

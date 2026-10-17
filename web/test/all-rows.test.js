@@ -5,7 +5,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { ALL_ROWS_CELL_BUDGET, allRowsPlan, frameCsvUrl } from '../src/all-rows.js';
+import {
+    ALL_ROWS_CELL_BUDGET, DENSITY_ROWS_KEY, allRowsPlan, frameCsvUrl, loadingLine,
+    readDensityRows, writeDensityRows,
+} from '../src/all-rows.js';
 
 const FOUR = ['loss', 'p_total', 'F', 'S'];
 
@@ -55,4 +58,50 @@ test('the csv url carries the session and, when asked, the columns', () => {
         + '&cols=loss%2Cp_total%2CF%2CS');
     assert.equal(frameCsvUrl('', 'abc', 'reins_density_df', [], 's'),
         '/v1/objects/abc/frame/reins_density_df.csv?session=s');
+});
+
+// ----------------------------------------------------------------------
+// The All rows preference, persisted like Tables and Perspective
+// ----------------------------------------------------------------------
+
+/** A `localStorage` stand-in: a Map behind the two methods the helpers call. */
+function storage(seed = {}) {
+    const map = new Map(Object.entries(seed));
+    return {
+        getItem: (k) => (map.has(k) ? map.get(k) : null),
+        setItem: (k, v) => { map.set(k, String(v)); },
+        map,
+    };
+}
+
+test('the preference reads display by default and all only when stored as all', () => {
+    assert.equal(DENSITY_ROWS_KEY, 'aggapi.densityRows');
+    assert.equal(readDensityRows(storage()), 'display');
+    assert.equal(readDensityRows(storage({ [DENSITY_ROWS_KEY]: 'all' })), 'all');
+    // An old or hand-edited value is the default, never a third state.
+    assert.equal(readDensityRows(storage({ [DENSITY_ROWS_KEY]: 'yes' })), 'display');
+});
+
+test('the preference round trips, and anything but all is written as display', () => {
+    const store = storage();
+    writeDensityRows(store, 'all');
+    assert.equal(readDensityRows(store), 'all');
+    writeDensityRows(store, 'display');
+    assert.equal(store.map.get(DENSITY_ROWS_KEY), 'display');
+    writeDensityRows(store, 'nonsense');
+    assert.equal(store.map.get(DENSITY_ROWS_KEY), 'display');
+});
+
+test('a storage that throws reads as the default and swallows the write', () => {
+    const refusing = {
+        getItem() { throw new Error('private mode'); },
+        setItem() { throw new Error('private mode'); },
+    };
+    assert.equal(readDensityRows(refusing), 'display');
+    assert.doesNotThrow(() => writeDensityRows(refusing, 'all'));
+});
+
+test('the loading line reads the shape with thousands separators', () => {
+    assert.equal(loadingLine({ rows: 65536, columns: 12 }), 'Loading 65,536 rows by 12 columns…');
+    assert.equal(loadingLine(null), 'Loading 0 rows by 0 columns…');
 });

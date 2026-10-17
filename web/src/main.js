@@ -30,7 +30,7 @@ import {
 import { renderInfo } from './renderers.js';
 import { fetchFailed, mountChart, mountChartDoc, notDrawable } from './charts/mount.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
-import { allRowsPlan } from './all-rows.js';
+import { allRowsPlan, loadingLine, readDensityRows, writeDensityRows } from './all-rows.js';
 import { mountIrTable, irToGrid, docTruncated, atFullPrecision } from './tables.js';
 import { renderError, renderRateLimit } from './error-pane.js';
 import {
@@ -2268,16 +2268,50 @@ function setPerspective(mode) {
     refetchTables();
 }
 
-// The header dropdown's Tables and Perspective sections. One sync for both,
-// since both are the same checked-item pattern and a tick that follows the
-// value however it moved is the whole contract. The menu and Ctrl+Shift+U both
-// set Tables, which is why this reads the value rather than the click.
+/**
+ * Which view the density tables show: `'display'` or `'all'`.
+ *
+ * The third page-wide table preference, beside Tables and Perspective, and
+ * persisted like them. One setting for every density table: More / Density,
+ * Reinsurance / Density, and the nttagg exact columns that ride inside
+ * `density_df`. Display grid is the default, because on the public server a
+ * whole portfolio frame is a 16 MB download (the author's ruling, 2026-10-17).
+ * 1.19.0 shipped this as a two-button segmented control above each table, and
+ * the author found the buttons horrible and the control in the wrong place.
+ */
+let _densityRows = readDensityRows(localStorage);
+
+function setDensityRows(mode) {
+    if (mode === _densityRows) return;
+    _densityRows = mode;
+    writeDensityRows(localStorage, mode);
+    syncPreferenceMenu();
+    // A refetch, the Perspective path, not a redraw: the two views are two
+    // routes (the binned display frame against the whole `.csv`), and the
+    // panes behind the other tabs hold the old view too. Cheap: the document
+    // routes revalidate to 304s.
+    refetchTables();
+}
+
+/** Flip All rows, the preference being boolean. */
+function toggleDensityRows() {
+    setDensityRows(_densityRows === 'all' ? 'display' : 'all');
+}
+
+// The header dropdown's Tables and Perspective sections. One sync for all
+// three preferences, since each is the same checked-item pattern and a tick
+// that follows the value however it moved is the whole contract. The menu and
+// the keystrokes both set them, which is why this reads the value rather than
+// the click.
 function syncPreferenceMenu() {
     for (const item of document.querySelectorAll('[data-table-view]')) {
         item.classList.toggle('active', item.dataset.tableView === _tableView);
     }
     for (const item of document.querySelectorAll('[data-perspective]')) {
         item.classList.toggle('active', item.dataset.perspective === _perspective);
+    }
+    for (const item of document.querySelectorAll('[data-density-rows]')) {
+        item.classList.toggle('active', _densityRows === 'all');
     }
 }
 /**
@@ -2379,11 +2413,33 @@ document.addEventListener('keydown', (ev) => {
     togglePerspective();
 }, true);
 
+/**
+ * Ctrl+Shift+A: toggle All rows in the density tables, the A for All.
+ *
+ * Bound exactly as Ctrl+Shift+U is, capture phase with `preventDefault` and
+ * `stopPropagation`, because CodeMirror binds plain Ctrl+A (`selectAll`) and
+ * our emacs `Ctrl-a`, and it drops the Shift when matching: on the bubble
+ * phase the program box would select its whole program as the view flipped.
+ * Taken inside the editor as well, unlike V, since no browser claims
+ * Ctrl+Shift+A for an editing action; Chrome's tab search on it yields to a
+ * page that handles the keystroke first (checked 2026-10-17).
+ */
+document.addEventListener('keydown', (ev) => {
+    if (!ev.ctrlKey || !ev.shiftKey || ev.altKey) return;
+    if (ev.code !== 'KeyA') return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    toggleDensityRows();
+}, true);
+
 for (const item of document.querySelectorAll('[data-table-view]')) {
     item.addEventListener('click', () => setTableView(item.dataset.tableView));
 }
 for (const item of document.querySelectorAll('[data-perspective]')) {
     item.addEventListener('click', () => setPerspective(item.dataset.perspective));
+}
+for (const item of document.querySelectorAll('[data-density-rows]')) {
+    item.addEventListener('click', toggleDensityRows);
 }
 syncPreferenceMenu();
 
@@ -2597,13 +2653,16 @@ async function loadNarrative() {
  * above it. That is where it belongs for the same reason the Overview pair sit
  * there: a hint beside a sub-tab reads as a third kind of item inside the row.
  *
+ * @param {string} [hint] a sentence in place of the leaf's own, for a view
+ *   the shared hint misdescribes: the density leaves' All rows view.
  * @returns {HTMLElement|null} the lede, or null for a leaf that declares none.
  */
-function ledeFor(group, key) {
+function ledeFor(group, key, hint = null) {
     const leaf = leafOf(group, key);
-    if (!leaf?.hint) return null;
+    const text = hint || leaf?.hint;
+    if (!leaf || !text) return null;
     const p = el('p', { className: 'exhibit-lede' }, el('b', {}, leaf.label));
-    p.appendChild(document.createTextNode(`: ${leaf.hint}`));
+    p.appendChild(document.createTextNode(`: ${text}`));
     return p;
 }
 
@@ -2773,6 +2832,11 @@ function replacePane(paneId, node) {
  *     Fetches `{columns, rows}` for frames too long to document. Supplied by the
  *     density views, which are permanently the grid's, and used as the fallback
  *     when a document comes back truncated.
+ * leaf : [str, str], optional
+ *     `[group, key]`, for the lede.
+ * header : function, optional
+ *     Builds a control row to sit above the lede, rebuilt on every draw.
+ *     Generic; no caller passes one at present (see the note in `draw`).
  *
  * Notes
  * -----
@@ -2795,8 +2859,10 @@ async function replacePaneTable(paneId, which, opts = GRID_FULL, bulk = null,
     const draw = () => {
         const root = el('div');
         // A control row above the table, rebuilt on every draw, as
-        // `loadExhibitLeaf` takes one: the density leaves' Display grid / All
-        // rows switch.
+        // `loadExhibitLeaf` takes one. Generic, and no caller passes one since
+        // the density leaves' Display grid / All rows switch moved into the
+        // header menu (1.22.0); kept because the next pane-level control will
+        // want exactly this.
         if (header) root.appendChild(header());
         const lede = leaf && ledeFor(leaf[0], leaf[1]);
         if (lede) root.appendChild(lede);
@@ -3569,7 +3635,9 @@ if ($('qr-help')) bootstrap.Tooltip.getOrCreateInstance($('qr-help'));
 // More / Density and Reinsurance / Density are the two leaves on the raw frame
 // route, permanently: a density is thousands of rows at the least, so it never
 // becomes a document, and the grid's filters are how you read a quantile off
-// it. Each has two views behind one segmented control:
+// it. Each has two views behind the page-wide All rows preference, set from the
+// header menu under Tables or with Ctrl+Shift+A (`_densityRows`, beside the
+// Tables and Perspective preferences above):
 //
 // * **Display grid**, the default and the fast first paint: the frame binned to
 //   a power-of-two grid of at most 8,192 rows (`resolution: 'display'`), and on
@@ -3581,43 +3649,21 @@ if ($('qr-help')) bootstrap.Tooltip.getOrCreateInstance($('qr-help'));
 //   worker. The grid's own Copy and Save then export exactly that frame, which
 //   is the download the Display grid's comment used to promise and nothing
 //   offered. See `all-rows.js` for the budget and `dev/done/plan-fast-frames.md`.
+//
+// **Both views window their rows, and that is what makes All rows usable.**
+// csv-grid virtualizes rows only when its scroll box has a bounded height
+// (`maxRows` or `height`): it measures one row, renders the rows in view with
+// spacers for the rest, and swaps rows on scroll. Given no height it renders
+// `min(rows, renderCap)` table rows into the DOM at once, and 1.19.0 passed
+// `renderCap: shape.rows` with no height, so a 65,536-row frame built 65,536
+// `<tr>` elements and took nine seconds that the fast-frames log blamed on the
+// parse. The parse runs in the worker and is fast; the fetch dominates now.
 
-/** Which view the density tables show: `'display'` or `'all'`. One setting for both leaves. */
-let _densityRows = 'display';
+/** Rows a density grid shows at once; the grid's own scrollbar reaches the rest. */
+const DENSITY_GRID_ROWS = 25;
 
-const DENSITY_ROWS_VIEWS = [['display', 'Display grid'], ['all', 'All rows']];
-
-/**
- * The Display grid / All rows switch, as a segmented control.
- *
- * Two fixed labels, each naming the view it selects, rather than one button
- * that flips its own meaning. The same shape as `approximationStrip`.
- *
- * @param {string} group the tab group the leaf lives in, for the scroll rule.
- * @param {function(): Promise} reload redraws the leaf in the newly chosen view.
- * @returns {HTMLElement} the control row, rebuilt on every draw.
- */
-function densityRowsStrip(group, reload) {
-    const row = el('div', { className: 'tab-tools' });
-    const box = el('div', { className: 'btn-group btn-group-sm', role: 'group' });
-    box.setAttribute('aria-label', 'density table rows');
-    for (const [value, label] of DENSITY_ROWS_VIEWS) {
-        const button = el('button', {
-            type: 'button',
-            className: 'btn btn-outline-secondary' + (value === _densityRows ? ' active' : ''),
-        }, label);
-        button.setAttribute('aria-pressed', String(value === _densityRows));
-        button.addEventListener('click', () => {
-            if (value === _densityRows) return;
-            _densityRows = value;
-            // The scroll rule: an in-pane view pill is navigation.
-            anchorNavSettled(paneOf(group), reload());
-        });
-        box.appendChild(button);
-    }
-    row.appendChild(box);
-    return row;
-}
+/** The lede under All rows: the leaf's shared hint says binned, and nothing is. */
+const ALL_ROWS_HINT = 'every row of the frame as the library built it, nothing binned';
 
 /**
  * All rows: the whole frame into the grid, from the `.csv` route.
@@ -3627,21 +3673,24 @@ function densityRowsStrip(group, reload) {
  * row of `fallbackCols`, with the plan's sentence above the table and a link
  * to the whole `.csv`. The grid is handed a URL rather than rows, so the fetch
  * and the parse of a 50 MB file happen in its worker and the page stays live.
+ * csv-grid shows nothing of its own while the fetch runs, so a muted line
+ * built from the shape stands above the toolbar until the grid's load promise
+ * settles; it is removed explicitly rather than left to the install, so a
+ * failed fetch (which the grid reports in its own error box) does not leave
+ * "Loading" standing over the error.
  *
  * @param {string} paneId the output pane.
  * @param {string} which the frame name, `density_df` or `reins_density_df`.
- * @param {string[]} leaf `[group, key]` for the lede and the strip.
+ * @param {string[]} leaf `[group, key]` for the lede.
  * @param {string[]} fallbackCols what to keep when the frame is over budget.
  */
 async function loadAllRows(paneId, which, leaf, fallbackCols) {
     const shape = await api.frameShape(state.id, which);
     const plan = allRowsPlan(shape, fallbackCols);
     const url = api.frameCsvUrl(state.id, which, plan.columns);
-    const header = () => densityRowsStrip(leaf[0], () => loadDensityLeaf(leaf));
     const draw = () => {
         const root = el('div');
-        root.appendChild(header());
-        const lede = ledeFor(leaf[0], leaf[1]);
+        const lede = ledeFor(leaf[0], leaf[1], ALL_ROWS_HINT);
         if (lede) root.appendChild(lede);
         if (!plan.whole) {
             const note = el('div', { className: 'text-muted small mb-2' }, `${plan.note} `);
@@ -3649,23 +3698,32 @@ async function loadAllRows(paneId, which, leaf, fallbackCols) {
                 'Download the whole frame as .csv.'));
             root.appendChild(note);
         }
+        const loading = el('div', { className: 'text-muted small mb-1' }, loadingLine(shape));
+        root.appendChild(loading);
         const host = el('div');
         root.appendChild(host);
         replacePane(paneId, root);        // tears down the previous mode first
-        // `renderCap` at the row count: the grid must not stop at its 2,000-row
-        // default and ask whether to show the rest, since the rest is the point.
+        // `maxRows` bounds the scroll box, which is what makes the grid window
+        // its rows (see the section note). No `renderCap`: a windowed grid
+        // never asks whether to show the rest.
         const grid = mountTable(paneId, host, { frame: { url, name: `${which}.csv` } },
-                                { ...GRID_FULL, renderCap: Math.max(1, shape.rows) });
+                                { ...GRID_FULL, maxRows: DENSITY_GRID_ROWS });
+        if (grid?.loaded) {
+            grid.loaded
+                // csv-grid 3.10.1 writes its status line before it applies
+                // `maxRows`, so on a grid that then windows the line keeps the
+                // unwindowed render's "showing rows 1–2,048". Asking for the
+                // status again once the load settles reads the windowed state.
+                // An upstream ask: `_applyHeight` should refresh the status.
+                .then(() => grid.renderStatus?.())
+                .catch(() => {})
+                .finally(() => loading.remove());
+        } else {
+            loading.remove();
+        }
         onTableViewChange(paneId, tableViewRedraw(grid, draw), root);
     };
     draw();
-}
-
-/** Reload a density leaf in whichever view `_densityRows` holds. */
-function loadDensityLeaf(leaf) {
-    return leaf[0] === 'more'
-        ? loadMoreDensity()
-        : loadReinsFrame('reins_density_df', leaf);
 }
 
 /**
@@ -3680,7 +3738,8 @@ function loadDensityLeaf(leaf) {
  * Display grid always and in All rows only over the cell budget.
  *
  * `renderCap: 8192` lifts CsvGrid's 2,000-row default so the whole display grid
- * shows without a "show all" prompt; 8,192 is the widest that grid gets (see
+ * shows without a "show all" prompt should the grid fail to window (a pane
+ * measured while hidden); 8,192 is the widest that grid gets (see
  * `serializers.display_log2_for`).
  */
 async function loadMoreDensity() {
@@ -3692,11 +3751,11 @@ async function loadMoreDensity() {
     }
     const opts = { resolution: 'display' };
     return replacePaneTable('pane-more', 'density_df',
-        { ...GRID_FULL, maxRows: 25, renderCap: 8192 },
+        { ...GRID_FULL, maxRows: DENSITY_GRID_ROWS, renderCap: 8192 },
         () => (whole
             ? api.density_df(state.id, opts)
             : api.density_df(state.id, { ...opts, cols: densityCols(state.kind) })),
-        leaf, () => densityRowsStrip('more', loadMoreDensity));
+        leaf);
 }
 
 /**
@@ -3705,6 +3764,8 @@ async function loadMoreDensity() {
  * `reins_density_df` is ten columns whatever the program, so All rows always
  * fits the budget; the fallback is named for form. It was Summary's loader too
  * until a70, and Summary is on the exhibit route now. See `loadReinsExhibit`.
+ * The Display grid takes the same `maxRows` as More / Density's; through
+ * 1.21.0 it had none and so rendered all 8,192 rows at once.
  */
 async function loadReinsFrame(which, leaf = null) {
     if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
@@ -3714,8 +3775,7 @@ async function loadReinsFrame(which, leaf = null) {
     }
     const bulk = () => api.frameOf(state.id, which, { resolution: 'display' });
     await replacePaneTable('pane-reinsurance', which,
-        { ...GRID_FULL, renderCap: 8192 }, bulk, at,
-        () => densityRowsStrip('reinsurance', () => loadReinsFrame(which, at)));
+        { ...GRID_FULL, maxRows: DENSITY_GRID_ROWS, renderCap: 8192 }, bulk, at);
 }
 
 /**

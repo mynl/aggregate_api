@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.22.0
+
+[Lab-All-Rows-Switch] **All rows is a page-wide switch in the header menu, and the density grids window their rows.** Plan `dev/plan-excel-library-and-frames.md`, first of five steps.
+
+- The Display grid / All rows segmented control above the two density tables is gone. All rows is a checked item under Tables in the header menu, **All rows in density tables**, toggled there or with Ctrl+Shift+A, persisted like Tables and Perspective, and one setting for every density table (More / Density, Reinsurance / Density, the nttagg exact columns). Display grid stays the default: on the public server a whole portfolio frame is a 16 MB download.
+- All rows shows 65,536 rows in about a second instead of nine. The grid was mounted with no bounded height and `renderCap` at the row count, so csv-grid built every row at once; the fast-frames log blamed the parse, which runs in the worker and is fast. Both density grids now take `maxRows: 25` and window, Reinsurance / Density's Display grid included, which rendered all 8,192 rows before.
+- While the whole frame fetches, a muted line gives the shape ("Loading 65,536 rows by 12 columns"), and under All rows the lede says nothing is binned.
+- Ctrl+Shift+A is bound on the capture phase like Ctrl+Shift+U, so inside the program box it toggles the view rather than selecting the program. Checked in Chrome on Windows, where the page takes it ahead of tab search; Edge and Firefox are unchecked.
+- `web/test/all-rows.test.js` covers the preference's read and write and the loading line (11 tests, from 7).
+
 ## 1.21.0
 
 [Excel-Program-Ranges] **Excel functions take a program as a range, and a refused program returns its reason as text.** Tire kicking after 1.20.0, no plan.
