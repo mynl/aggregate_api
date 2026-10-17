@@ -15,16 +15,19 @@
  * functions.json reads only literal types.
  */
 
-import type { RecipeTable } from "./core";
+import type { CellValue, RecipeTable } from "./core";
 import {
   MAX_IN_FLIGHT,
   MESSAGES,
   RATE_LIMIT_RETRIES,
   Semaphore,
+  declErrorText,
   errorMessage,
   flattenExhibit,
   formatHandle,
+  isDeclError,
   isMissingObject,
+  isProgramRefusal,
   isSessionId,
   joinDecl,
   memoKey,
@@ -67,6 +70,25 @@ interface Reply {
 /** Fail the cell with `#VALUE!` and `message` on hover. */
 function fail(message: string): never {
   throw new CustomFunctions.Error(CustomFunctions.ErrorCode.invalidValue, message);
+}
+
+/**
+ * A program the server refused, carrying the `#DECL!` text the cell should show.
+ *
+ * Thrown where a handle was needed and the program behind it did not build, so
+ * the function reading it can return the reason as its value rather than as an
+ * Excel error nobody can read.
+ */
+class DeclRefusal extends Error {}
+
+/** Run a spilling function, turning a refused program into a one-cell spill of its text. */
+async function rowsOrRefusal(work: () => Promise<any[][]>): Promise<any[][]> {
+  try {
+    return await work();
+  } catch (error) {
+    if (error instanceof DeclRefusal) return [[error.message]];
+    throw error;
+  }
 }
 
 /** The workbook's document settings, once Office is ready. */
@@ -213,15 +235,21 @@ async function readObject(handleText: unknown, path: (id: string) => string): Pr
 /**
  * The handle a `handle` argument names: as given, or built from the program it holds.
  *
- * A program takes the default grid and goes through the same path as AGG.BUILD
- * (the memo, the recipe table, library references only), so the cell then
- * behaves exactly as if it held the handle AGG.BUILD would have returned.
+ * The argument is a cell or a range, joined like AGG.BUILD's. A program takes
+ * the default grid and goes through the same path as AGG.BUILD (the memo, the
+ * recipe table, library references only), so the cell then behaves exactly as
+ * if it held the handle AGG.BUILD would have returned. A refused program, or a
+ * cell already holding a refusal's text, throws `DeclRefusal` with that text.
  */
-async function handleOf(handleText: unknown) {
-  const arg = programOrHandle(handleText);
+async function handleOf(handleCells: unknown) {
+  const text = joinDecl(handleCells as CellValue[][] | CellValue);
+  if (isDeclError(text)) throw new DeclRefusal(text);
+  const arg = programOrHandle(text);
   if (!arg) return fail(MESSAGES.notAHandle);
   if ("handle" in arg) return arg.handle;
-  const made = parseHandle(await buildOnce(arg.program, 0, 0));
+  const built = await buildOnce(arg.program, 0, 0);
+  if (typeof built === "string" && isDeclError(built)) throw new DeclRefusal(built);
+  const made = parseHandle(built);
   if (!made) return fail(MESSAGES.programIsValue);
   return made;
 }
@@ -231,7 +259,8 @@ async function handleOf(handleText: unknown) {
  *
  * Concurrent callers with the same key share one promise, so a full
  * recalculation of twenty cells over one program is one request. A shared
- * refusal reaches every one of them as the same message.
+ * refusal reaches every one of them as the same text, and is memoized like a
+ * handle: the same program draws the same refusal until it is edited.
  */
 function buildOnce(
   program: string,
@@ -246,6 +275,11 @@ function buildOnce(
   if (!pending) {
     pending = (async () => {
       const reply = await postBuild(program, log2, bs, signal);
+      if (isProgramRefusal(reply.status)) {
+        const refusal = declErrorText(reply.status, reply.body);
+        memo.set(key, refusal);
+        return refusal;
+      }
       if (reply.status !== 200) return fail(errorMessage(reply.status, reply.body));
       const made = reply.body as { kind: string; name?: string; id?: string; value?: number };
       if (made.kind === "value") {
@@ -282,7 +316,7 @@ export async function version(): Promise<string> {
  * @param [log2] log2 of the grid size. Omit to let the library choose.
  * @param [bs] Bucket size. Omit to let the library choose.
  * @param [invocation] Supplied by Excel.
- * @returns A handle such as agg.A#4f40714271198d8f, or the number a program such as (2+2) means.
+ * @returns A handle such as agg.A#4f40714271198d8f, the number a program such as (2+2) means, or #DECL! and the reason the server refused the program.
  */
 export async function build(
   decl: any[][],
@@ -292,6 +326,7 @@ export async function build(
 ): Promise<any> {
   const program = joinDecl(decl);
   if (!program) return fail(MESSAGES.emptyProgram);
+  if (isDeclError(program)) return program;
   const controller = new AbortController();
   if (invocation) invocation.onCanceled = () => controller.abort();
   return buildOnce(program, log2 ?? 0, bs ?? 0, controller.signal);
@@ -300,70 +335,76 @@ export async function build(
 /**
  * The exhibits an object can show.
  * @customfunction EXHIBITS
- * @param handle A handle from AGG.BUILD, or a DecL program.
- * @returns One row per exhibit: name, title, perspectives.
+ * @param handle A handle from AGG.BUILD, or a DecL program: a cell or a range.
+ * @returns One row per exhibit: name, title, perspectives. #DECL! and the reason if the program is refused.
  */
-export async function exhibits(handle: string): Promise<any[][]> {
-  const body = await readObject(handle, (id) => `/v1/objects/${id}/exhibits`);
-  const items =
-    (body as { exhibits?: { name: string; title: string; perspectives: string[] }[] }).exhibits ??
-    [];
-  return [
-    ["name", "title", "perspectives"],
-    ...items.map((e) => [e.name, e.title, e.perspectives.join(", ")]),
-  ];
+export async function exhibits(handle: any[][]): Promise<any[][]> {
+  return rowsOrRefusal(async () => {
+    const body = await readObject(handle, (id) => `/v1/objects/${id}/exhibits`);
+    const items =
+      (body as { exhibits?: { name: string; title: string; perspectives: string[] }[] }).exhibits ??
+      [];
+    return [
+      ["name", "title", "perspectives"],
+      ...items.map((e) => [e.name, e.title, e.perspectives.join(", ")]),
+    ];
+  });
 }
 
 /**
  * One exhibit, as values.
  * @customfunction EXHIBIT
- * @param handle A handle from AGG.BUILD, or a DecL program.
+ * @param handle A handle from AGG.BUILD, or a DecL program: a cell or a range.
  * @param name The exhibit, such as summary; AGG.EXHIBITS lists them.
  * @param [perspective] raw (the default) or insurer.
  * @param [block] 0 (the default) stacks every block under its caption; k returns block k alone.
  * @param [headers] Whether to include the header rows. Default TRUE.
- * @returns The exhibit's rows: labels as text, values as numbers.
+ * @returns The exhibit's rows: labels as text, values as numbers. #DECL! and the reason if the program is refused.
  */
 export async function exhibit(
-  handle: string,
+  handle: any[][],
   name: string,
   perspective?: string,
   block?: number,
   headers?: boolean
 ): Promise<any[][]> {
-  const view = encodeURIComponent(perspective || "raw");
-  const body = await readObject(
-    handle,
-    (id) => `/v1/objects/${id}/exhibit/${encodeURIComponent(name)}?perspective=${view}`
-  );
-  try {
-    return flattenExhibit(body, block ?? 0, headers ?? true);
-  } catch (error) {
-    return fail((error as Error).message);
-  }
+  return rowsOrRefusal(async () => {
+    const view = encodeURIComponent(perspective || "raw");
+    const body = await readObject(
+      handle,
+      (id) => `/v1/objects/${id}/exhibit/${encodeURIComponent(name)}?perspective=${view}`
+    );
+    try {
+      return flattenExhibit(body, block ?? 0, headers ?? true);
+    } catch (error) {
+      return fail((error as Error).message);
+    }
+  });
 }
 
 /**
  * Quantiles of the object's total loss.
  * @customfunction Q
- * @param handle A handle from AGG.BUILD, or a DecL program.
+ * @param handle A handle from AGG.BUILD, or a DecL program: a cell or a range.
  * @param p A probability, or a range of them, each strictly between 0 and 1.
- * @returns The exact quantile at each p, in the shape of p.
+ * @returns The exact quantile at each p, in the shape of p. #DECL! and the reason if the program is refused.
  */
-export async function q(handle: string, p: number[][]): Promise<number[][]> {
+export async function q(handle: any[][], p: number[][]): Promise<any[][]> {
   let values: number[];
   try {
     values = probabilities(p);
   } catch (error) {
     return fail((error as Error).message);
   }
-  const body = await readObject(
-    handle,
-    (id) => `/v1/objects/${id}/quantiles?snap=false&p=${values.join(",")}`
-  );
-  const rows = (body as { quantiles?: { q: number }[] }).quantiles ?? [];
-  return reshape(
-    rows.map((row) => row.q),
-    p
-  );
+  return rowsOrRefusal(async () => {
+    const body = await readObject(
+      handle,
+      (id) => `/v1/objects/${id}/quantiles?snap=false&p=${values.join(",")}`
+    );
+    const rows = (body as { quantiles?: { q: number }[] }).quantiles ?? [];
+    return reshape(
+      rows.map((row) => row.q),
+      p
+    );
+  });
 }

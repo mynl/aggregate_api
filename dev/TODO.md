@@ -6,6 +6,11 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Excel-Program-Ranges]** DONE (`1.21.0`), no plan: tire kicking after
+  1.20.0. The three handle-taking functions accept a program as a range, a
+  refused program returns `#DECL!` and the reason as cell text, and the
+  development build calls the local 19456 server.
+
 - **[Fast-Frames]** DONE (`1.17.1` to `1.20.0`), plan
   `dev/done/plan-fast-frames.md`: `[orjson-frames]` 1.17.1, `[gzip-level]`
   1.17.2, `[parquet-route]` 1.18.0, `[lab-all-rows]` 1.19.0,

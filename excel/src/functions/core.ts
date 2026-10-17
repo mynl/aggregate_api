@@ -53,6 +53,17 @@ export const MESSAGES = {
   emptyProgram: "the program is empty",
 };
 
+/**
+ * The prefix of the text a cell holds when the server refused its program.
+ *
+ * The author turned off Excel's error indicators, and a `#VALUE!` cell's
+ * message shows only on hover, so a parse error was unreadable. The reason is
+ * returned as the cell's value instead, under a prefix that reads like an Excel
+ * error and that no DecL program or handle starts with, so the text is
+ * recognized wherever it flows next.
+ */
+export const DECL_ERROR = "#DECL!";
+
 const HANDLE = /^([a-z]+)\.(.+)#([0-9a-f]{16})$/;
 const SESSION_ID = /^[A-Za-z0-9:.\-_]{8,200}$/;
 const MISSING_OBJECT = /^object [0-9a-f]{16} not in cache$/;
@@ -91,8 +102,30 @@ export function parseHandle(text: unknown): Handle | null {
 export function programOrHandle(text: unknown): { handle: Handle } | { program: string } | null {
   const handle = parseHandle(text);
   if (handle) return { handle };
-  if (typeof text !== "string" || !text.trim()) return null;
+  if (typeof text !== "string" || !text.trim() || isDeclError(text)) return null;
   return { program: text.trim() };
+}
+
+/** Whether a cell value is the text of a refused program. */
+export function isDeclError(value: unknown): boolean {
+  return typeof value === "string" && value.startsWith(DECL_ERROR);
+}
+
+/**
+ * Whether a build's status means the program itself was refused.
+ *
+ * A refusal (a parse error, an unknown reference, a grid over the cap) is
+ * about the program and is returned as text for the author to read. A rate
+ * limit, a timeout or a server fault is about the moment, so it stays an Excel
+ * error that a recalculation can clear.
+ */
+export function isProgramRefusal(status: number): boolean {
+  return status >= 400 && status < 500 && status !== 429;
+}
+
+/** The cell text for a refused program: the prefix and the server's reason. */
+export function declErrorText(status: number, body: unknown): string {
+  return `${DECL_ERROR} ${errorMessage(status, body)}`;
 }
 
 /**

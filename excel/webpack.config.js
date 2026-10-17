@@ -5,7 +5,8 @@
  * "Excel custom functions using a shared runtime" template.
  *
  * The API base is fixed at build time as __API_BASE__:
- *   development  http://localhost:8001, the local server (`aggregate-api --port 8001`)
+ *   development  http://localhost:19456, the author's local aLL server, which
+ *                also serves the Lab; any `aggregate-api --port 19456` works
  *   production   empty, so the add-in calls the origin that serves it
  * AGG_API_BASE overrides either.
  *
@@ -66,7 +67,7 @@ function productionManifest(content, base) {
 
 module.exports = async (env, options) => {
   const dev = options.mode === "development";
-  const apiBase = process.env.AGG_API_BASE ?? (dev ? "http://localhost:8001" : "");
+  const apiBase = process.env.AGG_API_BASE ?? (dev ? "http://localhost:19456" : "");
   const addinBase = (process.env.AGG_ADDIN_BASE || PRODUCTION_BASE).replace(/\/+$/, "");
   const config = {
     devtool: "source-map",

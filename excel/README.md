@@ -35,8 +35,9 @@ workbook reopens. `=AGG.VERSION()` says which server a workbook is talking to.
 
 ## Using it
 
-`decl` is a cell or a range. A range's non-empty cells join with newlines in
-reading order, so a program can sit one clause per cell.
+`decl`, and `handle` wherever a program stands in for a handle, is a cell or a
+range. A range's non-empty cells join with newlines in reading order, so a
+program can sit one clause per cell.
 
 **References resolve to library entries only.** `agg.Capstone.Gross` works;
 `agg.A`, where `A` is something you built in another cell, is refused with a
@@ -55,8 +56,9 @@ F1: =AGG.Q(C1, {0.5, 0.99})
 
 **A program goes wherever a handle goes.** `=AGG.Q(A1, 0.99)` with the
 program itself in A1 builds it on the default grid and reads the quantile, and
-Excel recalculates when A1 changes. Cells sharing one program post it once.
-`AGG.BUILD` is for when you want `log2` or `bs`, or a handle to reuse.
+Excel recalculates when A1 changes. `=AGG.EXHIBIT(A1:A19, "summary")` does the
+same for a program laid out down a column. Cells sharing one program post it
+once. `AGG.BUILD` is for when you want `log2` or `bs`, or a handle to reuse.
 
 `AGG.EXHIBIT` returns numbers, not formatted text. `block` 0 (the default)
 stacks every block under its caption with a blank row between; `block` k
@@ -64,8 +66,14 @@ returns block k alone, without a caption, which is the form to use in
 formulas. A label that spans several rows or columns is repeated into each of
 them, so every row and column of the spill says what it is.
 
-A failing cell shows `#VALUE!` with the reason on hover: a parse error as
-`line L, col C: ...`, otherwise the server's own message.
+**A refused program returns its reason as text**, readable in the cell:
+`#DECL! line L, col C: ...` for a parse error, `#DECL!` and the server's own
+message for an unknown reference or a grid over the cap. A spilling function
+returns it as a single cell, and a function reading a cell that holds such
+text repeats it, so the reason follows the program wherever it is used. Only
+transient failures (rate limited, timed out, server unreachable or faulting)
+show `#VALUE!`, with the reason on hover, since a recalculation can clear
+them.
 
 **Handles survive a restart.** The workbook keeps a table of how each handle
 was built, in its document settings (saved inside the .xlsx). When the server
@@ -113,9 +121,10 @@ Power Query.
 ## Development
 
 The add-in lives in this directory and builds with webpack. The API base is
-fixed at build time: `http://localhost:8001` for a development build, empty
+fixed at build time: `http://localhost:19456` for a development build, empty
 (the origin that serves the add-in) for a production build. `AGG_API_BASE`
-overrides either.
+overrides either. The development default is the one local server that also
+serves the Lab, so there is one API process to run, not two.
 
 One time, from this directory:
 
@@ -123,16 +132,20 @@ One time, from this directory:
 npm install
 ```
 
-Run the API with CORS open to the add-in's development origin, from the
-repository root:
+Run the API with CORS open to the add-in's development origin. The add-in's
+files come from the webpack dev server at `https://localhost:3000` while the
+API answers on another port, so the browser treats them as two origins and the
+API has to name the first one. From the repository root:
 
 ```
 $env:AGGAPI_CORS_ORIGINS = "https://localhost:3000"
-uv run --no-sync aggregate-api --port 8001
+uv run --no-sync aggregate-api --port 19456
 ```
 
-Then, from this directory, build, serve the add-in at `https://localhost:3000`
-and sideload it into desktop Excel:
+If the server is already running under a launcher, put the variable in the
+launcher's environment and restart it once. Then, from this directory, build,
+serve the add-in at `https://localhost:3000` and sideload it into desktop
+Excel:
 
 ```
 npm start

@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.21.0
+
+[Excel-Program-Ranges] **Excel functions take a program as a range, and a refused program returns its reason as text.** Tire kicking after 1.20.0, no plan.
+
+- `AGG.EXHIBITS`, `AGG.EXHIBIT` and `AGG.Q` accept `handle` as a cell or a range, joined like `AGG.BUILD`'s `decl`, so `=AGG.EXHIBIT(C31:C49, "summary")` works on a program laid out down a column. It gave `#CALC!` before, since the argument was typed as one string.
+- A program the server refuses (parse error, unknown reference, grid over the cap) returns `#DECL!` and the reason as the cell's text, readable without hovering: `#DECL! line 3, col 12: ...`. A spilling function returns it as one cell, and a cell holding that text passes it on to any function reading it. Transient failures (rate limit, timeout, unreachable, server fault) still show `#VALUE!`.
+- `functions.json` changed, so a sideloaded add-in needs `npm stop` and `npm start`, and an installed one a manifest reinstall.
+- Development builds of the add-in now call `http://localhost:19456`, the author's local server, instead of a second instance on 8001; `excel/README.md` has the recipe.
+
 ## 1.20.0
 
 [Excel-Decl-Arguments] **Excel functions take a DecL program wherever they take a handle.** Plan `dev/done/plan-fast-frames.md`, last of five steps.

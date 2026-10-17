@@ -11,13 +11,17 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
+  DECL_ERROR,
   MESSAGES,
   RECIPE_LIMIT,
   Semaphore,
+  declErrorText,
   errorMessage,
   flattenExhibit,
   formatHandle,
+  isDeclError,
   isMissingObject,
+  isProgramRefusal,
   isSessionId,
   joinDecl,
   memoKey,
@@ -62,9 +66,22 @@ test("a handle argument is a handle or a program, never both", () => {
   });
   // A near miss on the handle grammar is a program, and the server will say so.
   assert.deepEqual(programOrHandle("agg.A#123"), { program: "agg.A#123" });
-  for (const text of ["", "   ", 42, null, undefined, true]) {
+  for (const text of ["", "   ", 42, null, undefined, true, `${DECL_ERROR} line 1, col 3: oops`]) {
     assert.equal(programOrHandle(text), null, String(text));
   }
+});
+
+test("a refused program becomes #DECL! text, a transient failure does not", () => {
+  const body = { detail: { line: 1, column: 43, message: "Unexpected 'oops'." } };
+  const text = declErrorText(422, body);
+  assert.equal(text, "#DECL! line 1, col 43: Unexpected 'oops'.");
+  assert.ok(isDeclError(text));
+  assert.ok(isDeclError(`${DECL_ERROR} anything`));
+  for (const value of ["agg A 1 claim dsev [1] fixed", "#VALUE!", "", 42, null]) {
+    assert.equal(isDeclError(value), false, String(value));
+  }
+  for (const status of [400, 404, 422]) assert.ok(isProgramRefusal(status), String(status));
+  for (const status of [200, 429, 500, 504]) assert.equal(isProgramRefusal(status), false, String(status));
 });
 
 test("a range joins its non-empty cells in reading order", () => {
