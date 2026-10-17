@@ -469,3 +469,32 @@ Minor bump.
   was written with `uv lock` and pyarrow installed with `uv pip install`.
 - Not run: the host check (`curl -sI` through agg.mynl.com showing Caddy does
   not encode the Parquet response). That is the author's, with the deploy.
+
+### [lab-all-rows], 1.19.0, 2026-10-17
+
+- The budget constant and the decision live in a new pure module,
+  `web/src/all-rows.js` (`ALL_ROWS_CELL_BUDGET`, `allRowsPlan`,
+  `frameCsvUrl`), not in `main.js` as the plan said, so `node --test` covers
+  them (`web/test/all-rows.test.js`, 7 tests). `main.js` holds the switch
+  (`densityRowsStrip`), `loadAllRows`, `loadMoreDensity` and the reworked
+  `loadReinsFrame`; `replacePaneTable` takes a `header` factory as
+  `loadExhibitLeaf` does.
+- The worker is `import workerUrl from 'csv-grid/worker?url'` in `grid.js`;
+  Vite emits `assets/csv-grid.worker-<hash>.js`. `mountGrid` accepts
+  `{url, name}` beside `{columns, rows}`.
+- Smoked in Chrome against a scratch server on 127.0.0.1:8011 (scratch audit
+  database, built SPA). BasicBook at log2 16, More / Density, All rows:
+  65,536 rows by 12 columns, `-inf` in `log_p` as numbers, no console errors.
+  **9.4 s from click to filled grid**, of which the `.csv` fetch was 0.6 s
+  (11.5 MB; the server writes it in 0.4 s). The worker was in use (verified on
+  the instance). So about 8.5 s is csv-grid's parse, inference and render of
+  786k cells, which is slower than the author expected of it and is a finding
+  for `csv-grid`, not for this repo. A five-unit portfolio at log2 16 took the
+  fallback: 65,536 rows by 4 columns with the budget line and the whole-frame
+  link.
+- The lede under the switch still reads "binned probability mass, distribution,
+  and survival functions" in All rows, where nothing is binned. It is the
+  leaf's shared sentence (`ledeFor`); left as is, noted here.
+- Not run: Reinsurance / Density in the browser (the route and the shape are
+  covered by tests; the leaf shares `loadAllRows` with More / Density), and the
+  grid's Save compared byte for byte with the `.csv` route.

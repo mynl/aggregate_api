@@ -691,6 +691,15 @@ class DeleteResponse(BaseModel):
 # Tabular endpoints -- summary / stats_df / density_df / kappa
 # ======================================================================
 
+class FrameShapeResponse(BaseModel):
+    """Rows and columns of a named frame, before anyone downloads it."""
+
+    model_config = _RESPONSE_CFG
+
+    rows: int
+    columns: int
+
+
 class FrameResponse(BaseModel):
     """Pandas DataFrame as ``(columns, rows)``.
 

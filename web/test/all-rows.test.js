@@ -1,0 +1,58 @@
+// The All rows cell budget, under `node --test`.
+//
+// Run: `npm test` from `web/`.
+
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { ALL_ROWS_CELL_BUDGET, allRowsPlan, frameCsvUrl } from '../src/all-rows.js';
+
+const FOUR = ['loss', 'p_total', 'F', 'S'];
+
+test('the budget is the ruling', () => {
+    assert.equal(ALL_ROWS_CELL_BUDGET, 3_500_000);
+});
+
+test('an aggregate at the log2 cap loads whole', () => {
+    // 12 columns by 2**18 rows is 3.1M cells.
+    const plan = allRowsPlan({ rows: 262144, columns: 12 }, FOUR);
+    assert.equal(plan.whole, true);
+    assert.equal(plan.columns, null);
+    assert.equal(plan.note, '');
+});
+
+test('a four-unit portfolio at log2 16 loads whole; five units fall back', () => {
+    assert.equal(allRowsPlan({ rows: 65536, columns: 53 }, FOUR).whole, true);
+    const plan = allRowsPlan({ rows: 65536, columns: 63 }, FOUR);
+    assert.equal(plan.whole, false);
+    assert.deepEqual(plan.columns, FOUR);
+    assert.equal(plan.cells, 65536 * 63);
+});
+
+test('the note says what was dropped and where the whole frame is', () => {
+    const plan = allRowsPlan({ rows: 262144, columns: 113 }, FOUR);
+    assert.equal(plan.note,
+        '113 columns by 262,144 rows is 29.6M cells, over this table\'s 3.5M budget, '
+        + 'so it shows 4 columns on every row. For the whole frame, download the .csv '
+        + 'or work with it in Python through aggregate.');
+});
+
+test('a budget passed in is honored', () => {
+    assert.equal(allRowsPlan({ rows: 100, columns: 10 }, FOUR, 999).whole, false);
+    assert.equal(allRowsPlan({ rows: 100, columns: 10 }, FOUR, 1000).whole, true);
+});
+
+test('a missing shape counts as empty and fits', () => {
+    assert.equal(allRowsPlan(null, FOUR).whole, true);
+    assert.equal(allRowsPlan({}, FOUR).cells, 0);
+});
+
+test('the csv url carries the session and, when asked, the columns', () => {
+    assert.equal(frameCsvUrl('', 'abc', 'density_df', null, 's-1'),
+        '/v1/objects/abc/frame/density_df.csv?session=s-1');
+    assert.equal(frameCsvUrl('http://h:8001', 'abc', 'density_df', FOUR, 's 1'),
+        'http://h:8001/v1/objects/abc/frame/density_df.csv?session=s%201'
+        + '&cols=loss%2Cp_total%2CF%2CS');
+    assert.equal(frameCsvUrl('', 'abc', 'reins_density_df', [], 's'),
+        '/v1/objects/abc/frame/reins_density_df.csv?session=s');
+});

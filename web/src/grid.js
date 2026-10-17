@@ -7,14 +7,17 @@
 // pane it lives in and tear them down on clear/rebuild. The Price pane stacks
 // several grids in one pane, hence paneId -> CsvGrid[]. See dev/done/plan-grid.md.
 //
-// Worker note: the parse worker is disabled by default here (see mountGrid).
-// CsvGrid otherwise resolves its worker from `import.meta.url`, which under our
-// Vite build points at the hashed bundle, not a co-located worker file, so the
-// main-thread parser is the robust choice until the worker asset is shipped.
-// Our frames are small (summary/stats/reins) or server-downsampled (density),
-// well under CsvGrid's render cap, so main-thread parsing is imperceptible.
+// Worker note: CsvGrid parses CSV text of 1 MB or more in a Web Worker, which
+// it finds relative to its own `import.meta.url`. Under the Vite build that is
+// the hashed bundle, where no worker file sits, so through 1.17 the worker was
+// off and every grid parsed on the main thread. The `?url` import below has
+// Vite copy `csv-grid.worker.js` as a hashed asset and hands its address to
+// every grid. Only a `{csv}` or `{url}` load reaches the worker; a grid fed
+// `{records}`, which is every table but All rows, is built on the main thread
+// as before.
 
 import CsvGrid from 'csv-grid';
+import workerUrl from 'csv-grid/worker?url';
 import 'csv-grid/csv-grid.css';
 
 // paneId -> handles[], where a handle is anything with destroy(). CsvGrid
@@ -72,13 +75,15 @@ export function destroyAllGrids() {
  *     measure column widths at construction.
  * frame : object
  *     ``{columns: [...], rows: [[...]]}`` from the api (rows are arrays, which
- *     CsvGrid accepts directly as ``records``).
+ *     CsvGrid accepts directly as ``records``), or ``{url, name}`` for a CSV
+ *     the grid fetches and parses itself, in its worker (the All rows view).
  * opts : object, optional
- *     CsvGrid options. ``worker`` defaults to ``false`` (see module note) but
- *     can be overridden once a worker asset is served.
+ *     CsvGrid options. ``worker`` is the bundled worker's URL (see module
+ *     note); a caller can still pass ``false``.
  */
 export function mountGrid(paneId, host, frame, opts = {}) {
-    const { columns = [], rows = [] } = frame || {};
+    const { columns = [], rows = [], url = null, name = '' } = frame || {};
+    const data = url ? { url, name } : { columns, records: rows };
     // The SPA is light-only; CsvGrid otherwise auto-follows the OS via
     // prefers-color-scheme and would render dark on a dark-mode browser,
     // clashing with the rest of the page. Forcing data-theme="light" on the
@@ -97,8 +102,8 @@ export function mountGrid(paneId, host, frame, opts = {}) {
     // two tabs of one page and the reader had to notice a column count to
     // predict which. The author's call is one toolbar everywhere. Callers can
     // still override via opts, and nothing does.
-    const grid = new CsvGrid(host, { columns, records: rows }, {
-        worker: false,
+    const grid = new CsvGrid(host, data, {
+        worker: workerUrl,
         expandButtons: false,
         ...opts,
     });

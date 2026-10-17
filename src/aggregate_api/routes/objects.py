@@ -2713,7 +2713,17 @@ def _named_frame(entry: CacheEntry, which: str):
 
 @router.get("/objects/{oid}/frame/{which}.csv")
 def get_frame_csv(
-    oid: str, which: str, entry: CacheEntry = Depends(_locked_entry)
+    oid: str,
+    which: str,
+    cols: str | None = Query(
+        None,
+        description=(
+            "Comma-separated subset of column names. Names absent from the "
+            "frame are dropped silently, as on the density routes. Omit for "
+            "the whole frame."
+        ),
+    ),
+    entry: CacheEntry = Depends(_locked_entry),
 ) -> Response:
     """Return the full named frame as a CSV download.
 
@@ -2722,9 +2732,17 @@ def get_frame_csv(
     Exactly what the on-screen table shows, which has not always been true: the
     raw-moment rows were dropped for the screen and exported here. See
     ``_CSV_FRAMES``.
+
+    ``cols`` exists for the Lab's All rows view over its cell budget: every row
+    of the Display grid's columns rather than every row of every column. A
+    frame with MultiIndex columns ignores it, since its names are tuples and
+    the request spells strings.
     """
-    df = _named_frame(entry, which)
-    csv_text = reset_index_safe(df).to_csv(index=False)
+    df = reset_index_safe(_named_frame(entry, which))
+    if cols and not isinstance(df.columns, pd.MultiIndex):
+        wanted = [c.strip() for c in cols.split(",")]
+        df = df[[c for c in wanted if c in df.columns]]
+    csv_text = df.to_csv(index=False)
     return Response(
         content=csv_text,
         media_type="text/csv",
@@ -2732,6 +2750,27 @@ def get_frame_csv(
             "Content-Disposition": f'attachment; filename="{entry.name}-{which}.csv"',
         },
     )
+
+
+# ----------------------------------------------------------------------
+# GET /v1/objects/{id}/frame/{which}/shape  -- how big a download would be
+# ----------------------------------------------------------------------
+
+@router.get("/objects/{oid}/frame/{which}/shape", response_model=models.FrameShapeResponse)
+def get_frame_shape(
+    oid: str, which: str, entry: CacheEntry = Depends(_locked_entry)
+) -> dict:
+    """Rows and columns of the named frame, as the ``.csv`` route would serve it.
+
+    Notes
+    -----
+    For a client deciding whether to load a whole frame: the Lab's All rows
+    view holds a cell budget and asks here first. The frame is already in
+    memory, so this costs a shape read. The extra path segment keeps it clear
+    of ``/frame/{which}``, whose parameter would otherwise swallow a suffix.
+    """
+    df = reset_index_safe(_named_frame(entry, which))
+    return {"rows": int(df.shape[0]), "columns": int(df.shape[1])}
 
 
 # ----------------------------------------------------------------------

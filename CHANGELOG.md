@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.19.0
+
+[Lab-All-Rows] **The Lab's density tables show every row on request.** Plan `dev/plan-fast-frames.md`, fourth of five steps.
+
+- More / Density and Reinsurance / Density carry a Display grid | All rows switch. Display grid is today's binned view and stays the default. All rows loads the whole frame from the `.csv` route, every row and every column, into the grid, whose Copy and Save then export exactly that frame.
+- A 3.5M cell budget: over it (a five-unit portfolio at log2 16, any portfolio at log2 17), All rows shows every row of the Display grid's columns, says so, and links the whole `.csv`.
+- csv-grid's parse worker is on, served as a bundled asset; the All rows load parses off the main thread. Measured: 65,536 by 12 is 9.4 s from click to grid on DOOB, 0.6 s of it the fetch, the rest csv-grid's parse and render.
+- New routes for the view: `GET /v1/objects/{id}/frame/{which}/shape` (`{rows, columns}`) and `cols` on `frame/{which}.csv`.
+
 ## 1.18.0
 
 [Parquet-Route] **Any frame downloads as Parquet: `GET /v1/objects/{id}/frame/{which}.parquet`.** Plan `dev/plan-fast-frames.md`, third of five steps.

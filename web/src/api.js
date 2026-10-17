@@ -9,6 +9,7 @@
 // * api.plotUrl() returns a string (not a Promise) -- callers stick
 //   it straight into <img src="…"> and let the browser fetch it.
 
+import { frameCsvUrl } from './all-rows.js';
 import { API_BASE } from './config.js';
 import { SESSION_HEADER, sessionId, sessionParam } from './session.js';
 
@@ -108,6 +109,10 @@ export const api = {
     tail_df:      (id)              => _json('GET',  `/v1/objects/${id}/tail_df`),
     stats_df:     (id)              => _json('GET',  `/v1/objects/${id}/stats_df`),
     density_df:   (id, p = {})      => _json('GET',  `/v1/objects/${id}/density_df?${qs(p)}`),
+    // The All rows view: how big a frame is before the grid fetches its `.csv`,
+    // and the `.csv` address itself, which the grid loads with its own fetch.
+    frameShape:   (id, which)       => _json('GET',  `/v1/objects/${id}/frame/${which}/shape`),
+    frameCsvUrl:  (id, which, cols = null) => frameCsvUrl(API_BASE, id, which, cols, sessionId()),
     /**
      * A frame as a table document (the IR) for the static view.
      *

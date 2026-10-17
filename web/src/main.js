@@ -30,6 +30,7 @@ import {
 import { renderInfo } from './renderers.js';
 import { fetchFailed, mountChart, mountChartDoc, notDrawable } from './charts/mount.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
+import { allRowsPlan } from './all-rows.js';
 import { mountIrTable, irToGrid, docTruncated, atFullPrecision } from './tables.js';
 import { renderError, renderRateLimit } from './error-pane.js';
 import {
@@ -1655,33 +1656,7 @@ const LOADERS = {
     'bounds:pricing': () => showBoundsLeaf('pricing'),
     'bounds:allocation': () => showBoundsLeaf('allocation'),
 
-    'more:density': () => {
-        // `resolution: 'display'` here and nowhere else. The *plots* take every
-        // grid point, because a binned atom is a lie; a *table* of 65,536 rows
-        // is not a reading experience, and the CSV download is the exact export
-        // for anyone who wants the lot.
-        //
-        // A distortion's density_df is the g-curve over s in [0,1]; a
-        // bivariate's is its two component marginals; a severity's is a sampled
-        // loss / pdf / F / S curve. None has the aggregate's columns, so pull
-        // the whole frame for those. Every other kind takes the curated subset,
-        // plus whatever `DENSITY_COLS_BY_KIND` adds for it.
-        const opts = { resolution: 'display' };
-        // renderCap lifts CsvGrid's 2,000-row default so the whole display grid
-        // shows without a "show all" prompt. 8,192 is the widest that grid gets
-        // (see serializers.display_log2_for).
-        //
-        // The bulk path, permanently: even binned to the display grid this is
-        // thousands of rows, so it never becomes a document. The filters are how
-        // you read a quantile off it, which is the grid's whole job.
-        return replacePaneTable('pane-more', 'density_df',
-            { ...GRID_FULL, maxRows: 25, renderCap: 8192 },
-            () => (WHOLE_DENSITY_KINDS.has(state.kind)
-                ? api.density_df(state.id, opts)
-                : api.density_df(state.id,
-                    { ...opts, cols: densityCols(state.kind) })),
-            ['more', 'density']);
-    },
+    'more:density': () => loadMoreDensity(),
     // The exhibit route, not the frame route: the library registers a
     // `tail_behavior` exhibit and the api already serves it, so this leaf needs
     // no backend change at all. Its neighbors here take the frame route for
@@ -2807,7 +2782,7 @@ function replacePane(paneId, node) {
  * and hands it to the grid instead.
  */
 async function replacePaneTable(paneId, which, opts = GRID_FULL, bulk = null,
-                                leaf = null) {
+                                leaf = null, header = null) {
     let source = null;
     if (!bulk) {
         const doc = await frameDoc(which).catch(() => null);
@@ -2819,6 +2794,10 @@ async function replacePaneTable(paneId, which, opts = GRID_FULL, bulk = null,
     }
     const draw = () => {
         const root = el('div');
+        // A control row above the table, rebuilt on every draw, as
+        // `loadExhibitLeaf` takes one: the density leaves' Display grid / All
+        // rows switch.
+        if (header) root.appendChild(header());
         const lede = leaf && ledeFor(leaf[0], leaf[1]);
         if (lede) root.appendChild(lede);
         const host = el('div');
@@ -3584,21 +3563,159 @@ for (const id of QR_FIELDS) {
 // only one on the page, so it is initialized here rather than by a sweep.
 if ($('qr-help')) bootstrap.Tooltip.getOrCreateInstance($('qr-help'));
 
+// ----------------------------------------------------------------------
+// The density tables: Display grid or All rows
+// ----------------------------------------------------------------------
+// More / Density and Reinsurance / Density are the two leaves on the raw frame
+// route, permanently: a density is thousands of rows at the least, so it never
+// becomes a document, and the grid's filters are how you read a quantile off
+// it. Each has two views behind one segmented control:
+//
+// * **Display grid**, the default and the fast first paint: the frame binned to
+//   a power-of-two grid of at most 8,192 rows (`resolution: 'display'`), and on
+//   More / Density the curated columns. The *plots* take every grid point,
+//   because a binned atom is a lie; a table that opens on 65,536 rows is not a
+//   reading experience.
+// * **All rows**: the whole frame, every row and (within the cell budget) every
+//   column, loaded by the grid itself from the `.csv` route and parsed in its
+//   worker. The grid's own Copy and Save then export exactly that frame, which
+//   is the download the Display grid's comment used to promise and nothing
+//   offered. See `all-rows.js` for the budget and `dev/done/plan-fast-frames.md`.
+
+/** Which view the density tables show: `'display'` or `'all'`. One setting for both leaves. */
+let _densityRows = 'display';
+
+const DENSITY_ROWS_VIEWS = [['display', 'Display grid'], ['all', 'All rows']];
+
 /**
- * Reinsurance / Density: the one leaf here still on the frame route.
+ * The Display grid / All rows switch, as a segmented control.
  *
- * The bulk path, permanently. `reins_density_df` is thousands of rows even
- * binned to the display grid, so it never becomes a document, exactly as More /
- * Density never does. The plot leaf is what wants every point.
+ * Two fixed labels, each naming the view it selects, rather than one button
+ * that flips its own meaning. The same shape as `approximationStrip`.
  *
- * It was Summary's loader too until a70, and Summary is on the exhibit route
- * now. See `loadReinsExhibit`.
+ * @param {string} group the tab group the leaf lives in, for the scroll rule.
+ * @param {function(): Promise} reload redraws the leaf in the newly chosen view.
+ * @returns {HTMLElement} the control row, rebuilt on every draw.
+ */
+function densityRowsStrip(group, reload) {
+    const row = el('div', { className: 'tab-tools' });
+    const box = el('div', { className: 'btn-group btn-group-sm', role: 'group' });
+    box.setAttribute('aria-label', 'density table rows');
+    for (const [value, label] of DENSITY_ROWS_VIEWS) {
+        const button = el('button', {
+            type: 'button',
+            className: 'btn btn-outline-secondary' + (value === _densityRows ? ' active' : ''),
+        }, label);
+        button.setAttribute('aria-pressed', String(value === _densityRows));
+        button.addEventListener('click', () => {
+            if (value === _densityRows) return;
+            _densityRows = value;
+            // The scroll rule: an in-pane view pill is navigation.
+            anchorNavSettled(paneOf(group), reload());
+        });
+        box.appendChild(button);
+    }
+    row.appendChild(box);
+    return row;
+}
+
+/**
+ * All rows: the whole frame into the grid, from the `.csv` route.
+ *
+ * Asks `frame/{which}/shape` first and decides against the cell budget
+ * (`allRowsPlan`). Within it, the grid fetches every column; over it, every
+ * row of `fallbackCols`, with the plan's sentence above the table and a link
+ * to the whole `.csv`. The grid is handed a URL rather than rows, so the fetch
+ * and the parse of a 50 MB file happen in its worker and the page stays live.
+ *
+ * @param {string} paneId the output pane.
+ * @param {string} which the frame name, `density_df` or `reins_density_df`.
+ * @param {string[]} leaf `[group, key]` for the lede and the strip.
+ * @param {string[]} fallbackCols what to keep when the frame is over budget.
+ */
+async function loadAllRows(paneId, which, leaf, fallbackCols) {
+    const shape = await api.frameShape(state.id, which);
+    const plan = allRowsPlan(shape, fallbackCols);
+    const url = api.frameCsvUrl(state.id, which, plan.columns);
+    const header = () => densityRowsStrip(leaf[0], () => loadDensityLeaf(leaf));
+    const draw = () => {
+        const root = el('div');
+        root.appendChild(header());
+        const lede = ledeFor(leaf[0], leaf[1]);
+        if (lede) root.appendChild(lede);
+        if (!plan.whole) {
+            const note = el('div', { className: 'text-muted small mb-2' }, `${plan.note} `);
+            note.appendChild(el('a', { href: api.frameCsvUrl(state.id, which), download: '' },
+                'Download the whole frame as .csv.'));
+            root.appendChild(note);
+        }
+        const host = el('div');
+        root.appendChild(host);
+        replacePane(paneId, root);        // tears down the previous mode first
+        // `renderCap` at the row count: the grid must not stop at its 2,000-row
+        // default and ask whether to show the rest, since the rest is the point.
+        const grid = mountTable(paneId, host, { frame: { url, name: `${which}.csv` } },
+                                { ...GRID_FULL, renderCap: Math.max(1, shape.rows) });
+        onTableViewChange(paneId, tableViewRedraw(grid, draw), root);
+    };
+    draw();
+}
+
+/** Reload a density leaf in whichever view `_densityRows` holds. */
+function loadDensityLeaf(leaf) {
+    return leaf[0] === 'more'
+        ? loadMoreDensity()
+        : loadReinsFrame('reins_density_df', leaf);
+}
+
+/**
+ * More / Density, in the current view.
+ *
+ * Display grid takes `resolution: 'display'`, here and in `loadReinsFrame` and
+ * nowhere else, and on most kinds the curated columns. A distortion's
+ * density_df is the g-curve over s in [0,1]; a bivariate's is its two component
+ * marginals; a severity's is a sampled loss / pdf / F / S curve. None has the
+ * aggregate's columns, so those kinds take the whole frame in both views; every
+ * other kind takes `DENSITY_COLS` plus whatever `DENSITY_COLS_BY_KIND` adds, in
+ * Display grid always and in All rows only over the cell budget.
+ *
+ * `renderCap: 8192` lifts CsvGrid's 2,000-row default so the whole display grid
+ * shows without a "show all" prompt; 8,192 is the widest that grid gets (see
+ * `serializers.display_log2_for`).
+ */
+async function loadMoreDensity() {
+    const leaf = ['more', 'density'];
+    const whole = WHOLE_DENSITY_KINDS.has(state.kind);
+    if (_densityRows === 'all') {
+        return loadAllRows('pane-more', 'density_df', leaf,
+                           whole ? DENSITY_COLS : densityCols(state.kind).split(','));
+    }
+    const opts = { resolution: 'display' };
+    return replacePaneTable('pane-more', 'density_df',
+        { ...GRID_FULL, maxRows: 25, renderCap: 8192 },
+        () => (whole
+            ? api.density_df(state.id, opts)
+            : api.density_df(state.id, { ...opts, cols: densityCols(state.kind) })),
+        leaf, () => densityRowsStrip('more', loadMoreDensity));
+}
+
+/**
+ * Reinsurance / Density, in the current view.
+ *
+ * `reins_density_df` is ten columns whatever the program, so All rows always
+ * fits the budget; the fallback is named for form. It was Summary's loader too
+ * until a70, and Summary is on the exhibit route now. See `loadReinsExhibit`.
  */
 async function loadReinsFrame(which, leaf = null) {
     if (reinsChart) { reinsChart.dispose(); reinsChart = null; }
+    const at = leaf || ['reinsurance', 'density'];
+    if (_densityRows === 'all') {
+        return loadAllRows('pane-reinsurance', which, at, DENSITY_COLS);
+    }
     const bulk = () => api.frameOf(state.id, which, { resolution: 'display' });
     await replacePaneTable('pane-reinsurance', which,
-        { ...GRID_FULL, renderCap: 8192 }, bulk, leaf);
+        { ...GRID_FULL, renderCap: 8192 }, bulk, at,
+        () => densityRowsStrip('reinsurance', () => loadReinsFrame(which, at)));
 }
 
 /**

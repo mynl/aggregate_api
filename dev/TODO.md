@@ -8,7 +8,7 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 - **[Fast-Frames]** IN PROGRESS, plan `dev/plan-fast-frames.md`, five steps:
   `[orjson-frames]` DONE (`1.17.1`), `[gzip-level]` DONE (`1.17.2`),
-  `[parquet-route]` DONE (`1.18.0`), then `[lab-all-rows]`,
+  `[parquet-route]` DONE (`1.18.0`), `[lab-all-rows]` DONE (`1.19.0`), then
   `[excel-decl-arguments]`. Full density frames for the Lab
   (All rows, 3.5M cell budget), Excel (Power Query over Parquet) and R.
 
