@@ -7,8 +7,9 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 ## Landed
 
 - **[Fast-Frames]** IN PROGRESS, plan `dev/plan-fast-frames.md`, five steps:
-  `[orjson-frames]` DONE (`1.17.1`), `[gzip-level]` DONE (`1.17.2`), then
-  `[parquet-route]`, `[lab-all-rows]`, `[excel-decl-arguments]`. Full density frames for the Lab
+  `[orjson-frames]` DONE (`1.17.1`), `[gzip-level]` DONE (`1.17.2`),
+  `[parquet-route]` DONE (`1.18.0`), then `[lab-all-rows]`,
+  `[excel-decl-arguments]`. Full density frames for the Lab
   (All rows, 3.5M cell budget), Excel (Power Query over Parquet) and R.
 
 - **[Excel-Hosting]** DONE (`1.17.0`), plan `dev/done/plan-excel-hosting.md`.

@@ -1408,6 +1408,10 @@ class MetaResponse(BaseModel):
     # Where Menu > Copy link points its links (`AGGAPI_PUBLIC_URL`); null when
     # a deployment set it empty, and the SPA then uses its own origin.
     public_url: str | None = None
+    # The forms `frame/{which}` can be downloaded in. `csv` and `json` always;
+    # `parquet` when the optional pyarrow extra is installed, so an R or Power
+    # Query client can ask before it asks for a 501.
+    frame_formats: list[str] = []
 
 
 class StatusResponse(BaseModel):

@@ -23,7 +23,8 @@ same-origin.
 - **Backend** (`src/aggregate_api/`): FastAPI app. Object lifecycle
   (`POST /v1/objects` to build and cache, then `info`, `meta`, `summary`,
   `tail_df`, `validation_df`, `stats_df`, `density_df`, `plot`, `kappa`,
-  `price`, `pricing_at`, plus `frame/{which}` in CSV or table-document form),
+  `price`, `pricing_at`, plus `frame/{which}` in CSV, Parquet (with the
+  `parquet` extra) or table-document form),
   DecL helpers (`/v1/decl/complete`, `/lex`,
   `/format`), and the example library read straight from `aggregate`'s recipe
   base (`/v1/examples`, `/v1/examples/heroes`). In-memory LRU cache, build

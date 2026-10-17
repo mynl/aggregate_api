@@ -51,6 +51,6 @@ def test_middleware_level_is_six():
     levels = [
         m.kwargs.get("compresslevel")
         for m in app.user_middleware
-        if m.cls.__name__ == "GZipMiddleware"
+        if m.cls.__name__ in ("GZipMiddleware", "GZipExceptParquet")
     ]
     assert levels == [6]

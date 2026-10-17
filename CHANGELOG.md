@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.18.0
+
+[Parquet-Route] **Any frame downloads as Parquet: `GET /v1/objects/{id}/frame/{which}.parquet`.** Plan `dev/plan-fast-frames.md`, third of five steps.
+
+- The same frames as the `.csv` route (`density_df`, `reins_density_df`, `stats_df`, the lot), bit-exact, zstd with byte stream split on float columns: the 65,536 by 43 portfolio density frame is 9.2 MB written in about 30 ms, against 16 MB of gzipped JSON or CSV in 1 to 3 s. For R (`arrow::read_parquet`), pandas, DuckDB and Excel's Power Query.
+- pyarrow is the new optional extra `parquet` (`uv sync --extra parquet`); without it the route answers 501 naming the extra. `/v1/meta` gains `frame_formats`, `["csv", "json"]` plus `"parquet"` when it imports.
+- `.parquet` responses bypass the gzip middleware, since the body is compressed already.
+- The host needs `--extra parquet` added to its sync.
+
 ## 1.17.2
 
 [Gzip-Level] **Response compression drops from gzip level 9 to 6.** Plan `dev/plan-fast-frames.md`, second of five steps.

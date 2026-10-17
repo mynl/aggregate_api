@@ -31,6 +31,7 @@ from aggregate import plugins as agg_plugins
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import __version__ as api_version
 from . import resources, status
@@ -44,6 +45,37 @@ from .routes import objects as objects_routes
 from .routes import status as status_routes
 
 logger = logging.getLogger(__name__)
+
+
+class GZipExceptParquet:
+    """``GZipMiddleware`` for every path but a ``.parquet`` download.
+
+    Parameters
+    ----------
+    app : ASGIApp
+        The application downstream.
+    **kwargs
+        Passed to :class:`GZipMiddleware` (``minimum_size``, ``compresslevel``).
+
+    Notes
+    -----
+    Starlette's middleware excludes nothing but ``text/event-stream``, and a
+    Parquet body is zstd-compressed already, so the exclusion has to sit in
+    front of it. Routing on the path suffix rather than on the response's
+    content type keeps the decision before the response starts, where the
+    middleware stack can still be bypassed whole.
+    """
+
+    def __init__(self, app: ASGIApp, **kwargs) -> None:
+        self.app = app
+        self.gzip = GZipMiddleware(app, **kwargs)
+        self.kwargs = kwargs
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope.get("path", "").endswith(".parquet"):
+            await self.app(scope, receive, send)
+        else:
+            await self.gzip(scope, receive, send)
 
 
 def _load_plugins(settings: Settings) -> None:
@@ -154,7 +186,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # frame level 9 took 1.7 s for 16.11 MB and level 6 took 0.75 s for
     # 16.23 MB: half the CPU for under 1% more on the wire. Once the frame
     # itself serializes in 0.08 s, the compressor was most of the request.
-    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
+    #
+    # A `.parquet` download is already zstd inside, so it goes around the
+    # compressor: a second pass would spend the same CPU to save nothing.
+    app.add_middleware(GZipExceptParquet, minimum_size=1024, compresslevel=6)
 
     install_cors(app, settings.cors_origins)
 

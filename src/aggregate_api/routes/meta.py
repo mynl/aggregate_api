@@ -187,7 +187,18 @@ async def meta() -> dict:
         "plugins": _plugin_manifest(),
         "decl_help": decl_help.available_forms(),
         "public_url": settings.public_url.strip() or None,
+        "frame_formats": _frame_formats(),
     }
+
+
+def _frame_formats() -> list[str]:
+    """The download forms of ``frame/{which}``: csv and json, plus parquet when it imports."""
+    from .objects import parquet_available
+
+    formats = ["csv", "json"]
+    if parquet_available():
+        formats.append("parquet")
+    return formats
 
 
 def _ntt_version() -> str | None:

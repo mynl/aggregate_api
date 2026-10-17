@@ -82,6 +82,7 @@ return in milliseconds.
 from __future__ import annotations
 
 import copy
+import io
 import json
 import logging
 import math
@@ -140,6 +141,7 @@ from ..pricing import (
 )
 from ..tables import MAX_ROWS, frame_document, frame_document_dict
 from ..serializers import (
+    _flatten_columns,
     bin_density,
     bivariate_marginal_frame,
     display_log2_for,
@@ -2733,16 +2735,115 @@ def get_frame_csv(
 
 
 # ----------------------------------------------------------------------
-# GET /v1/objects/{id}/plot
+# GET /v1/objects/{id}/frame/{which}.parquet  -- full-frame download, binary
 # ----------------------------------------------------------------------
+
+#: Media type registered for Parquet (IANA, 2024).
+PARQUET_MEDIA_TYPE = "application/vnd.apache.parquet"
+
+PARQUET_UNAVAILABLE = (
+    "Parquet needs pyarrow, which this server does not have. Install the "
+    "'parquet' extra (uv sync --extra parquet) or download the .csv instead."
+)
+
+
+def parquet_available() -> bool:
+    """Whether the ``parquet`` extra is installed in this process."""
+    try:
+        import pyarrow  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def frame_to_parquet(df: pd.DataFrame) -> bytes:
+    """Serialize a frame as a Parquet file, compact and exact.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        The frame as the ``.csv`` route serves it: index reset, columns
+        flattened to strings.
+
+    Returns
+    -------
+    bytes
+        A complete Parquet file.
+
+    Notes
+    -----
+    zstd, with the **byte stream split** encoding on every float column and
+    dictionary encoding on the rest. The split is what makes this worth having:
+    full-precision floats are close to incompressible as whole values, so plain
+    zstd Parquet is no smaller than gzipped JSON (17.9 MB against 16.5 MB on the
+    benchmark frame). Regrouping each float's bytes by position lets zstd see
+    the slowly varying exponents and leading mantissa bits, and the same frame
+    is 9.2 MB, written in 27 ms. The round trip is bit-exact, NaN and infinity
+    included, which the JSON and CSV routes cannot say.
+
+    A frame with an object column of mixed Python types (a summary with strings
+    beside floats) fails Arrow's inference, so on that error the object columns
+    are rewritten as strings with nulls kept and the conversion runs again.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    try:
+        table = pa.Table.from_pandas(df, preserve_index=False)
+    except (pa.ArrowInvalid, pa.ArrowTypeError):
+        df = df.copy()
+        for col in df.select_dtypes(include="object").columns:
+            df[col] = df[col].map(lambda v: None if pd.isna(v) else str(v))
+        table = pa.Table.from_pandas(df, preserve_index=False)
+    floats = [name for name, kind in zip(table.schema.names, table.schema.types)
+              if pa.types.is_floating(kind)]
+    others = [name for name in table.schema.names if name not in floats]
+    buf = io.BytesIO()
+    pq.write_table(
+        table, buf, compression="zstd",
+        use_byte_stream_split=floats, use_dictionary=others,
+    )
+    return buf.getvalue()
+
+
+@router.get("/objects/{oid}/frame/{which}.parquet")
+def get_frame_parquet(
+    oid: str, which: str, entry: CacheEntry = Depends(_locked_entry)
+) -> Response:
+    """Return the full named frame as a Parquet download.
+
+    Notes
+    -----
+    The same frames as the ``.csv`` route, by the same resolver, for readers
+    that want numbers rather than text: R's ``arrow::read_parquet``, pandas,
+    DuckDB and Excel's Power Query. 501 when pyarrow is not installed, since
+    it is an optional extra; ``/v1/meta`` reports ``frame_formats`` so a
+    client can ask before it tries.
+
+    The body is already zstd-compressed, so ``app.py`` routes ``.parquet``
+    paths around the gzip middleware rather than compressing them twice.
+    """
+    if not parquet_available():
+        raise HTTPException(status_code=501, detail=PARQUET_UNAVAILABLE)
+    df = reset_index_safe(_named_frame(entry, which))
+    df = df.set_axis(_flatten_columns(df.columns), axis=1)
+    return Response(
+        content=frame_to_parquet(df),
+        media_type=PARQUET_MEDIA_TYPE,
+        headers={
+            "Content-Disposition": f'attachment; filename="{entry.name}-{which}.parquet"',
+        },
+    )
+
 
 # ----------------------------------------------------------------------
 # GET /v1/objects/{id}/frame/{which}?format=ir  -- the static-view document
 # ----------------------------------------------------------------------
-# Declared **after** the `.csv` route above and that ordering is load bearing:
-# a path parameter matches a dot, so `{which}` here would happily swallow
-# `summary.csv` and answer JSON to a download request. Starlette matches in
-# declaration order, so `.csv` wins as long as it stays first. A test pins it.
+# Declared **after** the `.csv` and `.parquet` routes above and that ordering
+# is load bearing: a path parameter matches a dot, so `{which}` here would
+# happily swallow `summary.csv` and answer JSON to a download request.
+# Starlette matches in declaration order, so the suffixed routes win as long
+# as they stay first. Tests pin both.
 
 @router.get("/objects/{oid}/frame/{which}")
 def get_frame_document(

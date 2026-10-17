@@ -451,3 +451,21 @@ Minor bump.
   an `identity` request do not, and the installed level is 6.
 - Sizes from the benchmark: level 9 16.11 MB, level 6 16.23 MB (0.7% larger),
   level 1 26.26 MB. Times 1,707 ms, 754 ms, 185 ms.
+
+### [parquet-route], 1.18.0, 2026-10-17
+
+- Landed as written, with pyarrow 26.0.0 in the lock and a `>=15` floor (the
+  release where `use_byte_stream_split` started taking a column list).
+- The gzip bypass is `GZipExceptParquet` in `app.py`, an ASGI wrapper that
+  routes on the path suffix and holds a `GZipMiddleware` for everything else.
+  `test_compression.test_middleware_level_is_six` reads the level off it.
+- `frame_to_parquet` retries with object columns rewritten as strings when
+  Arrow's inference fails on a mixed object column; no served frame needed it
+  in the suite, but a summary frame could.
+- A MultiIndex frame (`reins_stats_df`) goes out as two CSV header rows and as
+  `a.b` names in Parquet, which is `_flatten_columns`, the JSON route's
+  spelling. The test joins the CSV header rows the same way to compare.
+- `uv sync` still cannot replace the locked `aggregate-api.exe`, so the lock
+  was written with `uv lock` and pyarrow installed with `uv pip install`.
+- Not run: the host check (`curl -sI` through agg.mynl.com showing Caddy does
+  not encode the Parquet response). That is the author's, with the deploy.
