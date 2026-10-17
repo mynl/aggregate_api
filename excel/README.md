@@ -108,9 +108,10 @@ recalculate every cell.
 
 A density frame is `2**log2` rows by tens of columns, which is a table to load,
 not a spill. Power Query (Data, Get Data, From Other Sources, Blank Query, then
-Advanced Editor) loads it as Parquet with the query below. It reads the program
-from a cell named `Decl`, builds it (a program the server already holds comes
-straight back, so a refresh survives a restart), and loads the frame:
+Advanced Editor) loads it from the CSV route with the query below. It reads the
+program from a cell named `Decl`, builds it (a program the server already holds
+comes straight back, so a refresh survives a restart), loads the frame, and
+types every column as a number, reading `inf` and `-inf` as infinities:
 
 ```
 let
@@ -120,18 +121,34 @@ let
               Headers = [#"Content-Type" = "application/json"],
               Content = Json.FromValue([decl = decl, log2 = 16,
                                         library_references_only = true])])),
-    frame = Parquet.Document(Binary.Buffer(Web.Contents(base,
-              [RelativePath = "v1/objects/" & built[id]
-                              & "/frame/density_df.parquet"])))
+    raw   = Csv.Document(Web.Contents(base,
+              [RelativePath = "v1/objects/" & built[id] & "/frame/density_df.csv"]),
+              [Delimiter = ",", Encoding = TextEncoding.Utf8, QuoteStyle = QuoteStyle.Csv]),
+    named = Table.PromoteHeaders(raw, [PromoteAllScalars = true]),
+    toNumber = (t) =>
+              if t = "inf" then Number.PositiveInfinity
+              else if t = "-inf" then Number.NegativeInfinity
+              else if t = "" or t = "nan" then null
+              else Number.From(t, "en-US"),
+    typed = Table.TransformColumns(named,
+              List.Transform(Table.ColumnNames(named), each {_, toNumber, type number}))
 in
-    frame
+    typed
 ```
 
-`Binary.Buffer` is required: without it `Parquet.Document` fails with a
-"streamed binary values" error. Any name `GET /v1/objects/{id}/frame/{which}.csv`
-serves works in place of `density_df` (`reins_density_df`, `stats_df`, ...).
-Desktop Excel on Windows is the tested target. The server needs its `parquet`
-extra; `/v1/meta` lists `parquet` under `frame_formats` when it has it.
+Any name `GET /v1/objects/{id}/frame/{which}.csv` serves works in place of
+`density_df` (`reins_density_df`, `stats_df`, ...); asking for a name that does
+not exist returns the list. For a local server set `base` to its address, such
+as `http://localhost:19456`. Desktop Excel on Windows is the tested target
+(Microsoft 365, 2026-10).
+
+The `.parquet` route is a quarter of the size and the same rows, but Excel's
+Power Query has no Parquet connector (Microsoft lists it for Power BI, Fabric
+and Dataflows only), so it is for Power BI, R and Python. There the loader is
+`Parquet.Document(Binary.Buffer(Web.Contents(...)))` in place of the `raw` and
+`named` steps, with `Binary.Buffer` required, and the server needs its
+`parquet` extra; `/v1/meta` lists `parquet` under `frame_formats` when it has
+it.
 
 ## Data
 

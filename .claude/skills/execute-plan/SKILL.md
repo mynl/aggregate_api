@@ -54,7 +54,7 @@ Then read everything the plan is attached to, because a plan is rarely alone:
   holds the divergences between what this plan asked for and what actually
   shipped upstream. **Read it before writing a line of app code.** The pricing
   plan's LIB notes carried nine.
-- **The control list.** `T:/worktrees/dev-files.md` carries a row per plan with
+- **The control list.** `V:/worktrees/dev-files.md` carries a row per plan with
   its real status, and its "Getting to 1.0" section is the author's master list.
   The row is more current than the plan's own header.
 - **The tracked items.** `dev/TODO.md` is the live roadmap and the only list to
@@ -112,7 +112,7 @@ interactive grid permanently.
 **Depend, never vendor.** A plan phase that reimplements something from LIB
 locally is a finding. So is a **new** private-name import from `aggregate`. The
 sanctioned surface, and the three tolerated private reaches, are listed in
-`T:/worktrees/CLAUDE.md`. The sanctioned path for a gap is an upstream ask
+`V:/worktrees/CLAUDE.md`. The sanctioned path for a gap is an upstream ask
 through a round note, not a local workaround and not a deeper private reach.
 
 **The plan's facts against today's code.** A plan names files, line numbers,
@@ -187,7 +187,7 @@ Two things worth repeating because they are the ones that get missed:
 And two this skill adds:
 
 - **The execution notes** ship in the same commit as the phase they describe.
-- **The `dev-files.md` row** at `T:/worktrees/dev-files.md` gets the plan's new
+- **The `dev-files.md` row** at `V:/worktrees/dev-files.md` gets the plan's new
   status and version range.
 
 ## 7. Retire the plan

@@ -1,8 +1,9 @@
 # Plan: read the library at startup, before the first request
 
 Patch bump (1.13.x). Companion to the library plan
-`V:/worktrees/aggregate_REFACTOR/dev/plan-thread-safe-load.md`, which fixes the
-root cause in `aggregate`. This plan lands first and does not wait for it.
+`V:/worktrees/aggregate_REFACTOR/dev/done/plan-1.5.2-thread-safe-load.md`, which
+fixes the root cause in `aggregate` (landed in 1.5.2). This plan lands first and
+does not wait for it.
 
 ## Goal
 

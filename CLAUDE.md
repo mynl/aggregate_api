@@ -37,7 +37,7 @@ This package **depends on** `aggregate`; it does not vendor it. The api imports:
   `as_read` an example that exists to teach `ph 2/3` arrives spelled
   `ph 0.6666666666666666`.
 
-This list is not the whole surface. `T:/worktrees/CLAUDE.md` carries the audited
+This list is not the whole surface. `V:/worktrees/CLAUDE.md` carries the audited
 one, including the three tolerated private names.
 
 `aggregate` **stopped being a path source at 1.0.0 of this package.** Through
@@ -282,6 +282,17 @@ patch. Do not crawl, and do not go back to serials.
   touch it only when that material changes. It points at `CHANGELOG.md`.
 - **`dev/TODO.md`** holds the roadmap and pending ideas. Check it before
   proposing structural changes.
+
+## Deltas from house rules
+
+- **"Bind `127.0.0.1` by default; never `0.0.0.0`."** Excepted for the
+  author's own instance on DOOB, which great-servers launches from
+  `~/.great-servers/servers.yaml` with `--host 0.0.0.0 --port 19456` and no
+  token. The author's ruling (2026-10-14): it must answer on localhost and on
+  the VPN address (`10.8.0.8`) at once, and one bind cannot serve both, so the
+  wildcard is deliberate and known. Do not flag it. The exception covers that
+  launcher entry only: the code's default bind stays `127.0.0.1`, and any other
+  deployment follows the house rule.
 
 ## Working with the author
 
