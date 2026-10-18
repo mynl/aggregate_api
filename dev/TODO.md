@@ -569,6 +569,15 @@ and the standing REMINDER below about what is worth plotting.
 
 ## Near term (get it healthy)
 
+- [x] **[Build-Single-Flight] identical builds arriving together build
+      once.** A request waiting on the build slot never re-checks the cache,
+      and the store happens after the slot is released, so twenty
+      simultaneous POSTs of one new program run twenty serial builds. Excel
+      hides it with its client-side in-flight map; Sheets cannot. **Landed as
+      1.26.1** (`dev/done/plan-build-single-flight.md`): the waiter re-checks
+      under the slot, the store moved inside it, and `/v1/status` reports
+      `coalesced`.
+
 - [x] **[Lite-Shell] [Lite-Reading] the phone lite entry**
       (`dev/done/plan-phone-lite.md`, spec `dev/prototypes/phone.html`),
       **a168 to a169**, for the 2026-10-16 live demonstration. One URL: a

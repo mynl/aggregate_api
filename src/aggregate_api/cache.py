@@ -35,7 +35,7 @@ Why not weakref
 ---------------
 
 We want explicit bounded retention, not "alive until nobody
-holds a reference" -- the SPA holds the id, not the object,
+holds a reference". The SPA holds the id, not the object,
 so weakref would have no live referents and evict immediately.
 """
 
@@ -128,7 +128,7 @@ def object_id(statements: list, references: list, log2: int, bs: float,
 class CacheEntry:
     """One slot in the LRU.
 
-    ``obj`` is the live ``Aggregate`` or ``Portfolio`` -- the SPA
+    ``obj`` is the live ``Aggregate`` or ``Portfolio``. The SPA
     never reaches it directly, but the api's per-button endpoints
     pull data off it on demand.
 
@@ -183,7 +183,7 @@ class ObjectCache:
     Methods are coarsely thread-safe via a single lock. Reads
     move the entry to MRU; writes evict the LRU when full. The
     ``__contains__`` check does *not* move-to-MRU (peek, not
-    promote) -- the standard idiom for "is this in cache" before
+    promote), the standard idiom for "is this in cache" before
     a separate get/put decision.
     """
 
@@ -204,14 +204,27 @@ class ObjectCache:
         self.evictions = 0
         self.deletes = 0
 
-    def get(self, oid: str) -> CacheEntry | None:
-        """Return the cached entry for ``oid`` (moving it to MRU) or None."""
+    def get(self, oid: str, *, counted: bool = True) -> CacheEntry | None:
+        """Return the cached entry for ``oid`` (moving it to MRU) or None.
+
+        Parameters
+        ----------
+        oid : str
+            The object id.
+        counted : bool, default True
+            Whether this lookup moves ``hits`` and ``misses``. False for the
+            re-check ``post_object`` makes once it holds the build slot: that
+            request's lookup was already counted on arrival, and counting the
+            second look too would report two misses for every build.
+        """
         with self._lock:
             entry = self._store.get(oid)
             if entry is None:
-                self.misses += 1
+                if counted:
+                    self.misses += 1
                 return None
-            self.hits += 1
+            if counted:
+                self.hits += 1
             # ``move_to_end`` is the OrderedDict primitive that makes
             # LRU work; entries closest to the front are evicted first.
             self._store.move_to_end(oid)
@@ -242,7 +255,7 @@ class ObjectCache:
     def list(self) -> list[CacheEntry]:
         """Return a snapshot of cache contents, MRU last.
 
-        Returned list is a copy of the internal values -- safe to
+        Returned list is a copy of the internal values, safe to
         iterate without holding the lock.
         """
         with self._lock:

@@ -1473,6 +1473,79 @@ _BuildOrValue = Annotated[
 ]
 
 
+def _hit_response(
+    entry: CacheEntry,
+    oid: str,
+    *,
+    uw: Any,
+    preview: Any,
+    audit: AuditLog,
+    ip: str,
+    decl: str,
+    log2: int,
+    bs: float,
+    sid: str,
+    key_scope: str,
+    t0: float,
+) -> dict:
+    """Answer ``POST /v1/objects`` from a cached entry: register, audit, respond.
+
+    Parameters
+    ----------
+    entry : CacheEntry
+        The cached object the program keyed to.
+    oid : str
+        Its cache id.
+    uw : aggregate.underwriter.Underwriter
+        The caller's fork, where the program's declarations are filed.
+    preview : Any
+        The program's preview, from :func:`_preview`.
+    audit : AuditLog
+        The audit log; one ``ok`` row is written.
+    ip, decl, log2, bs, sid, key_scope : str, str, int, float, str, str
+        The request's audit fields, as :func:`post_object` resolved them.
+    t0 : float
+        ``time.monotonic()`` at the request's arrival, for ``elapsed_ms``.
+
+    Returns
+    -------
+    dict
+        The slim manifest with ``cached: True``.
+
+    Notes
+    -----
+    Two callers since 1.26.1: the lookup on arrival, and the re-check a request
+    makes once it holds the build slot, when the build it queued behind was the
+    same program. Both answers are a hit in every respect (the audit row, the
+    registration, the payload), so one function writes them and they cannot
+    drift apart.
+    """
+    # File the program in the caller's own base even though nothing was
+    # built: see :func:`_register` for why a hit has to register too.
+    _register(uw, preview)
+    elapsed = int((time.monotonic() - t0) * 1000)
+    audit.record_build(
+        ip=ip, decl=decl, log2=log2, bs=bs,
+        status="ok", object_id=oid, kind=entry.kind,
+        elapsed_ms=elapsed, session_id=sid, key_scope=key_scope,
+    )
+    return {
+        "id": oid,
+        "kind": entry.kind,
+        "name": entry.name,
+        # The build's warnings, not this request's: they belong to the
+        # object and were stored with it, so a hit says what the miss said.
+        "warnings": list(entry.notes),
+        "cached": True,
+        "elapsed_ms": elapsed,
+        **_summary_fields(entry.obj),
+        # Computed on the hit path too, never cached alongside the entry:
+        # ``can_sharpen`` reads the object's own note, which a Sharpen can
+        # move under a live id, so a stored copy could go stale.
+        "capability": capability_for(entry.obj),
+    }
+
+
 @router.post("/objects", response_model=_BuildOrValue)
 def post_object(
     req: models.BuildRequest,
@@ -1609,40 +1682,37 @@ def post_object(
         raise HTTPException(status_code=422, detail=detail) from None
     status_state.record_key_scope(key_scope)
 
-    # Cache hit -- return slim manifest immediately.
+    hit_fields = dict(
+        uw=uw, preview=preview, audit=audit, ip=ip, decl=req.decl,
+        log2=eff_log2, bs=eff_bs, sid=sid, key_scope=key_scope, t0=t0,
+    )
+
+    # A cache hit answers with the slim manifest at once.
     cached_entry = cache.get(oid)
     if cached_entry is not None:
-        # File the program in the caller's own base even though nothing was
-        # built: see :func:`_register` for why a hit has to register too.
-        _register(uw, preview)
-        elapsed = int((time.monotonic() - t0) * 1000)
-        audit.record_build(
-            ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
-            status="ok", object_id=oid, kind=cached_entry.kind,
-            elapsed_ms=elapsed, session_id=sid, key_scope=key_scope,
-        )
-        return {
-            "id": oid,
-            "kind": cached_entry.kind,
-            "name": cached_entry.name,
-            # The build's warnings, not this request's: they belong to the
-            # object and were stored with it, so a hit says what the miss said.
-            "warnings": list(cached_entry.notes),
-            "cached": True,
-            "elapsed_ms": elapsed,
-            **_summary_fields(cached_entry.obj),
-            # Computed on the hit path too, never cached alongside the entry:
-            # ``can_sharpen`` reads the object's own note, which a Sharpen can
-            # move under a live id, so a stored copy could go stale.
-            "capability": capability_for(cached_entry.obj),
-        }
+        return _hit_response(cached_entry, oid, **hit_fields)
 
-    # Cache miss -- fire the build, gated by the semaphore +
-    # wall-clock timeout. Note: the semaphore only serializes the
-    # *future submission*, not the wait. With one worker the
-    # semaphore is technically redundant (the worker serializes
-    # naturally), but it makes intent explicit.
+    # A miss builds, one at a time under the slot and against the wall-clock
+    # timeout. The slot covers the whole of a build's life in the cache: the
+    # re-check that opens it, the build, and the store that closes it.
+    #
+    # **Identical programs arriving together build once.** A request that
+    # missed above while another was building the same program has waited
+    # here, and by the time it holds the slot that build is in the cache. So
+    # the first thing a holder does is look again. The store stays inside the
+    # slot for the same reason: stored after release, there would be a moment
+    # when the next holder re-checked, missed, and built a second time. A
+    # Sheets client needs this, since it runs each cell on its own with no
+    # shared memory, and twenty cells passing one new program are twenty POSTs.
+    # The re-check is not counted on the cache panel, whose lookup for this
+    # request was the one above; a waiter it serves counts as coalesced.
     with status_state.build_slot(_build_semaphore):
+        cached_entry = cache.get(oid, counted=False)
+        if cached_entry is not None:
+            status_state.record_build_coalesced()
+            return _hit_response(cached_entry, oid, **hit_fields)
+
+        status_state.record_build_started()
         future = _build_executor.submit(_run_build, uw, req.decl, eff_log2, eff_bs)
         try:
             obj, build_notes = future.result(timeout=settings.build_timeout_s)
@@ -1761,74 +1831,75 @@ def post_object(
             )
             raise HTTPException(status_code=500, detail=str(exc))
 
-    # Classify the result. The api serves exactly the six DecL-creatable kinds
-    # the library declares as first-class (plus near-first-class ``sev``), and
-    # nothing else. They do not all carry the same surface: an Aggregate and a
-    # Portfolio have the lot, while a Distortion, a BivariateAggregate and a PnL
-    # have the reporting frames but no pricing / reinsurance / bs window, and a
-    # Severity is a look-through onto a frozen scipy variable with ``info`` and
-    # ``plot`` but no frames at all. Every frame route answers a clean 400 for a
-    # kind that does not carry it, so the SPA degrades rather than erroring.
-    kind = _classify_object(obj)
+        # Classify the result. The api serves exactly the six DecL-creatable kinds
+        # the library declares as first-class (plus near-first-class ``sev``), and
+        # nothing else. They do not all carry the same surface: an Aggregate and a
+        # Portfolio have the lot, while a Distortion, a BivariateAggregate and a PnL
+        # have the reporting frames but no pricing / reinsurance / bs window, and a
+        # Severity is a look-through onto a frozen scipy variable with ``info`` and
+        # ``plot`` but no frames at all. Every frame route answers a clean 400 for a
+        # kind that does not carry it, so the SPA degrades rather than erroring.
+        kind = _classify_object(obj)
 
-    # A program that means a number, which DecL has always allowed: the
-    # top-level ``answer`` rule carries ``expr``, so ``(2+2)`` and ``2/3`` are
-    # programs and ``build()`` answers each with a float. Through a137 the api
-    # built them and then refused the result two lines below, reporting the
-    # library's own answer as an unsupported kind.
-    #
-    # Nothing is cached and no recipe is registered: there is no object, so
-    # there is no slot to fill and nothing a later route could fetch against an
-    # id. The audit records it under its own status, so the operator's page does
-    # not read arithmetic as object builds.
-    #
-    # ``isinstance`` against ``numbers.Real`` rather than a kind-name test:
-    # ``(2+2)`` comes back a Python float and ``(exp(1))`` a ``numpy.float64``,
-    # and asking what a thing *is* beats keeping a list of the names it answers
-    # to. ``bool`` is excluded because it is a Real in Python and is not what
-    # any DecL expression means.
-    if isinstance(obj, numbers.Real) and not isinstance(obj, bool):
-        elapsed = int((time.monotonic() - t0) * 1000)
-        audit.record_build(
-            ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
-            status="value", elapsed_ms=elapsed,
-            session_id=sid, key_scope=key_scope,
-        )
-        return {
-            "kind": "value",
-            "value": float(obj),
-            "decl": req.decl,
-            "elapsed_ms": elapsed,
-        }
+        # A program that means a number, which DecL has always allowed: the
+        # top-level ``answer`` rule carries ``expr``, so ``(2+2)`` and ``2/3`` are
+        # programs and ``build()`` answers each with a float. Through a137 the api
+        # built them and then refused the result two lines below, reporting the
+        # library's own answer as an unsupported kind.
+        #
+        # Nothing is cached and no recipe is registered: there is no object, so
+        # there is no slot to fill and nothing a later route could fetch against an
+        # id. The audit records it under its own status, so the operator's page does
+        # not read arithmetic as object builds.
+        #
+        # ``isinstance`` against ``numbers.Real`` rather than a kind-name test:
+        # ``(2+2)`` comes back a Python float and ``(exp(1))`` a ``numpy.float64``,
+        # and asking what a thing *is* beats keeping a list of the names it answers
+        # to. ``bool`` is excluded because it is a Real in Python and is not what
+        # any DecL expression means.
+        if isinstance(obj, numbers.Real) and not isinstance(obj, bool):
+            elapsed = int((time.monotonic() - t0) * 1000)
+            audit.record_build(
+                ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
+                status="value", elapsed_ms=elapsed,
+                session_id=sid, key_scope=key_scope,
+            )
+            return {
+                "kind": "value",
+                "value": float(obj),
+                "decl": req.decl,
+                "elapsed_ms": elapsed,
+            }
 
-    if kind not in SUPPORTED_KINDS:
-        elapsed = int((time.monotonic() - t0) * 1000)
-        audit.record_build(
-            ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
-            status="build_error",
-            error_msg=f"unsupported kind {kind!r}",
-            elapsed_ms=elapsed,
-            session_id=sid, key_scope=key_scope,
-        )
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"api supports {', '.join(repr(k) for k in SUPPORTED_KINDS)} "
-                f"only; got {kind!r}"
-            ),
-        )
+        if kind not in SUPPORTED_KINDS:
+            elapsed = int((time.monotonic() - t0) * 1000)
+            audit.record_build(
+                ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
+                status="build_error",
+                error_msg=f"unsupported kind {kind!r}",
+                elapsed_ms=elapsed,
+                session_id=sid, key_scope=key_scope,
+            )
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"api supports {', '.join(repr(k) for k in SUPPORTED_KINDS)} "
+                    f"only; got {kind!r}"
+                ),
+            )
 
-    entry = CacheEntry(
-        obj=obj,
-        decl=req.decl,
-        log2=eff_log2,
-        bs=eff_bs,
-        kind=kind,
-        name=getattr(obj, "name", "<anonymous>"),
-        created_at=datetime.now(timezone.utc),
-        notes=build_notes,
-    )
-    cache.put(oid, entry)
+        entry = CacheEntry(
+            obj=obj,
+            decl=req.decl,
+            log2=eff_log2,
+            bs=eff_bs,
+            kind=kind,
+            name=getattr(obj, "name", "<anonymous>"),
+            created_at=datetime.now(timezone.utc),
+            notes=build_notes,
+        )
+        cache.put(oid, entry)
+
     elapsed = int((time.monotonic() - t0) * 1000)
     sessions.record_build(sid)
     audit.record_build(
@@ -3565,6 +3636,7 @@ def post_sharpen(
     # too, so the queue depth GET /v1/status reports is the real one: a probe
     # holding the slot blocks a build exactly as another build would.
     with status_state.build_slot(_build_semaphore):
+        status_state.record_build_started()
         future = _build_executor.submit(
             lambda: obj.sharpen(log2_cap=settings.log2_cap))
         try:

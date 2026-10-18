@@ -229,11 +229,17 @@ class build_slot:  # noqa: N801 (a context manager used as a statement reads bet
 
     Notes
     -----
-    Written as a context manager so the three counters cannot drift from each
+    Written as a context manager so the two gauges cannot drift from each
     other: a ``waiting`` that is decremented on one path out and not another
     would climb forever and the page would report a queue that is not there.
-    Entering counts a waiter, acquiring converts it to an in-flight build, and
+    Entering counts a waiter, acquiring converts it to an in flight holder, and
     leaving releases both regardless of how the body exited.
+
+    **Holding the slot is not the same as building.** Since 1.26.1 a holder
+    re-checks the cache first, and one that finds the program already built
+    (by the request it was queued behind) is answered from there. So whether a
+    build starts is counted at the submit, by :func:`record_build_started`, and
+    a holder served from the cache by :func:`record_build_coalesced`.
     """
 
     __slots__ = ("_semaphore",)
@@ -248,7 +254,6 @@ class build_slot:  # noqa: N801 (a context manager used as a statement reads bet
         with _lock:
             _counts["build_waiting"] -= 1
             _counts["build_in_flight"] += 1
-            _counts["builds_started"] += 1
         return self
 
     def __exit__(self, exc_type, exc, tb):
@@ -258,6 +263,33 @@ class build_slot:  # noqa: N801 (a context manager used as a statement reads bet
         return False
 
 
+def record_build_started() -> None:
+    """Count one build handed to the build worker.
+
+    Notes
+    -----
+    Called just before each submit to the build executor, in ``post_object``
+    and in the sharpen route, so ``started`` counts work the worker actually
+    ran rather than requests that held the slot.
+    """
+    with _lock:
+        _counts["builds_started"] += 1
+
+
+def record_build_coalesced() -> None:
+    """Count one request that waited for the slot and was served from the cache.
+
+    Notes
+    -----
+    The request missed the cache on arrival because the same program was being
+    built, waited behind that build, and found its object once it held the
+    slot. Ten identical programs arriving together read as one started and
+    nine coalesced.
+    """
+    with _lock:
+        _counts["builds_coalesced"] += 1
+
+
 def record_build_timeout() -> None:
     """Count one build abandoned at ``build_timeout_s``."""
     with _lock:
@@ -265,12 +297,20 @@ def record_build_timeout() -> None:
 
 
 def build_state() -> dict:
-    """Live build state: in flight, queued, started and timed out since start."""
+    """Live build state: in flight, queued, and the counts since start.
+
+    Returns
+    -------
+    dict
+        ``in_flight`` and ``waiting`` are gauges; ``started``, ``coalesced``
+        and ``timeouts`` are process-lifetime counters.
+    """
     with _lock:
         return {
             "in_flight": _counts["build_in_flight"],
             "waiting": _counts["build_waiting"],
             "started": _counts["builds_started"],
+            "coalesced": _counts["builds_coalesced"],
             "timeouts": _counts["build_timeouts"],
         }
 

@@ -4,6 +4,14 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.26.1
+
+[Build-Single-Flight] **Identical builds arriving together build once.** Plan `dev/done/plan-build-single-flight.md`.
+
+- Fixed: a request that missed the cache while the same program was building waited for the build slot and then built it again, so twenty simultaneous POSTs of one new program ran twenty serial builds. The waiter now re-checks the cache once it holds the slot and is answered as an ordinary hit (`cached: true`, same id), and the build stores its object before releasing the slot so no waiter slips between the two. Needed by the Google Sheets client, where every cell is its own request.
+- `/v1/status` counts builds at the submit, so `started` means builds the worker ran, and adds `coalesced` for waiters served from the cache; the status page shows it as "coalesced since boot". The cache panel still counts one lookup per request.
+- A program that fails or times out is still not coalesced: each waiter tries it in turn, as before.
+
 ## 1.26.0
 
 [Pane-Frames] **The task pane hands out a frame's URL and its Power Query, ready to paste.** Plan `dev/done/plan-excel-library-and-frames.md`, last of five steps.

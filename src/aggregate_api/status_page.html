@@ -392,6 +392,7 @@ function builds(d) {
             ['in flight', num(live.in_flight), live.in_flight ? 'warn' : null],
             ['waiting', num(live.waiting), live.waiting ? 'warn' : null],
             ['started since boot', num(live.started)],
+            ['coalesced since boot', num(live.coalesced)],
             ['timeouts since boot', num(live.timeouts), live.timeouts ? 'bad' : null],
         ])]),
         buildWindow('hour', d.builds.hour),
