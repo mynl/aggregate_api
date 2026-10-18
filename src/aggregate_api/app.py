@@ -3,7 +3,8 @@
 ``create_app()`` is the single entry point: it builds a fresh
 :class:`fastapi.FastAPI`, installs CORS if configured, mounts the
 ``v1`` routers, serves the Excel add-in at ``/excel`` when it has been
-built, and serves the web bundle at ``/`` when it is present.
+built, serves each front end named in ``AGGAPI_APPS`` at ``/<name>/``, and
+serves the web bundle at ``/`` when it is present.
 
 Flask users
 -----------
@@ -28,13 +29,14 @@ import logging
 from pathlib import Path
 
 from aggregate import plugins as agg_plugins
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import __version__ as api_version
-from . import resources, status
+from . import apps, resources, status
 from .config import Settings, get_settings
 from .cors import install_cors
 from .library import get_underwriter
@@ -220,11 +222,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.mount("/excel", _NoCacheStaticFiles(directory=str(excel_dir)),
                   name="excel")
 
+    static_dir = _resolve_static_dir(settings)
+
+    # Other front ends, each from its own repository, named in AGGAPI_APPS.
+    # Before ``/`` for the reason ``/excel`` is, and not gated on ``serve_spa``
+    # either, so a headless server still serves its apps. ``no-cache`` so an edit
+    # to an app's files shows on the next reload without a restart, and
+    # ``html=True`` so ``/<name>/`` serves its index.html.
+    #
+    # The explicit redirect is needed because Starlette's own slash redirect
+    # fires only when no route matches, and the SPA's ``/`` mount matches every
+    # path, so without it ``/<name>`` is a 404 whenever the bundle is present.
+    discovered = apps.discover(settings.apps, apps.reserved_names(static_dir))
+    for front_end in discovered:
+        app.add_route(f"/{front_end.name}", _redirect_to_trailing_slash,
+                      methods=["GET"], name=f"app-{front_end.name}-slash",
+                      include_in_schema=False)
+        app.mount(f"/{front_end.name}",
+                  _NoCacheStaticFiles(directory=str(front_end.directory), html=True),
+                  name=f"app-{front_end.name}")
+    app.state.apps = discovered
+
     # Static-file mount for the SPA (Plan D). Conditional because
     # the api ships independently of the web build; if the web
     # bundle isn't present, the api is api-only and ``/`` returns
     # 404 (which is fine for backend-only deploys).
-    static_dir = _resolve_static_dir(settings)
     if static_dir is not None and static_dir.exists():
         # ``html=True`` tells StaticFiles to serve index.html for /
         # *and* fall back to it for unknown paths -- the SPA-style
@@ -243,9 +265,10 @@ class _NoCacheStaticFiles(StaticFiles):
 
     Notes
     -----
-    For the Excel add-in. Office caches add-in files hard, so without this a
-    deploy would not reach a workbook until that cache expired. ``no-cache``
-    still lets the client keep a copy; it must revalidate first, and the
+    For the Excel add-in, and for the front ends in ``AGGAPI_APPS``, whose
+    files are not content hashed either. Office caches add-in files hard, so
+    without this a deploy would not reach a workbook until that cache expired.
+    ``no-cache`` still lets the client keep a copy; it must revalidate first, and the
     ``ETag`` ``StaticFiles`` sends makes that a 304 when nothing changed. So a
     deploy is picked up when the workbook reopens, for the price of one
     conditional request per file.
@@ -256,6 +279,34 @@ class _NoCacheStaticFiles(StaticFiles):
         response = await super().get_response(path, scope)
         response.headers["Cache-Control"] = "no-cache"
         return response
+
+
+async def _redirect_to_trailing_slash(request: Request) -> RedirectResponse:
+    """Send ``/<name>`` to ``/<name>/``, keeping the query string.
+
+    Parameters
+    ----------
+    request : Request
+        A GET for an app's bare name.
+
+    Returns
+    -------
+    RedirectResponse
+        307 to the same path with a trailing slash.
+
+    Notes
+    -----
+    An app's paths are relative, so its page has to be loaded from the
+    directory URL or ``style.css`` resolves against the root. The ``Location``
+    is relative too: an absolute one would be built from the scope, and behind
+    a proxy that is right only when the forwarded headers are, while a relative
+    one resolves against whatever the browser asked for. The query string goes
+    along so ``/asp?api=...`` arrives at ``/asp/?api=...``.
+    """
+    target = f"{request.url.path}/"
+    if request.url.query:
+        target = f"{target}?{request.url.query}"
+    return RedirectResponse(target, status_code=307)
 
 
 def _resolve_excel_dir() -> Path:

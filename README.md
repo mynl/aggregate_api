@@ -149,6 +149,27 @@ AGGAPI_CORS_ORIGINS=https://your.app uv run aggregate-api --headless
 shape follows what the bundled web app needs, so treat it as a moving target
 rather than a stable interface for now.
 
+### Serving other front ends
+
+A static single-page app from another repository can be served on the same
+origin as the API, at `/<name>/`, by naming its folder in `AGGAPI_APPS` as
+comma-separated `name=folder` pairs:
+
+```
+AGGAPI_APPS=asp=/srv/aggregate-asp, demo=/srv/agg-demo
+```
+
+The folder needs an `index.html`, and its paths should be relative. An optional
+`app.json` beside it gives the title and description the playground's Apps menu
+shows, `{"title": "...", "description": "..."}`; without one the title is the
+name. A name is lower case letters, digits and hyphens, starting with a letter,
+and must not be one the server already uses (`v1`, `excel`, `docs`, `assets`
+and the like). A bad entry is logged at WARNING and skipped. A folder whose path
+holds a comma cannot be named. Adding an app takes a restart; an edit to its
+files shows on the next reload. An app runs with the playground's origin and
+can call `/v1` as the visitor, so name only front ends you trust as you would a
+plugin.
+
 ## License
 
 BSD 3-Clause. See [LICENSE](LICENSE).

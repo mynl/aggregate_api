@@ -1412,6 +1412,26 @@ class PluginInfo(BaseModel):
     error: str | None = None
 
 
+class AppInfo(BaseModel):
+    """One front end the server mounts beside the playground.
+
+    Notes
+    -----
+    No field holds the folder the app is served from. ``/v1/meta`` is public,
+    and a path on the host is nobody's business but the operator's, which is
+    also why an entry ``AGGAPI_APPS`` rejected appears in the server log and
+    not here.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    name: str
+    title: str
+    description: str = ""
+    # Where it is served, `/<name>/`, trailing slash included.
+    url: str
+
+
 class MetaResponse(BaseModel):
     model_config = _RESPONSE_CFG
 
@@ -1446,6 +1466,9 @@ class MetaResponse(BaseModel):
     # `parquet` when the optional pyarrow extra is installed, so an R or Power
     # Query client can ask before it asks for a 501.
     frame_formats: list[str] = []
+    # The other front ends this server mounts (`AGGAPI_APPS`), which the
+    # playground lists in its Apps menu. Empty when none are named.
+    apps: list[AppInfo] = []
 
 
 class StatusResponse(BaseModel):

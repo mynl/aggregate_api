@@ -268,6 +268,25 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------
+    # Apps
+    # ------------------------------------------------------------------
+    # Other front ends to serve, each at /<name>/ from a folder of its own
+    # repository: comma-separated `name=folder` pairs, for example
+    # `asp=V:/dev/aggregate-asp`. Plugins extend the engine; apps extend the
+    # front, and in both the deployment declares what it trusts. An app runs on
+    # this origin with full access to /v1 and to the playground's storage, so
+    # name only your own repositories. See apps.py and
+    # dev/done/plan-front-end-apps.md.
+    #
+    # An environment variable rather than a config file entry, because a folder
+    # is a machine-specific location. A folder whose path holds a comma cannot
+    # be named.
+    apps_raw: str = Field(
+        default="",
+        validation_alias="AGGAPI_APPS",
+    )
+
+    # ------------------------------------------------------------------
     # Derived properties
     # ------------------------------------------------------------------
     @property
@@ -287,6 +306,29 @@ class Settings(BaseSettings):
         if not raw:
             return None
         return [name.strip() for name in raw.split(",") if name.strip()]
+
+    @property
+    def apps(self) -> list[tuple[str, str]]:
+        """Parse ``AGGAPI_APPS`` into ``(name, folder)`` pairs, in order.
+
+        Returns
+        -------
+        list of (str, str)
+            One pair per comma-separated entry, both halves trimmed. Split on
+            the first ``=`` only, so a folder may contain one. An entry with no
+            ``=`` comes back as ``(entry, "")`` rather than being dropped, so
+            :func:`aggregate_api.apps.discover` rejects it with a WARNING
+            naming it; a silently dropped entry is debugged by wondering why
+            the app is missing.
+        """
+        pairs = []
+        for entry in self.apps_raw.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            name, _, folder = entry.partition("=")
+            pairs.append((name.strip(), folder.strip()))
+        return pairs
 
     @property
     def cors_origins(self) -> list[str]:

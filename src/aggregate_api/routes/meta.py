@@ -10,7 +10,8 @@ Routes
   so the SPA can configure its form widgets (e.g. set the log2
   slider's max to ``log2_cap``), plus the loaded plugin manifest,
   which is what tells the SPA whether the Lab tab exists and what
-  sits under it.
+  sits under it, and the front ends mounted beside it, which fill
+  its Apps menu.
 * ``GET /v1/meta/style``: the house plot style, read off
   ``aggregate.style``, so the SPA's interactive charts and the
   server-rendered matplotlib plots cannot drift apart.
@@ -158,8 +159,12 @@ def plot_style() -> dict:
 
 
 @router.get("/meta", response_model=models.MetaResponse)
-async def meta() -> dict:
+async def meta(request: Request) -> dict:
     """Echo the live config knobs the SPA needs.
+
+    ``request`` is read for the front ends ``create_app`` mounted, which it
+    keeps on ``app.state.apps``. A ``Request`` parameter is not a dependency in
+    the sense below: FastAPI hands it over without a thread pool call.
 
     ``async def`` with the settings read in the body rather than through
     ``Depends(get_settings)``, for the reason given on :func:`health`: a sync
@@ -188,6 +193,10 @@ async def meta() -> dict:
         "decl_help": decl_help.available_forms(),
         "public_url": settings.public_url.strip() or None,
         "frame_formats": _frame_formats(),
+        "apps": [
+            {"name": a.name, "title": a.title, "description": a.description, "url": a.url}
+            for a in getattr(request.app.state, "apps", [])
+        ],
     }
 
 

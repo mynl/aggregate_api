@@ -169,6 +169,7 @@ the built SPA at `/` when present.
 | Module | Role |
 |---|---|
 | `app.py` | `create_app()` factory; static-file mount for the SPA |
+| `apps.py` | other front ends named in `AGGAPI_APPS`, admitted for a mount at `/<name>/` and listed on `/v1/meta` |
 | `__main__.py` | `aggregate-api` console script; launches uvicorn |
 | `config.py` | `Settings` (pydantic-settings, `AGGAPI_*` env vars) |
 | `cors.py` | CORS middleware install for split-origin deploys |

@@ -31,6 +31,7 @@ import { renderInfo } from './renderers.js';
 import { fetchFailed, mountChart, mountChartDoc, notDrawable } from './charts/mount.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
 import { allRowsPlan, loadingLine, readDensityRows, writeDensityRows } from './all-rows.js';
+import { appsMenuHtml } from './apps-menu.js';
 import { mountIrTable, irToGrid, docTruncated, atFullPrecision } from './tables.js';
 import { renderError, renderRateLimit } from './error-pane.js';
 import {
@@ -5335,6 +5336,7 @@ api.meta().then((meta) => {
     const strip = $('nav-versions');
     if (strip) strip.textContent = `agg ${meta.aggregate_version} · api ${meta.version}`;
     installPlugins(meta.plugins || []);
+    installApps(meta.apps || []);
     _aggregateVersion = meta.aggregate_version;
     _publicUrl = meta.public_url || null;
     declHelp.offer(meta);
@@ -5378,6 +5380,24 @@ function installPlugins(plugins) {
                            : `${p.name}${version}`;
         })
         .join(', ');
+}
+
+/**
+ * Fill the hamburger's Apps group with the other front ends this server mounts.
+ *
+ * Called once, from the meta fetch, beside `installPlugins`. The header and
+ * divider stay hidden when the server names none, which is every server that
+ * does not set `AGGAPI_APPS`.
+ *
+ * @param {Array} apps the `apps` array from `GET /v1/meta`.
+ */
+function installApps(apps) {
+    const html = appsMenuHtml(apps);
+    if (!html) return;
+    const divider = $('apps-divider');
+    divider.insertAdjacentHTML('beforebegin', html);
+    $('apps-header').hidden = false;
+    divider.hidden = false;
 }
 
 // Download every DecL program built this session, canonical and re-loadable,

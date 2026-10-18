@@ -578,6 +578,17 @@ and the standing REMINDER below about what is worth plotting.
       under the slot, the store moved inside it, and `/v1/status` reports
       `coalesced`.
 
+- [x] **[Front-End-Apps] serve other front ends at `/<name>/`**, each from
+      its own repository, named in `AGGAPI_APPS` (`asp=<folder>`), with an
+      Apps menu in the playground built from `/v1/meta`; adding one is an
+      entry and a restart. First tenant: aSP at `/asp/`, whose half is
+      `[Serve-From-aLL]` in `V:/dev/aggregate-asp`. Also stops the playground's
+      service worker caching anything outside its own files, and shortens
+      the All rows menu item. Author's ask, 2026-10-18, ruled to land
+      before `[Sheets-Template]`. **Landed as 1.27.0**
+      (`dev/done/plan-front-end-apps.md`); `/<name>` needed an explicit
+      redirect, since the SPA's `/` mount shadows Starlette's own.
+
 - [x] **[Lite-Shell] [Lite-Reading] the phone lite entry**
       (`dev/done/plan-phone-lite.md`, spec `dev/prototypes/phone.html`),
       **a168 to a169**, for the 2026-10-16 live demonstration. One URL: a

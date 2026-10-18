@@ -140,8 +140,8 @@
                                  default: on the public server a whole portfolio
                                  frame is a 16 MB download. -->
                             <li><button type="button" class="dropdown-item menu-check-item" data-density-rows="all">
-                                <i class="bi bi-check2"></i><span>All rows in density tables</span>
-                                <small class="text-muted">every row of density_df, scroll to read</small></button></li>
+                                <i class="bi bi-check2"></i><span>All rows</span>
+                                <small class="text-muted">scroll to read</small></button></li>
                             <li><hr class="dropdown-divider"></li>
                             <!-- Perspective: which business reading of an
                                  exhibit to serve. The library owns the
@@ -172,6 +172,13 @@
                                 <i class="bi bi-check2"></i><span>Emacs keys</span>
                                 <small class="text-muted">Ctrl+A/E/K/Y, N/P, F/B/D</small></button></li>
                             <li><hr class="dropdown-divider"></li>
+                            <!-- Apps: the other front ends this server mounts
+                                 (AGGAPI_APPS), each a link that opens in this
+                                 tab. main.js renders the items from /v1/meta
+                                 between this header and the divider, and shows
+                                 the pair only when there is at least one. -->
+                            <li id="apps-header" hidden><h6 class="dropdown-header">Apps</h6></li>
+                            <li id="apps-divider" hidden><hr class="dropdown-divider"></li>
                             <li><button type="button" class="dropdown-item" data-bs-toggle="offcanvas" data-bs-target="#helpPanel">Help</button></li>
                             <!-- The library's DecL reference card. Disabled until
                                  `/v1/meta` says the library has it, with the

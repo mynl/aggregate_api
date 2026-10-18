@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.27.0
+
+[Front-End-Apps] **Other front ends served at `/<name>/`, with an Apps menu.** Plan `dev/done/plan-front-end-apps.md`.
+
+- Added: `AGGAPI_APPS`, comma-separated `name=folder` pairs, mounts each folder at `/<name>/` on the API's own origin with `Cache-Control: no-cache`, so adding a front end is an entry and a restart and an edit to its files shows on the next reload. `/<name>` redirects to `/<name>/`, keeping the query string. Headless servers serve them too. First tenant: aSP, `asp=<its checkout>`.
+- An optional `app.json` in the folder gives a title and description. A bad entry (reserved or malformed name, duplicate, missing folder, no `index.html`, no `=`) is logged at WARNING and skipped; the server always starts.
+- `/v1/meta` gains `apps`, each `{name, title, description, url}` and never the folder, and the playground's hamburger shows an **Apps** group above Help, one link per app, hidden when there are none.
+- Fixed: the playground's service worker cached every same-origin GET outside `/v1/`, which would have pinned the first copy of `/excel/` or any app it saw. It now handles only the playground's own files, and `CACHE_VERSION` moves to `agg-pwa-v3`, so a returning browser drops the old entries.
+- The Tables item **All rows in density tables** is now **All rows**, over *scroll to read*.
+
 ## 1.26.1
 
 [Build-Single-Flight] **Identical builds arriving together build once.** Plan `dev/done/plan-build-single-flight.md`.
