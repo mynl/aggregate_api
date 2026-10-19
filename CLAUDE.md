@@ -75,8 +75,8 @@ something is missing or awkward to import, raise it as an upstream change in
 at each library minor rather than trusting the range.
 
 `greater-tables` used to be a path source for the same reason and **is not any
-more**: 6.0.0 shipped to PyPI at a53, so it is an ordinary registry dependency
-pinned `>=6.0.0`. The floor matters. PyPI also carries 5.3, the previous
+more**: 6.0.0 shipped to PyPI at a53, so it is an ordinary registry dependency,
+pinned `>=7.0.0` since 1.31.0. The floor matters. PyPI also carries 5.3, the previous
 generation under the same name, and it has no `build`, `canonical_json` or
 `IR_VERSION`, so resolving to it fails at import rather than at install. To
 co-develop it for a session, `uv pip install -e c:/s/ai/greatest-tables` after a
@@ -217,6 +217,11 @@ output panes (`renderers.js`, `error-pane.js`, `grid.js`), the interactive
 Overview chart, the examples menu (`examples.js`) and history. The build output
 lands in the backend's `static/` dir so a single `aggregate-api` process serves
 UI and api same-origin.
+
+Two more pages share the build, each with its own entry and a standalone
+stylesheet, no Bootstrap: `lite.html` (`lite.js`), the phone edition, and
+`use/index.html` (`use.js`), served at `/use/`, which walks a newcomer through
+running `aggregate` from Jupyter, R, Excel and Sheets.
 
 ## Naming conventions
 

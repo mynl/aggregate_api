@@ -30,7 +30,9 @@ import {
 import { renderInfo } from './renderers.js';
 import { fetchFailed, mountChart, mountChartDoc, notDrawable } from './charts/mount.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
-import { allRowsPlan, loadingLine, readDensityRows, writeDensityRows } from './all-rows.js';
+import {
+    allRowsPlan, browserStorage, loadingLine, readDensityRows, writeDensityRows,
+} from './all-rows.js';
 import { appsMenuHtml } from './apps-menu.js';
 import { mountIrTable, irToGrid, docTruncated, atFullPrecision } from './tables.js';
 import { renderError, renderRateLimit } from './error-pane.js';
@@ -2280,12 +2282,12 @@ function setPerspective(mode) {
  * 1.19.0 shipped this as a two-button segmented control above each table, and
  * the author found the buttons horrible and the control in the wrong place.
  */
-let _densityRows = readDensityRows(localStorage);
+let _densityRows = readDensityRows(browserStorage());
 
 function setDensityRows(mode) {
     if (mode === _densityRows) return;
     _densityRows = mode;
-    writeDensityRows(localStorage, mode);
+    writeDensityRows(browserStorage(), mode);
     syncPreferenceMenu();
     // A refetch, the Perspective path, not a redraw: the two views are two
     // routes (the binned display frame against the whole `.csv`), and the
@@ -5314,6 +5316,15 @@ if (helpLoad) {
 // ----------------------------------------------------------------------
 // Bundled-library versions are build-time constants (inlined by Vite's define);
 // aggregate / api versions come from the backend at runtime.
+//
+// `/#about` opens the panel, so another page on the site can link to the
+// terms: the /use page's terms line does (1.31.0). On arrival, and on a hash
+// change, since typing `#about` after a loaded Lab does not reload it.
+function openAboutFromHash() {
+    if (location.hash === '#about') bootstrap.Offcanvas.getOrCreateInstance($('aboutPanel')).show();
+}
+openAboutFromHash();
+window.addEventListener('hashchange', openAboutFromHash);
 $('about-grid').textContent = __CSV_GRID_VERSION__;
 $('about-echarts').textContent = __ECHARTS_VERSION__;
 $('about-echarts-gl').textContent = __ECHARTS_GL_VERSION__;

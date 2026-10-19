@@ -43,13 +43,16 @@ export default defineConfig({
         assetsDir: 'assets',
         sourcemap: false,
         rollupOptions: {
-            // Two pages, one build. `lite.html` + `lite.js` is the phone
+            // Three pages, one build. `lite.html` + `lite.js` is the phone
             // entry (see dev/plan-phone-lite.md); the vendor split below
             // applies per page automatically, and the lite page simply never
-            // references the codemirror or bootstrap chunks.
+            // references the codemirror or bootstrap chunks. `use/index.html`
+            // + `use.js` is the page on running aggregate from Jupyter, R,
+            // Excel and Sheets, served at /use/ (dev/done/plan-use-page.md).
             input: {
                 main: fileURLToPath(new URL('./index.html', import.meta.url)),
                 lite: fileURLToPath(new URL('./lite.html', import.meta.url)),
+                use: fileURLToPath(new URL('./use/index.html', import.meta.url)),
             },
             output: {
                 // Split the big vendors into their own chunks. They change only

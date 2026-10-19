@@ -1,0 +1,238 @@
+/* The /use page's whole stylesheet.
+ *
+ * Standalone by design, as `lite.css` is: `site.css` is coupled to Bootstrap's
+ * presence and this page ships no Bootstrap. The tokens block is lifted from
+ * `site.css` :root, and the folder tabs, the sub-tab row and its hairline
+ * divider copy the main page's. The layout is
+ * `dev/prototypes/use-page/side-by-side.html`, which is the specification for
+ * this page. If a value here disagrees with `site.css`, `site.css` is right and
+ * this drifted.
+ */
+
+:root {
+    --ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "Cascadia Mono", SFMono-Regular, Consolas, Menlo, monospace;
+    --fs-meta:  .74rem;
+    --fs-ui:    .82rem;
+    --fs-body:  .94rem;
+    --fs-head:  1.15rem;
+    --ink:     #000000;
+    --ink-2:   #2b2b2b;
+    --mut:     #5f5f5f;
+    --line:    #d4d4d4;
+    --line-2:  #ebebeb;
+    --soft:    #f6f6f6;
+    --house:   #a81313;
+    --house-dark: #8c1010;
+    --house-ring: rgba(168, 19, 19, .25);
+    --primary: var(--house);
+    --code:    var(--house);
+    /* A ticked step. The only green on the page, so done reads at a glance. */
+    --done:    #2e7d32;
+    /* The "your programs are your data" notes. */
+    --warn:    #c2410c;
+    --tabpad:  1.05rem;
+    --gutter:  1.15rem;
+    --measure: 46rem;
+}
+
+* { box-sizing: border-box; }
+/* `display` on a class beats the attribute, so a hidden button would show. */
+[hidden] { display: none !important; }
+body { margin: 0; font-family: var(--ui); color: var(--ink-2); background: #fff; }
+code, .mono { font-family: var(--mono); }
+code { color: var(--code); font-size: .875em; }
+a { color: var(--primary); text-decoration: none; }
+a:hover { color: var(--house-dark); text-decoration: underline; }
+
+/* ---- Header: the main page's brand, with the versions and Back on the right ---- */
+header { position: sticky; top: 0; z-index: 10; background: #fff;
+         border-bottom: 1px solid #dee2e6; box-shadow: 0 .125rem .25rem rgba(0, 0, 0, .075); }
+.bar { max-width: 1280px; margin: 0 auto; padding: .25rem 1.5rem; display: flex; align-items: center; }
+.brand { display: flex; align-items: center; margin-right: auto; }
+.brand:hover { text-decoration: none; }
+.brand img { height: 40px; width: auto; }
+.brand-text { display: flex; flex-direction: column; padding: 0 1rem; }
+.brand-title { line-height: 1.05; font-size: 1.25rem; font-weight: 700; color: var(--ink); }
+.brand-kicker { font-size: .6rem; font-variant: small-caps; letter-spacing: .18em;
+                color: var(--mut); margin-top: 2px; text-align: center; text-indent: .18em; }
+.nav-meta { display: flex; align-items: center; gap: .75rem; font-size: var(--fs-meta); color: var(--mut); }
+.nav-versions { font-family: var(--mono); font-size: .68rem; white-space: nowrap; }
+.back-btn { display: inline-flex; align-items: center; gap: .35rem;
+            border: 1px solid var(--line); border-radius: .375rem; background: #fff;
+            padding: .28rem .7rem; font-size: var(--fs-ui); color: var(--ink-2); white-space: nowrap; }
+.back-btn:hover { border-color: var(--primary); color: var(--primary); text-decoration: none; }
+
+/* ---- Lede ---- */
+main { max-width: 1280px; margin: 0 auto; padding: 1rem 1.5rem 3rem; }
+.lede-box { padding: 0 1rem; margin: 0 0 .35rem; display: flex; flex-wrap: wrap;
+            align-items: baseline; justify-content: space-between; gap: .1rem 1.25rem; }
+.lede { font-size: var(--fs-head); line-height: 1.5; color: var(--ink); margin: 0; font-weight: 600; }
+.lede code { font-size: .92em; }
+.lede-terms { font-size: var(--fs-meta); color: var(--mut); margin: 0; }
+.gloss { padding: 0 1rem; margin: 0 0 var(--gutter); max-width: var(--measure);
+         font-size: var(--fs-body); line-height: 1.5; }
+
+/* ---- Folder tabs, as the main page's output tabs ---- */
+.out-tabs { display: flex; align-items: flex-end; flex-wrap: nowrap; gap: .25rem;
+            margin: 0; padding: 0; list-style: none; border-bottom: 2px solid var(--line); }
+.out-tabs button {
+    background: var(--soft); border: 1px solid var(--line); border-bottom: 0;
+    border-radius: .4rem .4rem 0 0; white-space: nowrap; cursor: pointer;
+    padding: .32rem var(--tabpad); font: inherit; font-size: var(--fs-body); line-height: 1.3;
+    color: var(--ink-2);
+}
+/* The bold ghost: each tab is as wide as its bold self, so selecting one never
+   shifts its neighbors. */
+.out-tabs button::after { content: attr(data-label); display: block; height: 0;
+    overflow: hidden; visibility: hidden; font-weight: 700; }
+.out-tabs button:not(.active):hover { background: var(--line-2); color: var(--ink); }
+.out-tabs button.active { background: var(--primary); border-color: var(--primary);
+    color: #fff; font-weight: 700; margin-bottom: -2px; padding-bottom: calc(.32rem + 2px); }
+.out-tabs button:focus-visible, .sub-link:focus-visible, .tick:focus-visible {
+    outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.pane { display: none; padding: 1.1rem var(--tabpad) 0; }
+.pane.active { display: block; }
+
+/* ---- Excel's two routes: the main page's sub-tab row, a hairline between ---- */
+.pane.has-sub { padding-top: 0; }
+.sub-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem;
+            padding-top: .7rem; margin-bottom: 1rem; }
+.sub-link { border: 0; background: none; color: var(--mut); cursor: pointer; font-family: inherit;
+            font-size: .76rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: .1em; padding: .24rem .55rem; border-radius: .3rem; }
+.sub-link::after { content: attr(data-label); display: block; height: 0;
+    overflow: hidden; visibility: hidden; font-weight: 700; }
+.sub-link:first-of-type { padding-left: 0; }
+.sub-link:hover { color: var(--ink); }
+.sub-link.active { color: var(--primary); font-weight: 700; }
+.sub-divider { width: 1px; height: .9rem; background: var(--line); margin: 0 .5rem 0 .35rem; }
+.route { display: none; }
+.route.active { display: block; }
+
+/* ---- Three fact tiles ---- */
+.tiles { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: 1.25rem; }
+.tile { border: 1px solid var(--line-2); border-radius: .4rem; padding: .45rem .75rem;
+        min-width: 10rem; background: #fff; }
+.tile .k { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: var(--mut); font-weight: 600; }
+.tile .v { font-size: var(--fs-ui); color: var(--ink); margin-top: .1rem; }
+
+/* ---- Steps on the left, the result on the right ---- */
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 27rem); gap: 2.25rem; align-items: start; }
+.result { position: sticky; top: 4.5rem; }
+
+/* ---- Steps: the numbered circle is the checkbox ---- */
+.progress-line { display: flex; align-items: center; gap: .75rem; font-size: var(--fs-meta); color: var(--mut);
+                 margin-bottom: .6rem; }
+.bar-track { flex: 0 0 9rem; height: 4px; background: var(--line-2); border-radius: 2px; overflow: hidden; }
+.bar-fill { display: block; height: 100%; width: 0; background: var(--done); transition: width .25s; }
+.linkbtn { border: 0; background: none; padding: 0; font: inherit; color: var(--primary); cursor: pointer; }
+.linkbtn:hover { text-decoration: underline; }
+ol.steps { list-style: none; margin: 0; padding: 0; position: relative; }
+ol.steps > li { position: relative; padding: 0 0 1.1rem 2.6rem; }
+/* The rail joining the circles, so the steps read as one path. */
+ol.steps > li:not(:last-child)::before { content: ""; position: absolute; left: .82rem; top: 1.9rem;
+    bottom: .2rem; width: 2px; background: var(--line-2); }
+.tick { position: absolute; left: 0; top: 0; width: 1.75rem; height: 1.75rem; border-radius: 50%;
+        border: 2px solid var(--line); background: #fff; color: var(--mut); cursor: pointer;
+        font: 600 .8rem var(--mono); display: grid; place-items: center; padding: 0; }
+.tick:hover { border-color: var(--primary); color: var(--primary); }
+li.current .tick { border-color: var(--primary); color: var(--primary); box-shadow: 0 0 0 3px var(--house-ring); }
+li.ticked .tick { background: var(--done); border-color: var(--done); color: #fff; }
+.step-title { font-size: var(--fs-body); font-weight: 700; color: var(--ink); line-height: 1.75rem; margin: 0; }
+li.ticked .step-title { color: var(--mut); font-weight: 600; }
+.step-body { font-size: var(--fs-body); line-height: 1.5; margin-top: .1rem; }
+li.ticked .step-body { display: none; }
+.step-body p { margin: .3rem 0; }
+.hint { font-size: var(--fs-meta); color: var(--mut); }
+.kbd-path { font-weight: 600; color: var(--ink); }
+.label { font-size: .68rem; color: var(--mut); margin: .45rem 0 .1rem; text-transform: uppercase;
+         letter-spacing: .08em; font-weight: 600; }
+
+/* ---- Command blocks, each with a Copy ---- */
+.code { position: relative; margin: .35rem 0; }
+.code pre { margin: 0; padding: .55rem 4.2rem .55rem .75rem; background: var(--soft);
+            border: 1px solid var(--line-2); border-radius: .3rem; overflow-x: auto;
+            font-family: var(--mono); font-size: .8rem; line-height: 1.45; color: var(--ink); }
+.code .copy { position: absolute; top: .35rem; right: .35rem; border: 1px solid var(--line);
+              background: #fff; border-radius: .25rem; font: inherit; font-size: .7rem;
+              padding: .08rem .45rem; color: var(--mut); cursor: pointer; }
+.code .copy:hover { color: var(--primary); border-color: var(--primary); }
+.code .said { position: absolute; top: .45rem; right: 3.6rem; font-size: .68rem; color: var(--done);
+              opacity: 0; transition: opacity .2s; }
+.code .said.on { opacity: 1; }
+/* A worksheet step: one block per cell, each with its own Copy, since a block
+   holding all three cells would paste as nonsense. The cell name sits outside
+   the block so it is not copied. */
+.cells { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); gap: .3rem .4rem;
+         align-items: center; margin: .35rem 0; }
+.cells .ref { font: 600 .74rem var(--mono); color: var(--mut); }
+.cells .code { margin: 0; }
+.btn { display: inline-block; border: 1px solid var(--primary); background: var(--primary);
+       color: #fff; border-radius: .375rem; padding: .3rem .8rem; font-size: var(--fs-ui); }
+.btn:hover { background: var(--house-dark); color: #fff; text-decoration: none; }
+.note { margin: .5rem 0 0; padding: .55rem .8rem; border-left: 3px solid var(--line);
+        background: var(--soft); font-size: var(--fs-ui); line-height: 1.5; }
+.note.data { border-left-color: var(--warn); }
+
+/* ---- The result pictures, drawn in HTML so they never go stale against a new
+        Excel look, and so they scale ---- */
+.result-cap { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: var(--mut);
+              font-weight: 600; margin: 0 0 .4rem; }
+.shot { border: 1px solid var(--line); border-radius: .4rem; overflow: hidden; background: #fff;
+        box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .06); font-size: .74rem; }
+.shot-bar { display: flex; align-items: center; gap: .35rem; padding: .35rem .6rem;
+            background: var(--soft); border-bottom: 1px solid var(--line-2); color: var(--mut); font-size: .7rem; }
+.shot-bar i { width: .55rem; height: .55rem; border-radius: 50%; background: var(--line); display: inline-block; }
+.shot-bar span { margin-left: .4rem; }
+.nb { padding: .6rem .6rem .7rem; font-family: var(--mono); }
+.nb .cell { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr); gap: .4rem; margin-bottom: .4rem; }
+.nb .prompt { color: #303f9f; text-align: right; font-size: .7rem; padding-top: .3rem; }
+.nb .prompt.out { color: #d84315; }
+.nb .in { border: 1px solid var(--line-2); background: #f7f7f7; padding: .3rem .45rem; white-space: pre; overflow-x: auto; }
+.nb .o { padding: .3rem .45rem; white-space: pre; overflow-x: auto; }
+.nb .o .wrap { white-space: pre-wrap; display: block; margin-bottom: .4rem; }
+.nb .kw { color: #008000; font-weight: 700; }
+.nb .st { color: #ba2121; }
+.console { padding: .6rem .7rem; font-family: var(--mono); white-space: pre; overflow-x: auto;
+           line-height: 1.5; color: #222; }
+.console .pr { color: #1f4e9e; }
+.grid-fx { display: flex; border-bottom: 1px solid var(--line-2); font-family: var(--mono); }
+.grid-fx .nm { width: 3.2rem; padding: .25rem .4rem; border-right: 1px solid var(--line-2); color: var(--mut); }
+.grid-fx .fx { padding: .25rem .5rem; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grid-fx .fx b { color: var(--mut); font-weight: 400; font-style: italic; margin-right: .4rem; }
+table.sheet { border-collapse: collapse; width: 100%; table-layout: fixed; font-family: var(--ui); }
+table.sheet th { background: #f3f3f3; color: var(--mut); font-weight: 400; border: 1px solid #e2e2e2;
+                 padding: .12rem; font-size: .66rem; }
+table.sheet th:first-child { width: 1.9rem; }
+table.sheet td { border: 1px solid #e8e8e8; padding: .18rem .35rem; height: 1.4rem; white-space: nowrap;
+                 overflow: visible; font-size: .72rem; }
+table.sheet td.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.sheet td.sel { outline: 2px solid #217346; outline-offset: -2px; }
+table.sheet.g td.sel { outline-color: #1a73e8; }
+table.sheet td.hd { color: #555; }
+.same { margin-top: .7rem; font-size: var(--fs-meta); color: var(--mut); line-height: 1.5; }
+.same b { color: var(--ink-2); }
+
+@media (max-width: 991.98px) {
+    .cols { grid-template-columns: minmax(0, 1fr); }
+    .result { position: static; }
+}
+@media (max-width: 767.98px) { .bar, main { padding-left: 1rem; padding-right: 1rem; } }
+@media (max-width: 575.98px) {
+    .nav-versions { display: none; }
+    .brand-text { padding: 0 .6rem; }
+    /* Four short tabs fit a phone, so no scroll container: one would clip the
+       active tab's overlap of the rule and show a stray scrollbar. */
+    .out-tabs { gap: .15rem; }
+    .out-tabs button { padding: .28rem .55rem; font-size: var(--fs-ui); }
+    /* Excel's two routes on one line, the divider between them rather than
+       dangling at the end of a wrapped first line. */
+    .sub-link { letter-spacing: .04em; padding-left: .35rem; padding-right: .35rem; }
+    .sub-divider { margin: 0 .2rem 0 .1rem; }
+    .out-tabs button.active { padding-bottom: calc(.28rem + 2px); }
+    .lede-box, .gloss { padding: 0; }
+    .pane { padding-left: 0; padding-right: 0; }
+    .tile { min-width: 0; flex: 1 1 8rem; }
+}

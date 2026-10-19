@@ -35,30 +35,41 @@ _REFERENCE = re.compile(r"""(?:src|href)\s*=\s*["']([^"']+)["']""")
 
 
 def _local_references(html: str) -> list[str]:
-    """Local paths an HTML document loads, with any query or fragment dropped."""
+    """Local paths an HTML document loads, with any query or fragment dropped.
+
+    Kept as written, `./` and `../` included: the caller resolves each against
+    the page's own folder, which is what a browser does. Through 1.30.0 this
+    stripped leading dots and slashes, which was harmless while every page sat
+    at the top of ``static/`` and would read the /use page's ``../assets/x.js``
+    as ``use/assets/x.js``.
+    """
     out = []
     for raw in _REFERENCE.findall(html):
         if raw.startswith(("http://", "https://", "//", "data:", "mailto:", "#")):
             continue
-        out.append(raw.split("?", 1)[0].split("#", 1)[0].lstrip("./"))
+        out.append(raw.split("?", 1)[0].split("#", 1)[0])
     return out
 
 
-@pytest.mark.parametrize("document", ["index.html", "lite.html"])
+@pytest.mark.parametrize("document", ["index.html", "lite.html", "use/index.html"])
 def test_built_bundle_references_only_files_that_exist(document: str) -> None:
-    """Every local asset the built page loads is present beside it.
+    """Every local asset the built page loads is present where it points.
 
     Skipped when the bundle is absent, which is the honest state of a fresh
     clone: ``static/index.html`` is build output and gitignored, so a checkout
     that has never run ``scripts/build-web.ps1`` has nothing to check.
     """
-    page = _PACKAGE_ROOT / "static" / document
+    static = _PACKAGE_ROOT / "static"
+    page = static / document
     if not page.exists():
         pytest.skip(f"{document} is not built; run scripts/build-web.ps1")
 
-    static = page.parent
+    def target(ref: str) -> Path:
+        # A root-relative reference is the server's root, which is static/.
+        return static / ref.lstrip("/") if ref.startswith("/") else page.parent / ref
+
     missing = [ref for ref in _local_references(page.read_text(encoding="utf-8"))
-               if not (static / ref).exists()]
+               if not target(ref).exists()]
     assert not missing, (
         f"{document} loads {len(missing)} file(s) that are not on disk: "
         f"{missing}. The bundle is stale or half built; rerun "
@@ -80,5 +91,10 @@ def test_package_data_carries_the_asset_directory() -> None:
     patterns = config["tool"]["setuptools"]["package-data"]["aggregate_api"]
     assert any(p in ("static/assets/*", "static/**/*") for p in patterns), (
         "package-data must carry static/assets/* (or static/**/*); "
+        f"it currently reads {patterns}"
+    )
+    # The /use page is a folder of its own, for the same reason (1.31.0).
+    assert any(p in ("static/use/*", "static/**/*") for p in patterns), (
+        "package-data must carry static/use/* (or static/**/*); "
         f"it currently reads {patterns}"
     )

@@ -47,6 +47,27 @@ export function writeDensityRows(storage, value) {
 }
 
 /**
+ * The page's `localStorage`, reached only when a method is called.
+ *
+ * Where the browser blocks site data, reading `window.localStorage` itself
+ * throws. Passed as a bare `localStorage` argument at module top level, that
+ * throw happened before `readDensityRows` reached its `try`, stopped the
+ * evaluation of `main.js`, and left the whole Lab dead (found 2026-10-19,
+ * `dev/done/plan-use-page.md`, `[storage-guard]`). Behind these methods the
+ * throw lands inside the callers' `try`.
+ *
+ * @param {object} [scope] the global holding `localStorage`; `globalThis`.
+ * @returns {{getItem: function(string): (string|null),
+ *            setItem: function(string, string): void}}
+ */
+export function browserStorage(scope = globalThis) {
+    return {
+        getItem: (key) => scope.localStorage.getItem(key),
+        setItem: (key, value) => scope.localStorage.setItem(key, value),
+    };
+}
+
+/**
  * The one muted line shown while the grid fetches a whole frame.
  *
  * From the shape already in hand, so the reader knows what is coming before a

@@ -4,6 +4,18 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.31.0
+
+[Use-Page] **A page on running `aggregate` from Jupyter, R, Excel and Google Sheets.** Plan `dev/done/plan-use-page.md`.
+
+- Added: `/use`, reached from Menu ▸ Using in Jupyter, R, Excel, Sheets. Four folder tabs of numbered steps; click a step's number when it is done, and the ticks stay in this browser. Each tab ends on the same Gross 20-claim program beside a drawing of the result, and a test builds that program and checks the quantiles the page prints.
+- Added: deep links `/use#jupyter`, `#r`, `#excel`, `#excel-desktop` and `#sheets`, in any case. `/#about` opens the Lab's About panel, which the page's terms line uses.
+- Fixed: with site data blocked by the browser, the Lab painted its page and then did nothing. It now runs, keeping no preferences.
+- Fixed: menu items that are links (the new item, and the Apps entries) were grey, so they read as disabled.
+- Changed: `greater-tables` floor raised to 7.0.0, which fresh installs already resolved; the suite, the release check and the table harnesses pass on it.
+- The README lists aggregateR beside the Excel and Sheets clients. The Excel README's install paths now match the proven ones: More Settings on the web, the shared folder catalog on the desktop.
+- The Sheets tab says the template's copy link is coming until the author publishes the template.
+
 ## 1.30.0
 
 [DecL-Word-List] **The playground colors exactly the words of DecL, read from `aggregate`.** Plan `dev/done/plan-decl-word-list.md`.

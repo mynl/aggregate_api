@@ -42,6 +42,14 @@ same-origin.
   since a Sheets function name cannot hold a dot. A user makes a copy of the
   template and has them, with nothing to install. See
   [sheets/README.md](sheets/README.md).
+- **R package** ([aggregateR](https://github.com/mynl/aggregate-R), its own
+  repository): the same functions in R, `agg_build`, `agg_q`, `agg_exhibit`,
+  `agg_frame` and so on, over the same API. `agg_start()` runs a private local
+  server, so no program leaves the machine.
+
+The running app's Menu ▸ Using in Jupyter, R, Excel, Sheets (`/use`) walks
+through setting up each of these, and the library itself in Jupyter, step by
+step.
 
 ### Tables: one payload, two renderers
 

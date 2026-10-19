@@ -635,8 +635,20 @@ and the standing REMINDER below about what is worth plotting.
       D6 the same day. **Plan: `dev/plan-sheets-template.md`.** The spike
       passed; **the code landed as 1.29.0** (`sheets/`). Still to run: the
       author creates the template and pushes (step 5, `sheets/README.md`),
-      the copy link goes into `README.md`, and the template acceptance. A
+      the copy link goes into `README.md`, `sheets/README.md` and
+      `SHEETS_TEMPLATE_URL` in `web/src/use.js` (the /use page's Sheets tab
+      says the link is coming until then), and the template acceptance. A
       Marketplace editor add-on follows only if it gets traction.
+
+- [x] **[Use-Page] a page on running `aggregate` from Jupyter, R, Excel and
+      Sheets**, at `/use` with deep links (`/use#r`, `#excel-desktop`), from
+      Menu ▸ Using in Jupyter, R, Excel, Sheets. Four folder tabs of steps the
+      reader ticks off, each beside a drawing of the result, all on one
+      program whose quantiles a test checks. Author's ask, 2026-10-19, for the
+      R demonstration on 2026-10-20. **Landed as 1.31.0**
+      (`dev/done/plan-use-page.md`, spec
+      `dev/prototypes/use-page/side-by-side.html`), with greater-tables 7.0
+      and a fix for the Lab dying when the browser blocks site data.
 
 - [x] **[Lite-Shell] [Lite-Reading] the phone lite entry**
       (`dev/done/plan-phone-lite.md`, spec `dev/prototypes/phone.html`),

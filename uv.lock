@@ -61,7 +61,7 @@ status = [
 requires-dist = [
     { name = "aggregate", specifier = ">=1.6.0,<2" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "greater-tables", specifier = ">=6.0.0" },
+    { name = "greater-tables", specifier = ">=7.0.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "orjson", specifier = ">=3.10" },
     { name = "psutil", marker = "extra == 'status'", specifier = ">=5.9" },
@@ -277,7 +277,7 @@ wheels = [
 
 [[package]]
 name = "greater-tables"
-version = "6.0.0"
+version = "7.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
@@ -285,9 +285,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/15/01/3a268be5bb7a1d3d564647c14f000b0818d9b5d8e0d252effc12f4778905/greater_tables-6.0.0.tar.gz", hash = "sha256:b70ae3f6f12211d5423260106d2afe847bf29959e8648c4f7c2d4a9f15c0d0f1", size = 1677783, upload-time = "2026-08-05T22:33:22.439Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/48/cc/167933a9a5671b0f61085fb0848e40697c1a80dcf6d5aa6cbfbd05b0d8a6/greater_tables-7.0.0.tar.gz", hash = "sha256:989fd6436ae45680fa6eea93347cda8aa4ace3fc72b9e4422f932019668a88e2", size = 1712151, upload-time = "2026-10-15T15:15:15.573Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ac/de/2e77f9cd75c71cad5e3912a01a49beefed34ae06ddc94f52f5c2e6a41f6c/greater_tables-6.0.0-py3-none-any.whl", hash = "sha256:a2159a05bba635e728a0e61b6c9e2f30acb42c651f00da01e9b5d5caff57d78a", size = 360868, upload-time = "2026-08-05T22:33:20.954Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/dc/d9bae6f77985647d63f46de281602a5a38bccfe00eca446ec456a8673f66/greater_tables-7.0.0-py3-none-any.whl", hash = "sha256:2e66c5296f551d20bf98f8a7fcf919997432e21b81bb8eeb76b2cdfd3f7fe198", size = 379793, upload-time = "2026-10-15T15:15:13.992Z" },
 ]
 
 [[package]]

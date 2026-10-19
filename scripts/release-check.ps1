@@ -132,16 +132,26 @@ try {
     }
     Write-Good "carries status_page.html"
 
-    # Every asset index.html names must be in the wheel, not merely some assets.
-    $referenced = [regex]::Matches(
-        (Get-Content $indexPath -Raw),
-        '(?:src|href)\s*=\s*["'']\.?/?(assets/[^"'']+)["'']'
-    ) | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
-    $absent = $referenced | Where-Object { $names -notcontains "aggregate_api/static/$_" }
-    if ($absent) {
-        throw "index.html loads file(s) the wheel does not carry: $($absent -join ', ')"
+    # Every asset each page names must be in the wheel, not merely some assets.
+    # The /use page sits one folder down and names its assets as `../assets/`,
+    # which the pattern accepts beside `./assets/`; a pattern that did not would
+    # find no reference there and pass with nothing checked.
+    foreach ($page in @("index.html", "lite.html", "use/index.html")) {
+        if ($names -notcontains "aggregate_api/static/$page") {
+            throw "The wheel has no aggregate_api/static/$page. Check [tool.setuptools.package-data]: each folder under static/ is its own entry."
+        }
+        $pagePath = Join-Path $repoRoot "src\aggregate_api\static\$page"
+        $referenced = [regex]::Matches(
+            (Get-Content $pagePath -Raw),
+            '(?:src|href)\s*=\s*["''](?:\.\./|\./|/)?(assets/[^"'']+)["'']'
+        ) | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
+        if (-not $referenced) { throw "$page names no assets/ file; the pattern no longer matches the build." }
+        $absent = $referenced | Where-Object { $names -notcontains "aggregate_api/static/$_" }
+        if ($absent) {
+            throw "$page loads file(s) the wheel does not carry: $($absent -join ', ')"
+        }
+        Write-Good "carries $page and all $($referenced.Count) asset(s) it loads"
     }
-    Write-Good "all $($referenced.Count) asset(s) index.html loads are in the wheel"
 
     # ----------------------------------------- 5. install it somewhere clean
     Write-Step "Installing the wheel into a clean environment"
@@ -191,6 +201,25 @@ bad = [(r, client.get(r).status_code) for r in sorted(refs) if client.get(r).sta
 if bad:
     sys.exit("the installed app does not serve: " + ", ".join(f"{r} -> {c}" for r, c in bad))
 print(f"   GET / 200, and all {len(refs)} referenced file(s) 200")
+
+# The /use page: the bare path redirects to the folder, which serves the page,
+# and its references resolve against /use/, so `../assets/` is checked where a
+# browser would fetch it.
+from urllib.parse import urljoin
+bare = client.get("/use", follow_redirects=False)
+if bare.status_code not in (301, 302, 307, 308) or not bare.headers.get("location", "").endswith("/use/"):
+    sys.exit(f"GET /use returned {bare.status_code} to {bare.headers.get('location')}, not a redirect to /use/")
+use = client.get("/use/")
+if use.status_code != 200 or "<html" not in use.text:
+    sys.exit(f"GET /use/ returned {use.status_code}")
+use_refs = {urljoin("/use/", r.split("?", 1)[0])
+            for r in re.findall(r'(?:src|href)\s*=\s*["\']([^"\']+)["\']', use.text)
+            if not r.startswith(("http://", "https://", "//", "data:", "#"))}
+bad = [(r, client.get(r).status_code) for r in sorted(use_refs) if client.get(r).status_code != 200]
+if bad:
+    sys.exit("the installed /use page loads what the app does not serve: "
+             + ", ".join(f"{r} -> {c}" for r, c in bad))
+print(f"   GET /use redirects to /use/, 200, and all {len(use_refs)} referenced file(s) 200")
 
 meta = client.get("/v1/meta").json()
 print(f"   /v1/meta: version {meta['version']}, aggregate {meta['aggregate_version']}, tables {meta['tables_version']}")

@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Use aggregate elsewhere: checklist mock up</title>
+<!--
+  Mock up A of the "use aggregate from other environments" page, reached from
+  the Loss Lab's Menu ▸ Using in Jupyter, R, Excel, Sheets. Standalone: no
+  build step, no dependency, no server. Open the file.
+
+  The layout is the main page's: the same sticky header and wordmark, the lede
+  line, and the same folder tabs (copied from web/src/styles/site.css, tokens
+  and all). The hamburger's place top right holds a Back button to /.
+
+  Each tab is one checklist a reader ticks through. Ticks are kept in this
+  browser (localStorage) so a reader can close the page halfway and come back;
+  Clear ticks forgets them. Every command block has its own Copy.
+
+  Deep links: #jupyter #r #excel #excel-desktop #sheets, any case, so #R works.
+  Clicking a tab rewrites the hash, so the address bar is always a link to what
+  is on screen.
+
+  Numbers are real: computed with aggregate 1.6.0 at its default grid (log2 16,
+  bs 1), the same program in every tab, so a demonstration can show the same
+  99% quantile, 12,490, four ways. The handle ids are elided.
+-->
+<style>
+:root {
+    --ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "Cascadia Mono", SFMono-Regular, Consolas, Menlo, monospace;
+    --fs-meta: .74rem; --fs-ui: .82rem; --fs-body: .94rem; --fs-head: 1.15rem;
+    --ink: #000; --ink-2: #2b2b2b; --mut: #5f5f5f;
+    --line: #d4d4d4; --line-2: #ebebeb; --soft: #f6f6f6;
+    --house: #a81313; --house-dark: #8c1010; --house-ring: rgba(168, 19, 19, .25);
+    --primary: var(--house); --code: var(--house);
+    --green: #2e7d32; --warn: #c2410c;
+    --tabpad: 1.05rem; --gutter: 1.15rem; --measure: 46rem;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--ui); color: var(--ink-2); background: #fff; }
+code, .mono { font-family: var(--mono); }
+code { color: var(--code); font-size: .875em; }
+a { color: var(--primary); text-decoration: none; }
+a:hover { color: var(--house-dark); text-decoration: underline; }
+
+/* ---- Header, as index.html draws it ---- */
+header { position: sticky; top: 0; z-index: 10; background: #fff;
+         border-bottom: 1px solid #dee2e6; box-shadow: 0 .125rem .25rem rgba(0,0,0,.075); }
+.bar { max-width: 1280px; margin: 0 auto; padding: .25rem 1.5rem;
+       display: flex; align-items: center; }
+.brand { display: flex; align-items: center; margin-right: auto; text-decoration: none; }
+.brand:hover { text-decoration: none; }
+.brand img { height: 40px; width: auto; }
+.brand-text { display: flex; flex-direction: column; padding: 0 1rem; }
+.brand-title { line-height: 1.05; font-size: 1.25rem; font-weight: 700; color: var(--ink); }
+.brand-kicker { font-size: .6rem; font-variant: small-caps; letter-spacing: .18em;
+                color: var(--mut); margin-top: 2px; text-align: center; text-indent: .18em; }
+.nav-meta { display: flex; align-items: center; gap: .75rem; font-size: .74rem; color: var(--mut); }
+.nav-versions { font-family: var(--mono); font-size: .68rem; white-space: nowrap; }
+.back-btn { display: inline-flex; align-items: center; gap: .35rem;
+            border: 1px solid var(--line); border-radius: .375rem; background: #fff;
+            padding: .28rem .7rem; font-size: var(--fs-ui); color: var(--ink-2); }
+.back-btn:hover { border-color: var(--primary); color: var(--primary); text-decoration: none; }
+
+/* ---- Main ---- */
+main { max-width: 1280px; margin: 0 auto; padding: 1rem 1.5rem 3rem; }
+.lede-box { padding: 0 1rem; margin: 0 0 .35rem; display: flex; flex-wrap: wrap;
+            align-items: baseline; justify-content: space-between; gap: .1rem 1.25rem; }
+.lede { font-size: var(--fs-head); line-height: 1.5; color: var(--ink); margin: 0; font-weight: 600; }
+.lede code { font-size: .92em; }
+.lede-terms { font-size: .74rem; color: var(--mut); margin: 0; }
+.gloss { padding: 0 1rem; margin: 0 0 var(--gutter); max-width: var(--measure);
+         font-size: var(--fs-body); line-height: 1.5; color: var(--ink-2); }
+
+/* ---- Folder tabs, copied from site.css ---- */
+.out-tabs { display: flex; align-items: flex-end; flex-wrap: nowrap; gap: .25rem;
+            margin: 0; padding: 0; list-style: none; border-bottom: 2px solid var(--line); }
+.out-tabs button {
+    background: var(--soft); border: 1px solid var(--line); border-bottom: 0;
+    border-radius: .4rem .4rem 0 0; white-space: nowrap; cursor: pointer;
+    padding: .32rem var(--tabpad); font: inherit; font-size: var(--fs-body); line-height: 1.3;
+    color: var(--ink-2);
+}
+.out-tabs button::after { content: attr(data-label); display: block; height: 0;
+    overflow: hidden; visibility: hidden; font-weight: 700; }
+.out-tabs button:not(.active):hover { background: var(--line-2); color: var(--ink); }
+.out-tabs button.active { background: var(--primary); border-color: var(--primary);
+    color: #fff; font-weight: 700; margin-bottom: -2px; padding-bottom: calc(.32rem + 2px); }
+.sub-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem;
+            padding: .7rem 0 0 var(--tabpad); }
+.sub-link { border: 0; background: none; color: var(--mut); cursor: pointer;
+            font: inherit; font-size: .76rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: .1em; padding: .24rem .55rem; border-radius: .3rem; }
+.sub-link:first-of-type { padding-left: 0; }
+.sub-link:hover { color: var(--ink); }
+.sub-link.active { color: var(--primary); font-weight: 700; }
+
+/* ---- A tab's body ---- */
+.pane { display: none; padding: 1rem var(--tabpad) 0; }
+.pane.active { display: block; }
+.route { display: none; }
+.route.active { display: block; }
+.facts { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+         gap: .3rem 1.5rem; font-size: var(--fs-meta); color: var(--mut);
+         max-width: var(--measure); margin-bottom: 1rem; }
+.facts .what b { color: var(--ink-2); font-weight: 600; }
+.facts .dot { margin: 0 .35rem; font-family: var(--mono); }
+.progress { white-space: nowrap; }
+.progress .done { color: var(--green); font-weight: 600; }
+.linkbtn { border: 0; background: none; padding: 0; font: inherit; color: var(--primary); cursor: pointer; }
+.linkbtn:hover { text-decoration: underline; }
+
+/* ---- The checklist ---- */
+ol.steps { list-style: none; margin: 0; padding: 0; max-width: var(--measure); counter-reset: step; }
+ol.steps > li { counter-increment: step; padding: .7rem 0 .8rem; border-top: 1px solid var(--line-2); }
+ol.steps > li:first-child { border-top: 0; padding-top: 0; }
+.step-head { display: flex; align-items: baseline; gap: .6rem; cursor: pointer; }
+.step-head input { width: 1.05rem; height: 1.05rem; margin: 0; accent-color: var(--primary);
+                   flex: 0 0 auto; transform: translateY(.15rem); cursor: pointer; }
+.step-head .n { font-family: var(--mono); font-size: var(--fs-meta); color: var(--mut); width: 1.1rem; }
+.step-head .n::before { content: counter(step) "."; }
+.step-title { font-size: var(--fs-body); font-weight: 700; color: var(--ink); }
+li.ticked .step-title { color: var(--mut); text-decoration: line-through; text-decoration-color: var(--line); }
+.step-body { margin: .3rem 0 0 2.95rem; font-size: var(--fs-body); line-height: 1.5; }
+.step-body p { margin: .3rem 0; }
+.step-body .hint { font-size: var(--fs-meta); color: var(--mut); }
+.label { font-size: var(--fs-meta); color: var(--mut); margin: .5rem 0 .15rem;
+         text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+
+/* A command block with its own Copy, top right. The button never changes its
+   label; a quiet readout beside it says the copy happened. */
+.code { position: relative; margin: .35rem 0; }
+.code pre { margin: 0; padding: .55rem 4.2rem .55rem .75rem; background: var(--soft);
+            border: 1px solid var(--line-2); border-radius: .3rem; overflow-x: auto;
+            font-family: var(--mono); font-size: .8rem; line-height: 1.45; color: var(--ink); }
+.code .copy { position: absolute; top: .35rem; right: .35rem; border: 1px solid var(--line);
+              background: #fff; border-radius: .25rem; font: inherit; font-size: .7rem;
+              padding: .08rem .45rem; color: var(--mut); cursor: pointer; }
+.code .copy:hover { color: var(--primary); border-color: var(--primary); }
+.code .said { position: absolute; top: .45rem; right: 3.6rem; font-size: .68rem; color: var(--green);
+              opacity: 0; transition: opacity .2s; }
+.code .said.on { opacity: 1; }
+.out pre { background: #fff; border-style: dashed; color: var(--ink-2); padding-right: .75rem; }
+.c { color: var(--mut); }
+
+.note { max-width: var(--measure); margin: 1.25rem 0 0; padding: .6rem .8rem;
+        border-left: 3px solid var(--line); background: var(--soft);
+        font-size: var(--fs-ui); line-height: 1.5; }
+.note.data { border-left-color: var(--warn); }
+.btn { display: inline-block; border: 1px solid var(--primary); background: var(--primary);
+       color: #fff; border-radius: .375rem; padding: .3rem .8rem; font-size: var(--fs-ui); }
+.btn:hover { background: var(--house-dark); color: #fff; text-decoration: none; }
+.btn.placeholder { background: #fff; color: var(--primary); border-style: dashed; }
+.kbd-path { font-weight: 600; color: var(--ink); }
+
+.mock-notes { max-width: var(--measure); margin: 3rem 0 0; padding-top: 1rem;
+              border-top: 1px solid var(--line); font-size: var(--fs-meta); color: var(--mut); line-height: 1.5; }
+.mock-notes h2 { font-size: var(--fs-ui); color: var(--ink-2); margin: 0 0 .4rem; }
+.mock-notes ul { margin: 0; padding-left: 1.1rem; }
+
+@media (max-width: 767.98px) {
+    .bar, main { padding-left: 1rem; padding-right: 1rem; }
+}
+@media (max-width: 575.98px) {
+    .nav-versions { display: none; }
+    .brand-text { padding: 0 .6rem; }
+    .out-tabs { gap: .15rem; overflow-x: auto; }
+    .out-tabs button { padding: .28rem .55rem; font-size: var(--fs-ui); }
+    .out-tabs button.active { padding-bottom: calc(.28rem + 2px); }
+    .lede-box, .gloss { padding: 0; }
+    .pane { padding-left: 0; padding-right: 0; }
+    .sub-tabs { padding-left: 0; }
+    .step-body { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+
+<header>
+    <div class="bar">
+        <a class="brand" href="/">
+            <img src="../../../web/public/logo.png" alt="aggregate Loss Lab">
+            <div class="brand-text">
+                <div class="brand-title">aggregate Loss Lab</div>
+                <div class="brand-kicker">description to distribution</div>
+            </div>
+        </a>
+        <div class="nav-meta">
+            <span class="nav-versions">aggregate 1.6.0 · api 1.31.0</span>
+            <a class="back-btn" href="/" title="Back to the Loss Lab">← Back</a>
+        </div>
+    </div>
+</header>
+
+<main>
+    <div class="lede-box">
+        <p class="lede">How to use <code>aggregate</code> from other environments.</p>
+        <p class="lede-terms">Use of this site signifies agreement with the <a href="/#about">terms</a>.</p>
+    </div>
+    <p class="gloss">Jupyter runs the library itself, in Python on your machine. R, Excel and
+       Google Sheets send a DecL program to an aggregate server and read back exhibits,
+       quantiles and whole distributions. Pick a tab and tick the steps off as you go.</p>
+
+    <ul class="out-tabs" role="tablist">
+        <li><button type="button" data-tab="jupyter" data-label="Jupyter">Jupyter</button></li>
+        <li><button type="button" data-tab="r"       data-label="R">R</button></li>
+        <li><button type="button" data-tab="excel"   data-label="Excel">Excel</button></li>
+        <li><button type="button" data-tab="sheets"  data-label="Sheets">Sheets</button></li>
+    </ul>
+
+    <!-- ======================= Jupyter ======================= -->
+    <section class="pane" data-pane="jupyter">
+        <div class="facts">
+            <span class="what"><b>The library itself</b><span class="dot">·</span>Python 3.12 or later,
+                uv fetches it<span class="dot">·</span>about five minutes</span>
+            <span class="progress"></span>
+        </div>
+        <ol class="steps">
+            <li data-step="jupyter-uv">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Install uv, the Python project manager</span></label>
+                <div class="step-body">
+                    <div class="label">Windows, in PowerShell</div>
+                    <div class="code"><pre>winget install astral-sh.uv</pre></div>
+                    <div class="label">macOS or Linux</div>
+                    <div class="code"><pre>curl -LsSf https://astral.sh/uv/install.sh | sh</pre></div>
+                    <p class="hint">Then open a new terminal, so the shell can find <code>uv</code>.</p>
+                </div>
+            </li>
+            <li data-step="jupyter-init">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Make a project folder</span></label>
+                <div class="step-body">
+                    <div class="code"><pre>uv init --python 3.13 agg-notebooks
+cd agg-notebooks</pre></div>
+                    <p class="hint"><code>aggregate</code> needs Python 3.12 or later. uv downloads 3.13 if you do not have it,
+                       and keeps it inside uv, away from any Python you already have.</p>
+                </div>
+            </li>
+            <li data-step="jupyter-add">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Add <code>aggregate</code>, with JupyterLab</span></label>
+                <div class="step-body">
+                    <div class="code"><pre>uv add "aggregate[notebook]"</pre></div>
+                    <p class="hint">One command resolves, locks and installs, so there is no separate <code>uv sync</code>.
+                       The <code>notebook</code> extra brings JupyterLab and widgets.</p>
+                </div>
+            </li>
+            <li data-step="jupyter-lab">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Start JupyterLab</span></label>
+                <div class="step-body">
+                    <div class="code"><pre>uv run jupyter lab</pre></div>
+                    <p class="hint">A browser tab opens on the folder. File ▸ New ▸ Notebook, Python 3 kernel.
+                       Next time, <code>cd agg-notebooks</code> and this one line is all it takes.</p>
+                </div>
+            </li>
+            <li data-step="jupyter-build">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Build a distribution</span></label>
+                <div class="step-body">
+                    <p>Twenty claims a year, gamma mixed Poisson frequency, lognormal severity limited to 2000.</p>
+                    <div class="code"><pre>from aggregate import build, qd
+gross = build('agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4')
+qd(gross)
+gross.q([0.5, 0.9, 0.99])</pre></div>
+                    <div class="label">You should see, after the summary table</div>
+                    <div class="code out"><pre>array([ 4257.,  8207., 12490.])</pre></div>
+                </div>
+            </li>
+            <li data-step="jupyter-more">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Bring your programs over from the Loss Lab</span></label>
+                <div class="step-body">
+                    <p>Any program in the Loss Lab editor pastes into <code>build()</code> as it stands.
+                       <span class="kbd-path">Menu ▸ Download models</span> saves every program you built
+                       there as one <code>.agg</code> file. <code>gross.plot()</code> draws the density and
+                       survival function; <code>gross.density_df</code> is the whole distribution as a DataFrame.</p>
+                </div>
+            </li>
+        </ol>
+        <p class="note">The library's own documentation, with a guided tour of DecL:
+           <a href="https://aggregate.readthedocs.io">aggregate.readthedocs.io</a>.</p>
+    </section>
+
+    <!-- ======================= R ======================= -->
+    <section class="pane" data-pane="r">
+        <div class="facts">
+            <span class="what"><b>aggregateR, over a server</b><span class="dot">·</span>R 4.1 or later,
+                pure R, no Rtools<span class="dot">·</span>about five minutes</span>
+            <span class="progress"></span>
+        </div>
+        <ol class="steps">
+            <li data-step="r-pkgs">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Install the four packages aggregateR uses</span></label>
+                <div class="step-body">
+                    <div class="code"><pre>install.packages(c("httr2", "jsonlite", "nanoparquet", "processx"))</pre></div>
+                    <p class="hint">R 4.1 or later. RStudio is the easy way to run these a line at a time.</p>
+                </div>
+            </li>
+            <li data-step="r-install">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Install aggregateR from GitHub</span></label>
+                <div class="step-body">
+                    <div class="code"><pre>install.packages("https://github.com/mynl/aggregate-R/archive/refs/heads/master.tar.gz",
+                 repos = NULL, type = "source")</pre></div>
+                    <p class="hint">No Rtools needed on Windows: the package has no compiled code.
+                       <code>pak::pak("mynl/aggregate-R")</code> also works, but wants Rtools.</p>
+                </div>
+            </li>
+            <li data-step="r-server">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Choose a server</span></label>
+                <div class="step-body">
+                    <p><b>To try it,</b> do nothing: the package talks to the public server,
+                       <code>https://agg.mynl.com</code>, out of the box.</p>
+                    <p><b>For real work,</b> run a private server on your own machine. It needs uv
+                       (<code>winget install astral-sh.uv</code> on Windows); the first start downloads
+                       the server, which takes a couple of minutes.</p>
+                    <div class="code"><pre>library(aggregateR)
+agg_start()     <span class="c"># a private server on 127.0.0.1 for this R session</span>
+agg_server()    <span class="c"># which server the session is using</span></pre></div>
+                </div>
+            </li>
+            <li data-step="r-build">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Build a distribution and read its quantiles</span></label>
+                <div class="step-body">
+                    <div class="code"><pre>library(aggregateR)
+gross &lt;- agg_build("agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4")
+gross
+agg_q(gross, c(0.5, 0.9, 0.99))</pre></div>
+                    <div class="label">You should see</div>
+                    <div class="code out"><pre>&lt;agg_handle&gt; agg.Gross #…
+  server      https://agg.mynl.com
+  grid        log2 16, bs 1
+  mean, cv    4672, 0.562
+  validation  not unreasonable
+ 50%   90%   99%
+4257  8207 12490</pre></div>
+                </div>
+            </li>
+            <li data-step="r-frame">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Pull the whole distribution into a data.frame</span></label>
+                <div class="step-body">
+                    <div class="code"><pre>dg &lt;- agg_frame(gross)
+dim(dg)          <span class="c"># 65,536 rows, one per bucket</span>
+plot(dg$loss, dg$p_total, type = "l", xlim = c(0, 15000),
+     xlab = "Loss", ylab = "Probability")</pre></div>
+                </div>
+            </li>
+            <li data-step="r-more">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Explore the exhibits and the example library</span></label>
+                <div class="step-body">
+                    <div class="code"><pre>agg_exhibits(gross)              <span class="c"># what it can show</span>
+agg_exhibit(gross, "summary")    <span class="c"># a list of data.frames, captions included</span>
+agg_library()                    <span class="c"># the example programs, by name and kind</span>
+cat(agg_program("Capstone.Gross"))</pre></div>
+                    <p class="hint">A longer first session, gross and net of a treaty with ggplot2, is in the
+                       <a href="https://github.com/mynl/aggregate-R#a-first-session">aggregateR README</a>.</p>
+                </div>
+            </li>
+        </ol>
+        <p class="note data"><b>Your programs are your data.</b> The public server keeps an audit record of
+           every program it builds. Use made-up numbers there, and <code>agg_start()</code> for anything real.</p>
+    </section>
+
+    <!-- ======================= Excel ======================= -->
+    <section class="pane" data-pane="excel">
+        <div class="sub-tabs">
+            <button type="button" class="sub-link" data-route="web">Excel on the web</button>
+            <button type="button" class="sub-link" data-route="desktop">Desktop Excel, Windows</button>
+        </div>
+
+        <div class="route" data-routepane="web">
+            <div class="facts" style="margin-top:.8rem">
+                <span class="what"><b>The AGG functions, over agg.mynl.com</b><span class="dot">·</span>any
+                    Microsoft account<span class="dot">·</span>about two minutes</span>
+                <span class="progress"></span>
+            </div>
+            <ol class="steps">
+                <li data-step="xw-manifest">
+                    <label class="step-head"><input type="checkbox"><span class="n"></span>
+                        <span class="step-title">Download the add-in's manifest</span></label>
+                    <div class="step-body">
+                        <p><a class="btn" href="https://agg.mynl.com/excel/manifest.xml" download>Download manifest.xml</a></p>
+                        <p class="hint">A small XML file that tells Excel where the add-in lives. The upload dialog takes a file, not a link.</p>
+                    </div>
+                </li>
+                <li data-step="xw-upload">
+                    <label class="step-head"><input type="checkbox"><span class="n"></span>
+                        <span class="step-title">Upload it in Excel on the web</span></label>
+                    <div class="step-body">
+                        <p>Open any workbook at <a href="https://www.office.com">office.com</a>, then
+                           <span class="kbd-path">Home ▸ Add-ins ▸ More Add-ins ▸ Upload My Add-in</span>,
+                           choose <code>manifest.xml</code>, Upload.</p>
+                    </div>
+                </li>
+                <li data-step="xw-version">
+                    <label class="step-head"><input type="checkbox"><span class="n"></span>
+                        <span class="step-title">Check it answers</span></label>
+                    <div class="step-body">
+                        <div class="code"><pre>=AGG.VERSION()</pre></div>
+                        <div class="label">You should see</div>
+                        <div class="code out"><pre>aggregate_api 1.31.0, aggregate 1.6.0</pre></div>
+                    </div>
+                </li>
+                <li data-step="xw-build">
+                    <label class="step-head"><input type="checkbox"><span class="n"></span>
+                        <span class="step-title">Build in a cell, read quantiles in the next</span></label>
+                    <div class="step-body">
+                        <div class="code"><pre>A1   agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4
+B1   =AGG.BUILD(A1)
+B2   =AGG.Q(B1, {0.5, 0.9, 0.99})</pre></div>
+                        <div class="label">You should see</div>
+                        <div class="code out"><pre>B1   agg.Gross#…
+B2   4257    8207    12490</pre></div>
+                        <p class="hint">Edit A1 and every cell that depends on it rebuilds.
+                           <code>=AGG.EXHIBIT(B1, "summary")</code> spills a whole exhibit.</p>
+                    </div>
+                </li>
+            </ol>
+            <p class="note">The upload lives in this browser's storage. Clearing the browser's site data means uploading the manifest again.</p>
+        </div>
+
+        <div class="route" data-routepane="desktop">
+            <div class="facts" style="margin-top:.8rem">
+                <span class="what"><b>The AGG functions, over agg.mynl.com</b><span class="dot">·</span>Microsoft
+                    365 on Windows<span class="dot">·</span>about five minutes</span>
+                <span class="progress"></span>
+            </div>
+            <ol class="steps">
+                <li data-step="xd-folder">
+                    <label class="step-head"><input type="checkbox"><span class="n"></span>
+                        <span class="step-title">Save the manifest in a folder of its own</span></label>
+                    <div class="step-body">
+                        <div class="code"><pre>New-Item -ItemType Directory -Force C:\OfficeAddins
+Invoke-WebRequest https://agg.mynl.com/excel/manifest.xml -OutFile C:\OfficeAddins\aggregate-manifest.xml</pre></div>
+                        <p class="hint">Or <a href="https://agg.mynl.com/excel/manifest.xml" download>download manifest.xml</a> and move it there by hand.</p>
+                    </div>
+                </li>
+                <li data-step="xd-share">
+                    <label class="step-head"><input type="checkbox"><span class="n"></span>
+                        <span class="step-title">Share the folder, with yourself</span></label>
+                    <div class="step-body">
+                        <p>In Explorer, right-click the folder, <span class="kbd-path">Properties ▸ Sharing ▸ Share</span>,
+                           add yourself, Share. Note the network path it shows, such as
+                           <code>\\YOUR-PC\OfficeAddins</code>.</p>
+                    </div>
+                </li>
+                <li data-step="xd-trust">
+                    <label class="step-head"><input type="checkbox"><span class="n"></span>
+                        <span class="step-title">Tell Excel to trust it</span></label>
+                    <div class="step-body">
+                        <p><span class="kbd-path">File ▸ Options ▸ Trust Center ▸ Trust Center Settings ▸ Trusted Add-in Catalogs</span>.
+                           Paste the network path as Catalog Url, Add catalog, tick Show in Menu, OK, OK.</p>
+                    </div>
+                </li>
+                <li data-step="xd-restart">
+                    <label class="step-head"><input type="checkbox"><span class="n"></span>
+                        <span class="step-title">Close Excel completely, and reopen it</span></label>
+                    <div class="step-body"><p class="hint">Every window, not just the workbook: Excel reads the catalog list at start.</p></div>
+                </li>
+                <li data-step="xd-add">
+                    <label class="step-head"><input type="checkbox"><span class="n"></span>
+                        <span class="step-title">Add it from the shared folder</span></label>
+                    <div class="step-body">
+                        <p><span class="kbd-path">Home ▸ Add-ins ▸ More Add-ins ▸ SHARED FOLDER ▸ Aggregate ▸ Add</span>.</p>
+                    </div>
+                </li>
+                <li data-step="xd-build">
+                    <label class="step-head"><input type="checkbox"><span class="n"></span>
+                        <span class="step-title">Check it answers, then build</span></label>
+                    <div class="step-body">
+                        <div class="code"><pre>=AGG.VERSION()
+A1   agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4
+B1   =AGG.BUILD(A1)
+B2   =AGG.Q(B1, {0.5, 0.9, 0.99})</pre></div>
+                        <div class="label">You should see</div>
+                        <div class="code out"><pre>aggregate_api 1.31.0, aggregate 1.6.0
+B2   4257    8207    12490</pre></div>
+                    </div>
+                </li>
+            </ol>
+            <p class="note">If the Trust Center is locked by your IT department, use Excel on the web instead,
+               or ask a Microsoft 365 admin to deploy the add-in to you (admin center ▸ Settings ▸ Integrated apps).
+               On a Mac, use Excel on the web.</p>
+        </div>
+        <p class="note data"><b>Your programs are your data.</b> The add-in builds on the public server, which keeps
+           an audit record of every program. Use made-up numbers.</p>
+    </section>
+
+    <!-- ======================= Sheets ======================= -->
+    <section class="pane" data-pane="sheets">
+        <div class="facts">
+            <span class="what"><b>The AGG functions, over agg.mynl.com</b><span class="dot">·</span>a Google
+                account, nothing to install<span class="dot">·</span>about a minute</span>
+            <span class="progress"></span>
+        </div>
+        <ol class="steps">
+            <li data-step="s-copy">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Make your own copy of the template</span></label>
+                <div class="step-body">
+                    <p><a class="btn placeholder" href="#sheets">Make a copy of the AGG template</a></p>
+                    <p class="hint">Google asks to Make a copy; say yes. The copy is yours, in your Drive, with a
+                       Start here tab and a worked Example tab.</p>
+                </div>
+            </li>
+            <li data-step="s-version">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Check it answers</span></label>
+                <div class="step-body">
+                    <div class="code"><pre>=AGG_VERSION()</pre></div>
+                    <div class="label">You should see</div>
+                    <div class="code out"><pre>AGG for Sheets 1.31.0; aggregate_api 1.31.0, aggregate 1.6.0</pre></div>
+                    <p class="hint">Sheets names them <code>AGG_</code> where Excel has <code>AGG.</code>:
+                       a Sheets function name cannot hold a dot.</p>
+                </div>
+            </li>
+            <li data-step="s-build">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Build in a cell, read quantiles in the next</span></label>
+                <div class="step-body">
+                    <div class="code"><pre>A1   agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4
+B1   =AGG_BUILD(A1)
+B2   =AGG_Q(B1, {0.5, 0.9, 0.99})</pre></div>
+                    <div class="label">You should see</div>
+                    <div class="code out"><pre>B2   4257    8207    12490</pre></div>
+                </div>
+            </li>
+            <li data-step="s-menu">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Authorize the AGG menu, once</span></label>
+                <div class="step-body">
+                    <p>The first time you use <span class="kbd-path">AGG ▸ Recalculate AGG cells</span>, Google says it
+                       hasn't verified the app. Choose Advanced, then the Go to link, then Allow. It is your own copy
+                       of the script asking to show its menu and reach the server. The cells never ask.</p>
+                </div>
+            </li>
+            <li data-step="s-frame">
+                <label class="step-head"><input type="checkbox"><span class="n"></span>
+                    <span class="step-title">Pull a whole frame in as a live table</span></label>
+                <div class="step-body">
+                    <div class="code"><pre>=IMPORTDATA(AGG_FRAMEURL(B1, "density_df") &amp; "?cols=loss,p_total,S")</pre></div>
+                    <p class="hint">Sheets asks once, in a bar above the grid, to allow external data. An import holds
+                       about 100,000 cells, hence the three columns.</p>
+                </div>
+            </li>
+        </ol>
+        <p class="note data"><b>Your programs are your data.</b> Google's servers make the requests, so Sheets
+           always builds on the public server, which keeps an audit record of every program. Use made-up numbers.</p>
+        <p class="note">A copy keeps the version of the script it was made from. For a newer one, make a fresh copy.
+           The cells compute in the Sheets phone app too.</p>
+    </section>
+
+    <div class="mock-notes">
+        <h2>About this mock up (A, checklist)</h2>
+        <ul>
+            <li>Try <code>#R</code>, <code>#excel-desktop</code>, <code>#sheets</code> on the address. Tabs rewrite the hash.</li>
+            <li>Ticks persist in this browser; each tab counts its own and has its own Clear ticks.</li>
+            <li>The Sheets button is dashed because the template's copy link does not exist yet.</li>
+            <li>The menu path in Excel on the web step 2 is to confirm: <code>excel/README.md</code> says More add-ins,
+                <code>dev/excel-desktop-install.md</code> says More Settings.</li>
+            <li>Mock up B, <code>side-by-side.html</code>, puts the same steps beside a picture of the result.</li>
+        </ul>
+    </div>
+</main>
+
+<script>
+(function () {
+    'use strict';
+    const TABS = ['jupyter', 'r', 'excel', 'sheets'];
+    const KEY = 'use-page-ticks';
+
+    // Ticks live in this browser only. Every access is guarded: storage can be
+    // absent or throw (private windows, blocked site data), and the page must
+    // work the same without it.
+    function loadTicks() {
+        try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { return {}; }
+    }
+    function saveTicks(ticks) {
+        try { localStorage.setItem(KEY, JSON.stringify(ticks)); } catch (e) { /* not kept */ }
+    }
+    let ticks = loadTicks();
+
+    /** The tab and Excel route a hash names; #R and #r alike. */
+    function parseHash() {
+        const h = location.hash.slice(1).toLowerCase();
+        const [tab, route] = h.split('-');
+        return { tab: TABS.includes(tab) ? tab : 'jupyter',
+                 route: route === 'desktop' ? 'desktop' : 'web' };
+    }
+
+    function show(tab, route, rewrite) {
+        document.querySelectorAll('.out-tabs button').forEach(b =>
+            b.classList.toggle('active', b.dataset.tab === tab));
+        document.querySelectorAll('.pane').forEach(p =>
+            p.classList.toggle('active', p.dataset.pane === tab));
+        document.querySelectorAll('.sub-link').forEach(b =>
+            b.classList.toggle('active', b.dataset.route === route));
+        document.querySelectorAll('.route').forEach(p =>
+            p.classList.toggle('active', p.dataset.routepane === route));
+        if (rewrite) {
+            const hash = tab === 'excel' && route === 'desktop' ? '#excel-desktop' : '#' + tab;
+            history.replaceState(null, '', hash);
+        }
+    }
+
+    // Each list counts its own ticks, and offers to clear them once any exist.
+    function refreshProgress() {
+        document.querySelectorAll('ol.steps').forEach(list => {
+            const items = [...list.children];
+            const done = items.filter(li => li.classList.contains('ticked')).length;
+            const slot = list.parentElement.querySelector('.progress');
+            if (!slot) return;
+            if (!done) { slot.textContent = items.length + ' steps'; return; }
+            const count = done === items.length
+                ? '<span class="done">all ' + done + ' done</span>'
+                : done + ' of ' + items.length + ' done';
+            slot.innerHTML = count + ' <span class="dot">·</span> '
+                + '<button type="button" class="linkbtn clear">Clear ticks</button>';
+            slot.querySelector('.clear').onclick = () => {
+                items.forEach(li => { delete ticks[li.dataset.step]; });
+                saveTicks(ticks); paintTicks();
+            };
+        });
+    }
+    function paintTicks() {
+        document.querySelectorAll('li[data-step]').forEach(li => {
+            const on = !!ticks[li.dataset.step];
+            li.classList.toggle('ticked', on);
+            li.querySelector('input').checked = on;
+        });
+        refreshProgress();
+    }
+    document.querySelectorAll('li[data-step] input').forEach(box => {
+        box.addEventListener('change', () => {
+            const id = box.closest('li').dataset.step;
+            if (box.checked) ticks[id] = 1; else delete ticks[id];
+            saveTicks(ticks); paintTicks();
+        });
+    });
+
+    // A Copy on every command block, but not on the "you should see" ones.
+    document.querySelectorAll('.code:not(.out)').forEach(block => {
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'copy'; button.textContent = 'Copy';
+        const said = document.createElement('span');
+        said.className = 'said'; said.textContent = 'copied';
+        block.append(said, button);
+        button.onclick = () => {
+            const text = block.querySelector('pre').innerText;
+            navigator.clipboard?.writeText(text).then(() => {
+                said.classList.add('on'); setTimeout(() => said.classList.remove('on'), 1200);
+            });
+        };
+    });
+
+    document.querySelectorAll('.out-tabs button').forEach(b =>
+        b.addEventListener('click', () => show(b.dataset.tab, parseHash().route, true)));
+    document.querySelectorAll('.sub-link').forEach(b =>
+        b.addEventListener('click', () => show('excel', b.dataset.route, true)));
+    window.addEventListener('hashchange', () => { const s = parseHash(); show(s.tab, s.route, false); });
+
+    const start = parseHash();
+    show(start.tab, start.route, false);
+    paintTicks();
+}());
+</script>
+</body>
+</html>

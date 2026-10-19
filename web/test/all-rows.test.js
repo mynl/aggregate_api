@@ -6,8 +6,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-    ALL_ROWS_CELL_BUDGET, DENSITY_ROWS_KEY, allRowsPlan, frameCsvUrl, loadingLine,
-    readDensityRows, writeDensityRows,
+    ALL_ROWS_CELL_BUDGET, DENSITY_ROWS_KEY, allRowsPlan, browserStorage, frameCsvUrl,
+    loadingLine, readDensityRows, writeDensityRows,
 } from '../src/all-rows.js';
 
 const FOUR = ['loss', 'p_total', 'F', 'S'];
@@ -99,6 +99,28 @@ test('a storage that throws reads as the default and swallows the write', () => 
     };
     assert.equal(readDensityRows(refusing), 'display');
     assert.doesNotThrow(() => writeDensityRows(refusing, 'all'));
+});
+
+test('blocked site data: reaching localStorage throws, and nothing escapes', () => {
+    // A browser blocking site data throws on the property read itself, which is
+    // what killed the Lab when `localStorage` was passed as a bare argument.
+    const blocked = Object.defineProperty({}, 'localStorage', {
+        get() { throw new Error('SecurityError: access is denied for this document'); },
+    });
+    assert.doesNotThrow(() => browserStorage(blocked));
+    assert.equal(readDensityRows(browserStorage(blocked)), 'display');
+    assert.doesNotThrow(() => writeDensityRows(browserStorage(blocked), 'all'));
+});
+
+test('browserStorage passes through to a working localStorage', () => {
+    const held = {};
+    const scope = { localStorage: {
+        getItem: (k) => (k in held ? held[k] : null),
+        setItem: (k, v) => { held[k] = v; },
+    } };
+    writeDensityRows(browserStorage(scope), 'all');
+    assert.equal(held[DENSITY_ROWS_KEY], 'all');
+    assert.equal(readDensityRows(browserStorage(scope)), 'all');
 });
 
 test('the loading line reads the shape with thousands separators', () => {

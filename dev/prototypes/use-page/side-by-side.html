@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Use aggregate elsewhere: side by side mock up</title>
+<!--
+  Mock up B of the "use aggregate from other environments" page. Standalone,
+  like mock up A (checklist.html): open the file.
+
+  What differs from A:
+    - Two columns. The steps on the left, and on the right a picture of what
+      the reader ends up with: a notebook cell, an R console, a worksheet.
+      The picture is the promise, kept in view while the steps scroll. On a
+      phone it drops below the steps.
+    - The numbered circle IS the checkbox. Ticking a step folds its body away
+      and marks the next one as current, so the page always says where you
+      are. Unticking unfolds it.
+    - Three fact tiles under the tabs, Runs, Prerequisites, Install time,
+      instead of a line.
+
+  Revised 2026-10-19 to the author's choices: B throughout, with Excel's two
+  routes as A's small-caps sub-tab row, split by the hairline divider the
+  main page's Pricing row uses; the gloss's last sentences and the tile
+  labels as the author worded them.
+
+  Same as A: header, lede, folder tabs, deep links (#jupyter #r #excel
+  #excel-desktop #sheets, any case), ticks kept in this browser, a Copy on
+  every command, real numbers from aggregate 1.6.0 at its default grid.
+-->
+<style>
+:root {
+    --ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "Cascadia Mono", SFMono-Regular, Consolas, Menlo, monospace;
+    --fs-meta: .74rem; --fs-ui: .82rem; --fs-body: .94rem; --fs-head: 1.15rem;
+    --ink: #000; --ink-2: #2b2b2b; --mut: #5f5f5f;
+    --line: #d4d4d4; --line-2: #ebebeb; --soft: #f6f6f6;
+    --house: #a81313; --house-dark: #8c1010; --house-ring: rgba(168, 19, 19, .25);
+    --primary: var(--house); --code: var(--house);
+    --green: #2e7d32; --warn: #c2410c;
+    --tabpad: 1.05rem; --gutter: 1.15rem; --measure: 46rem;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--ui); color: var(--ink-2); background: #fff; }
+code, .mono { font-family: var(--mono); }
+code { color: var(--code); font-size: .875em; }
+a { color: var(--primary); text-decoration: none; }
+a:hover { color: var(--house-dark); text-decoration: underline; }
+
+header { position: sticky; top: 0; z-index: 10; background: #fff;
+         border-bottom: 1px solid #dee2e6; box-shadow: 0 .125rem .25rem rgba(0,0,0,.075); }
+.bar { max-width: 1280px; margin: 0 auto; padding: .25rem 1.5rem; display: flex; align-items: center; }
+.brand { display: flex; align-items: center; margin-right: auto; }
+.brand:hover { text-decoration: none; }
+.brand img { height: 40px; width: auto; }
+.brand-text { display: flex; flex-direction: column; padding: 0 1rem; }
+.brand-title { line-height: 1.05; font-size: 1.25rem; font-weight: 700; color: var(--ink); }
+.brand-kicker { font-size: .6rem; font-variant: small-caps; letter-spacing: .18em;
+                color: var(--mut); margin-top: 2px; text-align: center; text-indent: .18em; }
+.nav-meta { display: flex; align-items: center; gap: .75rem; font-size: .74rem; color: var(--mut); }
+.nav-versions { font-family: var(--mono); font-size: .68rem; white-space: nowrap; }
+.back-btn { display: inline-flex; align-items: center; gap: .35rem;
+            border: 1px solid var(--line); border-radius: .375rem; background: #fff;
+            padding: .28rem .7rem; font-size: var(--fs-ui); color: var(--ink-2); }
+.back-btn:hover { border-color: var(--primary); color: var(--primary); text-decoration: none; }
+
+main { max-width: 1280px; margin: 0 auto; padding: 1rem 1.5rem 3rem; }
+.lede-box { padding: 0 1rem; margin: 0 0 .35rem; display: flex; flex-wrap: wrap;
+            align-items: baseline; justify-content: space-between; gap: .1rem 1.25rem; }
+.lede { font-size: var(--fs-head); line-height: 1.5; color: var(--ink); margin: 0; font-weight: 600; }
+.lede code { font-size: .92em; }
+.lede-terms { font-size: .74rem; color: var(--mut); margin: 0; }
+.gloss { padding: 0 1rem; margin: 0 0 var(--gutter); max-width: var(--measure);
+         font-size: var(--fs-body); line-height: 1.5; }
+
+.out-tabs { display: flex; align-items: flex-end; flex-wrap: nowrap; gap: .25rem;
+            margin: 0; padding: 0; list-style: none; border-bottom: 2px solid var(--line); }
+.out-tabs button {
+    background: var(--soft); border: 1px solid var(--line); border-bottom: 0;
+    border-radius: .4rem .4rem 0 0; white-space: nowrap; cursor: pointer;
+    padding: .32rem var(--tabpad); font: inherit; font-size: var(--fs-body); line-height: 1.3;
+    color: var(--ink-2);
+}
+.out-tabs button::after { content: attr(data-label); display: block; height: 0;
+    overflow: hidden; visibility: hidden; font-weight: 700; }
+.out-tabs button:not(.active):hover { background: var(--line-2); color: var(--ink); }
+.out-tabs button.active { background: var(--primary); border-color: var(--primary);
+    color: #fff; font-weight: 700; margin-bottom: -2px; padding-bottom: calc(.32rem + 2px); }
+
+.pane { display: none; padding: 1.1rem var(--tabpad) 0; }
+.pane.active { display: block; }
+
+/* ---- Three fact tiles ---- */
+.tiles { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: 1.25rem; }
+.tile { border: 1px solid var(--line-2); border-radius: .4rem; padding: .45rem .75rem;
+        min-width: 10rem; background: #fff; }
+.tile .k { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: var(--mut); font-weight: 600; }
+.tile .v { font-size: var(--fs-ui); color: var(--ink); margin-top: .1rem; }
+
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 27rem); gap: 2.25rem; align-items: start; }
+.result { position: sticky; top: 4.5rem; }
+
+/* ---- Excel's two routes: the main page's sub-tab row, hairline between ---- */
+.pane.has-sub { padding-top: 0; }
+.sub-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem;
+            padding-top: .7rem; margin-bottom: 1rem; }
+.sub-link { border: 0; background: none; color: var(--mut); cursor: pointer; font-family: inherit;
+            font-size: .76rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: .1em; padding: .24rem .55rem; border-radius: .3rem; }
+.sub-link::after { content: attr(data-label); display: block; height: 0;
+    overflow: hidden; visibility: hidden; font-weight: 700; }
+.sub-link:first-of-type { padding-left: 0; }
+.sub-link:hover { color: var(--ink); }
+.sub-link.active { color: var(--primary); font-weight: 700; }
+.sub-divider { width: 1px; height: .9rem; background: var(--line); margin: 0 .5rem 0 .35rem; }
+.route { display: none; }
+.route.active { display: block; }
+
+/* ---- Steps: the circle is the checkbox ---- */
+.progress-line { display: flex; align-items: center; gap: .75rem; font-size: var(--fs-meta); color: var(--mut);
+                 margin-bottom: .6rem; }
+.bar-track { flex: 0 0 9rem; height: 4px; background: var(--line-2); border-radius: 2px; overflow: hidden; }
+.bar-fill { height: 100%; width: 0; background: var(--green); transition: width .25s; }
+.linkbtn { border: 0; background: none; padding: 0; font: inherit; color: var(--primary); cursor: pointer; }
+.linkbtn:hover { text-decoration: underline; }
+ol.steps { list-style: none; margin: 0; padding: 0; position: relative; }
+ol.steps > li { position: relative; padding: 0 0 1.1rem 2.6rem; }
+/* The rail joining the circles, so the steps read as one path. */
+ol.steps > li:not(:last-child)::before { content: ""; position: absolute; left: .82rem; top: 1.9rem;
+    bottom: .2rem; width: 2px; background: var(--line-2); }
+.tick { position: absolute; left: 0; top: 0; width: 1.75rem; height: 1.75rem; border-radius: 50%;
+        border: 2px solid var(--line); background: #fff; color: var(--mut); cursor: pointer;
+        font: 600 .8rem var(--mono); display: grid; place-items: center; padding: 0; }
+.tick:hover { border-color: var(--primary); color: var(--primary); }
+li.current .tick { border-color: var(--primary); color: var(--primary); box-shadow: 0 0 0 3px var(--house-ring); }
+li.ticked .tick { background: var(--green); border-color: var(--green); color: #fff; }
+.step-title { font-size: var(--fs-body); font-weight: 700; color: var(--ink); line-height: 1.75rem; margin: 0; }
+li.ticked .step-title { color: var(--mut); font-weight: 600; }
+.step-body { font-size: var(--fs-body); line-height: 1.5; margin-top: .1rem; }
+li.ticked .step-body { display: none; }
+.step-body p { margin: .3rem 0; }
+.hint { font-size: var(--fs-meta); color: var(--mut); }
+.kbd-path { font-weight: 600; color: var(--ink); }
+.label { font-size: .68rem; color: var(--mut); margin: .45rem 0 .1rem; text-transform: uppercase;
+         letter-spacing: .08em; font-weight: 600; }
+
+.code { position: relative; margin: .35rem 0; }
+.code pre { margin: 0; padding: .55rem 4.2rem .55rem .75rem; background: var(--soft);
+            border: 1px solid var(--line-2); border-radius: .3rem; overflow-x: auto;
+            font-family: var(--mono); font-size: .8rem; line-height: 1.45; color: var(--ink); }
+.code .copy { position: absolute; top: .35rem; right: .35rem; border: 1px solid var(--line);
+              background: #fff; border-radius: .25rem; font: inherit; font-size: .7rem;
+              padding: .08rem .45rem; color: var(--mut); cursor: pointer; }
+.code .copy:hover { color: var(--primary); border-color: var(--primary); }
+.code .said { position: absolute; top: .45rem; right: 3.6rem; font-size: .68rem; color: var(--green);
+              opacity: 0; transition: opacity .2s; }
+.code .said.on { opacity: 1; }
+.c { color: var(--mut); }
+.btn { display: inline-block; border: 1px solid var(--primary); background: var(--primary);
+       color: #fff; border-radius: .375rem; padding: .3rem .8rem; font-size: var(--fs-ui); }
+.btn:hover { background: var(--house-dark); color: #fff; text-decoration: none; }
+.btn.placeholder { background: #fff; color: var(--primary); border-style: dashed; }
+.note { margin: .5rem 0 0; padding: .55rem .8rem; border-left: 3px solid var(--line);
+        background: var(--soft); font-size: var(--fs-ui); line-height: 1.5; }
+.note.data { border-left-color: var(--warn); }
+
+/* ---- The result pictures ---- */
+.result-cap { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: var(--mut);
+              font-weight: 600; margin: 0 0 .4rem; }
+.shot { border: 1px solid var(--line); border-radius: .4rem; overflow: hidden; background: #fff;
+        box-shadow: 0 .25rem .75rem rgba(0,0,0,.06); font-size: .74rem; }
+.shot-bar { display: flex; align-items: center; gap: .35rem; padding: .35rem .6rem;
+            background: var(--soft); border-bottom: 1px solid var(--line-2); color: var(--mut); font-size: .7rem; }
+.shot-bar i { width: .55rem; height: .55rem; border-radius: 50%; background: var(--line); display: inline-block; }
+.shot-bar span { margin-left: .4rem; }
+.nb { padding: .6rem .6rem .7rem; font-family: var(--mono); }
+.nb .cell { display: grid; grid-template-columns: 2.6rem 1fr; gap: .4rem; margin-bottom: .4rem; }
+.nb .prompt { color: #303f9f; text-align: right; font-size: .7rem; padding-top: .3rem; }
+.nb .prompt.out { color: #d84315; }
+.nb .in { border: 1px solid var(--line-2); background: #f7f7f7; padding: .3rem .45rem; white-space: pre; overflow-x: auto; }
+.nb .o { padding: .3rem .45rem; white-space: pre; overflow-x: auto; }
+.nb .kw { color: #008000; font-weight: 700; }
+.nb .st { color: #ba2121; }
+.console { padding: .6rem .7rem; font-family: var(--mono); white-space: pre; overflow-x: auto;
+           line-height: 1.5; color: #222; }
+.console .pr { color: #1f4e9e; }
+.console .ok { color: #222; }
+.console .cm { color: #8a8a8a; }
+.grid-fx { display: flex; border-bottom: 1px solid var(--line-2); font-family: var(--mono); }
+.grid-fx .nm { width: 3.2rem; padding: .25rem .4rem; border-right: 1px solid var(--line-2); color: var(--mut); }
+.grid-fx .fx { padding: .25rem .5rem; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grid-fx .fx b { color: var(--mut); font-weight: 400; font-style: italic; margin-right: .4rem; }
+table.sheet { border-collapse: collapse; width: 100%; table-layout: fixed; font-family: var(--ui); }
+table.sheet th { background: #f3f3f3; color: var(--mut); font-weight: 400; border: 1px solid #e2e2e2;
+                 padding: .12rem; font-size: .66rem; }
+table.sheet th:first-child { width: 1.9rem; }
+table.sheet td { border: 1px solid #e8e8e8; padding: .18rem .35rem; height: 1.4rem; white-space: nowrap;
+                 overflow: visible; font-size: .72rem; }
+table.sheet td.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.sheet td.sel { outline: 2px solid #217346; outline-offset: -2px; }
+table.sheet.g td.sel { outline-color: #1a73e8; }
+table.sheet td.hd { color: #555; }
+.same { margin-top: .7rem; font-size: var(--fs-meta); color: var(--mut); line-height: 1.5; }
+.same b { color: var(--ink-2); }
+
+.mock-notes { max-width: var(--measure); margin: 3rem 0 0; padding-top: 1rem;
+              border-top: 1px solid var(--line); font-size: var(--fs-meta); color: var(--mut); line-height: 1.5; }
+.mock-notes h2 { font-size: var(--fs-ui); color: var(--ink-2); margin: 0 0 .4rem; }
+.mock-notes ul { margin: 0; padding-left: 1.1rem; }
+
+@media (max-width: 991.98px) {
+    .cols { grid-template-columns: minmax(0, 1fr); }
+    .result { position: static; }
+}
+@media (max-width: 767.98px) { .bar, main { padding-left: 1rem; padding-right: 1rem; } }
+@media (max-width: 575.98px) {
+    .nav-versions { display: none; }
+    .brand-text { padding: 0 .6rem; }
+    .out-tabs { gap: .15rem; overflow-x: auto; }
+    .out-tabs button { padding: .28rem .55rem; font-size: var(--fs-ui); }
+    .out-tabs button.active { padding-bottom: calc(.28rem + 2px); }
+    .lede-box, .gloss { padding: 0; }
+    .pane { padding-left: 0; padding-right: 0; }
+    .tile { min-width: 0; flex: 1 1 8rem; }
+}
+</style>
+</head>
+<body>
+
+<header>
+    <div class="bar">
+        <a class="brand" href="/">
+            <img src="../../../web/public/logo.png" alt="aggregate Loss Lab">
+            <div class="brand-text">
+                <div class="brand-title">aggregate Loss Lab</div>
+                <div class="brand-kicker">description to distribution</div>
+            </div>
+        </a>
+        <div class="nav-meta">
+            <span class="nav-versions">aggregate 1.6.0 · api 1.31.0</span>
+            <a class="back-btn" href="/" title="Back to the Loss Lab">← Back</a>
+        </div>
+    </div>
+</header>
+
+<main>
+    <div class="lede-box">
+        <p class="lede">How to use <code>aggregate</code> from other environments.</p>
+        <p class="lede-terms">Use of this site signifies agreement with the <a href="/#about">terms</a>.</p>
+    </div>
+    <p class="gloss">Jupyter runs the library itself, in Python on your machine. R, Excel and
+       Google Sheets send a DecL program to an aggregate server and read back exhibits,
+       quantiles and whole distributions. Each tab includes the same basic Gross 20-claim
+       example. Click each step's number as you complete it.</p>
+
+    <ul class="out-tabs" role="tablist">
+        <li><button type="button" data-tab="jupyter" data-label="Jupyter">Jupyter</button></li>
+        <li><button type="button" data-tab="r"       data-label="R">R</button></li>
+        <li><button type="button" data-tab="excel"   data-label="Excel">Excel</button></li>
+        <li><button type="button" data-tab="sheets"  data-label="Sheets">Sheets</button></li>
+    </ul>
+
+    <!-- ======================= Jupyter ======================= -->
+    <section class="pane" data-pane="jupyter">
+        <div class="tiles">
+            <div class="tile"><div class="k">Runs</div><div class="v">the library, on your machine</div></div>
+            <div class="tile"><div class="k">Prerequisites</div><div class="v">uv; it fetches Python 3.13</div></div>
+            <div class="tile"><div class="k">Install time</div><div class="v">about five minutes</div></div>
+        </div>
+        <div class="cols">
+            <div class="steps-col">
+                <div class="progress-line"></div>
+                <ol class="steps">
+                    <li data-step="jupyter-uv">
+                        <p class="step-title">Install uv</p>
+                        <div class="step-body">
+                            <div class="label">Windows, in PowerShell</div>
+                            <div class="code"><pre>winget install astral-sh.uv</pre></div>
+                            <div class="label">macOS or Linux</div>
+                            <div class="code"><pre>curl -LsSf https://astral.sh/uv/install.sh | sh</pre></div>
+                            <p class="hint">Then open a new terminal.</p>
+                        </div>
+                    </li>
+                    <li data-step="jupyter-init">
+                        <p class="step-title">Make a project folder</p>
+                        <div class="step-body">
+                            <div class="code"><pre>uv init --python 3.13 agg-notebooks
+cd agg-notebooks</pre></div>
+                        </div>
+                    </li>
+                    <li data-step="jupyter-add">
+                        <p class="step-title">Add <code>aggregate</code>, with JupyterLab</p>
+                        <div class="step-body">
+                            <div class="code"><pre>uv add "aggregate[notebook]"</pre></div>
+                            <p class="hint">Resolves, locks and installs in one go; no <code>uv sync</code> needed.</p>
+                        </div>
+                    </li>
+                    <li data-step="jupyter-lab">
+                        <p class="step-title">Start JupyterLab</p>
+                        <div class="step-body">
+                            <div class="code"><pre>uv run jupyter lab</pre></div>
+                            <p class="hint">File ▸ New ▸ Notebook. Next time, this line alone.</p>
+                        </div>
+                    </li>
+                    <li data-step="jupyter-build">
+                        <p class="step-title">Build a distribution</p>
+                        <div class="step-body">
+                            <div class="code"><pre>from aggregate import build, qd
+gross = build('agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4')
+qd(gross)
+gross.q([0.5, 0.9, 0.99])</pre></div>
+                            <p class="hint">Any program from the Loss Lab editor pastes into <code>build()</code> as it stands.</p>
+                        </div>
+                    </li>
+                </ol>
+            </div>
+            <aside class="result">
+                <p class="result-cap">What you end up with</p>
+                <div class="shot">
+                    <div class="shot-bar"><i></i><i></i><i></i><span>Untitled.ipynb · JupyterLab</span></div>
+                    <div class="nb">
+                        <div class="cell"><div class="prompt">[1]:</div><div class="in"><span class="kw">from</span> aggregate <span class="kw">import</span> build, qd
+gross = build(<span class="st">'agg Gross 20 claims ...'</span>)
+qd(gross)
+gross.q([<span>0.5</span>, 0.9, 0.99])</div></div>
+                        <div class="cell"><div class="prompt"></div><div class="o">       Mean     SD      CV    Skew P01 Median   P99
+X
+Freq     20 9.1652 0.45826 0.80741
+Sev  233.63 339.34  1.4525  3.0966   6    112  2000
+Agg  4672.5 2624.5 0.56168 0.94739 532   4257 12490</div></div>
+                        <div class="cell"><div class="prompt out">[1]:</div><div class="o">array([ 4257.,  8207., 12490.])</div></div>
+                    </div>
+                </div>
+                <p class="same"><b>Same program, every tab.</b> The 99% quantile is 12,490 in a notebook,
+                   in R, in Excel and in Sheets.</p>
+            </aside>
+        </div>
+    </section>
+
+    <!-- ======================= R ======================= -->
+    <section class="pane" data-pane="r">
+        <div class="tiles">
+            <div class="tile"><div class="k">Runs</div><div class="v">aggregateR, over a server</div></div>
+            <div class="tile"><div class="k">Prerequisites</div><div class="v">R 4.1 or later; no Rtools</div></div>
+            <div class="tile"><div class="k">Install time</div><div class="v">about five minutes</div></div>
+        </div>
+        <div class="cols">
+            <div class="steps-col">
+                <div class="progress-line"></div>
+                <ol class="steps">
+                    <li data-step="r-pkgs">
+                        <p class="step-title">Install the four packages it uses</p>
+                        <div class="step-body">
+                            <div class="code"><pre>install.packages(c("httr2", "jsonlite", "nanoparquet", "processx"))</pre></div>
+                        </div>
+                    </li>
+                    <li data-step="r-install">
+                        <p class="step-title">Install aggregateR from GitHub</p>
+                        <div class="step-body">
+                            <div class="code"><pre>install.packages("https://github.com/mynl/aggregate-R/archive/refs/heads/master.tar.gz",
+                 repos = NULL, type = "source")</pre></div>
+                            <p class="hint">Pure R, so no Rtools on Windows.</p>
+                        </div>
+                    </li>
+                    <li data-step="r-server">
+                        <p class="step-title">Choose a server</p>
+                        <div class="step-body">
+                            <p>To try it, nothing to do: it talks to <code>https://agg.mynl.com</code>.
+                               For real work, a private server on your machine (needs uv; the first start
+                               takes a couple of minutes):</p>
+                            <div class="code"><pre>library(aggregateR)
+agg_start()</pre></div>
+                        </div>
+                    </li>
+                    <li data-step="r-build">
+                        <p class="step-title">Build, and read quantiles</p>
+                        <div class="step-body">
+                            <div class="code"><pre>library(aggregateR)
+gross &lt;- agg_build("agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4")
+agg_q(gross, c(0.5, 0.9, 0.99))</pre></div>
+                        </div>
+                    </li>
+                    <li data-step="r-frame">
+                        <p class="step-title">The whole distribution, as a data.frame</p>
+                        <div class="step-body">
+                            <div class="code"><pre>dg &lt;- agg_frame(gross)
+plot(dg$loss, dg$p_total, type = "l", xlim = c(0, 15000))</pre></div>
+                            <p class="hint">More: <code>agg_exhibit(gross, "summary")</code>, <code>agg_library()</code>, and the
+                               <a href="https://github.com/mynl/aggregate-R#a-first-session">first session</a> in the README.</p>
+                        </div>
+                    </li>
+                </ol>
+                <p class="note data"><b>Your programs are your data.</b> The public server keeps an audit record of
+                   every build. Made-up numbers there; <code>agg_start()</code> for anything real.</p>
+            </div>
+            <aside class="result">
+                <p class="result-cap">What you end up with</p>
+                <div class="shot">
+                    <div class="shot-bar"><i></i><i></i><i></i><span>Console · R 4.5</span></div>
+                    <div class="console"><span class="pr">&gt;</span> gross &lt;- agg_build("agg Gross 20 claims ...")
+<span class="pr">&gt;</span> gross
+&lt;agg_handle&gt; agg.Gross #…
+  server      https://agg.mynl.com
+  grid        log2 16, bs 1
+  mean, cv    4672, 0.562
+  validation  not unreasonable
+<span class="pr">&gt;</span> agg_q(gross, c(0.5, 0.9, 0.99))
+ 50%   90%   99%
+4257  8207 12490
+<span class="pr">&gt;</span> nrow(agg_frame(gross))
+[1] 65536</div>
+                </div>
+                <p class="same"><b>Same program, every tab.</b> The 99% quantile is 12,490 in a notebook,
+                   in R, in Excel and in Sheets.</p>
+            </aside>
+        </div>
+    </section>
+
+    <!-- ======================= Excel ======================= -->
+    <section class="pane has-sub" data-pane="excel">
+        <div class="sub-tabs">
+            <button type="button" class="sub-link" data-route="web" data-label="Excel on the web">Excel on the web</button>
+            <span class="sub-divider" aria-hidden="true"></span>
+            <button type="button" class="sub-link" data-route="desktop" data-label="Desktop Excel, Windows">Desktop Excel, Windows</button>
+        </div>
+        <div class="tiles">
+            <div class="tile"><div class="k">Runs</div><div class="v">the AGG functions, over agg.mynl.com</div></div>
+            <div class="tile"><div class="k">Prerequisites</div><div class="v">Excel on the web, or Microsoft 365 on Windows</div></div>
+            <div class="tile"><div class="k">Install time</div><div class="v">two minutes on the web, five on the desktop</div></div>
+        </div>
+        <div class="cols">
+            <div class="steps-col">
+                <div class="route" data-routepane="web">
+                    <div class="progress-line"></div>
+                    <ol class="steps">
+                        <li data-step="xw-manifest">
+                            <p class="step-title">Download the manifest</p>
+                            <div class="step-body">
+                                <p><a class="btn" href="https://agg.mynl.com/excel/manifest.xml" download>Download manifest.xml</a></p>
+                            </div>
+                        </li>
+                        <li data-step="xw-upload">
+                            <p class="step-title">Upload it</p>
+                            <div class="step-body">
+                                <p>Any workbook at <a href="https://www.office.com">office.com</a>, then
+                                   <span class="kbd-path">Home ▸ Add-ins ▸ More Settings ▸ Upload My Add-in</span>,
+                                   choose the file, Upload.</p>
+                                <p class="hint">It lives in this browser's storage; clear the site data and upload again.</p>
+                            </div>
+                        </li>
+                        <li data-step="xw-build">
+                            <p class="step-title">Build in A2, quantiles in A3</p>
+                            <div class="step-body">
+                                <div class="code"><pre>A1   agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4
+A2   =AGG.BUILD(A1)
+A3   =AGG.Q(A2, {0.5, 0.9, 0.99})</pre></div>
+                                <p class="hint"><code>=AGG.VERSION()</code> anywhere says which server you are on.</p>
+                            </div>
+                        </li>
+                    </ol>
+                </div>
+                <div class="route" data-routepane="desktop">
+                    <div class="progress-line"></div>
+                    <ol class="steps">
+                        <li data-step="xd-folder">
+                            <p class="step-title">Save the manifest in a folder</p>
+                            <div class="step-body">
+                                <div class="code"><pre>New-Item -ItemType Directory -Force C:\OfficeAddins
+Invoke-WebRequest https://agg.mynl.com/excel/manifest.xml -OutFile C:\OfficeAddins\aggregate-manifest.xml</pre></div>
+                            </div>
+                        </li>
+                        <li data-step="xd-share">
+                            <p class="step-title">Share the folder, with yourself</p>
+                            <div class="step-body">
+                                <p>Right-click it, <span class="kbd-path">Properties ▸ Sharing ▸ Share</span>, add yourself,
+                                   Share. Note the path, such as <code>\\YOUR-PC\OfficeAddins</code>.</p>
+                            </div>
+                        </li>
+                        <li data-step="xd-trust">
+                            <p class="step-title">Trust it in Excel</p>
+                            <div class="step-body">
+                                <p><span class="kbd-path">File ▸ Options ▸ Trust Center ▸ Trust Center Settings ▸ Trusted Add-in Catalogs</span>:
+                                   paste the path, Add catalog, tick Show in Menu, OK, OK.</p>
+                            </div>
+                        </li>
+                        <li data-step="xd-add">
+                            <p class="step-title">Restart Excel, then add it</p>
+                            <div class="step-body">
+                                <p>Close every Excel window, reopen, then
+                                   <span class="kbd-path">Home ▸ Add-ins ▸ More Add-ins ▸ SHARED FOLDER ▸ Aggregate ▸ Add</span>.</p>
+                            </div>
+                        </li>
+                        <li data-step="xd-build">
+                            <p class="step-title">Build in A2, quantiles in A3</p>
+                            <div class="step-body">
+                                <div class="code"><pre>A1   agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4
+A2   =AGG.BUILD(A1)
+A3   =AGG.Q(A2, {0.5, 0.9, 0.99})</pre></div>
+                            </div>
+                        </li>
+                    </ol>
+                    <p class="note">Trust Center locked by IT? Use Excel on the web, or ask a Microsoft 365 admin to
+                       deploy it (admin center ▸ Settings ▸ Integrated apps). On a Mac, use the web.</p>
+                </div>
+                <p class="note data"><b>Your programs are your data.</b> The add-in builds on the public server,
+                   which keeps an audit record of every program. Use made-up numbers.</p>
+            </div>
+            <aside class="result">
+                <p class="result-cap">What you end up with</p>
+                <div class="shot">
+                    <div class="shot-bar"><i></i><i></i><i></i><span>Book1 · Excel</span></div>
+                    <div class="grid-fx"><div class="nm">A3</div><div class="fx"><b>fx</b>=AGG.Q(A2, {0.5, 0.9, 0.99})</div></div>
+                    <table class="sheet">
+                        <tr><th></th><th>A</th><th>B</th><th>C</th><th>D</th></tr>
+                        <tr><th>1</th><td colspan="4" class="hd">agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4</td></tr>
+                        <tr><th>2</th><td>agg.Gross#9c1e…</td><td></td><td></td><td></td></tr>
+                        <tr><th>3</th><td class="num sel">4,257</td><td class="num">8,207</td><td class="num">12,490</td><td></td></tr>
+                        <tr><th>4</th><td></td><td></td><td></td><td></td></tr>
+                    </table>
+                </div>
+                <p class="same"><b>Same program, every tab.</b> Edit A1 and A2 and A3 follow.
+                   <code>=AGG.EXHIBIT(A2, "summary")</code> spills a whole exhibit.</p>
+            </aside>
+        </div>
+    </section>
+
+    <!-- ======================= Sheets ======================= -->
+    <section class="pane" data-pane="sheets">
+        <div class="tiles">
+            <div class="tile"><div class="k">Runs</div><div class="v">the AGG functions, over agg.mynl.com</div></div>
+            <div class="tile"><div class="k">Prerequisites</div><div class="v">a Google account; nothing to install</div></div>
+            <div class="tile"><div class="k">Install time</div><div class="v">about a minute</div></div>
+        </div>
+        <div class="cols">
+            <div class="steps-col">
+                <div class="progress-line"></div>
+                <ol class="steps">
+                    <li data-step="s-copy">
+                        <p class="step-title">Make your own copy of the template</p>
+                        <div class="step-body">
+                            <p><a class="btn placeholder" href="#sheets">Make a copy of the AGG template</a></p>
+                            <p class="hint">It lands in your Drive with a Start here tab and a worked Example tab.</p>
+                        </div>
+                    </li>
+                    <li data-step="s-build">
+                        <p class="step-title">Build in A2, quantiles in A3</p>
+                        <div class="step-body">
+                            <div class="code"><pre>A1   agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4
+A2   =AGG_BUILD(A1)
+A3   =AGG_Q(A2, {0.5, 0.9, 0.99})</pre></div>
+                            <p class="hint"><code>AGG_</code> where Excel has <code>AGG.</code>: a Sheets name cannot hold a dot.</p>
+                        </div>
+                    </li>
+                    <li data-step="s-menu">
+                        <p class="step-title">Authorize the AGG menu, once</p>
+                        <div class="step-body">
+                            <p>First use of <span class="kbd-path">AGG ▸ Recalculate AGG cells</span>: Google says it hasn't
+                               verified the app. Advanced, then the Go to link, then Allow. The cells never ask.</p>
+                        </div>
+                    </li>
+                    <li data-step="s-frame">
+                        <p class="step-title">A whole frame, as a live table</p>
+                        <div class="step-body">
+                            <div class="code"><pre>=IMPORTDATA(AGG_FRAMEURL(A2, "density_df") &amp; "?cols=loss,p_total,S")</pre></div>
+                        </div>
+                    </li>
+                </ol>
+                <p class="note data"><b>Your programs are your data.</b> Sheets always builds on the public server,
+                   which keeps an audit record of every program. Use made-up numbers.</p>
+            </div>
+            <aside class="result">
+                <p class="result-cap">What you end up with</p>
+                <div class="shot">
+                    <div class="shot-bar"><i></i><i></i><i></i><span>Copy of AGG template · Google Sheets</span></div>
+                    <div class="grid-fx"><div class="nm">A3</div><div class="fx"><b>fx</b>=AGG_Q(A2, {0.5, 0.9, 0.99})</div></div>
+                    <table class="sheet g">
+                        <tr><th></th><th>A</th><th>B</th><th>C</th><th>D</th></tr>
+                        <tr><th>1</th><td colspan="4" class="hd">agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4</td></tr>
+                        <tr><th>2</th><td>agg.Gross#9c1e…</td><td></td><td></td><td></td></tr>
+                        <tr><th>3</th><td class="num sel">4257</td><td class="num">8207</td><td class="num">12490</td><td></td></tr>
+                        <tr><th>4</th><td></td><td></td><td></td><td></td></tr>
+                    </table>
+                </div>
+                <p class="same"><b>Same program, every tab.</b> The cells compute in the Sheets phone app too.
+                   A copy keeps the script version it was made from.</p>
+            </aside>
+        </div>
+    </section>
+
+    <div class="mock-notes">
+        <h2>About this mock up (B, side by side)</h2>
+        <ul>
+            <li>Click a numbered circle to tick it: its body folds away and the next step is ringed as current.</li>
+            <li>Narrow the window below about 990 px and the picture drops under the steps.</li>
+            <li>Excel's two routes are the main page's small-caps sub-tab row, with its hairline divider between them.</li>
+            <li>Excel on the web path is the one proven on 2026-10-17 (dev/excel-desktop-install.md): Add-ins ▸ More Settings.</li>
+            <li>The pictures are drawn in HTML, not screenshots, so they never go stale against a new Excel look,
+                and they scale. The numbers in them are real.</li>
+        </ul>
+    </div>
+</main>
+
+<script>
+(function () {
+    'use strict';
+    const TABS = ['jupyter', 'r', 'excel', 'sheets'];
+    const KEY = 'use-page-ticks';
+
+    function loadTicks() {
+        try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { return {}; }
+    }
+    function saveTicks(t) {
+        try { localStorage.setItem(KEY, JSON.stringify(t)); } catch (e) { /* not kept */ }
+    }
+    let ticks = loadTicks();
+
+    function parseHash() {
+        const h = location.hash.slice(1).toLowerCase();
+        const [tab, route] = h.split('-');
+        return { tab: TABS.includes(tab) ? tab : 'jupyter',
+                 route: route === 'desktop' ? 'desktop' : 'web' };
+    }
+    function show(tab, route, rewrite) {
+        document.querySelectorAll('.out-tabs button').forEach(b =>
+            b.classList.toggle('active', b.dataset.tab === tab));
+        document.querySelectorAll('.pane').forEach(p =>
+            p.classList.toggle('active', p.dataset.pane === tab));
+        document.querySelectorAll('.sub-link').forEach(b =>
+            b.classList.toggle('active', b.dataset.route === route));
+        document.querySelectorAll('.route').forEach(p =>
+            p.classList.toggle('active', p.dataset.routepane === route));
+        if (rewrite) {
+            history.replaceState(null, '',
+                tab === 'excel' && route === 'desktop' ? '#excel-desktop' : '#' + tab);
+        }
+    }
+
+    // The circle is the checkbox: a real button, so it takes focus and Space.
+    document.querySelectorAll('ol.steps > li').forEach((li, i, all) => {
+        const n = [...li.parentElement.children].indexOf(li) + 1;
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'tick';
+        b.setAttribute('aria-label', 'Mark step ' + n + ' done');
+        li.prepend(b);
+        b.onclick = () => {
+            const id = li.dataset.step;
+            if (ticks[id]) delete ticks[id]; else ticks[id] = 1;
+            saveTicks(ticks); paint();
+        };
+    });
+
+    function paint() {
+        document.querySelectorAll('ol.steps').forEach(list => {
+            const items = [...list.children];
+            let current = null;
+            items.forEach((li, i) => {
+                const on = !!ticks[li.dataset.step];
+                li.classList.toggle('ticked', on);
+                const b = li.querySelector('.tick');
+                b.textContent = on ? '✓' : String(i + 1);
+                b.setAttribute('aria-pressed', on ? 'true' : 'false');
+                if (!on && !current) current = li;
+            });
+            items.forEach(li => li.classList.toggle('current', li === current));
+            const done = items.filter(li => li.classList.contains('ticked')).length;
+            const line = list.parentElement.querySelector('.progress-line');
+            line.innerHTML = '<span class="bar-track"><span class="bar-fill" style="width:'
+                + (100 * done / items.length) + '%"></span></span>'
+                + '<span>' + (done === items.length ? 'all done' : done + ' of ' + items.length) + '</span>'
+                + (done ? '<button type="button" class="linkbtn clear">Clear ticks</button>' : '');
+            const clear = line.querySelector('.clear');
+            if (clear) clear.onclick = () => {
+                items.forEach(li => { delete ticks[li.dataset.step]; });
+                saveTicks(ticks); paint();
+            };
+        });
+    }
+
+    document.querySelectorAll('.code').forEach(block => {
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'copy'; button.textContent = 'Copy';
+        const said = document.createElement('span');
+        said.className = 'said'; said.textContent = 'copied';
+        block.append(said, button);
+        button.onclick = () => {
+            navigator.clipboard?.writeText(block.querySelector('pre').innerText).then(() => {
+                said.classList.add('on'); setTimeout(() => said.classList.remove('on'), 1200);
+            });
+        };
+    });
+
+    document.querySelectorAll('.out-tabs button').forEach(b =>
+        b.addEventListener('click', () => show(b.dataset.tab, parseHash().route, true)));
+    document.querySelectorAll('.sub-link').forEach(b =>
+        b.addEventListener('click', () => show('excel', b.dataset.route, true)));
+    window.addEventListener('hashchange', () => { const s = parseHash(); show(s.tab, s.route, false); });
+
+    const s = parseHash();
+    show(s.tab, s.route, false);
+    paint();
+}());
+</script>
+</body>
+</html>

@@ -77,7 +77,11 @@ dependencies = [
     # `canonical_json` or `IR_VERSION`, so resolving to it does not fail at
     # install, it fails at import. Without `>=6` a resolver working around some
     # other constraint could quietly pick it.
-    "greater-tables>=6.0.0",
+    #
+    # Raised to 7.0.0 at 1.31.0, the release this package was last checked
+    # against: 7.0 removed `TableSpec.math`, which nothing here or in the
+    # library uses, and a fresh install was already resolving it.
+    "greater-tables>=7.0.0",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
@@ -203,7 +207,11 @@ version = { attr = "aggregate_api.__version__" }
 # directory on every run, so a copy there would be deleted by the next deploy,
 # and a status page whose delivery depends on the pipeline it reports on cannot
 # report on that pipeline failing.
-aggregate_api = ["static/*", "static/assets/*", "status_page.html"]
+#
+# `static/use/*` is the /use page (1.31.0), a directory of its own for the same
+# no-recursion reason as `static/assets/*`: without it the wheel serves a 404 at
+# `/use/` while every asset the page loads is present.
+aggregate_api = ["static/*", "static/assets/*", "static/use/*", "status_page.html"]
 
 [tool.ruff]
 line-length = 100

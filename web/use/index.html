@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="How to use the aggregate actuarial library from Jupyter, R, Excel and Google Sheets, step by step.">
+    <meta name="theme-color" content="#ffffff">
+    <title>Using aggregate elsewhere</title>
+
+    <link rel="icon"            type="image/x-icon" href="/favicon.ico">
+    <link rel="icon"            type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon"            type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon"                                 href="/apple-touch-icon.png">
+    <link rel="manifest"                                         href="/site.webmanifest">
+</head>
+<body>
+
+<!-- The /use page. dev/prototypes/use-page/side-by-side.html is the drawing
+     this markup realizes, and dev/done/plan-use-page.md the plan. Deep links:
+     #jupyter #r #excel #excel-desktop #sheets, in any case. Every program on
+     the page is the same string, and tests/test_use_page.py builds it and
+     checks the quantiles printed here, so a library release that moves them
+     fails the suite rather than the reader. -->
+
+<header>
+    <div class="bar">
+        <a class="brand" href="../">
+            <img src="/logo.png" alt="aggregate Loss Lab">
+            <div class="brand-text">
+                <div class="brand-title">aggregate Loss Lab</div>
+                <div class="brand-kicker">description to distribution</div>
+            </div>
+        </a>
+        <div class="nav-meta">
+            <!-- Filled from /v1/meta; blank until it answers, and blank if it
+                 does not, since a wrong version is worse than none. -->
+            <span class="nav-versions" id="use-versions"></span>
+            <a class="back-btn" id="use-back" href="../" title="Back to the Loss Lab">← Back</a>
+        </div>
+    </div>
+</header>
+
+<main>
+    <div class="lede-box">
+        <p class="lede">How to use <code>aggregate</code> from other environments.</p>
+        <p class="lede-terms">Use of this site signifies agreement with the <a href="../#about">terms</a>.</p>
+    </div>
+    <p class="gloss">Jupyter runs the library itself, in Python on your machine. R, Excel and
+       Google Sheets send a DecL program to an aggregate server and read back exhibits,
+       quantiles and whole distributions. Each tab includes the same basic Gross 20-claim
+       example. Click each step's number as you complete it.</p>
+
+    <ul class="out-tabs" role="tablist">
+        <li><button type="button" role="tab" data-tab="jupyter" data-label="Jupyter">Jupyter</button></li>
+        <li><button type="button" role="tab" data-tab="r"       data-label="R">R</button></li>
+        <li><button type="button" role="tab" data-tab="excel"   data-label="Excel">Excel</button></li>
+        <li><button type="button" role="tab" data-tab="sheets"  data-label="Sheets">Sheets</button></li>
+    </ul>
+
+    <!-- ======================= Jupyter ======================= -->
+    <section class="pane" data-pane="jupyter" role="tabpanel">
+        <div class="tiles">
+            <div class="tile"><div class="k">Runs</div><div class="v">the library, on your machine</div></div>
+            <div class="tile"><div class="k">Prerequisites</div><div class="v">uv; it fetches Python 3.13</div></div>
+            <div class="tile"><div class="k">Install time</div><div class="v">about five minutes</div></div>
+        </div>
+        <div class="cols">
+            <div class="steps-col">
+                <div class="progress-line"></div>
+                <ol class="steps">
+                    <li data-step="jupyter-uv">
+                        <p class="step-title">Install uv</p>
+                        <div class="step-body">
+                            <div class="label">Windows, in PowerShell</div>
+                            <div class="code"><pre>winget install astral-sh.uv</pre></div>
+                            <div class="label">macOS or Linux</div>
+                            <div class="code"><pre>curl -LsSf https://astral.sh/uv/install.sh | sh</pre></div>
+                            <p class="hint">Then open a new terminal.</p>
+                        </div>
+                    </li>
+                    <li data-step="jupyter-init">
+                        <p class="step-title">Make a project folder</p>
+                        <div class="step-body">
+                            <div class="code"><pre>uv init --python 3.13 agg-notebooks
+cd agg-notebooks</pre></div>
+                        </div>
+                    </li>
+                    <li data-step="jupyter-add">
+                        <p class="step-title">Add <code>aggregate</code>, with JupyterLab</p>
+                        <div class="step-body">
+                            <div class="code"><pre>uv add "aggregate[notebook]"</pre></div>
+                            <p class="hint">Resolves, locks and installs in one go; no <code>uv sync</code> needed.</p>
+                        </div>
+                    </li>
+                    <li data-step="jupyter-lab">
+                        <p class="step-title">Start JupyterLab</p>
+                        <div class="step-body">
+                            <div class="code"><pre>uv run jupyter lab</pre></div>
+                            <p class="hint">File ▸ New ▸ Notebook. Next time, this line alone.</p>
+                        </div>
+                    </li>
+                    <li data-step="jupyter-build">
+                        <p class="step-title">Build a distribution</p>
+                        <div class="step-body">
+                            <div class="code"><pre>from aggregate import build, qd
+gross = build('agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4')
+qd(gross)
+gross.q([0.5, 0.9, 0.99])</pre></div>
+                            <p class="hint">Any program from the Loss Lab editor pastes into <code>build()</code> as it stands.
+                               The <a href="https://aggregate.readthedocs.io/">documentation</a> goes from here.</p>
+                        </div>
+                    </li>
+                </ol>
+            </div>
+            <aside class="result">
+                <p class="result-cap">What you end up with</p>
+                <div class="shot">
+                    <div class="shot-bar"><i></i><i></i><i></i><span>Untitled.ipynb · JupyterLab</span></div>
+                    <div class="nb">
+                        <div class="cell"><div class="prompt">[1]:</div><div class="in"><span class="kw">from</span> aggregate <span class="kw">import</span> build, qd
+gross = build(<span class="st">'agg Gross 20 claims ...'</span>)
+qd(gross)
+gross.q([0.5, 0.9, 0.99])</div></div>
+                        <div class="cell"><div class="prompt"></div><div class="o"><span class="wrap">Aggregate object: Gross. Frequency distribution gamma. Severity lognorm, [0, 2,000], bounded; 2,000 xs 0. Updated with bucket size 1 and log2 = 16. Validation: not unreasonable.</span>       Mean     SD      CV    Skew P01 Median   P99
+X
+Freq     20 9.1652 0.45826 0.80741
+Sev  233.63 339.34  1.4525  3.0966   6    112  2000
+Agg  4672.5 2624.5 0.56168 0.94739 532   4257 12490</div></div>
+                        <div class="cell"><div class="prompt out">[1]:</div><div class="o">array([ 4257.,  8207., 12490.])</div></div>
+                    </div>
+                </div>
+                <p class="same"><b>Same program, every tab.</b> The 99% quantile is 12,490 in a notebook,
+                   in R, in Excel and in Sheets.</p>
+            </aside>
+        </div>
+    </section>
+
+    <!-- ======================= R ======================= -->
+    <section class="pane" data-pane="r" role="tabpanel">
+        <div class="tiles">
+            <div class="tile"><div class="k">Runs</div><div class="v">aggregateR, over a server</div></div>
+            <div class="tile"><div class="k">Prerequisites</div><div class="v">R 4.1 or later; no Rtools</div></div>
+            <div class="tile"><div class="k">Install time</div><div class="v">about five minutes</div></div>
+        </div>
+        <div class="cols">
+            <div class="steps-col">
+                <div class="progress-line"></div>
+                <ol class="steps">
+                    <li data-step="r-pkgs">
+                        <p class="step-title">Install the four packages it uses</p>
+                        <div class="step-body">
+                            <div class="code"><pre>install.packages(c("httr2", "jsonlite", "nanoparquet", "processx"))</pre></div>
+                        </div>
+                    </li>
+                    <li data-step="r-install">
+                        <p class="step-title">Install aggregateR from GitHub</p>
+                        <div class="step-body">
+                            <div class="code"><pre>install.packages("https://github.com/mynl/aggregate-R/archive/refs/heads/master.tar.gz",
+                 repos = NULL, type = "source")</pre></div>
+                            <p class="hint">Pure R, so no Rtools on Windows.</p>
+                        </div>
+                    </li>
+                    <li data-step="r-server">
+                        <p class="step-title">Choose a server</p>
+                        <div class="step-body">
+                            <p>To try it, nothing to do: it talks to <code>https://agg.mynl.com</code>.
+                               For real work, a private server on your machine (needs uv; the first start
+                               takes a couple of minutes):</p>
+                            <div class="code"><pre>library(aggregateR)
+agg_start()</pre></div>
+                        </div>
+                    </li>
+                    <li data-step="r-build">
+                        <p class="step-title">Build, and read quantiles</p>
+                        <div class="step-body">
+                            <div class="code"><pre>library(aggregateR)
+gross &lt;- agg_build("agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4")
+agg_q(gross, c(0.5, 0.9, 0.99))</pre></div>
+                        </div>
+                    </li>
+                    <li data-step="r-frame">
+                        <p class="step-title">The whole distribution, as a data.frame</p>
+                        <div class="step-body">
+                            <div class="code"><pre>dg &lt;- agg_frame(gross)
+plot(dg$loss, dg$p_total, type = "l", xlim = c(0, 15000))</pre></div>
+                            <p class="hint">More: <code>agg_exhibit(gross, "summary")</code>, <code>agg_library()</code>, and the
+                               <a href="https://github.com/mynl/aggregate-R#a-first-session">first session</a> in the README.</p>
+                        </div>
+                    </li>
+                </ol>
+                <p class="note data"><b>Your programs are your data.</b> The public server keeps an audit record of
+                   every build. Made-up numbers there; <code>agg_start()</code> for anything real.</p>
+            </div>
+            <aside class="result">
+                <p class="result-cap">What you end up with</p>
+                <div class="shot">
+                    <div class="shot-bar"><i></i><i></i><i></i><span>Console · R</span></div>
+                    <div class="console"><span class="pr">&gt;</span> gross &lt;- agg_build("agg Gross 20 claims ...")
+<span class="pr">&gt;</span> gross
+&lt;agg_handle&gt; agg.Gross #4107713eaacc3d6d
+  server      https://agg.mynl.com
+  grid        log2 16, bs 1
+  mean, cv    4672.52, 0.562
+  validation  not unreasonable
+<span class="pr">&gt;</span> agg_q(gross, c(0.5, 0.9, 0.99))
+  50%   90%   99%
+ 4257  8207 12490
+<span class="pr">&gt;</span> nrow(agg_frame(gross))
+[1] 65536</div>
+                </div>
+                <p class="same"><b>Same program, every tab.</b> The 99% quantile is 12,490 in a notebook,
+                   in R, in Excel and in Sheets.</p>
+            </aside>
+        </div>
+    </section>
+
+    <!-- ======================= Excel ======================= -->
+    <section class="pane has-sub" data-pane="excel" role="tabpanel">
+        <div class="sub-tabs">
+            <button type="button" class="sub-link" data-route="web" data-label="Excel on the web">Excel on the web</button>
+            <span class="sub-divider" aria-hidden="true"></span>
+            <button type="button" class="sub-link" data-route="desktop" data-label="Desktop Excel, Windows">Desktop Excel, Windows</button>
+        </div>
+        <div class="tiles">
+            <div class="tile"><div class="k">Runs</div><div class="v">the AGG functions, over agg.mynl.com</div></div>
+            <div class="tile"><div class="k">Prerequisites</div><div class="v">Excel on the web, or Microsoft 365 on Windows</div></div>
+            <div class="tile"><div class="k">Install time</div><div class="v">two minutes on the web, five on the desktop</div></div>
+        </div>
+        <div class="cols">
+            <div class="steps-col">
+                <div class="route" data-routepane="web">
+                    <div class="progress-line"></div>
+                    <ol class="steps">
+                        <li data-step="xw-manifest">
+                            <p class="step-title">Download the manifest</p>
+                            <div class="step-body">
+                                <p><a class="btn" href="https://agg.mynl.com/excel/manifest.xml" download>Download manifest.xml</a></p>
+                            </div>
+                        </li>
+                        <li data-step="xw-upload">
+                            <p class="step-title">Upload it</p>
+                            <div class="step-body">
+                                <p>Any workbook at <a href="https://www.office.com">office.com</a>, then
+                                   <span class="kbd-path">Home ▸ Add-ins ▸ More Settings ▸ Upload My Add-in</span>,
+                                   choose the file, Upload.</p>
+                                <p class="hint">It lives in this browser's storage; clear the site data and upload again.</p>
+                            </div>
+                        </li>
+                        <li data-step="xw-build">
+                            <p class="step-title">Build in A2, quantiles in A3</p>
+                            <div class="step-body">
+                                <div class="cells">
+                                    <span class="ref">A1</span><div class="code"><pre>agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4</pre></div>
+                                    <span class="ref">A2</span><div class="code"><pre>=AGG.BUILD(A1)</pre></div>
+                                    <span class="ref">A3</span><div class="code"><pre>=AGG.Q(A2, {0.5, 0.9, 0.99})</pre></div>
+                                </div>
+                                <p class="hint"><code>=AGG.VERSION()</code> anywhere says which server you are on.</p>
+                            </div>
+                        </li>
+                    </ol>
+                </div>
+                <div class="route" data-routepane="desktop">
+                    <div class="progress-line"></div>
+                    <ol class="steps">
+                        <li data-step="xd-folder">
+                            <p class="step-title">Save the manifest in a folder</p>
+                            <div class="step-body">
+                                <div class="label">In PowerShell</div>
+                                <div class="code"><pre>New-Item -ItemType Directory -Force C:\OfficeAddins
+Invoke-WebRequest https://agg.mynl.com/excel/manifest.xml -OutFile C:\OfficeAddins\aggregate-manifest.xml</pre></div>
+                            </div>
+                        </li>
+                        <li data-step="xd-share">
+                            <p class="step-title">Share the folder, with yourself</p>
+                            <div class="step-body">
+                                <p>Right-click it, <span class="kbd-path">Properties ▸ Sharing ▸ Share</span>, add yourself,
+                                   Share. Note the path, such as <code>\\YOUR-PC\OfficeAddins</code>.</p>
+                            </div>
+                        </li>
+                        <li data-step="xd-trust">
+                            <p class="step-title">Trust it in Excel</p>
+                            <div class="step-body">
+                                <p><span class="kbd-path">File ▸ Options ▸ Trust Center ▸ Trust Center Settings ▸ Trusted Add-in Catalogs</span>:
+                                   paste the path, Add catalog, tick Show in Menu, OK, OK.</p>
+                            </div>
+                        </li>
+                        <li data-step="xd-add">
+                            <p class="step-title">Restart Excel, then add it</p>
+                            <div class="step-body">
+                                <p>Close every Excel window, reopen, then
+                                   <span class="kbd-path">Home ▸ Add-ins ▸ More Add-ins ▸ SHARED FOLDER ▸ Aggregate ▸ Add</span>.</p>
+                            </div>
+                        </li>
+                        <li data-step="xd-build">
+                            <p class="step-title">Build in A2, quantiles in A3</p>
+                            <div class="step-body">
+                                <div class="cells">
+                                    <span class="ref">A1</span><div class="code"><pre>agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4</pre></div>
+                                    <span class="ref">A2</span><div class="code"><pre>=AGG.BUILD(A1)</pre></div>
+                                    <span class="ref">A3</span><div class="code"><pre>=AGG.Q(A2, {0.5, 0.9, 0.99})</pre></div>
+                                </div>
+                            </div>
+                        </li>
+                    </ol>
+                    <p class="note">Trust Center locked by IT? Use Excel on the web, or ask a Microsoft 365 admin to
+                       deploy it (admin center ▸ Settings ▸ Integrated apps). On a Mac, use the web.</p>
+                </div>
+                <p class="note data"><b>Your programs are your data.</b> The add-in builds on the public server,
+                   which keeps an audit record of every program. Use made-up numbers.</p>
+            </div>
+            <aside class="result">
+                <p class="result-cap">What you end up with</p>
+                <div class="shot">
+                    <div class="shot-bar"><i></i><i></i><i></i><span>Book1 · Excel</span></div>
+                    <div class="grid-fx"><div class="nm">A3</div><div class="fx"><b>fx</b>=AGG.Q(A2, {0.5, 0.9, 0.99})</div></div>
+                    <table class="sheet">
+                        <tr><th></th><th>A</th><th>B</th><th>C</th><th>D</th></tr>
+                        <tr><th>1</th><td colspan="4" class="hd">agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4</td></tr>
+                        <tr><th>2</th><td>agg.Gross#4107…</td><td></td><td></td><td></td></tr>
+                        <tr><th>3</th><td class="num sel">4,257</td><td class="num">8,207</td><td class="num">12,490</td><td></td></tr>
+                        <tr><th>4</th><td></td><td></td><td></td><td></td></tr>
+                    </table>
+                </div>
+                <p class="same"><b>Same program, every tab.</b> Edit A1 and A2 and A3 follow.
+                   <code>=AGG.EXHIBIT(A2, "summary")</code> spills a whole exhibit.</p>
+            </aside>
+        </div>
+    </section>
+
+    <!-- ======================= Sheets ======================= -->
+    <section class="pane" data-pane="sheets" role="tabpanel">
+        <div class="tiles">
+            <div class="tile"><div class="k">Runs</div><div class="v">the AGG functions, over agg.mynl.com</div></div>
+            <div class="tile"><div class="k">Prerequisites</div><div class="v">a Google account; nothing to install</div></div>
+            <div class="tile"><div class="k">Install time</div><div class="v">about a minute</div></div>
+        </div>
+        <div class="cols">
+            <div class="steps-col">
+                <div class="progress-line"></div>
+                <ol class="steps">
+                    <li data-step="s-copy">
+                        <p class="step-title">Make your own copy of the template</p>
+                        <div class="step-body">
+                            <!-- use.js shows the button once SHEETS_TEMPLATE_URL is set,
+                                 and the pending line until then. -->
+                            <p><a class="btn" id="sheets-copy" href="#sheets" hidden>Make a copy of the AGG template</a></p>
+                            <p class="hint" id="sheets-copy-pending" hidden>The template's copy link is being published and
+                               appears here when it is.</p>
+                            <p class="hint">It lands in your Drive with a Start here tab and a worked Example tab.</p>
+                        </div>
+                    </li>
+                    <li data-step="s-build">
+                        <p class="step-title">Build in A2, quantiles in A3</p>
+                        <div class="step-body">
+                            <div class="cells">
+                                <span class="ref">A1</span><div class="code"><pre>agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4</pre></div>
+                                <span class="ref">A2</span><div class="code"><pre>=AGG_BUILD(A1)</pre></div>
+                                <span class="ref">A3</span><div class="code"><pre>=AGG_Q(A2, {0.5, 0.9, 0.99})</pre></div>
+                            </div>
+                            <p class="hint"><code>AGG_</code> where Excel has <code>AGG.</code>: a Sheets name cannot hold a dot.</p>
+                        </div>
+                    </li>
+                    <li data-step="s-menu">
+                        <p class="step-title">Authorize the AGG menu, once</p>
+                        <div class="step-body">
+                            <p>First use of <span class="kbd-path">AGG ▸ Recalculate AGG cells</span>: Google says it hasn't
+                               verified the app. Advanced, then the Go to link, then Allow. The cells never ask.</p>
+                        </div>
+                    </li>
+                    <li data-step="s-frame">
+                        <p class="step-title">A whole frame, as a live table</p>
+                        <div class="step-body">
+                            <div class="code"><pre>=IMPORTDATA(AGG_FRAMEURL(A2, "density_df") &amp; "?cols=loss,p_total,S")</pre></div>
+                        </div>
+                    </li>
+                </ol>
+                <p class="note data"><b>Your programs are your data.</b> Sheets always builds on the public server,
+                   which keeps an audit record of every program. Use made-up numbers.</p>
+            </div>
+            <aside class="result">
+                <p class="result-cap">What you end up with</p>
+                <div class="shot">
+                    <div class="shot-bar"><i></i><i></i><i></i><span>Copy of AGG template · Google Sheets</span></div>
+                    <div class="grid-fx"><div class="nm">A3</div><div class="fx"><b>fx</b>=AGG_Q(A2, {0.5, 0.9, 0.99})</div></div>
+                    <table class="sheet g">
+                        <tr><th></th><th>A</th><th>B</th><th>C</th><th>D</th></tr>
+                        <tr><th>1</th><td colspan="4" class="hd">agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4</td></tr>
+                        <tr><th>2</th><td>agg.Gross#4107…</td><td></td><td></td><td></td></tr>
+                        <tr><th>3</th><td class="num sel">4257</td><td class="num">8207</td><td class="num">12490</td><td></td></tr>
+                        <tr><th>4</th><td></td><td></td><td></td><td></td></tr>
+                    </table>
+                </div>
+                <p class="same"><b>Same program, every tab.</b> The cells compute in the Sheets phone app too.
+                   A copy keeps the script version it was made from.</p>
+            </aside>
+        </div>
+    </section>
+</main>
+
+<script type="module" src="/src/use.js"></script>
+</body>
+</html>

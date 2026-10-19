@@ -25,13 +25,15 @@ The add-in is served with the API, from `https://agg.mynl.com/excel/`, and
 calls the API on that same origin. Its manifest is
 `https://agg.mynl.com/excel/manifest.xml`.
 
-- **Excel on the web:** Home, Add-ins, More add-ins, then Upload My Add-in,
+- **Excel on the web:** Home, Add-ins, More Settings, then Upload My Add-in,
   and give it the manifest (download it first: the dialog takes a file).
-- **Desktop Excel:** the same Upload My Add-in in current Microsoft 365 builds
-  (Home, Add-ins, More add-ins). In older builds, put the manifest in a shared
-  folder, add that folder under File, Options, Trust Center, Trust Center
-  Settings, Trusted Add-in Catalogs, restart Excel, and pick it from Shared
-  Folder in the add-ins dialog.
+- **Desktop Excel on Windows:** desktop Excel has no Upload My Add-in. Put the
+  manifest in a folder, share it, add the share under File, Options, Trust
+  Center, Trust Center Settings, Trusted Add-in Catalogs, restart Excel, and
+  pick it from the SHARED FOLDER tab of Home, Add-ins, More Add-ins.
+
+The running server's `/use#excel` page walks through both, step by step, and
+`dev/excel-desktop-install.md` records the desktop route as it was proven.
 
 The add-in's version is the server's: the build stamps `__version__` into the
 manifest, and every file is served `no-cache`, so a deploy is picked up when a

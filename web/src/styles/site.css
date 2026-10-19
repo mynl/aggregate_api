@@ -237,6 +237,13 @@ header .navbar { min-height: 56px; }
 .nav-meta     { display: flex; align-items: center; gap: .45rem; font-size: .74rem; color: var(--mut); }
 .nav-meta a   { color: var(--mut); text-decoration: none; }
 .nav-meta a:hover { color: var(--primary); }
+/* The Menu sits inside .nav-meta, so the two rules above muted every item that
+   is a link (Using in Jupyter, R, Excel, Sheets, and the Apps entries), and a
+   muted item reads as disabled beside the button items. Give links back the
+   menu's own colors. */
+.nav-meta .dropdown-item { color: var(--bs-dropdown-link-color); }
+.nav-meta .dropdown-item:hover,
+.nav-meta .dropdown-item:focus { color: var(--bs-dropdown-link-hover-color); }
 .nav-meta .dot  { color: var(--mut); font-family: var(--mono); }
 .nav-meta .mono { font-family: var(--mono); }
 /* The two versions, left of the hamburger. Small and quiet: they are reference
