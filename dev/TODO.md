@@ -569,6 +569,38 @@ and the standing REMINDER below about what is worth plotting.
 
 ## Near term (get it healthy)
 
+- [ ] **[Excel-Info] `AGG.INFO(handle)`, first class.** The object's `info`
+      text (`GET /v1/objects/{id}/info`, what `Aggregate.info` prints and the
+      Lab's Narrative leaf shows) has no function; it is the first thing a
+      reader wants of a handle and it belongs beside `AGG.EXHIBITS`. Returns
+      the text as one cell, newlines kept, like `AGG.PROGRAM`; a program in
+      place of the handle builds first, as everywhere. Author's ask,
+      2026-10-17, after the 1.26.0 tire kicking in Excel on the web. Ideas
+      raised the same evening, unruled: an **Insert** button beside each Copy
+      in the pane's Whole frames section, writing the text into the selected
+      cell; a library picker in the pane writing `=AGG.LIBRARY("…")`; a Store
+      listing (`[Excel-Store]`, below).
+
+- [ ] **[Excel-Store] list the add-in on the Microsoft Marketplace**, the
+      one-click install for everyone (STORE tab in desktop and web Excel plus
+      Microsoft's installation link). Author's ask, 2026-10-18, after the
+      desktop install proved to need a shared folder and a Trust Center edit
+      (`dev/excel-desktop-install.md` has the recipe). **Plan:
+      `dev/plan-excel-store.md`**, rulings D1 to D6 made 2026-10-18 (Convex
+      Risk publishes, "Aggregate Loss Distributions", help@convexrisk.com,
+      own terms page, 90-day audit pruning, a friend's Mac with
+      `dev/store/mac-test-guide.md`). Partner Center enrollment needs a work account (the
+      convexrisk tenant) and has the longest lead time, so it starts now. The
+      Caddy limits are live (verified 2026-10-18); owed on the VPS are a
+      systemd unit and `AGGAPI_CACHE_MAX=100` (`/v1/meta` still reports 50).
+      Interim for colleagues in a tenant: an admin's Integrated apps upload,
+      no client setup at all. **2026-10-18: enrollment stuck** (Partner
+      Center will not validate the author's email), so the listing may not
+      happen. [server-ready], [store-pages], [audit-retention] and
+      [tenant-deploy] go ahead regardless; [store-pages] now puts help,
+      privacy and terms at the site root, for the whole service including
+      `[Sheets-Template]`.
+
 - [x] **[Build-Single-Flight] identical builds arriving together build
       once.** A request waiting on the build slot never re-checks the cache,
       and the store happens after the slot is released, so twenty
@@ -1655,6 +1687,14 @@ one version bump each.
       for, and it would reach this endpoint as a field.
 
 ## Raised with `csv-grid` (not fixed here)
+
+- [ ] **The status line is written before `maxRows` is applied.** 3.10.1's
+      `_install` runs `refresh()` (body and status) and then `_applyHeight()`,
+      which re-renders the body windowed but not the status, so a grid that
+      windows keeps "showing rows 1–2,048" in its status bar. `loadAllRows`
+      calls `renderStatus()` once the load promise settles. Ask:
+      `_applyHeight` refreshes the status after it re-renders. Raised
+      2026-10-17, 1.22.0.
 
 - [ ] **No way to default the export to raw values.** CsvGrid 3.9.0 builds the
       "Formatted values" checkbox with `checked = true` hard coded

@@ -184,8 +184,11 @@ packages = ["aggregate_api", "aggregate_api.routes"]
 version = { attr = "aggregate_api.__version__" }
 
 [tool.setuptools.package-data]
-# The built SPA bundle (index.html + assets/) is dropped here by the web
-# build and is gitignored; the committed icons/webmanifest ship too.
+# The built SPA bundle (index.html, assets/, and the icons, webmanifest and
+# service worker Vite copies from web/public/) is dropped here by the web build
+# and is gitignored whole. These globs read the filesystem, not git, so a wheel
+# carries whatever the last build wrote; release-check.ps1 refuses to run
+# without one.
 #
 # **`static/assets/*` is a separate entry and must stay one.** A package_data
 # glob matches files in one directory and does not recurse, so `static/*` alone

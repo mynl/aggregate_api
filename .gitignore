@@ -60,10 +60,11 @@ sheets/dist/
 sheets/.clasp.json
 
 # The built SPA lands in src/aggregate_api/static/ (output of
-# `npm run build`); not committed. Only the icons + webmanifest are.
-src/aggregate_api/static/assets/
-src/aggregate_api/static/index.html
-src/aggregate_api/static/lite.html
+# `npm run build`), and none of it is committed. That includes the icons,
+# site.webmanifest and sw.js, which Vite copies verbatim from web/public/, the
+# source; through 1.27.0 those copies were tracked too, and every rebuild after
+# a web/public edit left the tree dirty.
+src/aggregate_api/static/
 
 # Captured api payloads for the offline chart smoke test (output of
 # `uv run python dev/capture_fixtures.py`). Derived data, and ~17 MB of it.
