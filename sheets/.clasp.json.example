@@ -1,0 +1,5 @@
+{
+  "scriptId": "<the template's script id: Extensions, Apps Script, Project Settings, IDs>",
+  "rootDir": "dist",
+  "filePushOrder": ["dist/core.js"]
+}

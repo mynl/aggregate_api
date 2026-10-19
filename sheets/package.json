@@ -1,0 +1,20 @@
+{
+  "name": "aggregate-sheets",
+  "private": true,
+  "description": "The AGG functions for Google Sheets, a script bound to a template spreadsheet. Its version is the server's: see README.md.",
+  "license": "BSD-3-Clause",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "pretest": "node build.mjs",
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "push": "node build.mjs && clasp push"
+  },
+  "devDependencies": {
+    "@google/clasp": "^3.4.1",
+    "@types/google-apps-script": "^2.0.13",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3"
+  }
+}

@@ -37,6 +37,11 @@ same-origin.
   cells. `=AGG.BUILD(decl)` returns a handle; `=AGG.EXHIBIT(handle, "summary")`
   and `=AGG.Q(handle, p)` spill values from it. See
   [excel/README.md](excel/README.md).
+- **Google Sheets** (`sheets/`): the same functions as a script bound to a
+  template spreadsheet, named `AGG_BUILD`, `AGG_EXHIBIT`, `AGG_Q` and so on,
+  since a Sheets function name cannot hold a dot. A user makes a copy of the
+  template and has them, with nothing to install. See
+  [sheets/README.md](sheets/README.md).
 
 ### Tables: one payload, two renderers
 

@@ -11,8 +11,9 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
-  MESSAGES,
+  EXCEL,
   RECIPE_LIMIT,
+  SHEETS,
   Semaphore,
   REFUSAL,
   errorMessage,
@@ -21,6 +22,7 @@ import {
   frameDownloadUrl,
   frameFormat,
   frameRows,
+  hostMessages,
   isMissingObject,
   isProgramRefusal,
   isRefusal,
@@ -48,6 +50,39 @@ function fixture(name: string): any {
 }
 
 const rectangular = (rows: unknown[][]) => new Set(rows.map((r) => r.length)).size === 1;
+
+const MESSAGES = hostMessages(EXCEL);
+
+// ----------------------------------------------------------------------
+// Hosts
+// ----------------------------------------------------------------------
+
+test("Excel's messages are byte-identical to the constant the hosts replaced", () => {
+  assert.deepEqual(MESSAGES, {
+    unreachable: "server unreachable",
+    notAHandle: "expected a handle such as agg.A#4f40714271198d8f, or a DecL program",
+    programIsValue:
+      "this program is a number, not an object; pass a handle from AGG.BUILD or a program that declares an agg, port, sev or distortion",
+    unknownHandle: "handle unknown to this workbook; recalculate its AGG.BUILD cell",
+    upgraded:
+      "the server changed since this workbook was saved; press Ctrl+Alt+F9 to recalculate every cell",
+    timeout: "build timed out; lower log2 or simplify the program",
+    rateLimited: "rate limited, recalculate in a minute",
+    emptyProgram: "the program is empty",
+  });
+  assert.equal(noLibraryEntry(" Nope ", EXCEL), "no library entry named Nope; AGG.LIBRARY() lists them");
+});
+
+test("Sheets' messages name its functions and its menu", () => {
+  const sheets = hostMessages(SHEETS);
+  assert.equal(sheets.programIsValue,
+               "this program is a number, not an object; pass a handle from AGG_BUILD or a program that declares an agg, port, sev or distortion");
+  assert.equal(sheets.unknownHandle, "handle unknown to this spreadsheet; recalculate its AGG_BUILD cell");
+  assert.equal(sheets.upgraded,
+               "the server changed since this spreadsheet was saved; use AGG, Recalculate AGG cells, in the menu");
+  assert.equal(sheets.timeout, MESSAGES.timeout);
+  assert.equal(noLibraryEntry("Nope", SHEETS), "no library entry named Nope; AGG_LIBRARY() lists them");
+});
 
 // ----------------------------------------------------------------------
 // Handles and programs
@@ -238,10 +273,6 @@ test("the library spills name and kind in file order under a header", () => {
   assert.deepEqual(rows.slice(1).map((r) => r[0]), items.map((i: { name: string }) => i.name));
   assert.ok(rows.every((r) => r.length === 2));
   assert.deepEqual(libraryRows([]), [["name", "kind"]]);
-});
-
-test("a missing entry's refusal names it and points at the listing", () => {
-  assert.equal(noLibraryEntry(" Nope "), "no library entry named Nope; AGG.LIBRARY() lists them");
 });
 
 test("the power query carries the base and the frame and reads Decl", () => {

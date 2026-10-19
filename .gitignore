@@ -53,6 +53,12 @@ excel/node_modules/
 excel/dist/
 src/aggregate_api/excel_static/
 
+# The Google Sheets script: dist/ is what `npm run push` uploads, and
+# .clasp.json holds the template's script id (see sheets/README.md).
+sheets/node_modules/
+sheets/dist/
+sheets/.clasp.json
+
 # The built SPA lands in src/aggregate_api/static/ (output of
 # `npm run build`); not committed. Only the icons + webmanifest are.
 src/aggregate_api/static/assets/

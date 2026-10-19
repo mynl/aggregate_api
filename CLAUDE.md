@@ -158,6 +158,24 @@ Its checks run in `excel/`: `npm test` (node --test over `test/*.test.ts`),
 `npm run typecheck`, `npm run lint`. Development against a local server is
 `npm start` there; see `excel/README.md`.
 
+**Build the Google Sheets script** (writes `sheets/dist/`: the shared
+`excel/src/functions/core.ts` as the `AggCore` global, and `sheets/src/*.ts`
+with types stripped; the client version stamped in is `__version__`):
+```
+cd sheets; npm install; npm run build
+```
+Its checks run in `sheets/`: `npm test` (builds, then node --test over
+`test/*.test.ts`, which load `dist/` in a vm with stub Apps Script services) and
+`npm run typecheck`. A change to `core.ts` runs both `excel/` and `sheets/`
+checks. `npm run push` (clasp) publishes to the template and is the author's,
+like `git push`; see `sheets/README.md`.
+
+**Copies of the Sheets template never update**, so the routes a copy calls are
+a contract: `GET /v1/meta`, `POST /v1/objects`, and under
+`/v1/objects/{id}/` the `exhibits`, `exhibit/{name}`, `quantiles`, `frames`,
+`frame/{which}/shape` and `frame/{which}.csv` routes, plus `GET /v1/examples`.
+A change of shape on any of them needs a new route, not an edit.
+
 ## Architecture
 
 ### Backend: `src/aggregate_api/`

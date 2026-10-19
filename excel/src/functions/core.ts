@@ -1,10 +1,14 @@
 /**
- * The add-in's pure logic: no Office.js, no network.
+ * The AGG functions' pure logic: no Office.js, no Apps Script, no network.
  *
- * Everything the custom functions decide without asking Excel or the server
+ * Everything the custom functions decide without asking the host or the server
  * lives here, so `node --test` can cover it directly (`test/core.test.ts`).
  * Node runs this file by stripping its types, so it uses only erasable
  * TypeScript: no enums, namespaces or parameter properties, and no imports.
+ *
+ * Two hosts share it: the Excel add-in imports it, and the Google Sheets
+ * template (`sheets/`) bundles it as the `AggCore` global. What differs between
+ * them in a message (a function's name, how to recalculate) comes from a `Host`.
  */
 
 /** One cell value as Excel hands it to a function. */
@@ -40,18 +44,53 @@ export const MAX_IN_FLIGHT = 2;
 /** How many times a 429 is retried before the cell gives up. */
 export const RATE_LIMIT_RETRIES = 3;
 
-export const MESSAGES = {
+/** What a message needs to know about the spreadsheet program it is shown in. */
+export interface Host {
+  /** A function's name as a cell spells it, from its bare name: `BUILD` to `AGG.BUILD`. */
+  fn(name: string): string;
+  /** How to recalculate every AGG cell, as an instruction. */
+  recalculate: string;
+  /** What the host calls the document. */
+  document: string;
+}
+
+export const EXCEL: Host = {
+  fn: (name) => `AGG.${name}`,
+  recalculate: "press Ctrl+Alt+F9 to recalculate every cell",
+  document: "workbook",
+};
+
+/** Sheets functions cannot hold a dot, and Sheets has no full recalculation key. */
+export const SHEETS: Host = {
+  fn: (name) => `AGG_${name}`,
+  recalculate: "use AGG, Recalculate AGG cells, in the menu",
+  document: "spreadsheet",
+};
+
+/** The messages every host words the same way. */
+const COMMON = {
   unreachable: "server unreachable",
   notAHandle: "expected a handle such as agg.A#4f40714271198d8f, or a DecL program",
-  programIsValue:
-    "this program is a number, not an object; pass a handle from AGG.BUILD or a program that declares an agg, port, sev or distortion",
-  unknownHandle: "handle unknown to this workbook; recalculate its AGG.BUILD cell",
-  upgraded:
-    "the server changed since this workbook was saved; press Ctrl+Alt+F9 to recalculate every cell",
   timeout: "build timed out; lower log2 or simplify the program",
   rateLimited: "rate limited, recalculate in a minute",
   emptyProgram: "the program is empty",
 };
+
+/**
+ * The messages a cell can show, worded for `host`.
+ *
+ * Three name a function or the way to recalculate, so they differ between
+ * hosts; the rest are `COMMON`. Excel's are byte-identical to the constant
+ * this replaced, and `test/core.test.ts` asserts it.
+ */
+export function hostMessages(host: Host) {
+  return {
+    ...COMMON,
+    programIsValue: `this program is a number, not an object; pass a handle from ${host.fn("BUILD")} or a program that declares an agg, port, sev or distortion`,
+    unknownHandle: `handle unknown to this ${host.document}; recalculate its ${host.fn("BUILD")} cell`,
+    upgraded: `the server changed since this ${host.document} was saved; ${host.recalculate}`,
+  };
+}
 
 /**
  * The prefix of the text a cell holds when its program or an argument was refused.
@@ -222,8 +261,8 @@ export function isMissingObject(body: unknown): boolean {
  * list of `{loc, msg}`) show the first.
  */
 export function errorMessage(status: number, body: unknown): string {
-  if (status === 504) return MESSAGES.timeout;
-  if (status === 429) return MESSAGES.rateLimited;
+  if (status === 504) return COMMON.timeout;
+  if (status === 429) return COMMON.rateLimited;
   const detail = detailOf(body);
   if (Array.isArray(detail) && detail.length) {
     const first = detail[0] as { loc?: unknown[]; msg?: string };
@@ -543,9 +582,9 @@ export function libraryRows(items: LibraryItem[]): Grid {
   return [["name", "kind"], ...items.map((item) => [item.name, item.kind])];
 }
 
-/** The refusal for a library name no entry carries. */
-export function noLibraryEntry(name: unknown): string {
-  return `no library entry named ${String(name ?? "").trim()}; AGG.LIBRARY() lists them`;
+/** The refusal for a library name no entry carries, pointing at `host`'s listing function. */
+export function noLibraryEntry(name: unknown, host: Host): string {
+  return `no library entry named ${String(name ?? "").trim()}; ${host.fn("LIBRARY")}() lists them`;
 }
 
 /**

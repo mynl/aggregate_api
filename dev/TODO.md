@@ -596,6 +596,16 @@ and the standing REMINDER below about what is worth plotting.
       (`dev/done/plan-front-end-apps.md`); `/<name>` needed an explicit
       redirect, since the SPA's `/` mount shadows Starlette's own.
 
+- [ ] **[Sheets-Template] the AGG functions in Google Sheets**, as a script
+      bound to a template spreadsheet shared by a `/copy` link (`AGG_BUILD`
+      and the rest, one shared `core.ts`, a Recalculate menu item, whole
+      frames through `IMPORTDATA`). Author's ask, 2026-10-18; rulings D1 to
+      D6 the same day. **Plan: `dev/plan-sheets-template.md`.** The spike
+      passed; **the code landed as 1.29.0** (`sheets/`). Still to run: the
+      author creates the template and pushes (step 5, `sheets/README.md`),
+      the copy link goes into `README.md`, and the template acceptance. A
+      Marketplace editor add-on follows only if it gets traction.
+
 - [x] **[Lite-Shell] [Lite-Reading] the phone lite entry**
       (`dev/done/plan-phone-lite.md`, spec `dev/prototypes/phone.html`),
       **a168 to a169**, for the 2026-10-16 live demonstration. One URL: a

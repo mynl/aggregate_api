@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.29.0
+
+[Sheets-Template] **The AGG functions in Google Sheets, as a template script.** Plan `dev/plan-sheets-template.md`, steps 2 to 6; the template itself is the author's next step.
+
+- Added: `sheets/`, an Apps Script project bound to a template spreadsheet. `AGG_VERSION`, `AGG_BUILD`, `AGG_EXHIBITS`, `AGG_EXHIBIT`, `AGG_Q`, `AGG_FRAMES`, `AGG_FRAMEURL`, `AGG_LIBRARY` and `AGG_PROGRAM` behave as the Excel functions do, with autocomplete. Refusals read as `#AGG!` text; passing failures show `#ERROR!`.
+- Each copy keeps a build memo and the library in the document cache, a recipe per object in document properties (so a handle survives a server restart), and sends `X-Aggregate-Session: sheets:<digest of the spreadsheet id>`.
+- An **AGG** menu with **Recalculate AGG cells** stands in for Ctrl+Alt+F9: it empties the memo and reruns every AGG cell, `=IMPORTDATA(AGG_FRAMEURL(...))` included. `aggSetUpTemplate` writes the Start here and Example tabs.
+- `excel/src/functions/core.ts` serves both hosts: the three messages that name a function or how to recalculate are worded per host. Excel's strings are unchanged and asserted.
+- Copies never update, so the routes a copy calls are now a compatibility contract, listed in `sheets/README.md` and `CLAUDE.md`.
+
 ## 1.28.0
 
 [Quantiles-LEV] **The quantiles route reports the limited expected loss at each quantile.** Plan `dev/done/plan-quantiles-lev.md`, asked for by aSP's `[Loss-Input-Pricing]`.

@@ -17,8 +17,8 @@
 
 import type { CellValue, Handle, LibraryItem, RecipeTable } from "./core";
 import {
+  EXCEL,
   MAX_IN_FLIGHT,
-  MESSAGES,
   RATE_LIMIT_RETRIES,
   Semaphore,
   errorMessage,
@@ -27,6 +27,7 @@ import {
   frameDownloadUrl,
   frameFormat,
   frameRows,
+  hostMessages,
   isMissingObject,
   isProgramRefusal,
   isRefusal,
@@ -47,6 +48,9 @@ import {
   reshape,
   retryAfterSeconds,
 } from "./core";
+
+/** The messages, worded for Excel: `AGG.BUILD`, Ctrl+Alt+F9, workbook. */
+const MESSAGES = hostMessages(EXCEL);
 
 /** The API base, fixed at build time: empty for the same origin. */
 declare const __API_BASE__: string;
@@ -537,7 +541,7 @@ export async function library(name?: string, database?: string): Promise<any[][]
     const items = await libraryItems(database);
     if (String(name ?? "").trim() === "") return libraryRows(items);
     const entry = libraryEntry(items, name);
-    if (!entry) return refuse(noLibraryEntry(name));
+    if (!entry) return refuse(noLibraryEntry(name, EXCEL));
     // The program's text, not the `kind.Name` reference: the memo, the recipe
     // table and the in-flight sharing all apply, and an entry from another
     // database builds too when it is self-contained.
@@ -555,7 +559,7 @@ export async function library(name?: string, database?: string): Promise<any[][]
 export async function program(name: string, database?: string): Promise<any> {
   const rows = await rowsOrRefusal(async () => {
     const entry = libraryEntry(await libraryItems(database), name);
-    if (!entry) return refuse(noLibraryEntry(name));
+    if (!entry) return refuse(noLibraryEntry(name, EXCEL));
     return [[entry.decl]];
   });
   return rows[0][0];
