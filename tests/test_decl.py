@@ -1,6 +1,9 @@
-"""Tests for /v1/decl/* helpers (completions, lex, grammar)."""
+"""Tests for /v1/decl/* helpers (completions, lex, grammar, words)."""
 
 from __future__ import annotations
+
+import json
+from pathlib import Path
 
 
 def test_grammar_serves_lark(client):
@@ -219,3 +222,49 @@ def test_reformat_renders_library_programs_as_the_text_route_did():
             continue
         assert new == format_program(program, fmt="text", trailer=True), name
     assert echoed <= {"MinimumDistortion", "MixtureDistortion"}, echoed
+
+
+# ----------------------------------------------------------------------
+# The DecL word list (1.30.0, ``[DecL-Word-List]``)
+# ----------------------------------------------------------------------
+
+_WORDS_FILE = Path(__file__).resolve().parents[1] / "web" / "src" / "decl-words.json"
+_REGENERATE = "uv run --no-sync python -m aggregate.decl_words > web/src/decl-words.json"
+
+
+def _library_groups() -> dict:
+    """``decl_words()`` as JSON carries it, so tuples compare as lists."""
+    from aggregate.decl_words import decl_words
+
+    return json.loads(json.dumps(decl_words()))
+
+
+def test_words_route_serves_the_library_list(client):
+    """Every group of ``decl_words()``, unchanged, beside the library version.
+
+    The same object ``python -m aggregate.decl_words`` prints, which is what
+    aSP reads in place of a build step.
+    """
+    import aggregate
+
+    r = client.get("/v1/decl/words")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["version"] == aggregate.__version__
+    assert body["groups"] == _library_groups()
+    assert list(body["groups"]) == list(_library_groups()), "group order kept"
+
+
+def test_committed_word_file_matches_the_installed_library():
+    """``web/src/decl-words.json`` is the installed library's list, regenerated.
+
+    The playground colors DecL from the committed file, so that ``npm run dev``,
+    ``npm test`` and the build need no Python. This is what keeps it honest: a
+    word the library adds turns this red, never into an uncolored word. Only
+    ``groups`` is compared, because a library release that adds no word should
+    not fail here merely for changing ``version``.
+    """
+    committed = json.loads(_WORDS_FILE.read_text(encoding="utf-8"))
+    assert committed["groups"] == _library_groups(), (
+        "web/src/decl-words.json differs from the installed aggregate's "
+        f"decl_words(); regenerate it from the repository root with: {_REGENERATE}")

@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.30.0
+
+[DecL-Word-List] **The playground colors exactly the words of DecL, read from `aggregate`.** Plan `dev/done/plan-decl-word-list.md`.
+
+- Changed: `web/src/decl-words.json` replaces the hand-kept `decl-keywords.json`. It is generated with `uv run --no-sync python -m aggregate.decl_words > web/src/decl-words.json` and never edited, and a backend test fails, printing that command, when it falls behind the installed library.
+- Fixed: words the hand list missed are now colored, among them `claim`, `deposit`, `rol`, `cede`, `reinstatements`, `lr`, `dist`, `bivariate`, `clash`, `grossnet`, `ssev` and `picks`, plus every severity name. `biTVaR` is colored as a distortion.
+- Changed: 25 words the grammar does not reserve and the distortion registry does not list stop being colored, such as `mean`, `samples`, `phasefit` and `weibull`. `beta` colors as a keyword wherever it appears.
+- Added: `GET /v1/decl/words` serves the same list, `{version, groups}` as the library prints it, for aSP, which has no build step.
+- The `aggregate` floor rises to 1.6.0, the release that brought the word list.
+
 ## 1.29.0
 
 [Sheets-Template] **The AGG functions in Google Sheets, as a template script.** Plan `dev/plan-sheets-template.md`, steps 2 to 6; the template itself is the author's next step.

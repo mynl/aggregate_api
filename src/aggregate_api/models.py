@@ -1225,6 +1225,22 @@ class LexResponse(BaseModel):
     tokens: list[LexToken]
 
 
+class DeclWordsResponse(BaseModel):
+    """``GET /v1/decl/words``: every DecL word a colorizer needs, by group.
+
+    The object ``python -m aggregate.decl_words`` prints, field for field, so a
+    client reads this route and the committed ``web/src/decl-words.json`` the
+    same way. ``version`` is the installed ``aggregate``'s, not this service's.
+    Each group is a list of words, except ``severities``, which maps a name to
+    its shape parameter count (null for the empirical severities).
+    """
+
+    model_config = _RESPONSE_CFG
+
+    version: str
+    groups: dict[str, list[str] | dict[str, int | None]]
+
+
 # ======================================================================
 # Examples (aggregate's library.agg, via the recipe base)
 # ======================================================================

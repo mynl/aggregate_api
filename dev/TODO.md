@@ -824,14 +824,20 @@ and the standing REMINDER below about what is worth plotting.
       document verified correct; broken since a62. Fixed at a99 with a
       `custom` polygon plus two plain edge lines, and the smoke test gained
       `checkBands`. *(done; moved to `dev/done/`)*
-- [ ] **[Keyword-Mirror-Gaps]** `web/src/decl-keywords.json` lacks `deposit`,
+- [x] **[Keyword-Mirror-Gaps]** `web/src/decl-keywords.json` lacks `deposit`,
       `rol`, `cede`, `reinstatements`, `lr`, `dist`, `bivariate`, `clash`,
       `grossnet`, `ssev` and `picks`, found by the library while writing the
       DecL help (2026-10-13). Check the whole mirror against
-      `parser_errors._TERMINAL_LABELS`, not just these.
-- [ ] **[Name-Underscore-Comment]** the comment at `web/src/decl-mode.js` line
+      `parser_errors._TERMINAL_LABELS`, not just these. **Closed at 1.30.0**
+      by `[DecL-Word-List]` (`dev/done/plan-decl-word-list.md`): the hand
+      mirror is gone, and the editor colors from `web/src/decl-words.json`,
+      generated from `aggregate.decl_words` and held to it by a drift test.
+- [x] **[Name-Underscore-Comment]** the comment at `web/src/decl-mode.js` line
       31 says names may not contain `_`, which the grammar allows. Fix the
       comment, and the highlighter's name pattern if it follows the comment.
+      **Closed at 1.30.0**: only the comment was wrong (the pattern already
+      allowed `_`); corrected where the tokenizer now lives,
+      `web/src/decl-tokens.js`.
 
 ## Backlog / ideas (unordered)
 

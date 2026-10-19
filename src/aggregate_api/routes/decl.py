@@ -21,6 +21,8 @@ Routes
 * ``GET  /v1/decl/grammar``: serves ``decl.lark`` verbatim as
   ``text/plain``. Lets a future docs page embed the live grammar without a
   build-time include step.
+* ``GET  /v1/decl/words``: serves the library's DecL word list, by group,
+  for a colorizer with no Python of its own (aSP).
 * ``GET  /v1/decl/help``: serves one of the library's DecL help pages as an
   HTML fragment, or a 404 naming the library version when it has none.
 """
@@ -34,6 +36,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
 import aggregate
+from aggregate.decl_words import decl_words
 from aggregate.parser_errors import format_error
 
 from .. import decl_help, models
@@ -309,6 +312,30 @@ def decl_grammar() -> PlainTextResponse:
     """
     text = files("aggregate").joinpath("decl.lark").read_text(encoding="utf-8")
     return PlainTextResponse(text)
+
+
+@router.get("/decl/words", response_model=models.DeclWordsResponse)
+def decl_word_list() -> dict:
+    """Return the installed library's DecL word list, by group.
+
+    Returns
+    -------
+    dict
+        ``{"version": <aggregate version>, "groups": decl_words()}``, the
+        object ``python -m aggregate.decl_words`` prints.
+
+    Notes
+    -----
+    Served for aSP, which has no build step and so cannot read the list the
+    way the playground does, from ``web/src/decl-words.json`` generated at
+    commit time. Both come from ``aggregate.decl_words``: the grammar's
+    reserved words, frequencies, clauses and constants, the distortion
+    registry, and the library's own lists of declarations, severities and
+    mixing distributions. A word added to the language therefore reaches every
+    colorizer with no hand edit, and ``tests/test_decl.py`` fails when the
+    committed file falls behind the library.
+    """
+    return {"version": aggregate.__version__, "groups": decl_words()}
 
 
 @router.get(

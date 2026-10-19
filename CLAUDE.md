@@ -46,9 +46,11 @@ in-development `1.0.0a` line and PyPI stopped at 0.30.1, so a clone needed
 `aggregate_REFACTOR` checked out beside it before `uv sync` could succeed. The
 library published 1.0.1 on 2026-10-07 and that ended. There is no
 `[tool.uv.sources]` table any more, and a fresh clone syncs with nothing beside
-it. The pin is `aggregate>=1.0.1,<2`; `dev/done/plan-1.0.0-release.md` explains
-both bounds, and the comment where the table used to sit explains why removing
-it was necessary rather than merely tidy.
+it. The pin is `aggregate>=1.6.0,<2`. The floor is the release that brought
+`aggregate.decl_words` (1.30.0 of this package);
+`dev/done/plan-1.0.0-release.md` explains the ceiling, and the comment where the
+table used to sit explains why removing it was necessary rather than merely
+tidy.
 
 **Consequence for co-development, and it is easy to trip over.** `uv sync` now
 installs the *released* library, so working against the sibling worktree is an

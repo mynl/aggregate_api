@@ -160,9 +160,11 @@ failure.
 - **House style in everything authored.** No dashes as punctuation, ever. US
   spelling. Descriptive `[Bracket-Label]` names, never terse codes. Rendered
   output stays tight, with no gratuitous blank lines in blocks.
-- **Grammar mirror.** If the phase reacts to a LIB grammar or keyword change,
-  `web/src/decl-keywords.json` is a hand-curated mirror of
-  `parser_errors._TERMINAL_LABELS` and has to be checked against it explicitly.
+- **DecL word list.** If the phase reacts to a LIB grammar or keyword change,
+  regenerate `web/src/decl-words.json` with
+  `uv run --no-sync python -m aggregate.decl_words > web/src/decl-words.json`.
+  It is generated, never edited, and the drift test in `tests/test_decl.py`
+  fails until it matches the installed library.
 - **Keep the execution notes open as you go**, either a section appended to the
   plan or a companion file when the plan is shared and LIB keeps its own. Record
   each divergence at the moment you make it.

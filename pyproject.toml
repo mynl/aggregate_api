@@ -50,10 +50,10 @@ dependencies = [
     # it. Before that the whole 1.0.0a line was unpublished and this had to be
     # an editable path source; see dev/done/plan-1.0.0-release.md.
     #
-    # The floor is 1.0.1 and not 1.0.0 because 1.0.0 is not on PyPI at all:
-    # the library's own 1.0.1 was a packaging fix, "the wheel ships
-    # aggregate.charts, .plots and .exhibits", and the api imports two of those
-    # three. A bare `aggregate` would also let a resolver reach 0.30.1, the
+    # The floor is 1.6.0, for `aggregate.decl_words`, which `/v1/decl/words`
+    # serves and `web/src/decl-words.json` is generated from (1.30.0 of this
+    # package). Before that it was 1.0.1, not 1.0.0, because 1.0.0 is not on
+    # PyPI at all. A bare `aggregate` would let a resolver reach 0.30.1, the
     # newest of the old line, which has none of these modules and fails at
     # import rather than at install.
     #
@@ -61,7 +61,7 @@ dependencies = [
     # `parser_errors._TERMINAL_LABELS`. The library's API promise covers its
     # public surface, and a major is exactly where a private name moves.
     # Re-check both at each library minor rather than trusting the range.
-    "aggregate>=1.0.1,<2",
+    "aggregate>=1.6.0,<2",
     # Static tables (the author's own package). The api asks it for a semantic
     # table document (the IR), never for markup: the browser owns geometry. The
     # same install also ships the walker that renders that IR, which is what

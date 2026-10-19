@@ -96,10 +96,10 @@ PILL_NAMESPACES = ("kind", "topic", "role")
 # ``/tags\{[^}]*\}/``: the body cannot contain a closing brace, so ``[^}]*`` is
 # exact here and not an approximation.
 #
-# **This mirrors those three terminals**, the way ``web/src/decl-keywords.json``
-# is documented as mirroring ``parser_errors._TERMINAL_LABELS``, which puts it
-# under agreement 6 of the oversight charter: a grammar change to the trailer is
-# checked against this constant.
+# **This mirrors those three terminals**, which puts it under agreement 6 of the
+# oversight charter: a grammar change to the trailer is checked against this
+# constant. (The editor's DecL words stopped being a mirror at 1.30.0; they are
+# generated from ``aggregate.decl_words``.)
 #
 # ``\s*`` before the clause is what does the tidying, and it is why no second
 # pass is needed. A clause on its own line takes the newline and the indent in

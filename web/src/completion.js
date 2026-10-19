@@ -6,7 +6,8 @@
 // server's {label, terminal, kind} entries into CM6 Completion shapes.
 //
 // On any error (network down, parse failure server-side) we fall back
-// to the static keyword pool from decl-keywords.json so the editor
+// to the static pool of DecL words, the same sets decl-mode.js colors
+// from (decl-words.json, generated from the library), so the editor
 // stays usable offline.
 
 import { api } from './api.js';
@@ -32,7 +33,7 @@ export async function declCompletionSource(context) {
 
     // Only hit the network when the user explicitly invoked completion
     // (Ctrl-Space). For any implicit trigger we serve the static pool
-    // synchronously -- no per-keystroke round-trip to /v1/decl/complete.
+    // synchronously, with no per-keystroke round-trip to /v1/decl/complete.
     let serverOptions = null;
     if (context.explicit) {
         try {
@@ -57,7 +58,7 @@ export async function declCompletionSource(context) {
         }
     }
 
-    // Always include the static pool too -- the server returns only
+    // Always include the static pool too. The server returns only
     // grammar-suggested keywords, but users frequently want to type a
     // distortion name that isn't currently grammar-legal.
     const merged = dedupeByLabel([...(serverOptions || []), ...STATIC_POOL]);
