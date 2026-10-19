@@ -180,6 +180,13 @@ class Quantile(BaseModel):
     reinsurance quick-edit form writes into a program a person then reads, and
     a layer is quoted at three significant figures; ``q`` is what anyone
     checking the arithmetic wants.
+
+    ``lev`` is the expected loss limited to the quantile, ``P(X ∧ q)``, on the
+    law the route read (for a reinsured object, the net law). It is the loss a
+    pentagon prices when the insurer can default at assets ``a = q``. Null on
+    the occurrence basis, for a kind that cannot form it, and where the library
+    fails to: the quantile is what most callers ask for, so ``lev`` never fails
+    the row.
     """
 
     model_config = _RESPONSE_CFG
@@ -187,6 +194,7 @@ class Quantile(BaseModel):
     p: float
     q: float
     snapped: float
+    lev: float | None = None
 
 
 class QuantilesResponse(BaseModel):

@@ -4,6 +4,14 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.28.0
+
+[Quantiles-LEV] **The quantiles route reports the limited expected loss at each quantile.** Plan `dev/done/plan-quantiles-lev.md`, asked for by aSP's `[Loss-Input-Pricing]`.
+
+- Added: each row of `GET /v1/objects/{id}/quantiles` carries `lev`, the expected loss limited to the quantile, `P(X ∧ q(p))`. It is the loss a pentagon prices when the insurer can default at assets `a = q(p)`, the number aSP's default haircut needs.
+- It is the library's own `prob_loss_assets(a=q).L`, read off the same law as `q`: net for a reinsured object, the total for a portfolio or a pair.
+- Null on the occurrence basis, for a kind without `prob_loss_assets`, and where the library fails or the value is not finite. The quantile never fails for it, so Quick Re and `AGG.Q` are unchanged.
+
 ## 1.27.0
 
 [Front-End-Apps] **Other front ends served at `/<name>/`, with an Apps menu.** Plan `dev/done/plan-front-end-apps.md`.

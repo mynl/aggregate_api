@@ -746,6 +746,122 @@ def test_quantiles_occurrence_basis_handles_a_mixture(client):
     assert rows[1]["q"] <= 1000
 
 
+# The limited expected loss at each quantile (1.28.0, ``[Quantiles-LEV]``).
+
+_LEV_PS = "0,0.5,0.9,0.99,0.999,1"
+
+
+def _cached_object(oid: str):
+    """The live object behind ``oid``, reached past the Depends plumbing."""
+    from aggregate_api.config import get_settings
+    from aggregate_api.routes import objects as objects_routes
+
+    entry = objects_routes._get_cache(get_settings()).get(oid)
+    assert entry is not None, "the object just built is not in the cache"
+    return entry.obj
+
+
+def _law_mean(obj) -> float:
+    """The mean of the object's own ``p_total`` law, net for a reinsured one."""
+    density = obj.density_df
+    return float((density.loss * density.p_total).sum())
+
+
+def test_quantiles_report_the_limited_expected_loss(client):
+    """``lev`` is ``P(X ∧ q(p))``: the library's own number, bounded by the mean.
+
+    It is the loss a pentagon prices when the insurer can default at assets
+    ``a = q(p)``, which aSP's default haircut reads. ``prob_loss_assets`` is the
+    library's consistent ``(p, L, a)`` triple over the grid ``q`` reads, so the
+    route's value must be that ``L`` exactly. A limited expected loss rises
+    with the limit and never passes the mean; non-decreasing rather than
+    increasing, since a grid quantile can sit still across two probabilities.
+    """
+    decl = "agg LEV 5 claims sev lognorm 10 cv 1 poisson"
+    oid = client.post("/v1/objects", json={"decl": decl}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/quantiles",
+                   params={"p": _LEV_PS, "snap": "false"})
+    assert r.status_code == 200, r.text
+    rows = r.json()["quantiles"]
+    obj = _cached_object(oid)
+    mean = _law_mean(obj)
+    for row in rows:
+        assert row["lev"] == pytest.approx(
+            obj.prob_loss_assets(a=row["q"]).L, rel=1e-12, abs=1e-12)
+        assert row["lev"] <= mean * (1 + 1e-9)
+    levs = [row["lev"] for row in rows]
+    assert levs == sorted(levs), "a limited expected loss rises with the limit"
+    assert levs[0] == 0, "nothing is lost below a zero limit"
+    assert levs[1] < mean, "the median limit leaves something out"
+    assert levs[-1] == pytest.approx(mean, rel=1e-9), "the top of the support limits nothing"
+
+
+def test_quantiles_limited_expected_loss_reads_the_net_law(client):
+    """On a reinsured object ``lev`` is limited net loss, as ``q`` is net.
+
+    The two must describe one law, or the pentagon aSP builds from them prices
+    the gross loss against net assets. The net mean is below the gross one, so
+    a gross reading at ``p = 0.999`` would pass the net mean, and the check
+    against the gross program says the bound is not met by accident.
+    """
+    gross = "agg LevGross 5 claims sev lognorm 10 cv 1 poisson"
+    net = ("agg LevNet 5 claims sev lognorm 10 cv 1 "
+           "occurrence net of 50 xs 20 poisson aggregate net of 50 xs 80")
+    params = {"p": "0.5,0.999,1", "snap": "false"}
+
+    def levs(decl):
+        oid = client.post("/v1/objects", json={"decl": decl}).json()["id"]
+        r = client.get(f"/v1/objects/{oid}/quantiles", params=params)
+        assert r.status_code == 200, r.text
+        return oid, [row["lev"] for row in r.json()["quantiles"]]
+
+    net_oid, net_levs = levs(net)
+    _, gross_levs = levs(gross)
+    net_mean = _law_mean(_cached_object(net_oid))
+    assert all(lev <= net_mean * (1 + 1e-9) for lev in net_levs)
+    assert net_levs[-1] == pytest.approx(net_mean, rel=1e-9)
+    assert gross_levs[1] > net_mean, "the gross law would have shown"
+
+
+def test_quantiles_limited_expected_loss_is_aggregate_basis_only(client):
+    """The occurrence basis leaves ``lev`` null and its quantiles as they were."""
+    decl = "agg TIER 100 claims 1000 xs 0 sev lognorm 50 cv 2 poisson"
+    oid = client.post("/v1/objects", json={"decl": decl}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/quantiles",
+                   params={"p": "0.5,0.95", "basis": "occurrence"})
+    assert r.status_code == 200, r.text
+    for row in r.json()["quantiles"]:
+        assert set(row) == {"p", "q", "snapped", "lev"}
+        assert row["lev"] is None
+        assert row["q"] <= 1000, "still the per-claim law"
+
+
+def test_quantiles_survive_a_failing_limited_expected_loss(client, monkeypatch):
+    """A library failure in ``prob_loss_assets`` nulls ``lev``, never the row."""
+    oid = client.post("/v1/objects", json={"decl": _DICE}).json()["id"]
+
+    def refuse(**kwargs):
+        raise ValueError("no anchor here")
+
+    monkeypatch.setattr(_cached_object(oid), "prob_loss_assets", refuse)
+    r = client.get(f"/v1/objects/{oid}/quantiles", params={"p": "0,1", "snap": "false"})
+    assert r.status_code == 200, r.text
+    rows = r.json()["quantiles"]
+    assert [row["q"] for row in rows] == [3.0, 18.0]
+    assert [row["lev"] for row in rows] == [None, None]
+
+
+def test_quantiles_limited_expected_loss_on_a_portfolio(client):
+    """A portfolio's quantile and limited loss both read its total law."""
+    oid = client.post("/v1/objects", json={"decl": _PORT}).json()["id"]
+    r = client.get(f"/v1/objects/{oid}/quantiles", params={"p": "0.99", "snap": "false"})
+    assert r.status_code == 200, r.text
+    row = r.json()["quantiles"][0]
+    obj = _cached_object(oid)
+    assert row["lev"] == pytest.approx(obj.prob_loss_assets(a=row["q"]).L, rel=1e-12)
+    assert row["lev"] < _law_mean(obj)
+
+
 # ----------------------------------------------------------------------
 # The plot endpoint, and its absence
 # ----------------------------------------------------------------------
@@ -1217,6 +1333,9 @@ def test_bivariate_total_moments_and_quantiles(client):
     assert qr.status_code == 200, qr.text
     q99 = qr.json()["quantiles"][0]["q"]
     assert q99 > body["mean"]
+    # The limited expected loss reads the same total law (1.28.0).
+    lev99 = qr.json()["quantiles"][0]["lev"]
+    assert lev99 is not None and 0 < lev99 < body["mean"]
     assert client.get(
         f"/v1/objects/{body['id']}/quantiles?p=0.99&basis=occurrence"
     ).status_code == 400

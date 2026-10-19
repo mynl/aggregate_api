@@ -3080,6 +3080,45 @@ def _snap(value: float, digits: int = 3) -> float:
     return round(value * factor) / factor
 
 
+def _limited_expected_loss(law, a: float) -> float | None:
+    """``P(X ∧ a)`` on ``law``, or ``None`` when it cannot be formed.
+
+    Parameters
+    ----------
+    law : object
+        The object the quantile was read from: an ``Aggregate``, a
+        ``Portfolio``, or a pair's ``total``. Anything without a public
+        ``prob_loss_assets`` answers ``None``.
+    a : float
+        The asset level, here the exact quantile the route just computed.
+
+    Returns
+    -------
+    float or None
+        The limited expected loss, or ``None`` when the law has no
+        ``prob_loss_assets``, the library raises, or the value is not finite.
+
+    Notes
+    -----
+    ``prob_loss_assets(a=...)`` returns the grid snapped triple ``(p, L, a)``
+    with ``L == lev(a)``, over the same ``p_total`` grid ``q`` reads, so ``L``
+    and the quantile describe one law. On a lower quantile the snap is the
+    identity, since ``q(F(q(p))) == q(p)``.
+
+    A failure answers ``None`` rather than raising, because the quantile is
+    what Quick Re and the Excel functions ask for and the limited loss must not
+    cost them it. A non-finite value answers ``None`` too: JSON has no NaN.
+    """
+    prob_loss_assets = getattr(law, "prob_loss_assets", None)
+    if not callable(prob_loss_assets):
+        return None
+    try:
+        lev = float(prob_loss_assets(a=a).L)
+    except Exception:  # noqa: BLE001 -- reported as a null, never raised
+        return None
+    return lev if math.isfinite(lev) else None
+
+
 @router.get("/objects/{oid}/quantiles", response_model=models.QuantilesResponse)
 def get_quantiles(
     oid: str,
@@ -3117,6 +3156,13 @@ def get_quantiles(
     ``q_sev`` is the per-claim quantile function and is aggregate level, so it
     answers for a mixture too, where the individual ``sevs`` components cannot.
     A kind carrying neither function gets a clean 400 rather than a wrong number.
+
+    **Each row also carries ``lev``,** the expected loss limited to the
+    quantile, ``P(X ∧ q(p))``, read off the same law as ``q`` (1.28.0). It is
+    the loss a pentagon prices when the insurer can default at assets
+    ``a = q(p)``, which is what aSP's default haircut needs. The aggregate basis
+    only: a limited expected loss per claim prices nothing here, so the
+    occurrence basis leaves it null.
     """
     if basis not in ("aggregate", "occurrence"):
         raise HTTPException(
@@ -3136,15 +3182,18 @@ def get_quantiles(
         raise HTTPException(
             status_code=422, detail="every p must lie between 0 and 1 inclusive")
     name = "q_sev" if basis == "occurrence" else "q"
-    q = getattr(entry.obj, name, None)
+    # ``law`` is whichever object answered ``q``, so the limited expected loss
+    # below is read off the same distribution as the quantile.
+    law = entry.obj
+    q = getattr(law, name, None)
     # A pair carries no ``q`` of its own, but its total does: the joint's
     # total distribution is the pair's aggregate law, so its quantile function
     # is the honest ``aggregate``-basis answer (it is what the lite tiles read
     # P99 from). The occurrence basis stays a 400, since there is no single
     # per-claim law behind a pair.
     if not callable(q) and basis == "aggregate":
-        total = getattr(entry.obj, "total", None)
-        q = getattr(total, "q", None) if total is not None else None
+        law = getattr(entry.obj, "total", None)
+        q = getattr(law, "q", None) if law is not None else None
     if not callable(q):
         raise HTTPException(
             status_code=400,
@@ -3157,8 +3206,11 @@ def get_quantiles(
         except Exception as exc:  # noqa: BLE001 -- reported, not raised
             raise HTTPException(
                 status_code=400, detail=f"{name}({v}) failed: {exc}") from exc
+        lev = (_limited_expected_loss(law, exact)
+               if basis == "aggregate" else None)
         out.append({"p": v, "q": exact,
-                    "snapped": _snap(exact) if snap else exact})
+                    "snapped": _snap(exact) if snap else exact,
+                    "lev": lev})
     return {"quantiles": out}
 
 

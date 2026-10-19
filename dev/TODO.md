@@ -578,6 +578,13 @@ and the standing REMINDER below about what is worth plotting.
       under the slot, the store moved inside it, and `/v1/status` reports
       `coalesced`.
 
+- [x] **[Quantiles-LEV] the quantiles route reports the limited expected
+      loss**, `P(X ∧ q(p))`, beside each quantile on the aggregate basis,
+      for aSP's default haircut (`[Loss-Input-Pricing]`). **Landed as
+      1.28.0** (`dev/done/plan-quantiles-lev.md`): `lev` is the library's
+      `prob_loss_assets(a=q).L` on the law `q` read, null on the occurrence
+      basis.
+
 - [x] **[Front-End-Apps] serve other front ends at `/<name>/`**, each from
       its own repository, named in `AGGAPI_APPS` (`asp=<folder>`), with an
       Apps menu in the playground built from `/v1/meta`; adding one is an
