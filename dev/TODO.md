@@ -39,9 +39,10 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 - **[Excel-Hosting]** DONE (`1.17.0`), plan `dev/done/plan-excel-hosting.md`.
   `/excel` serves the add-in built by `scripts/build-excel.ps1` (or `.sh`),
   `no-cache`, with a production manifest under `https://agg.mynl.com/excel`.
-  Still owed, the author's on the host: the Caddy limits, `AGGAPI_CACHE_MAX=100`,
-  the deploy, and the plan's acceptance list against agg.mynl.com (web in Edge
-  and Chrome, Windows desktop, a version bump reaching a reopened workbook).
+  On the host, done: the Caddy limits (verified 2026-10-18), the deploy, and
+  `AGGAPI_CACHE_MAX=100` (2026-10-20, in the systemd unit). Still owed, the
+  author's: the plan's acceptance list against agg.mynl.com (web in Edge and
+  Chrome, Windows desktop, a version bump reaching a reopened workbook).
 
 - **[Excel-Core]** DONE (`1.16.0`), plan `dev/done/plan-excel-core.md`. The
   `excel/` add-in: `AGG.BUILD`, `AGG.EXHIBITS`, `AGG.EXHIBIT`, `AGG.Q` and
@@ -562,8 +563,8 @@ and the standing REMINDER below about what is worth plotting.
 - [x] Bandwidth limited by caddy page with obscured url; special caddy install
       *(done — `rate_limit` on the public `/Q7M4Z9KP` route, build-only, plus a
       friendly 429 card; see human-hints.)*
-- [ ] Set up service to run on vps *(systemd unit documented in human-hints;
-      still launched via `nohup`)*
+- [x] Set up service to run on vps *(done 2026-10-20: the systemd unit in
+      human-hints, with `AGGAPI_CACHE_MAX=100`; `refresh.sh` restarts it)*
 - [x] Limit log2 <= 18 *(`AGGAPI_LOG2_CAP` defaults to 18)*
 - [ ] 
 
@@ -591,8 +592,8 @@ and the standing REMINDER below about what is worth plotting.
       own terms page, 90-day audit pruning, a friend's Mac with
       `dev/store/mac-test-guide.md`). Partner Center enrollment needs a work account (the
       convexrisk tenant) and has the longest lead time, so it starts now. The
-      Caddy limits are live (verified 2026-10-18); owed on the VPS are a
-      systemd unit and `AGGAPI_CACHE_MAX=100` (`/v1/meta` still reports 50).
+      Caddy limits are live (verified 2026-10-18), and the VPS runs under a
+      systemd unit with `AGGAPI_CACHE_MAX=100` (2026-10-20).
       Interim for colleagues in a tenant: an admin's Integrated apps upload,
       no client setup at all. **2026-10-18: enrollment stuck** (Partner
       Center will not validate the author's email), so the listing may not

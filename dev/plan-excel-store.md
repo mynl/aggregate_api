@@ -32,7 +32,7 @@ Every step below carries an owner.
 - **Gap:** `<ProviderName>` reads "Stephen J. Mildenhall"; it must match the Partner Center publisher name.
 - **What the service records.** Every build writes an audit row with the client IP address and the program text, kept indefinitely (`audit.py`, database at `/home/steve/.aggregate/api/audit.db` on the VPS). The privacy policy must say so.
 - **Caddy limits are live** on `agg.mynl.com`: 30 builds a minute per workbook session, 120 a minute and 1,200 an hour per address. `/docs` and `/v1/status` are closed to the public. Nothing owed there.
-- **Owed on the VPS:** `cache_max` still reports 50, not the 100 the hosting plan asked for. The service still runs under `nohup` with no systemd unit, so a reboot takes every installed user down until someone restarts it by hand.
+- **The VPS is ready (2026-10-20):** the service runs under a systemd unit, so it restarts on failure and on reboot, and `cache_max` is 100, as the hosting plan asked.
 
 ## Decisions for the author (D1 to D6)
 
@@ -72,8 +72,8 @@ A tenant admin uploads the manifest under the Microsoft 365 admin center, Settin
 
 ### [server-ready] The public service can carry strangers. Owner: Author, on the VPS.
 
-1. A systemd unit for the API (the TODO entry "Set up service to run on vps" has it documented), so the service restarts on failure and on reboot. A listed add-in that dies with the VPS is the likeliest one-star review.
-2. `AGGAPI_CACHE_MAX=100` in the service environment, after checking free memory (entries run up to a few MB). Confirm with `curl http://10.8.0.1:19456/v1/meta`.
+1. **Done 2026-10-20.** A systemd unit for the API (`human-hints.md`, "Run as a systemd service"), so the service restarts on failure and on reboot. A listed add-in that dies with the VPS is the likeliest one-star review.
+2. **Done 2026-10-20.** `AGGAPI_CACHE_MAX=100` in the service environment, after checking free memory (entries run up to a few MB). Confirm with `curl http://10.8.0.1:19456/v1/meta`.
 3. Nothing in Caddy. The limits are live, verified from the Caddyfile on 2026-10-18.
 
 ### [store-pages] Help, privacy and terms pages for the service, helpUrl, manifest identity. Owner: Claude. One version bump.

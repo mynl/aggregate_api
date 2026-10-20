@@ -209,7 +209,8 @@ is decided at startup):
 uv run aggregate-api --port 8001 --host 127.0.0.1
 ```
 
-Keep it alive past the SSH session with `nohup ... &` (or a systemd unit).
+Keep it alive past the SSH session with the systemd unit under "Run as a
+systemd service" below (`nohup ... &` until 2026-10-20).
 
 **4. Caddy block** — reload after editing (`sudo systemctl reload caddy`):
 
@@ -558,11 +559,11 @@ Make refresh install *from* the lock instead of updating it:
 Lock updates should happen intentionally on Windows, get committed, then pulled
 by the VPS.
 
-### Later: run as a systemd service
+### Run as a systemd service
 
-Current relaunch is `nohup` to `~/aggapi.log` (fine while watching logs in dev).
-When ready to make it durable (auto-restart, starts on boot), drop a unit at
-`/etc/systemd/system/aggregate-api.service`:
+Since 2026-10-20 the VPS runs under this unit, so the service restarts on
+failure and on reboot; before that `refresh.sh` relaunched it with `nohup` to
+`~/aggapi.log`. The unit is `/etc/systemd/system/aggregate-api.service`:
 
 ```ini
 [Unit]
@@ -573,14 +574,15 @@ After=network.target
 Type=simple
 User=steve
 WorkingDirectory=/home/steve/hacking/aggregate_api
-ExecStart=/home/steve/.local/bin/uv run aggregate-api --host 127.0.0.1 --port 8001
+Environment=AGGAPI_CACHE_MAX=100
+ExecStart=/home/steve/.local/bin/uv run --no-sync aggregate-api --host 127.0.0.1 --port 8001
 Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-(`ExecStart` path: check with `which uv`.) Then:
+(`ExecStart` path: check with `which uv`. `--no-sync` because `refresh.sh` already syncs, so a restart or a boot never touches the environment. Add one `Environment=` line per `AGGAPI_*` setting the instance needs.) Then:
 
 ```bash
 sudo systemctl daemon-reload
@@ -589,8 +591,8 @@ sudo systemctl restart aggregate-api         # after a deploy
 journalctl -u aggregate-api -f               # watch logs (replaces tail -f)
 ```
 
-With this in place, `refresh.sh` swaps its `pkill`/`nohup` block for a single
-`sudo systemctl restart aggregate-api`.
+`refresh.sh` restarts it with `sudo systemctl restart aggregate-api` in place of
+its old `pkill`/`nohup` block.
 
 ## Upstream (`aggregate`) — not fixable here
 
