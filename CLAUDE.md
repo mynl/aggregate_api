@@ -170,7 +170,7 @@ Its checks run in `sheets/`: `npm test` (builds, then node --test over
 `test/*.test.ts`, which load `dist/` in a vm with stub Apps Script services) and
 `npm run typecheck`. A change to `core.ts` runs both `excel/` and `sheets/`
 checks. `npm run push` (clasp) publishes to the template and is the author's,
-like `git push`; see `sheets/README.md`.
+a deployment rather than a `git push`; see `sheets/README.md`.
 
 **Copies of the Sheets template never update**, so the routes a copy calls are
 a contract: `GET /v1/meta`, `POST /v1/objects`, and under
@@ -300,8 +300,9 @@ patch. Do not crawl, and do not go back to serials.
   that moved `excel/`, and after any bump that is deployed, since its manifest
   carries the version.
 - **One plan doc per step.** Work proceeds from a `dev/plan-<desc>.md`. When
-  its last step lands, move it to `dev/done/` in that same commit and tick the
-  matching `dev/TODO.md` entry (a delta, see below).
+  its first step lands, move it to `dev/done/` in that same commit (house rule)
+  and keep editing it there; tick the matching `dev/TODO.md` entry when the
+  last step lands.
 - **Keep `CHANGELOG.md` current.** Each version bump adds a `## <version>`
   section describing what landed and any breaking changes. Write it at the close
   of the iteration; don't defer.
@@ -321,16 +322,6 @@ patch. Do not crawl, and do not go back to serials.
   known. Do not flag it. The exception covers that
   launcher entry only: the code's default bind stays `127.0.0.1`, and any other
   deployment follows the house rule.
-- **"Move a plan to `dev/done/` only when I say it is done."** Reversed here.
-  An executed plan moves to `dev/done/` in the commit that lands its last step,
-  with its execution log, without waiting for the author's word; the
-  `execute-plan` and `version-bump` skills do it as part of the bump. The
-  author's ruling (2026-10-19). The reason: that commit's CHANGELOG section and
-  `dev/TODO.md` tick cite the plan as `dev/done/plan-<desc>.md`, so moving it in
-  the same commit keeps those pointers true from the start. Tweaks after the
-  author kicks the tires are new work and do not bring a plan back. A plan with
-  steps still to run (one waiting on a spike or on an upstream release, say)
-  stays in `dev/`.
 
 ## Working with the author
 

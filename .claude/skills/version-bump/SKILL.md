@@ -89,7 +89,8 @@ One commit carrying the whole batch:
 - `uv.lock`.
 - `CHANGELOG.md`, a new `## <version>` section at the top, newest first.
 - `dev/TODO.md`, tick the matching entry.
-- The plan doc, moved from `dev/` to `dev/done/`.
+- The plan doc, moved from `dev/` to `dev/done/` if this is its first bump; later
+  bumps edit it there (house rule, 2026-10-20).
 
 **Never in the commit:** the built SPA under `src/aggregate_api/static/`. It is
 gitignored, and `.\scripts\build-web.ps1` is not a commit step: nothing it
@@ -199,7 +200,8 @@ Publishing, tagging and the GitHub release are the **author's**, never yours.
 
 ## 9. Never
 
-- **Never push.** That is the author's, on explicit request only.
+- **Never leave a bump unpushed.** The push is part of the bump (house rule,
+  2026-10-20), not a separate request.
 - **Never commit the author's unrelated or in-progress work** with the bump.
 - **Never batch two bumps** into one commit.
 

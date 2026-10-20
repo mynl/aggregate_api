@@ -3,7 +3,7 @@ name: execute-plan
 description: Review a dev plan and, if it is sound, execute it end to end with
   house hygiene: phase by phase, both gates green (pytest and the web JS suite),
   one version bump commit per phase, execution notes recording every divergence,
-  dev/TODO.md, dev-files.md, and the finished plan retired to dev/done/. If the plan is not
+  dev/TODO.md, dev-files.md, and the plan retired to dev/done/ at its first phase. If the plan is not
   sound, stop and ask in one batch rather than guess. Use when asked to review a
   plan and execute it if it is ok, to run, work, do or implement a
   dev/plan-*.md, or to pick up a plan whose phases are specified but not yet
@@ -194,9 +194,10 @@ And two this skill adds:
 
 ## 7. Retire the plan
 
-In the final phase's commit, and not before:
+In the first phase's commit, move the plan from `dev/` to `dev/done/`; every
+later phase edits it there (house rule, 2026-10-20). In the final phase's commit:
 
-- Move the plan from `dev/` to `dev/done/`.
+- Confirm the plan sits in `dev/done/` with its execution notes complete.
 - **Symlink care.** Plans canonical here often have a LIB symlink pointing at
   them. Moving one into `dev/done/` dangles that link, so retire the LIB side in
   the same breath: repoint the link and fix the LIB `.gitignore` entry that
