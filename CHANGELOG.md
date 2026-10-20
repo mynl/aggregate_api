@@ -4,6 +4,13 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.31.1
+
+[Sheets-Template] **The /use page links the Google Sheets template.** Plan `dev/done/plan-sheets-template.md`, step 6.
+
+- Added: the Sheets tab's Make a copy button, to the AGG template at `https://docs.google.com/spreadsheets/d/1bzk9ZJgT9zShiWrbhlEddi8vvcajC1eacLmxsRuXKS8/copy`. `README.md` and `sheets/README.md` carry the same link, and a test fails if the three differ.
+- Changed: the Sheets steps have a newcomer build the worked example on the template's blank Sheet1, which the template now keeps (`sheets/README.md`, step 5).
+
 ## 1.31.0
 
 [Use-Page] **A page on running `aggregate` from Jupyter, R, Excel and Google Sheets.** Plan `dev/done/plan-use-page.md`.

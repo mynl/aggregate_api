@@ -69,6 +69,21 @@ def test_the_r_handle_print_is_the_library_s(page: str, gross) -> None:
     assert f"mean, cv    {gross.est_m:.6g}, {gross.est_cv:.3g}" in page
 
 
+def test_the_sheets_template_link_is_the_same_everywhere() -> None:
+    """The page's copy button and both READMEs send a reader to one template.
+
+    Copies never update, so a stale link hands out an old script for good.
+    Replacing the template means editing all three, and this fails on a miss.
+    """
+    copy_link = re.compile(r"https://docs\.google\.com/spreadsheets/d/[\w-]+/copy")
+    script = (_REPO / "web" / "src" / "use.js").read_text(encoding="utf-8")
+    declared = re.search(r"SHEETS_TEMPLATE_URL = '([^']*)'", script).group(1)
+    assert copy_link.fullmatch(declared), declared
+    for readme in ("README.md", "sheets/README.md"):
+        text = (_REPO / readme).read_text(encoding="utf-8")
+        assert set(copy_link.findall(text)) == {declared}, readme
+
+
 def test_use_redirects_to_the_folder_and_serves_the_page(client) -> None:
     """``/use`` redirects to ``/use/``, which serves the page.
 

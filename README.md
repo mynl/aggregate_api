@@ -39,8 +39,9 @@ same-origin.
   [excel/README.md](excel/README.md).
 - **Google Sheets** (`sheets/`): the same functions as a script bound to a
   template spreadsheet, named `AGG_BUILD`, `AGG_EXHIBIT`, `AGG_Q` and so on,
-  since a Sheets function name cannot hold a dot. A user makes a copy of the
-  template and has them, with nothing to install. See
+  since a Sheets function name cannot hold a dot. A user makes
+  [a copy of the template](https://docs.google.com/spreadsheets/d/1bzk9ZJgT9zShiWrbhlEddi8vvcajC1eacLmxsRuXKS8/copy)
+  and has them, with nothing to install. See
   [sheets/README.md](sheets/README.md).
 - **R package** ([aggregateR](https://github.com/mynl/aggregate-R), its own
   repository): the same functions in R, `agg_build`, `agg_q`, `agg_exhibit`,

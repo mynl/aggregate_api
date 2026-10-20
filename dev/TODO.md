@@ -632,13 +632,14 @@ and the standing REMINDER below about what is worth plotting.
       bound to a template spreadsheet shared by a `/copy` link (`AGG_BUILD`
       and the rest, one shared `core.ts`, a Recalculate menu item, whole
       frames through `IMPORTDATA`). Author's ask, 2026-10-18; rulings D1 to
-      D6 the same day. **Plan: `dev/plan-sheets-template.md`.** The spike
-      passed; **the code landed as 1.29.0** (`sheets/`). Still to run: the
-      author creates the template and pushes (step 5, `sheets/README.md`),
-      the copy link goes into `README.md`, `sheets/README.md` and
-      `SHEETS_TEMPLATE_URL` in `web/src/use.js` (the /use page's Sheets tab
-      says the link is coming until then), and the template acceptance. A
-      Marketplace editor add-on follows only if it gets traction.
+      D6 the same day. **Plan: `dev/done/plan-sheets-template.md`.** The
+      spike passed; **the code landed as 1.29.0** (`sheets/`), and **the copy
+      link as 1.31.1**, in `README.md`, `sheets/README.md` and
+      `SHEETS_TEMPLATE_URL`, held together by a test. Still to run, the
+      author's: push the script, run `aggSetUpTemplate` keeping Sheet1 blank,
+      share the template (steps 4 to 6, `sheets/README.md`), and the template
+      acceptance. A Marketplace editor add-on follows only if it gets
+      traction.
 
 - [x] **[Use-Page] a page on running `aggregate` from Jupyter, R, Excel and
       Sheets**, at `/use` with deep links (`/use#r`, `#excel-desktop`), from

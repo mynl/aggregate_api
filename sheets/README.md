@@ -1,8 +1,8 @@
 # AGG for Google Sheets
 
-The Excel add-in's nine AGG functions in Google Sheets, as a script bound to a template spreadsheet. A user opens the template's copy link, presses Make a copy, and has `AGG_BUILD`, `AGG_EXHIBIT`, `AGG_Q` and the rest in their own copy: no install, no add-on. Users read the template's **Start here** tab; this file is for whoever builds and publishes the script.
+The Excel add-in's nine AGG functions in Google Sheets, as a script bound to a template spreadsheet. A user opens the template's copy link, https://docs.google.com/spreadsheets/d/1bzk9ZJgT9zShiWrbhlEddi8vvcajC1eacLmxsRuXKS8/copy, presses Make a copy, and has `AGG_BUILD`, `AGG_EXHIBIT`, `AGG_Q` and the rest in their own copy: no install, no add-on. Users read the template's **Start here** tab; this file is for whoever builds and publishes the script.
 
-Design and rationale: `dev/plan-sheets-template.md`. The functions behave as the Excel add-in's do (`excel/README.md`), with `AGG_` where Excel has `AGG.`, since a Sheets function name cannot hold a dot.
+Design and rationale: `dev/done/plan-sheets-template.md`. The functions behave as the Excel add-in's do (`excel/README.md`), with `AGG_` where Excel has `AGG.`, since a Sheets function name cannot hold a dot.
 
 ## Layout
 
@@ -39,8 +39,8 @@ Once, to set up:
 2. `npx clasp login` (credentials land in `~/.clasprc.json`, outside the repo).
 3. Create the "AGG template" spreadsheet, open Extensions, Apps Script, and copy the script id from Project Settings into `sheets/.clasp.json`, starting from `.clasp.json.example`.
 4. `npm run push`. clasp asks before overwriting the manifest; say yes.
-5. In the Apps Script editor, run `aggSetUpTemplate` once and accept the authorization. It writes the Start here and Example tabs; delete the empty Sheet1 if you like. Rerun it whenever the tab text changes.
-6. Share the spreadsheet as anyone with the link can view, and publish its copy link, `https://docs.google.com/spreadsheets/d/<id>/copy`.
+5. In the Apps Script editor, run `aggSetUpTemplate` once and accept the authorization. It writes the Start here and Example tabs. Keep Sheet1, and keep it empty: the `/use` page has a newcomer type the worked example into it, and every copy carries whatever it holds. Rerun it whenever the tab text changes.
+6. Share the spreadsheet as anyone with the link can view. Its copy link, `https://docs.google.com/spreadsheets/d/<id>/copy`, is the one above; until it is shared, anyone else who opens it is asked to request access, so nobody copies a half-built template. A new template means a new link in `SHEETS_TEMPLATE_URL` (`web/src/use.js`), `README.md` and here.
 
 ## The compatibility surface
 

@@ -346,11 +346,12 @@ Invoke-WebRequest https://agg.mynl.com/excel/manifest.xml -OutFile C:\OfficeAddi
                             <p><a class="btn" id="sheets-copy" href="#sheets" hidden>Make a copy of the AGG template</a></p>
                             <p class="hint" id="sheets-copy-pending" hidden>The template's copy link is being published and
                                appears here when it is.</p>
-                            <p class="hint">It lands in your Drive with a Start here tab and a worked Example tab.</p>
+                            <p class="hint">It lands in your Drive with a Start here tab, a worked Example tab, and a
+                               blank Sheet1 for the next step.</p>
                         </div>
                     </li>
                     <li data-step="s-build">
-                        <p class="step-title">Build in A2, quantiles in A3</p>
+                        <p class="step-title">On Sheet1, build in A2, quantiles in A3</p>
                         <div class="step-body">
                             <div class="cells">
                                 <span class="ref">A1</span><div class="code"><pre>agg Gross 20 claims 2000 xs 0 sev lognorm 250 cv 2 mixed gamma 0.4</pre></div>

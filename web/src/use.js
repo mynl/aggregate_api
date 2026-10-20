@@ -14,11 +14,11 @@ import { parseUseHash, useHash } from './use-route.js';
 
 /**
  * The `/copy` link of the AGG for Sheets template, which puts a copy in the
- * reader's Drive. Empty until the author publishes the template
- * (`sheets/README.md`, step 5); while it is empty the Sheets tab's first step
- * says so and shows no button.
+ * reader's Drive. `README.md` and `sheets/README.md` carry the same link, and a
+ * test holds the three together. Emptied, the Sheets tab's first step says the
+ * link is coming and shows no button.
  */
-const SHEETS_TEMPLATE_URL = '';
+const SHEETS_TEMPLATE_URL = 'https://docs.google.com/spreadsheets/d/1bzk9ZJgT9zShiWrbhlEddi8vvcajC1eacLmxsRuXKS8/copy';
 
 /** Where the ticks are kept: `{stepId: 1}` for every ticked step. */
 const TICKS_KEY = 'use-page-ticks';
