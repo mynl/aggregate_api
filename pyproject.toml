@@ -50,18 +50,23 @@ dependencies = [
     # it. Before that the whole 1.0.0a line was unpublished and this had to be
     # an editable path source; see dev/done/plan-1.0.0-release.md.
     #
-    # The floor is 1.6.0, for `aggregate.decl_words`, which `/v1/decl/words`
-    # serves and `web/src/decl-words.json` is generated from (1.30.0 of this
-    # package). Before that it was 1.0.1, not 1.0.0, because 1.0.0 is not on
-    # PyPI at all. A bare `aggregate` would let a resolver reach 0.30.1, the
-    # newest of the old line, which has none of these modules and fails at
-    # import rather than at install.
+    # The floor is 1.11.0 (1.32.0 of this package). 1.10.0 made the format
+    # sheets send each exhibit block only its own columns, without which
+    # greater_tables 7.4 and later raises one warning per absent column, 538 on
+    # one pricing request; 1.11.0 is the first release on PyPI carrying it, and
+    # the release this package is tested on. It also requires greater_tables
+    # 8.1. Before that the floor was 1.6.0, for `aggregate.decl_words`, which
+    # `/v1/decl/words` serves and `web/src/decl-words.json` is generated from
+    # (1.30.0), and before that 1.0.1, because 1.0.0 is not on PyPI at all. A
+    # bare `aggregate` would let a resolver reach 0.30.1, the newest of the old
+    # line, which has none of these modules and fails at import rather than at
+    # install.
     #
     # The ceiling is caution about two private names, `parser._PARSER` and
     # `parser_errors._TERMINAL_LABELS`. The library's API promise covers its
     # public surface, and a major is exactly where a private name moves.
     # Re-check both at each library minor rather than trusting the range.
-    "aggregate>=1.6.0,<2",
+    "aggregate>=1.11.0,<2",
     # Static tables (the author's own package). The api asks it for a semantic
     # table document (the IR), never for markup: the browser owns geometry. The
     # same install also ships the walker that renders that IR, which is what
@@ -78,10 +83,12 @@ dependencies = [
     # install, it fails at import. Without `>=6` a resolver working around some
     # other constraint could quietly pick it.
     #
-    # Raised to 7.0.0 at 1.31.0, the release this package was last checked
-    # against: 7.0 removed `TableSpec.math`, which nothing here or in the
-    # library uses, and a fresh install was already resolving it.
-    "greater-tables>=7.0.0",
+    # Raised to 7.0.0 at 1.31.0: 7.0 removed `TableSpec.math`, which nothing
+    # here or in the library uses. Raised to 8.1.0 at 1.32.0, the floor for
+    # every consumer and the one `aggregate` 1.11 itself requires; tables
+    # rendered through it differ from 7.0 in places (its CHANGELOG marks each
+    # such release "Output changes").
+    "greater-tables>=8.1.0",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
@@ -159,7 +166,7 @@ aggregate-api = "aggregate_api.__main__:main"
 #
 #     uv sync --extra dev                                   # PyPI, the default
 #     uv pip install -e V:/worktrees/aggregate_REFACTOR     # swap in the library
-#     uv pip install -e c:/s/ai/greatest-tables             # swap in the tables
+#     uv pip install -e V:/dev/greatest-tables              # swap in the tables
 #
 # The tables checkout folder is still named `greatest-tables` after the working
 # name it carried for a day; that is deliberate and the path above is correct.

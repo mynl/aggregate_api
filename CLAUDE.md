@@ -46,8 +46,11 @@ in-development `1.0.0a` line and PyPI stopped at 0.30.1, so a clone needed
 `aggregate_REFACTOR` checked out beside it before `uv sync` could succeed. The
 library published 1.0.1 on 2026-10-07 and that ended. There is no
 `[tool.uv.sources]` table any more, and a fresh clone syncs with nothing beside
-it. The pin is `aggregate>=1.6.0,<2`. The floor is the release that brought
-`aggregate.decl_words` (1.30.0 of this package);
+it. The pin is `aggregate>=1.11.0,<2` since 1.32.0: the first release on PyPI
+whose format sheets send each exhibit block only its own columns, without
+which greater_tables 8 warns once per absent column
+(`dev/done/plan-greater-tables-8.md`). The comment at the pin in
+`pyproject.toml` gives the earlier floors;
 `dev/done/plan-1.0.0-release.md` explains the ceiling, and the comment where the
 table used to sit explains why removing it was necessary rather than merely
 tidy.
@@ -76,10 +79,10 @@ at each library minor rather than trusting the range.
 
 `greater-tables` used to be a path source for the same reason and **is not any
 more**: 6.0.0 shipped to PyPI at a53, so it is an ordinary registry dependency,
-pinned `>=7.0.0` since 1.31.0. The floor matters. PyPI also carries 5.3, the previous
+pinned `>=8.1.0` since 1.32.0, the floor for every consumer. The floor matters. PyPI also carries 5.3, the previous
 generation under the same name, and it has no `build`, `canonical_json` or
 `IR_VERSION`, so resolving to it fails at import rather than at install. To
-co-develop it for a session, `uv pip install -e c:/s/ai/greatest-tables` after a
+co-develop it for a session, `uv pip install -e V:/dev/greatest-tables` after a
 sync; the next `uv sync` (a dependency change, never a bump) silently puts the
 released build back.
 

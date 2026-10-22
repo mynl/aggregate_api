@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.32.0
+
+[Greater-Tables-8] **Tables come from greater_tables 8.1.0, and no response carries a greater_tables warning.** Plan `dev/done/plan-greater-tables-8.md`, the consumer half of the library's [Format-Sheet-Block-Filter].
+
+- Changed: requires `greater-tables>=8.1.0` (was `>=7.0.0`) and `aggregate>=1.11.0` (was `>=1.6.0`); `uv.lock` moves to 8.1.0 and 1.11.0. The browser walker at `/v1/assets/gt-render.esm.js` comes from the same install, so it moves too.
+- Changed: some tables read differently. greater_tables 7.4.0 gives a float column with no format of its own the decimals its smallest value needs, or SI past five; in the exhibits that adds a decimal to several `approximation` columns and sets `Change CV` on the `reins` summary in SI, like `Change EX`.
+- Fixed: a pricing allocate request returned 538 `formatters key ... matches no column` warnings under greater_tables 7.4 and later. aggregate 1.10.0 sends each exhibit block only the format entries for its own columns.
+- Changed: the DecL playground colors `aad`, `agglimit`, `franchise` and `disappearing`, from the word list regenerated against aggregate 1.11.0.
+
 ## 1.31.1
 
 [Sheets-Template] **The /use page links the Google Sheets template.** Plan `dev/done/plan-sheets-template.md`, step 6.

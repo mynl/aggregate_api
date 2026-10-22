@@ -12,7 +12,7 @@ resolution-markers = [
 
 [[package]]
 name = "aggregate"
-version = "1.6.0"
+version = "1.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "greater-tables" },
@@ -25,9 +25,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/89/ab/7ed5136e92bacd650cab3a569139d250db474be66c1cbcc7f83bdf8743e4/aggregate-1.6.0.tar.gz", hash = "sha256:1f76348f519fa789e77b722e33f1a6fe3c1c81bf2cc557316927d60275fd09bf", size = 1839405, upload-time = "2026-10-19T09:58:23.261Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/13/0b8944662c3dbae669d953ff866addb476936b39aef65d1437df9012586d/aggregate-1.11.0.tar.gz", hash = "sha256:40542b044ead8d1a701df34127f97742e23dd067c649d675f310d2b93cc07445", size = 1872432, upload-time = "2026-10-22T17:42:30.308Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6c/1a/d6a0668d65f33ef0b1a47e03ae266f1557653c64e6575bd80ef3090beb91/aggregate-1.6.0-py3-none-any.whl", hash = "sha256:5ffd96869d7819a3c62f010e7ae3f58e2bf6dd2654580f16cd5e28e18e236dc9", size = 1341799, upload-time = "2026-10-19T09:58:21.319Z" },
+    { url = "https://files.pythonhosted.org/packages/48/c9/0f414a7937bf60b0b789c834fc096fc24373f4a2cbfe1e3fb4db8e3ddb76/aggregate-1.11.0-py3-none-any.whl", hash = "sha256:4ae43661a26151de92d32e5f8e5ab314a73ee458588b918afa8f02734948edc3", size = 1359914, upload-time = "2026-10-22T17:42:28.66Z" },
 ]
 
 [[package]]
@@ -59,9 +59,9 @@ status = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aggregate", specifier = ">=1.6.0,<2" },
+    { name = "aggregate", specifier = ">=1.11.0,<2" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "greater-tables", specifier = ">=7.0.0" },
+    { name = "greater-tables", specifier = ">=8.1.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "orjson", specifier = ">=3.10" },
     { name = "psutil", marker = "extra == 'status'", specifier = ">=5.9" },
@@ -277,7 +277,7 @@ wheels = [
 
 [[package]]
 name = "greater-tables"
-version = "7.0.0"
+version = "8.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
@@ -285,9 +285,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/48/cc/167933a9a5671b0f61085fb0848e40697c1a80dcf6d5aa6cbfbd05b0d8a6/greater_tables-7.0.0.tar.gz", hash = "sha256:989fd6436ae45680fa6eea93347cda8aa4ace3fc72b9e4422f932019668a88e2", size = 1712151, upload-time = "2026-10-15T15:15:15.573Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/18/ca/0fb84995b99d05a4ec8281fd8502f24d0ff3ef16fabdca90f9a79bba6e60/greater_tables-8.1.0.tar.gz", hash = "sha256:a912ba01e430168640f10f8e45ab86ee49a526d0001e6897320f86a83bd7bf37", size = 1773530, upload-time = "2026-10-22T09:56:13.179Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4b/dc/d9bae6f77985647d63f46de281602a5a38bccfe00eca446ec456a8673f66/greater_tables-7.0.0-py3-none-any.whl", hash = "sha256:2e66c5296f551d20bf98f8a7fcf919997432e21b81bb8eeb76b2cdfd3f7fe198", size = 379793, upload-time = "2026-10-15T15:15:13.992Z" },
+    { url = "https://files.pythonhosted.org/packages/17/9f/6f41dbb823f986570fc73f533d57f0132566f7a7d870ce3f613e0c8e59a3/greater_tables-8.1.0-py3-none-any.whl", hash = "sha256:0618992f4a391ea7667039e7de451ba465ac153886e30f7087c54fa42e218b6b", size = 394232, upload-time = "2026-10-22T09:56:11.812Z" },
 ]
 
 [[package]]

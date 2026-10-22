@@ -6,6 +6,14 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Greater-Tables-8]** DONE (`1.32.0`), plan
+  `dev/done/plan-greater-tables-8.md`, the consumer half of the library's
+  [Format-Sheet-Block-Filter] (`aggregate` 1.10.0, on PyPI as 1.11.0). Floors
+  `greater-tables>=8.1.0` and `aggregate>=1.11.0`; no greater_tables warning in
+  any response. Still owed, the author's: the plugin's re-lock to
+  greater-tables 8.1.0, uncommitted in `aggregate-relativity`, and the by-hand
+  acceptance against the restarted server.
+
 - **[Excel-Library-And-Frames]** DONE (`1.22.0` to `1.26.0`), plan
   `dev/done/plan-excel-library-and-frames.md`, five steps, one bump each:
   `[lab-all-rows-switch]` 1.22.0 (All rows as a menu item and Ctrl+Shift+A,

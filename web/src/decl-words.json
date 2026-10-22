@@ -1,9 +1,11 @@
 {
-  "version": "1.6.0",
+  "version": "1.11.0",
   "groups": {
     "reserved": [
+      "aad",
       "after",
       "agg",
+      "agglimit",
       "aggregate",
       "and",
       "approx",
@@ -27,6 +29,7 @@
       "deposit",
       "derive",
       "dfreq",
+      "disappearing",
       "dist",
       "distortion",
       "dsev",
@@ -36,6 +39,7 @@
       "expenses",
       "exposure",
       "fixed",
+      "franchise",
       "free",
       "geometric",
       "grossceded",
