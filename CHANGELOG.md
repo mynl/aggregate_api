@@ -4,6 +4,14 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.33.0
+
+[Menu-Preferences] **The Lab's menu fits a phone.** No plan: tire kicking on the full site from a phone.
+
+- Changed: Tables, Perspective and Editor sit collapsed under one Preferences row, after Apps and before Help. The row opens the group in place and keeps the menu open; choosing an item closes it as before, and the group starts collapsed each time the menu opens. Ctrl+Shift+U, A and V are unchanged.
+- Fixed: a menu taller than the screen had items nobody could reach, since it hangs off the sticky header. It is now capped at the visible height and scrolls itself.
+- Help says Menu ▸ Preferences ▸ Emacs keys, and a web test pins the menu's order.
+
 ## 1.32.0
 
 [Greater-Tables-8] **Tables come from greater_tables 8.1.0, and no response carries a greater_tables warning.** Plan `dev/done/plan-greater-tables-8.md`, the consumer half of the library's [Format-Sheet-Block-Filter].

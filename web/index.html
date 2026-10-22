@@ -82,7 +82,7 @@
                         <button type="button" class="hamburger-btn" data-bs-toggle="dropdown"
                                 aria-expanded="false" aria-label="menu" title="Menu">
                             <i class="bi bi-list"></i></button>
-                        <ul class="dropdown-menu dropdown-menu-end">
+                        <ul class="dropdown-menu dropdown-menu-end main-menu">
                             <!-- A deep link to the entry and tab on screen, first
                                  and in a group of its own (author, 1.13.1). Its
                                  state is worked out each time the menu opens, and
@@ -101,6 +101,26 @@
                                  the listing does not answer. -->
                             <li id="database-header"><h6 class="dropdown-header">Examples from</h6></li>
                             <li id="database-divider"><hr class="dropdown-divider"></li>
+                            <!-- Apps: the other front ends this server mounts
+                                 (AGGAPI_APPS), each a link that opens in this
+                                 tab. main.js renders the items from /v1/meta
+                                 between this header and the divider, and shows
+                                 the pair only when there is at least one. -->
+                            <li id="apps-header" hidden><h6 class="dropdown-header">Apps</h6></li>
+                            <li id="apps-divider" hidden><hr class="dropdown-divider"></li>
+                            <!-- Preferences: Tables, Perspective and Editor,
+                                 collapsed behind one row so the menu fits a
+                                 phone (author, 1.33.0). Bootstrap 5 has no
+                                 nested submenu, and a flyout is no use on a
+                                 phone, so the row discloses the group in place.
+                                 Pressing it keeps the menu open; choosing an
+                                 item inside closes it, as before. The group
+                                 starts collapsed each time the menu opens. See
+                                 `prefs-toggle` in main.js. -->
+                            <li><button type="button" class="dropdown-item prefs-toggle" id="prefs-toggle"
+                                        aria-expanded="false" aria-controls="prefs-group">
+                                <span>Preferences</span><i class="bi bi-chevron-down" aria-hidden="true"></i></button></li>
+                            <li id="prefs-group" hidden><ul class="prefs-group">
                             <!-- Tables: the page-wide static / interactive choice. It lives here
                                  rather than on each tab because it is a preference, not a per-table
                                  decision, and a switch on every table would be a lot of chrome for
@@ -171,14 +191,8 @@
                             <li><button type="button" class="dropdown-item menu-check-item" id="emacs-item">
                                 <i class="bi bi-check2"></i><span>Emacs keys</span>
                                 <small class="text-muted">Ctrl+A/E/K/Y, N/P, F/B/D</small></button></li>
+                            </ul></li>
                             <li><hr class="dropdown-divider"></li>
-                            <!-- Apps: the other front ends this server mounts
-                                 (AGGAPI_APPS), each a link that opens in this
-                                 tab. main.js renders the items from /v1/meta
-                                 between this header and the divider, and shows
-                                 the pair only when there is at least one. -->
-                            <li id="apps-header" hidden><h6 class="dropdown-header">Apps</h6></li>
-                            <li id="apps-divider" hidden><hr class="dropdown-divider"></li>
                             <li><button type="button" class="dropdown-item" data-bs-toggle="offcanvas" data-bs-target="#helpPanel">Help</button></li>
                             <!-- The library's DecL reference card. Disabled until
                                  `/v1/meta` says the library has it, with the
@@ -836,7 +850,7 @@
             </div>
             <p class="small text-muted">Ctrl+Shift+V stands aside inside the program box and the
                 entry forms, where the browser claims it for paste, and works everywhere else.
-                Menu ▸ Editor ▸ Emacs keys adds Ctrl+A/E/K/Y, N/P and F/B/D in the
+                Menu ▸ Preferences ▸ Emacs keys adds Ctrl+A/E/K/Y, N/P and F/B/D in the
                 program box.</p>
 
             <h6>Controls</h6>

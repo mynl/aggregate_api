@@ -6,6 +6,11 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Menu-Preferences]** DONE (`1.33.0`), no plan: tire kicking on a phone.
+  Tables, Perspective and Editor collapse under a Preferences row after Apps,
+  and the menu scrolls within the screen. Still owed, the author's: the check
+  on a real phone.
+
 - **[Greater-Tables-8]** DONE (`1.32.0`), plan
   `dev/done/plan-greater-tables-8.md`, the consumer half of the library's
   [Format-Sheet-Block-Filter] (`aggregate` 1.10.0, on PyPI as 1.11.0). Floors

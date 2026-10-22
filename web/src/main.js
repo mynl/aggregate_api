@@ -5520,6 +5520,28 @@ async function copyLink() {
 }
 
 // ----------------------------------------------------------------------
+// Preferences: Tables, Perspective and Editor behind one row (1.33.0)
+// ----------------------------------------------------------------------
+// The three groups made the menu taller than a phone's screen, so they sit
+// collapsed under a disclosure row (author, 1.33.0). The row keeps the menu
+// open; the items inside keep their own wiring and close it as before.
+{
+    const toggle = $('prefs-toggle');
+    const group = $('prefs-group');
+    const setOpen = (open) => {
+        group.hidden = !open;
+        toggle.setAttribute('aria-expanded', String(open));
+    };
+    toggle.addEventListener('click', (e) => {
+        // Bootstrap closes an open menu from a click handler on `document`,
+        // for a press anywhere inside it too, so the press stops here.
+        e.stopPropagation();
+        setOpen(group.hidden);
+    });
+    document.querySelector('.hamburger-btn')?.addEventListener('show.bs.dropdown', () => setOpen(false));
+}
+
+// ----------------------------------------------------------------------
 // PWA service worker (production bundle only)
 // ----------------------------------------------------------------------
 // Registered only in the built bundle so the Vite dev server's HMR isn't

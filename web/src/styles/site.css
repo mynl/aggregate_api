@@ -272,6 +272,20 @@ header .navbar { min-height: 56px; }
 .hamburger-btn { border: 0; background: transparent; color: var(--mut); cursor: pointer;
   padding: 0 .15rem; line-height: 1; font-size: 1.15rem; display: inline-flex; }
 .hamburger-btn:hover { color: var(--primary); }
+/* The menu hangs off the sticky header, so it stays put while the page scrolls
+   behind it, and a menu taller than a phone's screen had items nobody could
+   reach. Capped at the visible height under the header, it scrolls itself
+   instead; `dvh` follows the phone browser's toolbar as it shows and hides, and
+   the `vh` line is the fallback where `dvh` is not understood. `contain` keeps
+   a scroll that reaches the menu's end from moving the page. */
+.main-menu { max-height: calc(100vh - 4.5rem); max-height: calc(100dvh - 4.5rem);
+  overflow-y: auto; overscroll-behavior: contain; }
+/* Preferences: one disclosure row over the Tables, Perspective and Editor
+   groups. The label never changes; the chevron turns to show the state. */
+.prefs-toggle { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.prefs-toggle .bi-chevron-down { font-size: .75rem; color: var(--mut); transition: transform .15s; }
+.prefs-toggle[aria-expanded="true"] .bi-chevron-down { transform: rotate(180deg); }
+.prefs-group { list-style: none; margin: 0; padding: 0 0 0 .5rem; }
 .help-panel { width: 360px; max-width: 86vw; }
 .help-panel .offcanvas-title { font-size: 1rem; font-weight: 700; }
 .help-body { font-size: .82rem; color: var(--ink-2); }
