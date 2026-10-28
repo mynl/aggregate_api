@@ -29,7 +29,7 @@ import logging
 from pathlib import Path
 
 from aggregate import plugins as agg_plugins
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -40,6 +40,7 @@ from . import apps, resources, status
 from .config import Settings, get_settings
 from .cors import install_cors
 from .library import get_underwriter
+from .loss_table_files import refuse_file_text
 from .routes import decl as decl_routes
 from .routes import examples as examples_routes
 from .routes import meta as meta_routes
@@ -197,10 +198,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Mount all routers under /v1. FastAPI's include_router accepts
     # a prefix, similar to Flask's blueprint url_prefix kwarg.
-    app.include_router(meta_routes.router, prefix="/v1", tags=["meta"])
-    app.include_router(objects_routes.router, prefix="/v1", tags=["objects"])
-    app.include_router(decl_routes.router, prefix="/v1", tags=["decl"])
-    app.include_router(examples_routes.router, prefix="/v1", tags=["examples"])
+    #
+    # Every router that takes a program refuses a loss table file path from
+    # outside the private network, before the handler runs and before anything
+    # reaches the library. See loss_table_files.py. The status router is private
+    # as a whole, so it goes without.
+    public = [Depends(refuse_file_text)]
+    app.include_router(meta_routes.router, prefix="/v1", tags=["meta"],
+                       dependencies=public)
+    app.include_router(objects_routes.router, prefix="/v1", tags=["objects"],
+                       dependencies=public)
+    app.include_router(decl_routes.router, prefix="/v1", tags=["decl"],
+                       dependencies=public)
+    app.include_router(examples_routes.router, prefix="/v1", tags=["examples"],
+                       dependencies=public)
     # The operator's page. Mounted with the rest, and ahead of the static mount
     # below, which is why it lives under /v1: an unmatched top-level path falls
     # through to StaticFiles(html=True) and would be answered with index.html

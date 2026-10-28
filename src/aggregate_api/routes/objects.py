@@ -125,6 +125,12 @@ from ..capability import (
     PNL_PREMIUM_STYLE_SUPPORTED, can_sharpen, capability_for, narrative_for,
 )
 from ..config import Settings, get_settings
+from ..loss_table_files import (
+    REFUSAL as FILE_REFUSAL,
+    preview_names_file,
+    request_is_private,
+    spec_names_file,
+)
 from ..layer_pricing import (
     indication as layer_indication, policy_limit, price_clause)
 from ..library import (
@@ -781,15 +787,23 @@ def _missing_entry_detail(exc: RecipeNotFound) -> dict:
     }
 
 
-def _resolve_object(oid: str, cache: ObjectCache) -> CacheEntry:
-    """Fetch an entry or raise 404."""
+def _resolve_object(oid: str, cache: ObjectCache, request: Request) -> CacheEntry:
+    """Fetch an entry or raise 404.
+
+    Notes
+    -----
+    An entry built from a loss table file is served to private requests only,
+    and to anyone else is the same 404 as an id never built, so its existence
+    is not confirmed. Its id is a hash anyone can compute from the program, so
+    the id is no secret. See ``loss_table_files.py``.
+    """
     entry = cache.get(oid)
-    if entry is None:
+    if entry is None or (entry.reads_files and not request_is_private(request)):
         raise HTTPException(status_code=404, detail=f"object {oid} not in cache")
     return entry
 
 
-async def _locked_entry(oid: str):
+async def _locked_entry(oid: str, request: Request):
     """Dependency: resolve an object and hold its lock for the whole request.
 
     Every route that pulls data off a built object depends on this rather than
@@ -857,7 +871,7 @@ async def _locked_entry(oid: str):
     # whole problem; `_get_cache` and `get_settings` are both singleton lookups,
     # so the injection bought nothing here but the token.
     settings = get_settings()
-    entry = _resolve_object(oid, _get_cache(settings))
+    entry = _resolve_object(oid, _get_cache(settings), request)
 
     # Wait on the event loop, never in a worker thread. `acquire(blocking=True)`
     # would park a thread that is holding a token, which is the livelock
@@ -1659,6 +1673,26 @@ def post_object(
         raise HTTPException(status_code=422, detail=detail) from None
     status_state.record_preview_ms((time.monotonic() - preview_t0) * 1000)
 
+    # A program that names a loss table file, in its own text or through
+    # anything it resolves to, builds for private requests only. Refused here,
+    # after the preview and before any build work, because the preview reads no
+    # file and the build does. The router dependency has already refused a path
+    # in the request text; this catches one reached by reference. See
+    # loss_table_files.py.
+    try:
+        reads_files = preview_names_file(uw, preview)
+    except RecipeNotFound as exc:
+        raise HTTPException(status_code=422,
+                            detail=_missing_entry_detail(exc)) from None
+    if reads_files and not request_is_private(request):
+        elapsed = int((time.monotonic() - t0) * 1000)
+        audit.record_build(
+            ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
+            status="build_error", error_msg=FILE_REFUSAL,
+            elapsed_ms=elapsed, session_id=sid,
+        )
+        raise HTTPException(status_code=422, detail=FILE_REFUSAL)
+
     # A client that cannot track a reference by name (a spreadsheet cell does
     # not depend on the cell that built the referent) asks for library entries
     # only. Refused before any build work, and not counted as a keying.
@@ -1897,6 +1931,7 @@ def post_object(
             name=getattr(obj, "name", "<anonymous>"),
             created_at=datetime.now(timezone.utc),
             notes=build_notes,
+            reads_files=reads_files,
         )
         cache.put(oid, entry)
 
@@ -1994,16 +2029,24 @@ def _classify_object(obj: Any) -> str:
 # ----------------------------------------------------------------------
 
 @router.get("/objects", response_model=models.ObjectListResponse)
-def list_objects(cache: ObjectCache = Depends(_get_cache)) -> dict:
-    """Return a snapshot of cache contents, MRU last."""
+def list_objects(request: Request,
+                 cache: ObjectCache = Depends(_get_cache)) -> dict:
+    """Return a snapshot of cache contents, MRU last.
+
+    An entry built from a loss table file is listed for private requests only,
+    as :func:`_resolve_object` serves it.
+    """
     # Recover the (id, entry) pairing by scanning the cache.
     # The cache holds the OrderedDict internally; we expose it via
     # .list() but lose the id. Walk the internal dict directly
     # *with* the lock through a small helper.
     items = []
+    private = request_is_private(request)
     # Internal access: read the OrderedDict items under lock.
     with cache._lock:  # noqa: SLF001 -- intentional cross-module use
         for oid, entry in cache._store.items():
+            if entry.reads_files and not private:
+                continue
             items.append({
                 "id": oid,
                 "kind": entry.kind,
@@ -2033,6 +2076,7 @@ _KIND_ORDER = {
 
 @router.get("/session/models.agg")
 def get_session_models(
+    request: Request,
     form: Literal["raw", "agg"] = Query(
         "raw",
         description=(
@@ -2071,8 +2115,13 @@ def get_session_models(
     because this URL is opened by navigation and a navigation cannot carry one.
     A request with neither lands in the anonymous session, whose base holds
     whatever other headerless clients put there.
+
+    Both forms leave out, for a request from outside the private network, any
+    program that names a loss table file: its path is a fact about the host's
+    disk. See ``loss_table_files.py``.
     """
     programs: list[str] = []
+    private = request_is_private(request)
     if form == "raw":
         # Programs exactly as typed -- unique decls in cache (MRU) order. This is
         # deliberately NOT run through ``format_program``: that re-parses and so
@@ -2083,6 +2132,8 @@ def get_session_models(
         seen: set[str] = set()
         with cache._lock:  # noqa: SLF001 -- intentional cross-module use
             for entry in cache._store.values():
+                if entry.reads_files and not private:
+                    continue
                 decl = entry.decl.strip()
                 if decl and decl not in seen:
                     seen.add(decl)
@@ -2105,6 +2156,8 @@ def get_session_models(
         )
         for r in rows:
             kind, name = r.Index
+            if not private and spec_names_file(r.spec):
+                continue
             # Canonical text from the parsed spec (ranges expanded, deduped) ...
             try:
                 text = spec_to_decl(r.spec, kind, name)
@@ -2145,8 +2198,9 @@ def get_session_models(
 # ----------------------------------------------------------------------
 
 @router.get("/objects/{oid}", response_model=models.ObjectManifest)
-def get_manifest(oid: str, cache: ObjectCache = Depends(_get_cache)) -> dict:
-    entry = _resolve_object(oid, cache)
+def get_manifest(oid: str, request: Request,
+                 cache: ObjectCache = Depends(_get_cache)) -> dict:
+    entry = _resolve_object(oid, cache, request)
     return {
         "id": oid,
         "kind": entry.kind,
@@ -3742,6 +3796,8 @@ def post_sharpen(
         # The build's warnings travel with the copy, because they describe the
         # object rather than the request: this one was built by that build.
         notes=list(entry.notes),
+        # Built from the same sources, so served to the same requests.
+        reads_files=entry.reads_files,
     )
     cache.put(new_oid, new_entry)
     return {

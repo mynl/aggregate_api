@@ -6,6 +6,13 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Loss-Table-File-Gate]** DONE (`1.35.0`), plan
+  `dev/done/plan-loss-table-file-gate.md`. A loss table file path is read for
+  private requests only: the request text, references through the preview, and
+  the object cache. Still owed, the author's: deploy to the VPS, and
+  `192.168.4.0/24` in `AGGAPI_PRIVATE_CIDRS` on DOOB's launcher. Optional later:
+  a library switch that refuses file sources at the read, as a second layer.
+
 - **[ELT-Keywords-And-Eltq]** DONE (`1.34.0`), no plan: the consumer half of
   the library's loss tables, `aggregate` 1.12.0 to 1.18.0. `eltq>=2.13` as a
   direct dependency and the word list regenerated against 1.18.0. Still owed:

@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.35.0
+
+[Loss-Table-File-Gate] **A loss table file path is read for private requests only.** Plan `dev/done/plan-loss-table-file-gate.md`. Since aggregate 1.13.0, `elt "path"` and `ylt "path"` read a CSV, TSV, Parquet or Feather file from the server's disk, and agg.mynl.com ran 1.18.0 with no guard.
+
+- Fixed: a request from outside `AGGAPI_PRIVATE_CIDRS` (the status page's list, by default loopback and the VPN subnet) whose query or body names a readable file gets a 422 before anything reaches the library.
+- Fixed: a reference to a recipe built from a file (`agg.NAME`, `sev agg.NAME`) is refused the same way, from the preview the build route already makes, so no file is read.
+- Fixed: an object built from a file is hidden from outside. Its id is a hash anyone can compute, so the lookup returns 404, and the cache listing and the session download leave it out.
+- Unchanged: inline `elt [[...]]` and `ylt [...]` tables, for everyone. A request with no proxy header is judged on its peer, so local development reads files as before.
+- Deployment: DOOB's launcher needs `192.168.4.0/24` added to `AGGAPI_PRIVATE_CIDRS` for the LAN; the VPS keeps the default.
+
 ## 1.34.0
 
 [ELT-Keywords-And-Eltq] **The DecL playground colors the loss table words, and an ELT6 table with secondary uncertainty builds.** No plan: the consumer half of the library's loss tables, `aggregate` 1.12.0 to 1.18.0.

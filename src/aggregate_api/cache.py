@@ -172,6 +172,10 @@ class CacheEntry:
     # cache hit reports the same warnings as the miss that made it, so
     # rebuilding a program does not silently lose the reason to worry about it.
     notes: list[str] = field(default_factory=list)
+    # Whether the program, or anything it resolves to, names a loss table file.
+    # Such an object is served to private requests only: its id is a hash
+    # anyone can compute from the program. See loss_table_files.py.
+    reads_files: bool = False
     # Guards reads *of the object*, not of this dataclass. See below.
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False,
                                  compare=False)
