@@ -67,6 +67,14 @@ dependencies = [
     # public surface, and a major is exactly where a private name moves.
     # Re-check both at each library minor rather than trusting the range.
     "aggregate>=1.11.0,<2",
+    # Secondary uncertainty in an event loss table: an ELT6 `elt` source
+    # without `no2u` imports eltq, and raises ImportError without it. The
+    # library declares it as its `elt` extra from 1.18.0. It is named directly
+    # here because 1.18.0 is not yet on PyPI, and `aggregate[elt]` against
+    # 1.11.0 resolves to no eltq at all, since that release has no such extra.
+    # Once the floor reaches 1.18.0 this line becomes `aggregate[elt]`. The
+    # floor matches the library's ELTQ_MIN_VERSION.
+    "eltq>=2.13",
     # Static tables (the author's own package). The api asks it for a semantic
     # table document (the IR), never for markup: the browser owns geometry. The
     # same install also ships the walker that renders that IR, which is what

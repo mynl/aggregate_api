@@ -4,6 +4,14 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.34.0
+
+[ELT-Keywords-And-Eltq] **The DecL playground colors the loss table words, and an ELT6 table with secondary uncertainty builds.** No plan: the consumer half of the library's loss tables, `aggregate` 1.12.0 to 1.18.0.
+
+- Added: `eltq>=2.13` as a dependency. An `elt` source with `max sdi sdc` columns and no `no2u` imports it, and raises `ImportError` without it. Named directly because `aggregate` 1.18.0, which declares it as the `elt` extra, is not yet on PyPI; it becomes `aggregate[elt]` when the floor reaches 1.18.0. `uv.lock` adds eltq 2.14.0.
+- Changed: the DecL playground colors `elt`, `ylt`, `no2u` and `unit`, from the word list regenerated against aggregate 1.18.0.
+- Release blocker: the word list follows 1.18.0 while the floor stays `aggregate>=1.11.0`, so `release-check.ps1`, which installs the PyPI release, fails `tests/test_decl.py` until 1.18.0 is published and the floor moves.
+
 ## 1.33.0
 
 [Menu-Preferences] **The Lab's menu fits a phone.** No plan: tire kicking on the full site from a phone.

@@ -1,5 +1,5 @@
 {
-  "version": "1.11.0",
+  "version": "1.18.0",
   "groups": {
     "reserved": [
       "aad",
@@ -34,6 +34,7 @@
       "distortion",
       "dsev",
       "dwait",
+      "elt",
       "exp",
       "expense",
       "expenses",
@@ -60,6 +61,7 @@
       "neymanA",
       "neymana",
       "no",
+      "no2u",
       "nttagg",
       "occurrence",
       "of",
@@ -87,6 +89,7 @@
       "to",
       "tower",
       "tweedie",
+      "unit",
       "wait",
       "wts",
       "xpnl",
@@ -94,6 +97,7 @@
       "xs",
       "year",
       "years",
+      "ylt",
       "zm",
       "zt"
     ],
@@ -115,7 +119,9 @@
       "dfreq",
       "dsev",
       "dwait",
-      "nttagg"
+      "elt",
+      "nttagg",
+      "ylt"
     ],
     "clauses": [
       "hints",

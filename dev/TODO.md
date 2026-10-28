@@ -6,6 +6,12 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[ELT-Keywords-And-Eltq]** DONE (`1.34.0`), no plan: the consumer half of
+  the library's loss tables, `aggregate` 1.12.0 to 1.18.0. `eltq>=2.13` as a
+  direct dependency and the word list regenerated against 1.18.0. Still owed:
+  `aggregate[elt]` and the `aggregate>=1.18.0` floor once 1.18.0 is on PyPI;
+  until then `release-check.ps1` fails the word list test.
+
 - **[Menu-Preferences]** DONE (`1.33.0`), no plan: tire kicking on a phone.
   Tables, Perspective and Editor collapse under a Preferences row after Apps,
   and the menu scrolls within the screen. Still owed, the author's: the check
