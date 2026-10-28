@@ -5341,6 +5341,8 @@ api.meta().then((meta) => {
         $('about-ntt-label').hidden = false;
         $('about-ntt').hidden = false;
     }
+    // A dependency, so null only on a broken install, which is worth saying.
+    $('about-eltq').textContent = meta.eltq_version || 'not installed';
     // The same two in the header, where they can be read without opening
     // anything. `agg` first, because which library built the numbers is the
     // question this answers most often.

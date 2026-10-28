@@ -6,6 +6,9 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Eltq-Version]** DONE (`1.35.1`), no plan: About, `/v1/meta` and the status
+  page list the eltq version.
+
 - **[Loss-Table-File-Gate]** DONE (`1.35.0`), plan
   `dev/done/plan-loss-table-file-gate.md`. A loss table file path is read for
   private requests only: the request text, references through the preview, and

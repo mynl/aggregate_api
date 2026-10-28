@@ -127,6 +127,18 @@ def test_meta_reports_the_ntt_engine_only_when_it_imports(client, monkeypatch):
     assert client.get("/v1/meta").json()["ntt_version"] == "9.9.9"
 
 
+def test_meta_reports_eltq(client, monkeypatch):
+    """`eltq_version` is the installed eltq, and null rather than a failure
+    when it does not import."""
+    import sys
+
+    import eltq
+
+    assert client.get("/v1/meta").json()["eltq_version"] == eltq.__version__
+    monkeypatch.setitem(sys.modules, "eltq", None)
+    assert client.get("/v1/meta").json()["eltq_version"] is None
+
+
 @pytest.mark.parametrize(
     "env, expected",
     [

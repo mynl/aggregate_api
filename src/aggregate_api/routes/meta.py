@@ -185,6 +185,7 @@ async def meta(request: Request) -> dict:
         "aggregate_version": aggregate.__version__,
         "tables_version": greater_tables.__version__,
         "ntt_version": _ntt_version(),
+        "eltq_version": eltq_version(),
         "log2_cap": settings.log2_cap,
         "log2_default": settings.log2_default,
         "build_timeout_s": settings.build_timeout_s,
@@ -208,6 +209,29 @@ def _frame_formats() -> list[str]:
     if parquet_available():
         formats.append("parquet")
     return formats
+
+
+def eltq_version() -> str | None:
+    """The eltq version, or ``None`` if it does not import.
+
+    Returns
+    -------
+    str or None
+        ``eltq.__version__`` when the package imports, else ``None``.
+
+    Notes
+    -----
+    eltq computes secondary uncertainty for an ELT6 loss table. A dependency
+    since 1.34.0, so ``None`` means a broken install. Guarded anyway: the
+    library treats it as optional (its ``elt`` extra) and imports it only for
+    that one source form, and neither ``/v1/meta`` nor the status page should
+    fail over it. Public because the status page reports it too.
+    """
+    try:
+        import eltq
+    except ImportError:
+        return None
+    return getattr(eltq, "__version__", None)
 
 
 def _ntt_version() -> str | None:

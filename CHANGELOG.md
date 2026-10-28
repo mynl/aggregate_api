@@ -4,6 +4,13 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.35.1
+
+[Eltq-Version] **About and the status page list the eltq version.** No plan: follows the 1.34.0 dependency.
+
+- Added: `eltq_version` on `/v1/meta` and in the status page's identity block, null when eltq does not import. The About panel shows it under `eltq`, or `not installed`.
+- Unchanged: `AGG_VERSION()` in Sheets, since a template copy never updates.
+
 ## 1.35.0
 
 [Loss-Table-File-Gate] **A loss table file path is read for private requests only.** Plan `dev/done/plan-loss-table-file-gate.md`. Since aggregate 1.13.0, `elt "path"` and `ylt "path"` read a CSV, TSV, Parquet or Feather file from the server's disk, and agg.mynl.com ran 1.18.0 with no guard.

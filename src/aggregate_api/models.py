@@ -1468,6 +1468,9 @@ class MetaResponse(BaseModel):
     # The optional compiled exact-compound engine, `aggregate-ntt`, when it
     # imports in this process; null otherwise, which hides its About row.
     ntt_version: str | None = None
+    # eltq, for secondary uncertainty in an ELT6 loss table. A dependency, so
+    # null only on a broken install.
+    eltq_version: str | None = None
     log2_cap: int
     log2_default: int
     build_timeout_s: float

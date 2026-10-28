@@ -225,6 +225,7 @@ def test_a_fresh_app_reports_the_library_loaded_before_any_build(status_client):
     payload = status_client.get("/v1/status").json()
     assert payload["identity"]["library_loaded"] is True
     assert payload["identity"]["library_recipes"] > 0
+    assert payload["identity"]["eltq_version"]
 
 
 def test_a_build_moves_the_counters(status_client):

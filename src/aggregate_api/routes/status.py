@@ -83,6 +83,7 @@ from ..library import get_underwriter
 from ..net import is_private_request
 from ..sessions import SessionRegistry
 from . import objects as objects_routes
+from .meta import eltq_version
 
 log = logging.getLogger(__name__)
 
@@ -233,6 +234,7 @@ def _identity(settings: Settings) -> dict:
         "version": api_version,
         "aggregate_version": aggregate.__version__,
         "tables_version": greater_tables.__version__,
+        "eltq_version": eltq_version(),
         "python": sys.version.split()[0],
         "platform": platform.platform(terse=True),
         "host": settings.host,
