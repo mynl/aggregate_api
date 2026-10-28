@@ -57,12 +57,12 @@ const MESSAGES = hostMessages(EXCEL);
 // Hosts
 // ----------------------------------------------------------------------
 
-test("Excel's messages are byte-identical to the constant the hosts replaced", () => {
+test("Excel's messages, word for word", () => {
   assert.deepEqual(MESSAGES, {
     unreachable: "server unreachable",
     notAHandle: "expected a handle such as agg.A#4f40714271198d8f, or a DecL program",
     programIsValue:
-      "this program is a number, not an object; pass a handle from AGG.BUILD or a program that declares an agg, port, sev or distortion",
+      "this program is a number or a conversion, not an object; pass a handle from AGG.BUILD or a program that declares an agg, port, sev or distortion",
     unknownHandle: "handle unknown to this workbook; recalculate its AGG.BUILD cell",
     upgraded:
       "the server changed since this workbook was saved; press Ctrl+Alt+F9 to recalculate every cell",
@@ -76,7 +76,7 @@ test("Excel's messages are byte-identical to the constant the hosts replaced", (
 test("Sheets' messages name its functions and its menu", () => {
   const sheets = hostMessages(SHEETS);
   assert.equal(sheets.programIsValue,
-               "this program is a number, not an object; pass a handle from AGG_BUILD or a program that declares an agg, port, sev or distortion");
+               "this program is a number or a conversion, not an object; pass a handle from AGG_BUILD or a program that declares an agg, port, sev or distortion");
   assert.equal(sheets.unknownHandle, "handle unknown to this spreadsheet; recalculate its AGG_BUILD cell");
   assert.equal(sheets.upgraded,
                "the server changed since this spreadsheet was saved; use AGG, Recalculate AGG cells, in the menu");

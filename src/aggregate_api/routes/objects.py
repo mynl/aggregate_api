@@ -1477,12 +1477,13 @@ def collapse_program(decl: str) -> str:
 # POST /v1/objects
 # ----------------------------------------------------------------------
 
-# Discriminated on ``kind``, which both members already declare as a ``Literal``:
-# the six object kinds on one side and ``'value'`` on the other. A union rather
-# than six null fields on ``BuildResponse``, because almost nothing a build
-# manifest carries applies to a number. See :class:`models.ValueResponse`.
-_BuildOrValue = Annotated[
-    models.BuildResponse | models.ValueResponse,
+# Discriminated on ``kind``, which every member already declares as a
+# ``Literal``: the object kinds, ``'value'`` and ``'text'``. A union rather than
+# six null fields on ``BuildResponse``, because almost nothing a build manifest
+# carries applies to an answer. See :class:`models.ValueResponse` and
+# :class:`models.TextResponse`.
+_BuildOrAnswer = Annotated[
+    models.BuildResponse | models.ValueResponse | models.TextResponse,
     Field(discriminator="kind"),
 ]
 
@@ -1560,7 +1561,7 @@ def _hit_response(
     }
 
 
-@router.post("/objects", response_model=_BuildOrValue)
+@router.post("/objects", response_model=_BuildOrAnswer)
 def post_object(
     req: models.BuildRequest,
     request: Request,
@@ -1905,6 +1906,27 @@ def post_object(
                 "elapsed_ms": elapsed,
             }
 
+        # A conversion statement, ``tweedie 1.5 100 2`` or ``stable 1.5 1 2 0``,
+        # whose answer is the library's string of the object it returns. Treated
+        # as the number above is: nothing cached, no recipe, audited as a value.
+        # Recognized by the statement kind the library's own preview declares
+        # rather than by a list of class names here, so the library's next
+        # conversion needs no edit in this file, and under a library that
+        # predates the kind no statement carries it.
+        if _is_conversion(preview):
+            elapsed = int((time.monotonic() - t0) * 1000)
+            audit.record_build(
+                ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
+                status="value", elapsed_ms=elapsed,
+                session_id=sid, key_scope=key_scope,
+            )
+            return {
+                "kind": "text",
+                "text": str(obj),
+                "decl": req.decl,
+                "elapsed_ms": elapsed,
+            }
+
         if kind not in SUPPORTED_KINDS:
             elapsed = int((time.monotonic() - t0) * 1000)
             audit.record_build(
@@ -2022,6 +2044,25 @@ def _classify_object(obj: Any) -> str:
         if isinstance(obj, base):
             return base_kind
     return type(obj).__name__.lower()
+
+
+def _is_conversion(preview: Any) -> bool:
+    """Whether a previewed program is a conversion statement.
+
+    Parameters
+    ----------
+    preview : aggregate.underwriter.ProgramPreview
+        From :func:`_preview`.
+
+    Returns
+    -------
+    bool
+        True when the last statement, the one whose object ``build()`` returns,
+        has the library's kind ``'conversion'`` (one of
+        ``underwriter.ANSWER_KINDS`` since ``aggregate`` 1.22.0).
+    """
+    statements = getattr(preview, "statements", None) or ()
+    return bool(statements) and getattr(statements[-1], "kind", None) == "conversion"
 
 
 # ----------------------------------------------------------------------

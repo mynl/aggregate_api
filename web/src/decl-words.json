@@ -1,5 +1,5 @@
 {
-  "version": "1.18.0",
+  "version": "1.23.0",
   "groups": {
     "reserved": [
       "aad",
@@ -85,6 +85,7 @@
       "slide",
       "splice",
       "ssev",
+      "stable",
       "swing",
       "to",
       "tower",
@@ -97,7 +98,7 @@
       "xs",
       "year",
       "years",
-      "ylt",
+      "yelt",
       "zm",
       "zt"
     ],
@@ -121,7 +122,7 @@
       "dwait",
       "elt",
       "nttagg",
-      "ylt"
+      "yelt"
     ],
     "clauses": [
       "hints",

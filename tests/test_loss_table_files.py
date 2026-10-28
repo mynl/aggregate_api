@@ -69,10 +69,10 @@ def test_suffixes_match_the_library():
     ('agg A elt "x.csv"', True),
     ('agg A elt "X.CSV"', True),
     ('agg A elt unit U as "my unit" "d:/t/x.parquet"', True),
-    ('agg A ylt "x.feather" note{see "x.tsv"}', True),
+    ('agg A yelt "x.feather" note{see "x.tsv"}', True),
     ('agg A elt "a.csv/."', True),
     ('agg A as "events" elt [[1 .1 100] [2 .2 50]]', False),
-    ('agg A ylt [100 200 300]', False),
+    ('agg A yelt [100 200 300]', False),
     ('agg A elt "x.xlsx"', False),
 ])
 def test_mentions_readable_file(text, expected):

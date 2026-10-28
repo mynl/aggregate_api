@@ -334,6 +334,29 @@ class ValueResponse(BaseModel):
     elapsed_ms: int
 
 
+class TextResponse(BaseModel):
+    """A program whose answer is text, from ``POST /v1/objects``.
+
+    A conversion statement, such as ``tweedie 1.5 100 2`` (``aggregate`` 1.22.0)
+    or ``stable 1.5 1 2 0`` (1.23.0), answers with an object whose string lists
+    every spelling of the same parameters. The library's ``str`` is the answer,
+    served verbatim.
+
+    Notes
+    -----
+    A kind of its own rather than ``value``, because ``value`` is a float in the
+    schema and every client treats it as a number. Like a number there is no
+    object to keep: no ``id``, no cache slot and no capability block.
+    """
+
+    model_config = _RESPONSE_CFG
+
+    kind: Literal["text"] = "text"
+    text: str = Field(..., description="The answer, as the library spells it.")
+    decl: str = Field(..., description="The program, as the collapse left it.")
+    elapsed_ms: int
+
+
 class LayerRequest(BaseModel):
     """One layer to quote, in the vocabulary the Quick Re row speaks.
 

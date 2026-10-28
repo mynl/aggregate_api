@@ -179,10 +179,12 @@ class AuditLog:
             Build knobs as requested -- may be None when omitted.
         status : str
             One of ``'ok' | 'value' | 'parse_error' | 'build_error' | 'timeout'
-            | 'limit_exceeded'``. ``'value'`` is a program that meant a number
-            (``(2+2)``), which builds and answers but leaves no object; it has
-            its own status so the operator's page does not read arithmetic as
-            object builds. The summary groups by this column, so a new status
+            | 'limit_exceeded'``. ``'value'`` is a program that meant an
+            answer rather than an object: a number (``(2+2)``) or a text answer
+            from a conversion statement (``tweedie 1.5 100 2``), which builds
+            and answers but leaves no object; it has its own status so the
+            operator's page does not read either as object builds. The summary
+            groups by this column, so a new status
             appears as its own row rather than disturbing an existing one.
         object_id : str|None
             Set on success.

@@ -335,10 +335,21 @@ function buildOnce(
         return refusal;
       }
       if (reply.status !== 200) return fail(errorMessage(reply.status, reply.body));
-      const made = reply.body as { kind: string; name?: string; id?: string; value?: number };
+      const made = reply.body as {
+        kind: string;
+        name?: string;
+        id?: string;
+        value?: number;
+        text?: string;
+      };
       if (made.kind === "value") {
         memo.set(key, made.value as number);
         return made.value as number;
+      }
+      // A conversion statement answers with text, the cell value as it is.
+      if (made.kind === "text") {
+        memo.set(key, made.text as string);
+        return made.text as string;
       }
       const handle = formatHandle(made.kind, made.name ?? "", made.id as string);
       await remember(made.id as string, program, log2, bs);

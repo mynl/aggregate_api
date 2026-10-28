@@ -77,6 +77,7 @@ async function objectIdOf(text: string): Promise<string> {
   if (!response.ok) throw new Error(await reasonOf(response));
   const made = await response.json();
   if (made.kind === "value") throw new Error("this program is a number, not an object");
+  if (made.kind === "text") throw new Error("this program is a conversion, not an object");
   return made.id as string;
 }
 

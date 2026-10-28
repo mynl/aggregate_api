@@ -18,6 +18,11 @@ const FIXTURES = new URL("../../excel/test/fixtures/", import.meta.url);
 
 export const SPREADSHEET_ID = "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcdefg";
 
+/** A conversion statement and the text the stub server answers it with. */
+export const TWEEDIE_PROGRAM = "tweedie 1.5 100 2";
+export const TWEEDIE_TEXT =
+  "tweedie 1.5 100 2 = tweedie 1.5 100 cv 0.447214 = tweedie 10 claims sev gamma 10 cv 1, Pr(X=0) 4.53999e-05";
+
 /** A captured payload from excel/test/fixtures/. */
 export function fixture(name: string): any {
   return JSON.parse(readFileSync(new URL(`${name}.json`, FIXTURES), "utf8"));
@@ -135,6 +140,7 @@ export function harness() {
           return { status: 422, body: { detail: { line: 1, column: 7, message: "Unexpected 'oops'." } } };
         }
         if (decl.trim() === "(2+2)") return { status: 200, body: { kind: "value", value: 4 } };
+        if (decl.trim() === TWEEDIE_PROGRAM) return { status: 200, body: { kind: "text", text: TWEEDIE_TEXT } };
         const [kind, name] = decl.trim().split(/\s+/);
         const id = idOf(request.payload);
         held.add(id);

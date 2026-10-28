@@ -6,6 +6,12 @@ What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 
 ## Landed
 
+- **[Status-Bar-Text-Answers]** DONE (`1.36.0`), plan
+  `dev/done/plan-status-bar-text-answers.md`. A conversion statement
+  (`tweedie`, `stable`) answers as text in the aLL strip and as the cell value
+  in Excel and Sheets; the word list follows aggregate 1.23.0 and `ylt` became
+  `yelt`. Still owed, the author's: `npm run push` for the Sheets template.
+
 - **[Eltq-Version]** DONE (`1.35.1`), no plan: About, `/v1/meta` and the status
   page list the eltq version.
 

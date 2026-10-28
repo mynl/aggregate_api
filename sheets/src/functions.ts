@@ -240,9 +240,14 @@ function buildOnce_(program: string, log2: number, bs: number): string | number 
   } else if (reply.status !== 200) {
     return fail_(reply);
   } else {
-    const made = reply.body as { kind: string; name?: string; id?: string; value?: number };
+    const made = reply.body as {
+      kind: string; name?: string; id?: string; value?: number; text?: string;
+    };
     if (made.kind === "value") {
       value = made.value as number;
+    } else if (made.kind === "text") {
+      // A conversion statement answers with text, the cell value as it is.
+      value = made.text as string;
     } else {
       value = AggCore.formatHandle(made.kind, made.name ?? "", made.id as string);
       rememberRecipe_(made.id as string, program, log2, bs);

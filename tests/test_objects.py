@@ -442,6 +442,68 @@ def test_a_number_takes_no_cache_slot(client):
     assert len(client.get("/v1/objects").json()["objects"]) == before
 
 
+def _conversion_programs():
+    """The conversion statements the installed library has, as pytest params.
+
+    ``tweedie`` arrived in ``aggregate`` 1.22.0 and ``stable`` in 1.23.0. Under
+    an older library each is a parse error, so its case is skipped rather than
+    failed.
+    """
+    import importlib.util
+
+    tweedie = importlib.util.find_spec("aggregate.tweedie") is not None
+    stable = importlib.util.find_spec("aggregate.stable") is not None
+    skip_t = pytest.mark.skipif(not tweedie, reason="aggregate before 1.22.0")
+    skip_s = pytest.mark.skipif(not stable, reason="aggregate before 1.23.0")
+    return [
+        pytest.param("tweedie 1.5 100 2", "tweedie 10 claims sev gamma 10 cv 1",
+                     marks=skip_t, id="tweedie"),
+        pytest.param("stable 1.5 1 2 0", "stable 1.5 1 2 -2 s0",
+                     marks=skip_s, id="stable"),
+        pytest.param("stable 1000 claims sev 100 * lomax 1.5", "Pr(X>mean)",
+                     marks=skip_s, id="stable-compound"),
+    ]
+
+
+@pytest.mark.parametrize("program, fragment", _conversion_programs())
+def test_a_conversion_is_answered_as_text(client, program, fragment):
+    """A conversion statement serves the library's string, and keeps nothing.
+
+    Recognized by the preview's statement kind, ``'conversion'``, so ``Stable``
+    and ``TweedieConversion`` reach the same branch with no class list. Audited
+    as a value: a program that means an answer rather than an object.
+    """
+    from aggregate_api.config import get_settings
+    from aggregate_api.routes.objects import _get_audit
+
+    before = len(client.get("/v1/objects").json()["objects"])
+    r = client.post("/v1/objects", json={"decl": program})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "text"
+    assert fragment in body["text"]
+    assert body["decl"] == program
+    assert "id" not in body
+    assert len(client.get("/v1/objects").json()["objects"]) == before
+    rows = [row for row in _get_audit(get_settings()).recent(20)
+            if row["decl"] == program]
+    assert [row["status"] for row in rows] == ["value"]
+
+
+def test_an_unknown_object_is_still_refused(client, monkeypatch):
+    """An object of no supported kind, from a statement that is no conversion.
+
+    The text branch keys on the statement kind, so an ordinary program whose
+    build returns something unexpected still meets the 422 it always did.
+    """
+    from aggregate_api.routes import objects
+
+    monkeypatch.setattr(objects, "_run_build", lambda uw, decl, log2, bs: (object(), []))
+    r = client.post("/v1/objects", json={"decl": _DICE})
+    assert r.status_code == 422
+    assert "only; got 'object'" in r.json()["detail"]
+
+
 def test_list_objects(client):
     client.post("/v1/objects", json={"decl": _DICE})
     r = client.get("/v1/objects")

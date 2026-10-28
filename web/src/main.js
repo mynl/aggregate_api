@@ -479,9 +479,9 @@ async function rebuildMissing(program) {
 /**
  * Write one plain line to the strip's first row, with nothing under it.
  *
- * For the two answers that are neither an object nor a failure: an empty box,
- * and a program that meant a number. Both leave the note slot and the clock
- * blank, because there is no program to quote and nothing was calculated.
+ * For the answers that are neither an object nor a failure: an empty box, a
+ * program that meant a number, and a conversion's text. Each leaves the note
+ * slot and the clock blank, because there is no object to annotate or time.
  *
  * Not `clustered` and not `foldable`: this line is prose rather than a set of
  * readings, and with no object there is nothing whose note could fold. That
@@ -550,6 +550,22 @@ function renderValue(res) {
     ]);
 }
 
+/**
+ * A program whose answer is text: a conversion statement such as
+ * `tweedie 1.5 100 2` or `stable 1.5 1 2 0`.
+ *
+ * Handled as a number is, panes cleared and nothing recorded, with the
+ * library's string shown alone. No `decl =` prefix, because the string already
+ * opens with the program in its own spelling. The strip wraps, so the line of
+ * about 110 characters a conversion gives stays inside it at phone width.
+ */
+function renderText(res) {
+    forgetBuild();
+    clearPanes();
+    renderActionRow();
+    renderStripLine(el('span', { className: 'mono' }, res.text));
+}
+
 async function build() {
     // Every build closes the DecL help: Build, Ctrl+Enter and an example pick
     // alike. The reader asked to see a result, and the help is in front of it.
@@ -567,11 +583,12 @@ async function build() {
     buildBtn.textContent = 'Building…';
     try {
         const res = await api.build(decl, {});
-        // A number is not an object: no id, no panes, and nothing for the
-        // action row to derive from. It is also not recorded in history, whose
-        // ring is the trail of programs that built something and which
-        // `rebuildMissing` walks looking for declarations.
+        // A number or a text answer is not an object: no id, no panes, and
+        // nothing for the action row to derive from. Neither is recorded in
+        // history, whose ring is the trail of programs that built something and
+        // which `rebuildMissing` walks looking for declarations.
         if (res && res.kind === 'value') { renderValue(res); return; }
+        if (res && res.kind === 'text') { renderText(res); return; }
         adoptBuild(res);
         recordProgram(decl);
         _builtDecl = decl;

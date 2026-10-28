@@ -1,18 +1,18 @@
 """Loss table files are read for private requests only.
 
-Since ``aggregate`` 1.13.0 an ``elt`` or ``ylt`` source may be a quoted file
+Since ``aggregate`` 1.13.0 an ``elt`` or ``yelt`` source may be a quoted file
 path, and the library reads it from the disk of the process that builds the
 program: an absolute path anywhere, a relative one against the server's working
 directory. On a public server that disk is the host's. A visitor could probe it
 (the library's error distinguishes a missing file from one lacking columns, and
 includes the resolved absolute path) and pull the numbers out of any file shaped
-like a loss table, a column named ``loss`` being enough for a ``ylt``.
+like a loss table, a column named ``loss`` being enough for a ``yelt``.
 
 So a request from outside ``AGGAPI_PRIVATE_CIDRS`` may not name a file. Private
 means what it means for the status page, judged by
 :func:`aggregate_api.net.is_private_request`, and ``net.py`` explains the
 forwarded chain that judgment rests on. Inline tables, ``elt [[...]]`` and
-``ylt [...]``, are untouched and open to everyone.
+``yelt [...]``, are untouched and open to everyone.
 
 One test, three places
 ----------------------
@@ -68,7 +68,7 @@ READABLE_SUFFIXES = (".csv", ".tsv", ".parquet", ".feather")
 #: The refusal, shown in the SPA's error pane.
 REFUSAL = ("loss table files are read only for requests from this server's "
            "private network; write the table inline, as elt [[id rate mean] ...] "
-           "or ylt [loss ...]")
+           "or yelt [loss ...]")
 
 
 def mentions_readable_file(text: str) -> bool:

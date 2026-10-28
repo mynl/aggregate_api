@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.36.0
+
+[Status-Bar-Text-Answers] **A conversion statement shows its answer as text, in aLL, Excel and Sheets.** Plan `dev/done/plan-status-bar-text-answers.md`. Serves `tweedie 1.5 100 2` (aggregate 1.22.0) and `stable 1.5 1 2 0` (1.23.0), refused as unsupported kinds through 1.35.1.
+
+- Added: `POST /v1/objects` answers a statement of kind `conversion` with `{kind: "text", text, decl, elapsed_ms}`, the library's string verbatim. Nothing is cached and the audit status is `value`, as for `(2+2)`. Keyed on the preview's statement kind, so the library's next conversion needs no edit here.
+- Added: aLL shows the text alone in the status strip; `AGG.BUILD` and `AGG_BUILD` return it as the cell value. A conversion passed where a handle is expected is refused as "a number or a conversion, not an object".
+- Changed: the DecL playground colors `stable` and `yelt` and no longer `ylt`, from the word list regenerated against aggregate 1.23.0. The loss table file refusal says `yelt [loss ...]`.
+- Known: a Sheets template copy made before 1.36.0 shows a malformed handle, `text.#undefined`, for a conversion rather than a refusal. No program that worked before is affected.
+- Release blocker, as at 1.34.0: the word list follows 1.23.0 while the floor stays `aggregate>=1.11.0`.
+
 ## 1.35.1
 
 [Eltq-Version] **About and the status page list the eltq version.** No plan: follows the 1.34.0 dependency.

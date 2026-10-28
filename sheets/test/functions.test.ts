@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { SPREADSHEET_ID, fixture, harness, plain } from "./harness.ts";
+import { SPREADSHEET_ID, TWEEDIE_PROGRAM, TWEEDIE_TEXT, fixture, harness, plain } from "./harness.ts";
 
 const PROGRAM = "agg A 2 claims sev lognorm 10 cv 1 poisson";
 const HANDLE = /^agg\.A#[0-9a-f]{16}$/;
@@ -73,6 +73,15 @@ test("a refused program reads as #AGG! text, memoized; a value is a number", () 
   assert.equal(h.script.AGG_BUILD(refusal), refusal, "a refusal flows through unchanged");
 });
 
+test("a conversion is its text, memoized, and no handle", () => {
+  const h = harness();
+  assert.equal(h.script.AGG_BUILD(TWEEDIE_PROGRAM), TWEEDIE_TEXT);
+  assert.equal(h.script.AGG_BUILD(TWEEDIE_PROGRAM), TWEEDIE_TEXT);
+  assert.equal(h.count("POST", /^\/v1\/objects$/), 1, "the text is memoized");
+  assert.deepEqual(plain(h.script.AGG_EXHIBITS(TWEEDIE_PROGRAM)),
+                   [["#AGG! this program is a number or a conversion, not an object; pass a handle from AGG_BUILD or a program that declares an agg, port, sev or distortion"]]);
+});
+
 // ----------------------------------------------------------------------
 // Reading an object
 // ----------------------------------------------------------------------
@@ -102,7 +111,7 @@ test("an exhibit refusal, a bad block and a bad argument each spill one #AGG! ce
   assert.deepEqual(plain(h.script.AGG_EXHIBITS("")),
                    [["#AGG! expected a handle such as agg.A#4f40714271198d8f, or a DecL program"]]);
   assert.deepEqual(plain(h.script.AGG_EXHIBITS("(2+2)")),
-                   [["#AGG! this program is a number, not an object; pass a handle from AGG_BUILD or a program that declares an agg, port, sev or distortion"]]);
+                   [["#AGG! this program is a number or a conversion, not an object; pass a handle from AGG_BUILD or a program that declares an agg, port, sev or distortion"]]);
 });
 
 test("AGG_Q answers in the shape of p, and refuses a p outside [0, 1]", () => {

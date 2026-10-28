@@ -80,13 +80,14 @@ const COMMON = {
  * The messages a cell can show, worded for `host`.
  *
  * Three name a function or the way to recalculate, so they differ between
- * hosts; the rest are `COMMON`. Excel's are byte-identical to the constant
- * this replaced, and `test/core.test.ts` asserts it.
+ * hosts; the rest are `COMMON`. Excel's were byte-identical to the constant
+ * this replaced until 1.36.0 widened `programIsValue` to a conversion, and
+ * `test/core.test.ts` asserts the wording.
  */
 export function hostMessages(host: Host) {
   return {
     ...COMMON,
-    programIsValue: `this program is a number, not an object; pass a handle from ${host.fn("BUILD")} or a program that declares an agg, port, sev or distortion`,
+    programIsValue: `this program is a number or a conversion, not an object; pass a handle from ${host.fn("BUILD")} or a program that declares an agg, port, sev or distortion`,
     unknownHandle: `handle unknown to this ${host.document}; recalculate its ${host.fn("BUILD")} cell`,
     upgraded: `the server changed since this ${host.document} was saved; ${host.recalculate}`,
   };
