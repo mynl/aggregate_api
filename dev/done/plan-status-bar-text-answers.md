@@ -153,4 +153,6 @@ Divergences:
 - **Phone edition**: `lite.js` builds only menu examples, which a conversion never is (it is never stored in the recipe base), so it has no text branch.
 - The stale `Pr(X=0) 4.54e-05` in the Goal is `4.53999e-05` from the library (six significant figures). The tests match on a fragment.
 
+Visual check, after the commit, on a scratch server at `127.0.0.1:8765` with the rebuilt SPA: `tweedie 1.5 100 2` shows its text on one strip line at desktop width, and `stable 1000 claims sev 100 * lomax 1.5` wraps to three lines at 390px with no horizontal overflow. Light only: the app has no dark palette (`site.css` says so), so the plan's "light and dark" does not apply.
+
 Gates: `uv run --no-sync pytest` (see the commit's CHANGELOG), `npm test` in `web/`, `excel/` and `sheets/`, `npm run typecheck` in `excel/` and `sheets/`, `npm run lint` in `excel/`.

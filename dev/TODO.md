@@ -4,6 +4,12 @@ Pending work for `aggregate_api`, newest thinking at the bottom of each list.
 What has landed is in `CHANGELOG.md` and the git log; completed plans move to
 `dev/done/`.
 
+Items oddly from the aggregate list
+
+- **[Session-Build-Clobbers-The-Trailer]**: a session `build(...)` of a program
+  that shadows a library name replaces the library entry's `note{}` and
+  `tags{}`.
+
 ## Landed
 
 - **[Status-Bar-Text-Answers]** DONE (`1.36.0`), plan
@@ -601,7 +607,7 @@ and the standing REMINDER below about what is worth plotting.
 - [x] Set up service to run on vps *(done 2026-10-20: the systemd unit in
       human-hints, with `AGGAPI_CACHE_MAX=100`; `refresh.sh` restarts it)*
 - [x] Limit log2 <= 18 *(`AGGAPI_LOG2_CAP` defaults to 18)*
-- [ ] 
+- [ ]
 
 ## Near term (get it healthy)
 
@@ -617,12 +623,14 @@ and the standing REMINDER below about what is worth plotting.
       cell; a library picker in the pane writing `=AGG.LIBRARY("…")`; a Store
       listing (`[Excel-Store]`, below).
 
-- [ ] **[Excel-Store] list the add-in on the Microsoft Marketplace**, the
-      one-click install for everyone (STORE tab in desktop and web Excel plus
+- [x] **[Excel-Store] list the add-in on the Microsoft Marketplace.
+      REJECTED 2026-10-28** (author: "never going to happen"); the plan is
+      closed as `dev/done/plan-excel-store-REJECTED.md`. The entry as it
+      stood: the one-click install for everyone (STORE tab in desktop and web Excel plus
       Microsoft's installation link). Author's ask, 2026-10-18, after the
       desktop install proved to need a shared folder and a Trust Center edit
       (`dev/excel-desktop-install.md` has the recipe). **Plan:
-      `dev/plan-excel-store.md`**, rulings D1 to D6 made 2026-10-18 (Convex
+      `dev/done/plan-excel-store-REJECTED.md`**, rulings D1 to D6 made 2026-10-18 (Convex
       Risk publishes, "Aggregate Loss Distributions", help@convexrisk.com,
       own terms page, 90-day audit pruning, a friend's Mac with
       `dev/store/mac-test-guide.md`). Partner Center enrollment needs a work account (the

@@ -220,7 +220,7 @@ In the template, by the author:
 
 ## Later, not this plan
 
-- **Marketplace editor add-on (D1, later).** It needs a Google Cloud project, an OAuth consent screen and a listing review, with links to a privacy policy, terms and a help page. `[Excel-Store]`'s [store-pages] step (`dev/plan-excel-store.md`, revised 2026-10-18) writes those pages for the whole service at the site root (`/help.html`, `/privacy.html`, `/terms.html`), including the Sheets specifics, so Google's listing links to them as they are.
+- **Marketplace editor add-on (D1, later).** It needs a Google Cloud project, an OAuth consent screen and a listing review, with links to a privacy policy, terms and a help page. `[Excel-Store]`'s [store-pages] step (`dev/done/plan-excel-store-REJECTED.md`, revised 2026-10-18; the plan was rejected on 2026-10-28 and the step never landed) was to write those pages for the whole service at the site root (`/help.html`, `/privacy.html`, `/terms.html`), including the Sheets specifics, so Google's listing links to them as they are.
 - `?cols=` on the `.csv` frame route, for importing a big frame a few columns at a time.
 - Rate limits behind Google's egress (D5), when it bites.
 - A sidebar, if a library or frame picker proves wanted.

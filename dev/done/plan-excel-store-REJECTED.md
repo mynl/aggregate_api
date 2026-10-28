@@ -1,6 +1,8 @@
-# Plan: list the Excel add-in on the Microsoft Marketplace
+# Plan: list the Excel add-in on the Microsoft Marketplace (REJECTED)
 
-**Status: decisions D1 to D6 ruled by the author on 2026-10-18 (see the rulings below). Claude's steps wait for the author's go. The author's [account] step is stuck: Partner Center will not validate the author's email (2026-10-18), and the store listing may not happen.** Tracked as `[Excel-Store]` in `dev/TODO.md`.
+> **REJECTED 2026-10-28 (author): "never going to happen."** The listing was never made: Partner Center enrollment stuck at email validation on 2026-10-18 and was not retried. Of the steps meant to go ahead without a listing, only [server-ready] happened (the systemd unit and `AGGAPI_CACHE_MAX=100`, done by the author on 2026-10-20). [store-pages], [audit-retention] and [tenant-deploy] did not land and are not carried forward; any of them wanted later needs its own plan. The `[Excel-Store]` entry in `dev/TODO.md` is closed. Sideloading, recorded in `dev/excel-desktop-install.md`, remains the only install route.
+
+**Status, as of 2026-10-18: decisions D1 to D6 ruled by the author on 2026-10-18 (see the rulings below). Claude's steps wait for the author's go. The author's [account] step is stuck: Partner Center will not validate the author's email (2026-10-18), and the store listing may not happen.** Tracked as `[Excel-Store]` in `dev/TODO.md`.
 
 **What survives without the store.** Four steps pay off whether or not a listing ever exists, and they go ahead regardless:
 - [server-ready]: a public service needs a restart policy.
@@ -194,3 +196,4 @@ Microsoft Learn: "Publish your Office Add-in to Microsoft Marketplace" (2026-07)
 
 - **2026-10-18 [account]:** blocked. Partner Center will not validate the author's email, cause unknown. The listing may not happen; the steps listed under Status go ahead regardless.
 - **2026-10-18 plan revised:** [store-pages] moves the three pages from `/excel/` to the site root (`web/public/`) and words them for the whole service, so the Google Sheets template and a possible Google Workspace Marketplace listing use the same pages.
+- **2026-10-28 rejected:** the author ruled the listing will not happen. Moved to `dev/done/` as `plan-excel-store-REJECTED.md`, with nothing executed beyond the author's [server-ready] items.
