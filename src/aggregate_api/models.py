@@ -244,7 +244,8 @@ class BuildResponse(BaseModel):
     # missing here is not cosmetic: the route classifies the object, pydantic
     # then rejects the api's own response, and the build 500s after doing all
     # the work.
-    kind: Literal["agg", "port", "sev", "distortion", "bvagg", "pnl", "nttagg"]
+    kind: Literal["agg", "port", "sev", "distortion", "bvagg", "pnl", "nttagg",
+                  "chfagg"]
     name: str
     warnings: list[str] = []
     cached: bool

@@ -19,7 +19,8 @@ from __future__ import annotations
 
 import pytest
 
-from tests.conftest import NTTAGG_SUPPORTED, requires_exact_tail, requires_nttagg
+from tests.conftest import (CHFAGG_SUPPORTED, NTTAGG_SUPPORTED, requires_chfagg,
+                            requires_exact_tail, requires_nttagg)
 
 
 # One object of each kind the api builds, small enough to stay quick, plus an
@@ -46,21 +47,28 @@ DECLS = {
     # be able to parse: the kind arrived in ``aggregate`` 1.1.0 and the pin is
     # ``>=1.0.1,<2``. Its cases carry the gate; see ``LABELS`` below.
     "nttagg": "nttagg CAP.Ntt dfreq [1:6] dsev [1:6]",
+    # The law inverted from its characteristic function, ``aggregate`` 1.30.0,
+    # gated the same way.
+    "chfagg": "chfagg CAP.Chf gamma 4 25",
 }
+
+#: The library-gated kinds: label to (marker, whether the library has it).
+_GATED = {"nttagg": (requires_nttagg, NTTAGG_SUPPORTED),
+          "chfagg": (requires_chfagg, CHFAGG_SUPPORTED)}
 
 #: ``DECLS`` as parametrize cases, with the library-gated kinds marked. One
 #: place for the gate rather than a skip inside each sweep: the sweeps are what
 #: make the new kind worth adding to the table at all, since they assert that
 #: every exhibit and chart the block lights actually serves.
 LABELS = [
-    pytest.param(label, marks=[requires_nttagg] if label == "nttagg" else [])
+    pytest.param(label, marks=[_GATED[label][0]] if label in _GATED else [])
     for label in DECLS
 ]
 
 #: The labels the installed library can build, for the loops that sweep the dict
 #: directly instead of parametrizing over it.
 BUILDABLE = [label for label in DECLS
-             if label != "nttagg" or NTTAGG_SUPPORTED]
+             if label not in _GATED or _GATED[label][1]]
 
 
 def _build(client, label):
@@ -586,6 +594,30 @@ def test_an_exact_compound_lists_the_exact_tail_chart(client):
     _, body = _build(client, "nttagg")
     assert "exact_tail" in body["capability"]["charts"]
     assert body["capability"]["primary_chart"] == "agg"
+
+
+@requires_chfagg
+def test_a_characteristic_function_law_prices_and_does_nothing_else(client):
+    """What a ``chfagg`` answers, read off the library with nothing declared here.
+
+    An ``AggregateCHF`` is a peer of ``Aggregate``, not a subclass, and carries
+    a narrower surface: the four generic exhibits, its own chart (the primary
+    one), pricing and hints. It carries no ``pnl_program``, ``reins_program``
+    or ``sharpen``, so the P&L button, the Reins tab and Sharpen grey out by
+    the same ``hasattr`` contract every other kind follows.
+    """
+    _, body = _build(client, "chfagg")
+    cap = body["capability"]
+    assert [e["name"] for e in cap["exhibits"]] == [
+        "summary", "tail", "stats", "validation"]
+    assert cap["primary_chart"] == "chfagg"
+    assert cap["can_price"] is True
+    assert cap["can_hints"] is True
+    for flag in ("can_pnl", "can_pnl_rate", "can_xpnl", "can_explode",
+                 "can_reins", "can_views", "can_sharpen", "can_evaluate",
+                 "can_bounds", "can_allocate", "can_natural_allocation"):
+        assert cap[flag] is False, flag
+    assert cap["reins_bases"] == []
 
 
 @requires_exact_tail

@@ -19,7 +19,7 @@ import pytest
 from aggregate_api import models
 from aggregate_api.serializers import display_log2_for
 
-from tests.conftest import requires_nttagg
+from tests.conftest import requires_chfagg, requires_nttagg
 
 
 _DICE = "agg Dice dfreq [3] dsev [1:6]"
@@ -2834,3 +2834,74 @@ def test_the_exact_logarithm_right_edges_rather_than_summing(client):
     for i in range(8):
         assert disp_float[i] == pytest.approx(
             sum(full_float[ratio * i:ratio * i + ratio]), rel=1e-12)
+
+
+# ----------------------------------------------------------------------
+# The characteristic function law, chfagg
+# ----------------------------------------------------------------------
+# ``aggregate`` 1.30.0, gated on the parser as the exact compound is. A gamma
+# with shape 4 and scale 25 is the cheap case with a known answer: mean 100,
+# cv 1/2.
+
+_CHF = "chfagg Gamma.Chf gamma 4 25"
+
+
+@requires_chfagg
+def test_a_characteristic_function_law_builds_and_names_its_own_kind(client):
+    """The four kind touchpoints, end to end, as for the exact compound."""
+    r = client.post("/v1/objects", json={"decl": _CHF})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "chfagg"
+    assert body["name"] == "Gamma.Chf"
+    assert body["mean"] == pytest.approx(100, rel=1e-8)
+    assert body["cv"] == pytest.approx(0.5, rel=1e-6)
+    models.BuildResponse.model_validate(body)
+
+
+@requires_chfagg
+def test_a_characteristic_function_law_prices(client):
+    """The preview and the calibration answer, and a named view is a sentence.
+
+    ``AggregateCHF.price_pentagon`` and ``calibrate_distortions`` take no
+    ``reins_view`` at all, so the pricing runners pass the keyword only when a
+    view is named; passing None was a ``TypeError`` and a 500. The form sends no
+    basis for an object with no ``reins_bases``, and a client that names one
+    anyway gets the 400 the other refusals on this path give.
+    """
+    oid = client.post("/v1/objects", json={"decl": _CHF}).json()["id"]
+    target = {"p": 0.99, "coc": 0.1}
+    preview = client.post(f"/v1/objects/{oid}/pricing/preview", json=target)
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["loss"] == pytest.approx(100, rel=0.01)
+    calibrate = client.post(f"/v1/objects/{oid}/pricing/calibrate", json=target)
+    assert calibrate.status_code == 200, calibrate.text
+    # A premium target takes the bridge through the pentagon first.
+    by_premium = client.post(f"/v1/objects/{oid}/pricing/calibrate",
+                             json={"p": 0.99, "premium": 110})
+    assert by_premium.status_code == 200, by_premium.text
+    named = client.post(f"/v1/objects/{oid}/pricing/preview",
+                        json={**target, "basis": "gross"})
+    assert named.status_code == 400
+    assert "no reinsurance" in named.json()["detail"]
+
+
+@requires_chfagg
+def test_the_session_export_writes_a_law_before_the_aggregate_using_it(client):
+    """A ``chfagg`` sorts ahead of an ``agg`` that takes it as a severity.
+
+    ``sev chfagg.NAME`` (``aggregate`` 1.33.0) makes the law a dependency, so
+    the canonical export ranks it with ``sev``. The library's own write order
+    puts it after ``agg``, and the file it writes does not reload.
+    """
+    session = {"X-Aggregate-Session": "2026-10-29T00:00:00-chfagg-export-test"}
+    law = client.post("/v1/objects", headers=session, json={
+        "decl": "chfagg Export.Law gamma 4 25 hints{log2=12; bs=1/8}"})
+    assert law.status_code == 200, law.text
+    uses = client.post("/v1/objects", headers=session, json={
+        "decl": "agg Export.Uses dfreq [2] sev chfagg.Export.Law"})
+    assert uses.status_code == 200, uses.text
+    r = client.get("/v1/session/models.agg", headers=session,
+                   params={"form": "agg"})
+    assert r.status_code == 200, r.text
+    assert r.text.index("chfagg Export.Law") < r.text.index("agg Export.Uses")

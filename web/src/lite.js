@@ -36,7 +36,7 @@ const LANDING = 'BasicBook';
 const KIND_LABEL = {
     agg: 'Aggregate', port: 'Portfolio', sev: 'Severity',
     distortion: 'Distortion', bvagg: 'Bivariate', pnl: 'P&L',
-    nttagg: 'NTT Aggregate',
+    nttagg: 'NTT Aggregate', chfagg: 'CHF Aggregate',
 };
 
 const $ = (id) => document.getElementById(id);

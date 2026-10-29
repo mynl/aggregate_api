@@ -9,6 +9,8 @@ import pytest
 
 from aggregate_api.examples import filter_examples, load_examples, load_heroes
 
+from tests.conftest import requires_chfagg
+
 
 def test_examples_is_one_flat_list(client):
     """The payload is items plus facets, with no groups and no headings."""
@@ -168,10 +170,11 @@ def test_example_decl_arrives_without_its_filing_clauses(client):
     # with ``ExactDiceOfDice`` (library 1.2.0a3), which is the shape of hazard
     # this set carries: an entry added upstream reddens this assertion with no
     # line changing in this repo, so the set is widened ahead of the library
-    # rather than behind it.
+    # rather than behind it. ``chfagg`` joined with ``StableLaw`` (library
+    # 1.30.0), and reddened it exactly that way.
     heads = {"agg", "port", "sev", "distortion", "dist", "pnl", "xpnl",
              "bivariate", "clash", "grossceded", "grossnet", "netceded",
-             "nttagg"}
+             "nttagg", "chfagg"}
     hinted = 0
     for item in client.get("/v1/examples").json()["items"]:
         decl = item["decl"]
@@ -254,6 +257,22 @@ def test_a_library_entry_builds_and_declares_no_note_of_its_own(client, kind, na
     assert not body["tags"], f"{name} built an object carrying tags"
 
 
+@requires_chfagg
+def test_the_shipped_characteristic_function_laws_build(client):
+    """Every ``chfagg`` the menu offers builds, under its own kind.
+
+    The library shipped ``StableLaw`` at 1.30.0, before this api admitted the
+    kind, and through 1.36.0 picking it from the menu answered 422.
+    """
+    laws = [i for i in client.get("/v1/examples").json()["items"]
+            if i["kind"] == "chfagg"]
+    assert laws, "library.agg ships a chfagg"
+    for item in laws:
+        r = client.post("/v1/objects", json={"decl": item["decl"]})
+        assert r.status_code == 200, f"{item['name']}: {r.text}"
+        assert r.json()["kind"] == "chfagg"
+
+
 def test_heroes_are_the_role_hero_entries(client):
     """``/examples/heroes`` is ``discover(tags='role:hero')``, in file order."""
     r = client.get("/v1/examples/heroes")
@@ -289,7 +308,7 @@ def test_hero_example_builds(client):
     r = client.post("/v1/objects", json={"decl": hero["decl"]})
     assert r.status_code == 200, r.text
     assert r.json()["kind"] in ("agg", "port", "sev", "bvagg", "pnl",
-                               "distortion", "nttagg")
+                               "distortion", "nttagg", "chfagg")
 
 
 def test_hero_sparklines(client):

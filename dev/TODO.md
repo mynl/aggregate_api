@@ -12,6 +12,11 @@ Items oddly from the aggregate list
 
 ## Landed
 
+- **[Chfagg-Kind]** DONE (`1.37.0`), no plan: the library's `chfagg` law
+  (aggregate 1.30.0 to 1.34.0) builds, prices and exports, and the word list
+  follows 1.34.0. Owed upstream: `_KIND_WRITE_ORDER` writes `agg` before the
+  `chfagg` it references, so the library's own `.agg` export does not reload.
+
 - **[Status-Bar-Text-Answers]** DONE (`1.36.0`), plan
   `dev/done/plan-status-bar-text-answers.md`. A conversion statement
   (`tweedie`, `stable`) answers as text in the aLL strip and as the cell value

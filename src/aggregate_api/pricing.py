@@ -130,6 +130,38 @@ def _one_anchor(p: float | None, a: float | None) -> dict:
     return {"p": p} if p is not None else {"a": a}
 
 
+def _reins_view(obj: Any, basis: str | None) -> dict:
+    """The reinsurance view as the keyword the library takes, or nothing.
+
+    Parameters
+    ----------
+    obj : Any
+        The object about to be priced.
+    basis : str or None
+        The view the caller named, or None for the object's own distribution.
+
+    Returns
+    -------
+    dict
+        ``{'reins_view': basis}`` when a view is named, else empty.
+
+    Notes
+    -----
+    Omitted rather than passed as None because an ``AggregateCHF`` (``chfagg``,
+    ``aggregate`` 1.32.0) prices with no ``reins_view`` parameter at all, and
+    passing None would be a ``TypeError``. Every other kind defaults it to None,
+    so omitting it changes nothing for them. A view named for an object with no
+    ``reins_views`` is refused as a sentence, the same contract ``capability``
+    reads, rather than reaching the library as a 500.
+    """
+    if basis is None:
+        return {}
+    if not hasattr(obj, "reins_views"):
+        raise ValueError(f"this object carries no reinsurance, so there is no "
+                         f"{basis!r} view to price on; drop the basis")
+    return {"reins_view": basis}
+
+
 def _technical_target(target: dict, expense_ratio: float | None) -> dict:
     """A premium target read as gross, scaled to the technical premium.
 
@@ -225,7 +257,8 @@ def _coc_for_premium(obj: Any, anchor: dict, premium: float,
     assets) is the library's own ``ValueError`` and travels to the caller
     unchanged, which is what puts its sentence in the preview line.
     """
-    row = obj.price_pentagon(**anchor, P=premium, reins_view=basis).iloc[0]
+    row = obj.price_pentagon(**anchor, P=premium,
+                             **_reins_view(obj, basis)).iloc[0]
     return _scalar(row["ROE"])
 
 
@@ -311,7 +344,7 @@ def run_pricing_preview(
             raise ValueError("pricing requires an Aggregate or a Portfolio")
 
     row = obj.price_pentagon(**anchor, **_pentagon_target(target),
-                             reins_view=basis).iloc[0]
+                             **_reins_view(obj, basis)).iloc[0]
     out = {
         "p": p,
         "assets": _scalar(row["a"]),
@@ -431,7 +464,8 @@ def run_calibration(
 
     warns: list[str] = []
     with library_warnings() as caught:
-        result = obj.calibrate_distortions(**target, **anchor, reins_view=basis)
+        result = obj.calibrate_distortions(**target, **anchor,
+                                           **_reins_view(obj, basis))
         exhibits = {name: _envelopes(result, name)
                     for name in ("pricing.calibrate", "pricing.stand_alone")}
     warns.extend(caught)
@@ -564,7 +598,8 @@ def run_natural_allocation(
 
     warns: list[str] = []
     with library_warnings() as caught:
-        result = obj.calibrate_distortions(**target, **anchor, reins_view=basis)
+        result = obj.calibrate_distortions(**target, **anchor,
+                                           **_reins_view(obj, basis))
         exhibits = {"pricing.allocate": _envelopes(result, "pricing.allocate")}
     warns.extend(caught)
     return {"kind": _kind_of(obj), "exhibits": exhibits, "warnings": warns}

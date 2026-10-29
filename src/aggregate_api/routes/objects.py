@@ -1992,6 +1992,9 @@ _KIND_OF_CLASS = {
     # A string key, so nothing here imports ``aggregate.ntt``: under a library
     # that predates the kind no object ever matches it and the entry is inert.
     "AggregateNTT": "nttagg",
+    # ``aggregate`` 1.27.0's law inverted from its characteristic function, a
+    # peer of ``Aggregate`` rather than a subclass, declared ``chfagg``.
+    "AggregateCHF": "chfagg",
 }
 
 # The two taxonomies whose subclasses reach the api under the base name.
@@ -2002,7 +2005,8 @@ _KIND_OF_CLASS = {
 _KIND_OF_BASE = ((Distortion, "distortion"), (Severity, "sev"))
 
 # What POST /v1/objects will build, in the library's own vocabulary.
-SUPPORTED_KINDS = ("agg", "port", "sev", "distortion", "bvagg", "pnl", "nttagg")
+SUPPORTED_KINDS = ("agg", "port", "sev", "distortion", "bvagg", "pnl", "nttagg",
+                   "chfagg")
 
 # Guard: the contract declares which classes flow through to this service, so a
 # class added upstream without a kind here should be noticed, not silently
@@ -2107,11 +2111,15 @@ def list_objects(request: Request,
 # distortion depends on nothing and sorts last. An unlisted kind falls to 99.
 # An ``nttagg`` can neither reference nor be referenced, so its rank is free;
 # it takes the slot beside ``bvagg`` that the library's own
-# ``_KIND_WRITE_ORDER`` gives it rather than an arbitrary one. The tie breaks on
-# name, as it does upstream.
+# ``_KIND_WRITE_ORDER`` gives it rather than an arbitrary one. A ``chfagg``
+# references nothing and an ``agg`` can reference it (``sev chfagg.NAME``, since
+# ``aggregate`` 1.33.0), so it ranks with ``sev``, ahead of every ``agg``. Here
+# the library is not mirrored: its order (1.34.0) puts ``chfagg`` after ``agg``
+# and its own export does not reload. The tie breaks on name, as it does
+# upstream.
 _KIND_ORDER = {
-    "sev": 0, "agg": 1, "port": 2, "bvagg": 3, "nttagg": 3, "pnl": 4,
-    "distortion": 5,
+    "sev": 0, "chfagg": 0, "agg": 1, "port": 2, "bvagg": 3, "nttagg": 3,
+    "pnl": 4, "distortion": 5,
 }
 
 

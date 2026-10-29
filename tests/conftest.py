@@ -54,6 +54,38 @@ requires_nttagg = pytest.mark.skipif(
 )
 
 
+def _chfagg_is_supported() -> bool:
+    """Whether the installed ``aggregate`` knows the ``chfagg`` kind.
+
+    Returns
+    -------
+    bool
+        True when a trivial ``chfagg`` program parses.
+
+    Notes
+    -----
+    The same capability probe as ``_nttagg_is_supported`` and for the same
+    reason: the kind arrived in ``aggregate`` 1.30.0 while the floor is 1.11.0.
+    """
+    try:
+        from aggregate import build
+
+        build.parser.parse("chfagg Gate.Probe gamma 4 25")
+    except Exception:
+        return False
+    return True
+
+
+#: Gate for the characteristic function law tests.
+CHFAGG_SUPPORTED = _chfagg_is_supported()
+
+#: Marker form of the gate above.
+requires_chfagg = pytest.mark.skipif(
+    not CHFAGG_SUPPORTED,
+    reason="the installed aggregate has no 'chfagg' kind (arrived in 1.30.0)",
+)
+
+
 def _exact_tail_is_supported() -> bool:
     """Whether the installed ``aggregate`` registers the ``exact_tail`` chart.
 

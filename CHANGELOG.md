@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.37.0
+
+[Chfagg-Kind] **A `chfagg`, the law aggregate computes from its characteristic function, builds, prices and exports.** No plan: the consumer half of aggregate 1.27.0 to 1.34.0. Through 1.36.0 every `chfagg` answered 422, the shipped `StableLaw` example included.
+
+- Added: the kind `chfagg`, labeled CHF Aggregate. Its four exhibits (summary, tail, stats, validation), its chart and its frames come from the library's registries with no table here; P&L, Reins and Sharpen grey out because the object carries none of them.
+- Fixed: pricing passes `reins_view` only when a basis is named, since `AggregateCHF` pricing takes no such parameter and the preview and calibration answered 500. A basis named for an object with no reinsurance is a 400.
+- Changed: the session `.agg` export writes a `chfagg` ahead of any `agg` that uses it as a severity (`sev chfagg.NAME`), so the file reloads.
+- Changed: the DecL playground colors `chfagg`, from the word list regenerated against aggregate 1.34.0.
+- Release blocker, as at 1.34.0: the word list follows 1.34.0 while the floor stays `aggregate>=1.11.0`.
+
 ## 1.36.0
 
 [Status-Bar-Text-Answers] **A conversion statement shows its answer as text, in aLL, Excel and Sheets.** Plan `dev/done/plan-status-bar-text-answers.md`. Serves `tweedie 1.5 100 2` (aggregate 1.22.0) and `stable 1.5 1 2 0` (1.23.0), refused as unsupported kinds through 1.35.1.
