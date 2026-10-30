@@ -66,11 +66,15 @@ def _chfagg_is_supported() -> bool:
     -----
     The same capability probe as ``_nttagg_is_supported`` and for the same
     reason: the kind arrived in ``aggregate`` 1.30.0 while the floor is 1.11.0.
+    The ``mean cv`` form parses in every release that has the kind, so the gate
+    asks only whether the kind exists. A probe in the positional form skipped
+    every ``chfagg`` test, silently, when ``aggregate`` 1.35.0 moved scale and
+    location to arithmetic; a spelling the library drops should fail here.
     """
     try:
         from aggregate import build
 
-        build.parser.parse("chfagg Gate.Probe gamma 4 25")
+        build.parser.parse("chfagg Gate.Probe gamma 100 cv 0.5")
     except Exception:
         return False
     return True

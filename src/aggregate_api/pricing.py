@@ -618,11 +618,12 @@ def run_evaluation(
 
     Parameters
     ----------
-    obj : Aggregate | Portfolio | PnL
-        The live object; all three expose ``evaluate``.
+    obj : Aggregate | Portfolio | AggregateCHF | PnL
+        The live object; all four expose ``evaluate``.
     premium : float, optional
-        The consideration to measure against. Only an ``Aggregate`` or a
-        ``Portfolio`` takes one, and only when its own exposure states none.
+        The consideration to measure against. A ``PnL`` takes none, and the
+        others take one only when their own exposure states none, which an
+        ``AggregateCHF`` never does.
     basis : str, optional
         Which premium is being input, for a reinsured ``Aggregate``: the gross
         one, the one net of the occurrence program, or the net. Passed as
@@ -655,7 +656,7 @@ def run_evaluation(
     """
     if not hasattr(obj, "evaluate"):
         raise ValueError(
-            "evaluation requires an Aggregate, a Portfolio or a P&L")
+            "evaluation requires an Aggregate, a Portfolio, a chfagg or a P&L")
 
     is_pnl = type(obj).__name__ == "PnL"
     if is_pnl:
@@ -684,7 +685,7 @@ def run_evaluation(
     warns: list[str] = []
     with library_warnings() as caught:
         result = (obj.evaluate() if is_pnl
-                  else obj.evaluate(premium, p=p, a=a, reins_view=basis))
+                  else obj.evaluate(premium, p=p, a=a, **_reins_view(obj, basis)))
         exhibits = {"pricing.evaluate": _envelopes(result, "pricing.evaluate")}
     warns.extend(caught)
     return {"kind": _kind_of(obj), "exhibits": exhibits, "warnings": warns}

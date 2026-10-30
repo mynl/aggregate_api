@@ -4,6 +4,18 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.38.0
+
+[Chfagg-Aggregate-Parity] **A `chfagg` takes aggregate's arithmetic form, and Evaluate, Sharpen and two more exhibits work on it.** No plan: the consumer half of aggregate 1.35.0 to 1.41.0.
+
+- Breaking, from the library: `chfagg G gamma 4 25` is now a 422 naming the new spelling, `25 * gamma 4`. Scale and location are arithmetic around the law's shapes, so a saved program in the positional form needs rewriting. `gamma 100 cv 0.5` is unchanged.
+- Added: the Evaluate leaf and the Sharpen button on a `chfagg`, with the More Sharpen leaf once a probe has run, and the `bs_window` and `tail_behavior` exhibits. All of it is read off the library, with no table here.
+- Fixed: Evaluate passes `reins_view` only when a basis is named. `AggregateCHF.evaluate` takes no such parameter, and every `chfagg` would have answered 500 once the leaf lit.
+- Changed: the `chfagg` test gate probes the `mean cv` form. Its positional probe stopped parsing at aggregate 1.35.0 and skipped all nine `chfagg` tests, silently.
+- Changed: the word list is regenerated against aggregate 1.41.0. Its words did not move, only its version.
+- Known: Evaluate with no asset anchor is refused on a grid whose truncation rings, as a 400 in the library's words, for example `tweedie 1.5 100 2`. Anchored at a `p` or an `a` it answers.
+- Release blocker, as at 1.34.0: the word list and the `chfagg` tests follow 1.41.0 while the floor stays `aggregate>=1.11.0`.
+
 ## 1.37.0
 
 [Chfagg-Kind] **A `chfagg`, the law aggregate computes from its characteristic function, builds, prices and exports.** No plan: the consumer half of aggregate 1.27.0 to 1.34.0. Through 1.36.0 every `chfagg` answered 422, the shipped `StableLaw` example included.

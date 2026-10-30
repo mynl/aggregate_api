@@ -2843,7 +2843,7 @@ def test_the_exact_logarithm_right_edges_rather_than_summing(client):
 # with shape 4 and scale 25 is the cheap case with a known answer: mean 100,
 # cv 1/2.
 
-_CHF = "chfagg Gamma.Chf gamma 4 25"
+_CHF = "chfagg Gamma.Chf 25 * gamma 4"
 
 
 @requires_chfagg
@@ -2887,6 +2887,102 @@ def test_a_characteristic_function_law_prices(client):
 
 
 @requires_chfagg
+def test_a_characteristic_function_law_evaluates_a_premium_it_is_given(client):
+    """The Evaluate leaf answers, and each refusal is a sentence.
+
+    ``AggregateCHF.evaluate`` takes no ``reins_view``, so the runner passes it
+    only when a view is named, as the pricing runners do, and it states no
+    premium, so a blank one is the library's refusal rather than a 500.
+    """
+    oid = client.post("/v1/objects", json={"decl": _CHF}).json()["id"]
+    url = f"/v1/objects/{oid}/pricing/evaluate"
+    for body in ({"premium": 130}, {"premium": 130, "p": 0.99}):
+        r = client.post(url, json=body)
+        assert r.status_code == 200, r.text
+        assert "pricing.evaluate" in r.json()["exhibits"]
+    blank = client.post(url, json={})
+    assert blank.status_code == 400
+    assert "needs the premium" in blank.json()["detail"]
+    named = client.post(url, json={"premium": 130, "basis": "gross"})
+    assert named.status_code == 400
+    assert "no reinsurance" in named.json()["detail"]
+
+
+@requires_chfagg
+def test_a_law_whose_grid_rings_refuses_an_unanchored_evaluate_in_a_sentence(client):
+    """A negative mass is a 400 saying so, and an anchor below the ringing answers."""
+    oid = client.post("/v1/objects",
+                      json={"decl": "chfagg Rings.Law tweedie 1.5 100 2"}).json()["id"]
+    url = f"/v1/objects/{oid}/pricing/evaluate"
+    bare = client.post(url, json={"premium": 130})
+    assert bare.status_code == 400
+    assert "not positive and decreasing" in bare.json()["detail"]
+    anchored = client.post(url, json={"premium": 130, "p": 0.99})
+    assert anchored.status_code == 200, anchored.text
+
+
+@requires_chfagg
+def test_a_confirmed_law_sharpens_once_and_its_audit_serves(client):
+    """Sharpen confirms a sound grid, and the More leaf it lights answers.
+
+    ``has_sharpen`` reads ``sharpen_df``, so the exhibit has to be registered
+    for the kind: ``aggregate`` 1.38.0 to 1.40.0 had the frame and not the
+    exhibit, and the leaf lit and answered 404.
+    """
+    oid = client.post("/v1/objects", json={"decl": _CHF}).json()["id"]
+    r = client.post(f"/v1/objects/{oid}/sharpen")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "note{sharpen: grid confirmed" in body["program"]
+    assert body["description"].startswith("Sharpen: not run")
+    cap = body["capability"]
+    assert cap["can_sharpen"] is False and cap["has_sharpen"] is True
+    assert "sharpen" in [e["name"] for e in cap["exhibits"]]
+    for perspective in ("raw", "insurer"):
+        ex = client.get(f"/v1/objects/{body['id']}/exhibit/sharpen",
+                        params={"perspective": perspective})
+        assert ex.status_code == 200, f"{perspective}: {ex.text}"
+    again = client.post(f"/v1/objects/{body['id']}/sharpen")
+    assert again.status_code == 400
+    rebuilt = client.post("/v1/objects", json={"decl": body["program"]})
+    assert rebuilt.status_code == 200, rebuilt.text
+    assert rebuilt.json()["id"] == body["id"]
+
+
+@requires_chfagg
+def test_a_law_on_a_short_grid_sharpens_one_log2_and_stays_live(client):
+    """A grid short of the budget grows one ``log2``, and Sharpen stays offered.
+
+    A moved grid writes ``hints{}`` and no verdict, so the program rebuilds on
+    the new grid, under the id the route returned, and a re-run continues.
+    """
+    oid = client.post("/v1/objects",
+                      json={"decl": "chfagg Short.Law stable 1.1 1"}).json()["id"]
+    r = client.post(f"/v1/objects/{oid}/sharpen")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "hints{log2=17" in " ".join(body["program"].split())
+    assert body["capability"]["can_sharpen"] is True
+    assert body["capability"]["has_sharpen"] is True
+    ex = client.get(f"/v1/objects/{body['id']}/exhibit/sharpen",
+                    params={"perspective": "insurer"})
+    assert ex.status_code == 200, ex.text
+    rebuilt = client.post("/v1/objects", json={"decl": body["program"]})
+    assert rebuilt.status_code == 200, rebuilt.text
+    assert rebuilt.json()["id"] == body["id"]
+
+
+@requires_chfagg
+@pytest.mark.parametrize("old, new", [("gamma 4 25", "25 * gamma 4"),
+                                      ("norm 100 30", "30 * norm + 100")])
+def test_a_positional_scale_is_refused_with_the_arithmetic_spelling(client, old, new):
+    """A program saved before ``aggregate`` 1.35.0 answers with what to type."""
+    r = client.post("/v1/objects", json={"decl": f"chfagg Old.Law {old}"})
+    assert r.status_code == 422
+    assert new in r.text
+
+
+@requires_chfagg
 def test_the_session_export_writes_a_law_before_the_aggregate_using_it(client):
     """A ``chfagg`` sorts ahead of an ``agg`` that takes it as a severity.
 
@@ -2896,7 +2992,7 @@ def test_the_session_export_writes_a_law_before_the_aggregate_using_it(client):
     """
     session = {"X-Aggregate-Session": "2026-10-29T00:00:00-chfagg-export-test"}
     law = client.post("/v1/objects", headers=session, json={
-        "decl": "chfagg Export.Law gamma 4 25 hints{log2=12; bs=1/8}"})
+        "decl": "chfagg Export.Law 25 * gamma 4 hints{log2=12; bs=1/8}"})
     assert law.status_code == 200, law.text
     uses = client.post("/v1/objects", headers=session, json={
         "decl": "agg Export.Uses dfreq [2] sev chfagg.Export.Law"})

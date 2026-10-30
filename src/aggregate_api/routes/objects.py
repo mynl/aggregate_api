@@ -3775,7 +3775,7 @@ def post_sharpen(
     if not hasattr(entry.obj, "sharpen"):
         raise HTTPException(
             status_code=400,
-            detail="sharpening applies to an Aggregate or a Portfolio")
+            detail="sharpening applies to an Aggregate, a Portfolio or a chfagg")
     if not can_sharpen(entry.obj):
         raise HTTPException(
             status_code=400,

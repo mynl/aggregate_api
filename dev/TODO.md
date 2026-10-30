@@ -12,6 +12,12 @@ Items oddly from the aggregate list
 
 ## Landed
 
+- **[Chfagg-Aggregate-Parity]** DONE (`1.38.0`), no plan: the consumer half of
+  aggregate 1.35.0 to 1.41.0. A `chfagg` takes the arithmetic form, Evaluate and
+  Sharpen run on it, with the More Sharpen leaf and the `bs_window` and
+  `tail_behavior` exhibits, and the word list follows 1.41.0. Still owed: the
+  `aggregate>=1.41.0` floor once that is on PyPI.
+
 - **[Chfagg-Kind]** DONE (`1.37.0`), no plan: the library's `chfagg` law
   (aggregate 1.30.0 to 1.34.0) builds, prices and exports, and the word list
   follows 1.34.0. Owed upstream: `_KIND_WRITE_ORDER` writes `agg` before the

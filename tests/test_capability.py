@@ -49,7 +49,7 @@ DECLS = {
     "nttagg": "nttagg CAP.Ntt dfreq [1:6] dsev [1:6]",
     # The law inverted from its characteristic function, ``aggregate`` 1.30.0,
     # gated the same way.
-    "chfagg": "chfagg CAP.Chf gamma 4 25",
+    "chfagg": "chfagg CAP.Chf 25 * gamma 4",
 }
 
 #: The library-gated kinds: label to (marker, whether the library has it).
@@ -597,24 +597,27 @@ def test_an_exact_compound_lists_the_exact_tail_chart(client):
 
 
 @requires_chfagg
-def test_a_characteristic_function_law_prices_and_does_nothing_else(client):
+def test_a_characteristic_function_law_prices_and_sharpens_with_no_reinsurance(client):
     """What a ``chfagg`` answers, read off the library with nothing declared here.
 
-    An ``AggregateCHF`` is a peer of ``Aggregate``, not a subclass, and carries
-    a narrower surface: the four generic exhibits, its own chart (the primary
-    one), pricing and hints. It carries no ``pnl_program``, ``reins_program``
-    or ``sharpen``, so the P&L button, the Reins tab and Sharpen grey out by
-    the same ``hasattr`` contract every other kind follows.
+    An ``AggregateCHF`` is a peer of ``Aggregate``, not a subclass. It has the
+    six exhibits that need no frequency or severity, its own chart (the primary
+    one), pricing, evaluation, hints and sharpen. It carries no ``pnl_program``
+    or ``reins_program``, so the P&L button and the Reins tab grey out by the
+    same ``hasattr`` contract every other kind follows. Its ``exp_premium`` is 0,
+    so the Evaluate form asks for a premium; ``sharpen`` appears among the
+    exhibits only after a probe.
     """
     _, body = _build(client, "chfagg")
     cap = body["capability"]
     assert [e["name"] for e in cap["exhibits"]] == [
-        "summary", "tail", "stats", "validation"]
+        "summary", "tail", "stats", "validation", "bs_window", "tail_behavior"]
     assert cap["primary_chart"] == "chfagg"
-    assert cap["can_price"] is True
-    assert cap["can_hints"] is True
+    for flag in ("can_price", "can_hints", "can_sharpen", "can_evaluate",
+                 "needs_premium"):
+        assert cap[flag] is True, flag
     for flag in ("can_pnl", "can_pnl_rate", "can_xpnl", "can_explode",
-                 "can_reins", "can_views", "can_sharpen", "can_evaluate",
+                 "can_reins", "can_views", "has_sharpen", "has_premium",
                  "can_bounds", "can_allocate", "can_natural_allocation"):
         assert cap[flag] is False, flag
     assert cap["reins_bases"] == []

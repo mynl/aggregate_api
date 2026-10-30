@@ -181,8 +181,9 @@ def can_sharpen(obj: Any) -> bool:
     Consumer: the Sharpen button, which has no exhibit or chart of its own.
 
     Two conditions. The object has to have the method at all, which is
-    ``Aggregate`` and ``Portfolio`` and nothing else, and it is read off the
-    object rather than from a kind list so a future host needs no edit here.
+    ``Aggregate``, ``Portfolio`` and ``AggregateCHF`` and nothing else, and it is
+    read off the object rather than from a kind list so a future host needs no
+    edit here.
     And the program must not already carry a sharpen verdict, since a second
     audit of a grid the probe just confirmed is a slow no-op.
 
