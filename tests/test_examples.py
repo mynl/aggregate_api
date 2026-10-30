@@ -171,10 +171,11 @@ def test_example_decl_arrives_without_its_filing_clauses(client):
     # this set carries: an entry added upstream reddens this assertion with no
     # line changing in this repo, so the set is widened ahead of the library
     # rather than behind it. ``chfagg`` joined with ``StableLaw`` (library
-    # 1.30.0), and reddened it exactly that way.
+    # 1.30.0), and reddened it exactly that way. ``stable`` joined with the four
+    # classical stable laws (library 1.42.0), and ``tweedie`` beside it.
     heads = {"agg", "port", "sev", "distortion", "dist", "pnl", "xpnl",
              "bivariate", "clash", "grossceded", "grossnet", "netceded",
-             "nttagg", "chfagg"}
+             "nttagg", "chfagg", "stable", "tweedie"}
     hinted = 0
     for item in client.get("/v1/examples").json()["items"]:
         decl = item["decl"]

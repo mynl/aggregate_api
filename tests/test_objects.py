@@ -490,6 +490,103 @@ def test_a_conversion_is_answered_as_text(client, program, fragment):
     assert [row["status"] for row in rows] == ["value"]
 
 
+def _stable_has(member):
+    """Whether the installed library's ``Stable`` has ``member``."""
+    try:
+        from aggregate.stable import Stable
+    except ImportError:
+        return False
+    return hasattr(Stable, member)
+
+
+requires_named_laws = pytest.mark.skipif(
+    not _stable_has("from_spec"), reason="aggregate before 1.42.0")
+requires_stable_arithmetic = pytest.mark.skipif(
+    not _stable_has("__truediv__"), reason="aggregate before 1.43.0")
+
+SESSION = "X-Aggregate-Session"
+
+
+def _post(client, session, decl, **opts):
+    """POST a build as ``session``, returning the response."""
+    return client.post("/v1/objects", json={"decl": decl, **opts},
+                       headers={SESSION: session})
+
+
+@requires_named_laws
+@pytest.mark.parametrize("program, fragment", [
+    ("stable x0 1.5 0", "x0: stable 1.5 0 1 0 ="),
+    ("tweedie t0 1.5 10 2", "t0: tweedie 1.5 10 2 ="),
+], ids=["stable", "tweedie"])
+def test_a_named_law_is_text_kept_in_its_session(client, program, fragment):
+    """The statement files in the session's fork, with no object in the cache.
+
+    A later reference resolves in that session, by the dotted form and by the
+    bare name, and another session gets the structured miss.
+    """
+    kind, name = program.split()[:2]
+    before = len(client.get("/v1/objects").json()["objects"])
+    for decl in (program, f"{kind}.{name}", name):
+        r = _post(client, "named-one", decl)
+        assert r.status_code == 200, r.text
+        assert r.json()["kind"] == "text"
+        assert fragment in r.json()["text"]
+        assert "id" not in r.json()
+    assert len(client.get("/v1/objects").json()["objects"]) == before
+    r = _post(client, "named-two", f"{kind}.{name}")
+    assert r.status_code == 422, r.text
+    detail = r.json()["detail"]
+    assert (detail["error"], detail["kind"], detail["name"]) == ("recipe_not_found", kind, name)
+
+
+@requires_named_laws
+def test_a_library_law_serves_a_library_only_client_and_an_own_law_does_not(client):
+    """``stable.Holtsmark`` is what an Excel client can reference; ``stable.x0`` is not."""
+    r = _post(client, "named-one", "stable.Holtsmark", library_references_only=True)
+    assert r.status_code == 200, r.text
+    assert "Holtsmark: stable 1.5 0 1 0 =" in r.json()["text"]
+    assert _post(client, "named-one", "stable x0 1.5 0").status_code == 200
+    r = _post(client, "named-one", "stable.x0", library_references_only=True)
+    assert r.status_code == 422, r.text
+    detail = r.json()["detail"]
+    assert (detail["error"], detail["kind"], detail["name"]) == ("session_reference", "stable", "x0")
+
+
+@requires_stable_arithmetic
+def test_arithmetic_on_a_named_law_is_text(client):
+    """An expression is an answer; it files nothing and its operands stay put."""
+    assert _post(client, "named-one", "stable x0 1.5 0").status_code == 200
+    r = _post(client, "named-one", "stable.x0 + 1")
+    assert r.status_code == 200, r.text
+    assert r.json()["text"].startswith("stable 1.5 0 1 1 =")
+    r = _post(client, "named-one", "stable.Holtsmark + 1", library_references_only=True)
+    assert r.status_code == 200, r.text
+    assert r.json()["text"].startswith("stable 1.5 0 1 1 =")
+
+
+@requires_named_laws
+def test_an_ambiguous_bare_name_is_a_422_in_the_library_words(client):
+    """The preview's ``KeyError`` reaches the client, with no parse report to misread."""
+    assert _post(client, "named-one", "stable x0 1.5 0").status_code == 200
+    assert _post(client, "named-one", "agg x0 1 claims dsev [1] fixed").status_code == 200
+    r = _post(client, "named-one", "x0")
+    assert r.status_code == 422, r.text
+    assert "ambiguous across kinds (agg, stable)" in r.json()["detail"]
+
+
+def test_register_skips_every_answer_kind():
+    """Reaching it with a conversion would break the fork's ``recipes`` frame."""
+    from aggregate import build
+    from aggregate_api.routes.objects import _register
+
+    uw = build.fork(name="register")
+    for program in ("tweedie 1.5 100 2", "2 ** 3"):
+        before = set(uw._recipes)
+        _register(uw, uw.preview(program))
+        assert set(uw._recipes) == before
+    assert not uw.recipes.empty
+
+
 def test_an_unknown_object_is_still_refused(client, monkeypatch):
     """An object of no supported kind, from a statement that is no conversion.
 

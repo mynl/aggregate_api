@@ -725,8 +725,10 @@ def _register(uw, preview) -> None:
     -----
     The bare-name route registers nothing: the entry was already there, and
     filing it again would re-mark a library entry as this session's, which is
-    exactly the flag the cache rule reads. ``expr`` is skipped for the reason
-    the library skips it, being an answer rather than a declaration.
+    exactly the flag the cache rule reads. ``expr`` and ``conversion`` are
+    skipped for the reason the library skips them, being answers rather than
+    declarations. They are written out because ``underwriter.ANSWER_KINDS``
+    arrived in ``aggregate`` 1.22.0, which the floor predates.
 
     **The filed spec is the served object's.** Since 1.14.0 the key is a hash
     of the previewed specs, so a hit means the preview parsed to exactly what
@@ -737,7 +739,7 @@ def _register(uw, preview) -> None:
     if preview is None or preview.route != "program":
         return
     for statement in preview.statements:
-        if statement.kind == "expr":
+        if statement.kind in ("expr", "conversion"):
             continue
         uw.add_recipe(statement.kind, statement.name, statement.spec,
                       statement.program)
@@ -1907,8 +1909,11 @@ def post_object(
             }
 
         # A conversion statement, ``tweedie 1.5 100 2`` or ``stable 1.5 1 2 0``,
-        # whose answer is the library's string of the object it returns. Treated
-        # as the number above is: nothing cached, no recipe, audited as a value.
+        # or a named law, ``stable x0 1.5 0``, whose answer is the library's
+        # string of the object it returns. Treated as the number above is:
+        # nothing cached and audited as a value. The library files a named law
+        # in this session's fork as it parses it, so a later ``stable.x0``
+        # resolves here and only here.
         # Recognized by the statement kind the library's own preview declares
         # rather than by a list of class names here, so the library's next
         # conversion needs no edit in this file, and under a library that
@@ -2051,7 +2056,7 @@ def _classify_object(obj: Any) -> str:
 
 
 def _is_conversion(preview: Any) -> bool:
-    """Whether a previewed program is a conversion statement.
+    """Whether a previewed program answers with a law's parameters, as text.
 
     Parameters
     ----------
@@ -2063,10 +2068,13 @@ def _is_conversion(preview: Any) -> bool:
     bool
         True when the last statement, the one whose object ``build()`` returns,
         has the library's kind ``'conversion'`` (one of
-        ``underwriter.ANSWER_KINDS`` since ``aggregate`` 1.22.0).
+        ``underwriter.ANSWER_KINDS`` since ``aggregate`` 1.22.0), or ``'stable'``
+        or ``'tweedie'``, a named law and its bare name (since 1.42.0). Under an
+        older library no statement has either of those two kinds.
     """
     statements = getattr(preview, "statements", None) or ()
-    return bool(statements) and getattr(statements[-1], "kind", None) == "conversion"
+    return (bool(statements)
+            and getattr(statements[-1], "kind", None) in ("conversion", "stable", "tweedie"))
 
 
 # ----------------------------------------------------------------------

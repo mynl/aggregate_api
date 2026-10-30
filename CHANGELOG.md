@@ -4,6 +4,16 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.39.0
+
+[aLL-Named-Laws] **A named stable or tweedie law answers as text and stays in the session.** No object is served: `stable x0 1.5 0` and `tweedie t0 1.5 10 2` show the library's string, and `stable.x0`, `tweedie.t0` and the bare name resolve later in that session. Follows aggregate 1.42.0, `[Stable-Expressions]`; the library's plan is `dev/done/plan-stable-expressions.md` there.
+
+- Added: `stable.Holtsmark` and the three other library laws work under `library_references_only`, so a spreadsheet can reference them. A session's own `stable.x0` is refused there with `session_reference`.
+- Changed: the `_is_conversion` test takes the kinds `stable` and `tweedie`. The Examples menu lists the four library laws, and the `heads` set in `test_examples` widens to match.
+- Fixed: `_register` skips `conversion` as well as `expr`. Reaching it with a conversion would have broken the session's `recipes` frame. It was not reached, since a text answer is never cached.
+- A bare name held under two kinds is a 422 in the library's words, with no change here.
+- Known, as at 1.38.0: these tests need aggregate 1.42.0 while the floor stays `aggregate>=1.11.0`, so they skip under an older library. `stable.x0 + 1` needs 1.43.0.
+
 ## 1.38.0
 
 [Chfagg-Aggregate-Parity] **A `chfagg` takes aggregate's arithmetic form, and Evaluate, Sharpen and two more exhibits work on it.** No plan: the consumer half of aggregate 1.35.0 to 1.41.0.
