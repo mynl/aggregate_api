@@ -257,10 +257,12 @@ export function canNext() {
  * declared it, so the pane can offer the rebuild rather than describe it.
  *
  * Matched on the declaration head only: a DecL statement opens
- * `<kind> <Name> ...`, and the entries are stored collapsed to one line, so the
- * head is the first two tokens. Deliberately not a parse. This is a convenience
- * that either finds the program or does not; a wrong guess would show a button
- * that rebuilds something else, so the match is anchored and exact.
+ * `<kind> <Name> ...`, and an entry is stored as it was typed and may hold several
+ * statements, so a head counts at the start of the text, after a blank line, or
+ * after a line-final `;`. Deliberately not a parse. This is a convenience that
+ * either finds the program or does not; a wrong guess would show a button that
+ * rebuilds something else, so the match is anchored and exact. An indented `agg A`
+ * inside a `port` does not count: that rebuild would restore nothing.
  *
  * @param {string} kind e.g. 'agg', 'port', 'sev'
  * @param {string} name the entry name
@@ -271,7 +273,8 @@ export function findDeclaring(kind, name) {
     // Escaped because both halves arrive from a server payload. DecL names are
     // identifiers in practice, so this guards the case where they are not.
     const quote = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const head = new RegExp(`^\\s*${quote(kind)}\\s+${quote(name)}(\\s|$)`);
+    const head = new RegExp(
+        `(?:^|\\n\\s*\\n|;\\s*\\n)\\s*${quote(kind)}\\s+${quote(name)}(\\s|$)`);
     return state.entries.find((text) => head.test(text)) || null;
 }
 

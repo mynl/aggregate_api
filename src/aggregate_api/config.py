@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     # FFT memory cost; 2**20 is ~8 MB per density array and is well
     # past anything legitimate users need on a team-deploy box.
     log2_cap: int = 18
+    # Most statements one program may hold. Each costs a parse and all but the
+    # last are filed in the session, so this bounds both: requests above it fail
+    # with HTTP 422 (limit_exceeded). Ordinary use is three to five.
+    max_statements: int = 12
     # Per-build wall-clock timeout; expires via threadpool.future.
     build_timeout_s: float = 10.0
 

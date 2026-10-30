@@ -179,7 +179,10 @@ class AuditLog:
             Build knobs as requested -- may be None when omitted.
         status : str
             One of ``'ok' | 'value' | 'parse_error' | 'build_error' | 'timeout'
-            | 'limit_exceeded'``. ``'value'`` is a program that meant an
+            | 'limit_exceeded' | 'declared'``. ``'declared'`` is the statements
+            of a program before its last, filed and not built, which have a
+            row of their own because the rest of the request concerns the last
+            statement alone. ``'value'`` is a program that meant an
             answer rather than an object: a number (``(2+2)``) or a text answer
             from a conversion statement (``tweedie 1.5 100 2``), which builds
             and answers but leaves no object; it has its own status so the

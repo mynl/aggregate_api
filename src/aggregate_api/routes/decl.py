@@ -17,7 +17,9 @@ Routes
   structure of a program and must not read it back out of text.
 * ``POST /v1/decl/format``: accepts ``decl`` and returns the program
   re-rendered canonically in the caller's session, every dotted reference
-  inlined, echoing the input on any failure.
+  inlined, echoing the input on any failure or on several statements.
+* ``POST /v1/decl/statements``: accepts ``decl`` and returns how many statements
+  it holds. String work only, and it parses nothing.
 * ``GET  /v1/decl/grammar``: serves ``decl.lark`` verbatim as
   ``text/plain``. Lets a future docs page embed the live grammar without a
   build-time include step.
@@ -42,7 +44,7 @@ from aggregate.parser_errors import format_error
 from .. import decl_help, models
 from ..completion import complete, lex
 from ..serializers import spec_to_payload
-from .objects import _get_session_uw
+from .objects import _get_session_uw, split_program
 
 
 router = APIRouter()
@@ -103,9 +105,9 @@ def _parse_statements(decl: str) -> list[tuple[str, str, dict]]:
     statement.
 
     Each statement is parsed against ``aggregate.build`` alone, so a name a
-    statement declares is not in scope for the statements after it. Reformat
-    stopped sharing that limit at 1.15.0, by previewing in the caller's fork:
-    see :func:`_format_decl`.
+    statement declares is not in scope for the statements after it. The build
+    route resolves them in order, in the caller's fork: see
+    ``routes.objects._declare_prelude``.
     """
     try:
         from aggregate import build
@@ -135,22 +137,32 @@ def _format_decl(decl: str, uw) -> str:
     Returns
     -------
     str
-        Every statement rendered by ``format_program`` from its previewed spec,
-        joined by a blank line, or ``decl`` byte for byte when anything fails.
+        The statement rendered by ``format_program`` from its previewed spec,
+        or ``decl`` byte for byte when anything fails or the program holds
+        several statements.
 
     Notes
     -----
+    **Several statements echo (1.40.0).** The render works from a parsed spec,
+    and parsing has by then replaced ``sev.S`` with a copy of ``S``, so a program
+    of several statements would come back with its references inlined and its
+    earlier statements left as dead text: an edit to ``sev S`` afterward would no
+    longer change ``agg A``, with no warning. That is a silent change of meaning
+    from a button whose purpose is layout. The SPA refuses the press before
+    calling here, and this keeps a direct caller safe too. Through 1.39 such a
+    program rendered statement by statement, which is what 1.15.0 accepted and
+    ``dev/done/plan-multi-statement-programs.md`` withdrew.
+
     **Rendered from the preview, not from the text.** ``uw.preview`` parses the
     program in a private fork of the caller's base and registers nothing, so
     every dotted reference resolves the way a build would resolve it: library
-    entries, the caller's own declarations (``port P agg.A`` after an own
-    ``agg A``), and names an earlier statement of the same program declares.
-    Each statement's spec, which already holds those references inlined, goes
-    to ``format_program`` as a ``(kind, name, spec)`` tuple. A ``sev agg.X``
-    stays a reference, because the spec keeps it symbolic: it stands for the
-    referent's computed output and has no inline spelling. Through 1.14 the
-    route rendered the text against ``aggregate.build`` alone, so an own
-    reference, or a second statement naming the first, came back untouched.
+    entries and the caller's own declarations (``port P agg.A`` after an own
+    ``agg A``). The statement's spec, which already holds those references
+    inlined, goes to ``format_program`` as a ``(kind, name, spec)`` tuple. A
+    ``sev agg.X`` stays a reference, because the spec keeps it symbolic: it
+    stands for the referent's computed output and has no inline spelling. Through
+    1.14 the route rendered the text against ``aggregate.build`` alone, so an own
+    reference came back untouched.
 
     **The promise: a failure echoes the input byte for byte.** a137 learned why
     that has to be enforced here. The writer's text route answers a statement
@@ -186,6 +198,8 @@ def _format_decl(decl: str, uw) -> str:
     try:
         from aggregate.decl_writer import format_program
 
+        if len(split_program(decl)) > 1:
+            return decl
         preview = uw.preview(decl)
         if preview.route != "program":
             return decl
@@ -239,6 +253,29 @@ def decl_format(req: models.DeclFormatRequest,
     Best-effort: malformed input echoes back unchanged.
     """
     return {"decl": _format_decl(req.decl, uw)}
+
+
+@router.post("/decl/statements", response_model=models.DeclStatementsResponse)
+def decl_statements(req: models.DeclStatementsRequest) -> dict:
+    """Return how many statements ``req.decl`` holds, by the library's rule.
+
+    Parses nothing, files nothing and adds no cache entry or audit row, so it
+    costs string work only.
+
+    Notes
+    -----
+    **Why a route.** The statement rule belongs to the library and the client
+    must not hold a copy: a blank line inside ``[ ]``, a comment line, and a
+    ``;`` inside a multi-line ``note{}`` all defeat a client-side regex. The SPA
+    calls this when a control that transforms the box is pressed.
+
+    **Unbalanced brackets count as one**, so the control that was pressed goes
+    on to report the problem in its usual way.
+    """
+    try:
+        return {"statements": len(split_program(req.decl))}
+    except ValueError:
+        return {"statements": 1}
 
 
 @router.post("/decl/parse", response_model=models.DeclParseResponse)

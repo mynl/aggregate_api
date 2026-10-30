@@ -318,6 +318,7 @@ export const api = {
     complete:     (decl, cursor)    => _json('POST', '/v1/decl/complete', { decl, cursor }),
     lex:          (decl)            => _json('POST', '/v1/decl/lex', { decl }),
     formatDecl:   (decl)            => _json('POST', '/v1/decl/format', { decl }),
+    countStatements: (decl)         => _json('POST', '/v1/decl/statements', { decl }),
 
     // Metadata
     /**

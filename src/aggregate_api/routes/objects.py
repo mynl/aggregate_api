@@ -1411,36 +1411,30 @@ _REINS_MOMENTS = ["mean", "cv", "skew"]
 # app draws what it is given; if the orientation is wrong it is wrong there.
 
 
-def collapse_program(decl: str) -> str:
-    """One line of DecL from however the text arrived.
+def split_program(decl: str) -> list[str]:
+    """The statements of a program by the library's rule, each on one line.
 
-    Collapse newlines, tabs and ``\\`` line-continuations to single spaces so a
-    program formatted across several indented lines builds without the ugly
-    continuation character. DecL treats a bare newline as a *program separator*,
-    but the same program on one line parses fine. Runs of whitespace are
-    replaced rather than deleted so tokens do not merge (``100\\nclaims`` to
-    ``100 claims``), and any ``\\`` goes first so existing continuation programs
-    fold in too.
-
-    Done up front on the build path so the hints scan, the cache key, the build
-    and any parse-error caret all see the same source. This is a single-object
-    playground (one program per build), so merging newline-separated programs is
-    not a regression.
-
-    Shared rather than inlined because the derivation routes have to reach the
-    **same cache key** an ordinary build of the same text would. The library
-    renders derived programs in its multi-line spread layout, so without this
-    the id would be computed over different bytes and rebuilding a derived
-    program from the editor would miss its own cache slot.
+    A blank line or a line-final ``;`` separates two statements, and a newline
+    inside a statement folds to a space. This is the only parse rule on the
+    build path and it is the rule ``Underwriter.build_many`` applies, so text
+    the library refuses is refused here too.
 
     Parameters
     ----------
     decl : str
+        The program as it arrived.
 
     Returns
     -------
-    str
-        One line, or ``''`` for a program that holds no statement.
+    list of str
+        The statements in order, empty for a program that holds none.
+
+    Raises
+    ------
+    ValueError
+        Unbalanced square brackets. ``preprocess`` raises a bare
+        ``AssertionError`` for these, and so does ``build()``. The catch goes
+        when the library raises a ``ValueError`` with an ``ErrorReport``.
 
     Notes
     -----
@@ -1451,8 +1445,7 @@ def collapse_program(decl: str) -> str:
     first puts a leading ``# a note`` in front of the program, so the whole
     statement became one comment and the library preprocessed it to nothing,
     which the reader saw as an unexplained parse failure. ``//`` failed the same
-    way. A trailing comment survived, but only because ``build()`` preprocesses
-    downstream; the rule was never working here.
+    way.
 
     :meth:`aggregate.parser.UnderwritingLexer.preprocess` is where the comment
     rules live: full-line and inline, ``#`` and ``//``, with ``note{}`` /
@@ -1462,17 +1455,171 @@ def collapse_program(decl: str) -> str:
     ``routes.decl`` for the same reason, so the sanctioned import surface does
     not move.
 
-    The statements come back as a list, and they are joined with a space rather
-    than answered as a list, because merging is what this function has always
-    done. The trailing ``re.sub`` stays for the same reason: it is what makes
-    the output **byte identical** to the old one on every program without a
-    comment, which is not tidiness but the cache key. Checked against nine, from
-    a multi-line ``port`` through the bivariate's nested ``dbvsev`` matrices to
-    a ``note{}`` body holding a ``#``.
+    **Whitespace is normalized per statement**, which ``preprocess`` leaves to
+    the lexer. The ``re.sub`` is the cache key rather than tidiness: every id
+    since a138 was computed over text normalized this way, and a statement here
+    stays byte identical to that text. Checked against nine programs, from a
+    multi-line ``port`` through the bivariate's nested ``dbvsev`` matrices to a
+    ``note{}`` body holding a ``#``.
     """
-    text = decl.replace("\\", " ")
-    statements = UnderwritingLexer.preprocess(text)
-    return re.sub(r"\s+", " ", " ".join(statements)).strip()
+    try:
+        statements = UnderwritingLexer.preprocess(decl)
+    except AssertionError:
+        raise ValueError("unbalanced [ ] in this program") from None
+    return [re.sub(r"\s+", " ", statement).strip() for statement in statements]
+
+
+def collapse_program(decl: str) -> str:
+    """One line of DecL from a program that holds at most one statement.
+
+    Shared rather than inlined because the derivation routes have to reach the
+    **same cache key** an ordinary build of the same text would. The library
+    renders derived programs in its multi-line spread layout, so without this
+    the id would be computed over different bytes and rebuilding a derived
+    program from the editor would miss its own cache slot.
+
+    Parameters
+    ----------
+    decl : str
+        A program the library rendered, a cached entry's ``decl``, or a
+        fragment a reader typed.
+
+    Returns
+    -------
+    str
+        One line, or ``''`` for a program that holds no statement.
+
+    Raises
+    ------
+    ValueError
+        More than one statement, or unbalanced brackets.
+
+    Notes
+    -----
+    **It never joins statements.** Two statements on one line are a parse error
+    the library would not have raised on the text as written. The refusal is
+    loud on purpose: ``format_program`` over all 206 library entries, and every
+    program the test suite sent through here on 2026-10-30, produced nothing
+    that splits, so a program that does is a defect worth seeing.
+    """
+    statements = split_program(decl)
+    if len(statements) > 1:
+        raise ValueError(
+            f"expected one statement; this program holds {len(statements)}")
+    return statements[0] if statements else ""
+
+
+def _declare_prelude(parts: list[str], uw, req: models.BuildRequest,
+                     request: Request, settings: Settings, audit: AuditLog,
+                     *, ip: str, sid: str | None, log2: int, bs: float,
+                     t0: float) -> None:
+    """Check every statement of a program, then file all but the last.
+
+    A program of several statements means the same as submitting them one at a
+    time, except that a failure anywhere files nothing. Each statement but the
+    last is filed as an entry of ``library.agg`` is filed, and only the last is
+    built.
+
+    Parameters
+    ----------
+    parts : list of str
+        The statements from :func:`split_program`, at least two.
+    uw : aggregate.underwriter.Underwriter
+        The caller's own fork, which receives the prelude.
+    req : models.BuildRequest
+        For ``library_references_only``.
+    request : starlette.requests.Request
+        For the private network test.
+    settings : Settings
+        For ``max_statements``.
+    audit : AuditLog
+        Receives a row for a refusal, or one ``declared`` row for the prelude.
+    ip, sid : str, str or None
+        The caller, for the audit row.
+    log2, bs : int, float
+        The requested grid, for the audit row.
+    t0 : float
+        ``time.monotonic()`` at the start of the request.
+
+    Raises
+    ------
+    fastapi.HTTPException
+        422 on any refusal. Nothing has been filed in ``uw`` when this raises.
+
+    Notes
+    -----
+    **Statement by statement, not one whole-program preview.** The loop gives
+    the failing index for every kind of failure with no string matching,
+    including the plain ``ValueError`` messages that have no ``ErrorReport``. A
+    bare name in last position also keeps working as it does alone: ``preview``
+    tries the bare-name lookup only when given that name as its whole input.
+
+    **A fork, so that a failure files nothing.** Filing on the real base as each
+    statement passes would leave statements 1 to 4 behind when statement 5
+    fails. The fork costs a dict copy, and the whole step measured 18 ms for
+    twelve statements on 2026-10-30.
+
+    **``library_references_only`` refuses.** Every Excel and Sheets build sets
+    it. Without this refusal a program would build once and fail on
+    resubmission, since the preview would then list its own names as session
+    entries and :func:`_own_reference` would refuse them.
+
+    **Accepted consequence (author, 2026-10-30).** A prelude statement that
+    parses and cannot build raises nothing until something refers to it.
+    """
+    program = " ".join(parts)
+
+    def refuse(status: str, detail: Any, message: str) -> None:
+        elapsed = int((time.monotonic() - t0) * 1000)
+        audit.record_build(
+            ip=ip, decl=program, log2=log2, bs=bs,
+            status=status, error_msg=message,
+            elapsed_ms=elapsed, session_id=sid,
+        )
+        raise HTTPException(status_code=422, detail=detail) from None
+
+    if len(parts) > settings.max_statements:
+        message = (f"this program holds {len(parts)} statements; "
+                   f"AGGAPI_MAX_STATEMENTS is {settings.max_statements}")
+        refuse("limit_exceeded", message, message)
+    if req.library_references_only:
+        message = ("this client builds one statement at a time; "
+                   f"this program holds {len(parts)}")
+        refuse("build_error", message, message)
+
+    scratch = uw.fork()
+    previews = []
+    for index, statement in enumerate(parts):
+        try:
+            preview = _preview(scratch, statement)
+        except RecipeNotFound as exc:
+            detail = _missing_entry_detail(exc)
+            detail["statement_index"] = index
+            refuse("build_error", detail, detail["message"])
+        except Exception as exc:  # noqa: BLE001 (refused, see _preview)
+            outcome, detail, message = _unpreviewable_detail(statement, exc)
+            if isinstance(detail, dict):
+                detail["statement_index"] = index
+            else:
+                detail = f"statement {index + 1}: {detail}"
+            refuse(outcome, detail, message)
+        _register(scratch, preview)
+        previews.append(preview)
+
+    # Against the fork, which holds what each statement resolved to. The router
+    # dependency has already refused a path in the text, so this catches one
+    # reached by reference, in a prelude statement nothing may ever build.
+    if (not request_is_private(request)
+            and any(preview_names_file(scratch, p) for p in previews)):
+        refuse("build_error", FILE_REFUSAL, FILE_REFUSAL)
+
+    for preview in previews[:-1]:
+        _register(uw, preview)
+    # Without this row the audit holds only the last statement.
+    audit.record_build(
+        ip=ip, decl=" ".join(parts[:-1]), log2=log2, bs=bs, status="declared",
+        elapsed_ms=int((time.monotonic() - t0) * 1000), session_id=sid,
+    )
 
 
 # ----------------------------------------------------------------------
@@ -1596,6 +1743,12 @@ def post_object(
     twice, once here and once inside the build. Both are stated rather than
     discovered: the alternative is keying on text that no longer determines the
     object, which is not a slower answer but a wrong one.
+
+    **Several statements.** A blank line or a line-final ``;`` separates them,
+    as in ``build_many``. The statements before the last are filed in the
+    caller's session and only the last is built, so the preview, the key, the
+    build and the response all concern the last statement alone. See
+    :func:`_declare_prelude`.
     """
     # Resolve effective knobs: a missing log2 / bs from the request
     # means "use library defaults" -- which the underlying build()
@@ -1607,10 +1760,23 @@ def post_object(
     sid = session_id_of(request)
     t0 = time.monotonic()
 
-    req.decl = collapse_program(req.decl)
+    try:
+        parts = split_program(req.decl)
+    except ValueError as exc:
+        message = str(exc)
+        elapsed = int((time.monotonic() - t0) * 1000)
+        audit.record_build(
+            ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
+            status="parse_error", error_msg=message,
+            elapsed_ms=elapsed, session_id=sid,
+        )
+        raise HTTPException(status_code=422, detail=message) from None
+
+    # Every statement, for the empty check, the log2 scan and their audit rows.
+    req.decl = " ".join(parts)
 
     # A program that holds no statement, which since a138 is a real arrival
-    # rather than an impossible one: the collapse strips comments now, so a box
+    # rather than an impossible one: the split strips comments, so a box
     # holding nothing but ``# a note`` reaches here empty. Answered in its own
     # words. The library's answer is "build() expects a single output, got 0;
     # use build_many() for batched programs", which is about ``build_many`` and
@@ -1650,6 +1816,13 @@ def post_object(
             status_code=422,
             detail=f"log2 {effective_log2} exceeds AGGAPI_LOG2_CAP={settings.log2_cap}",
         )
+
+    # The cap above scanned every statement on purpose. A prelude ``hints{log2=25}``
+    # filed unscanned would reach a build through ``sev agg.NAME`` and bypass it.
+    if len(parts) > 1:
+        _declare_prelude(parts, uw, req, request, settings, audit,
+                         ip=ip, sid=sid, log2=eff_log2, bs=eff_bs, t0=t0)
+    req.decl = parts[-1]
 
     preview_t0 = time.monotonic()
     try:
@@ -4361,6 +4534,7 @@ def _resolve_risk(obj: Any, text: str, settings: Settings, uw):
         if str(unit) == name:
             return name, obj[name]
 
+    # One statement only: given two, ``uw`` builds and files both before raising.
     program = collapse_program(name)
     hint_log2 = max((int(m) for m in _HINTS_LOG2.findall(program)), default=0)
     if hint_log2 > settings.log2_cap:

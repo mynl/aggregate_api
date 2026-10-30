@@ -4,6 +4,19 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.40.0
+
+[Multi-Statement-Programs] **The playground's box takes several statements, and the API stops accepting text the library refuses.** A blank line or a line-final `;` separates statements, as in `build_many`. The statements before the last are filed in the session and only the last is built, so the result on screen is the last statement. Plan: `dev/done/plan-multi-statement-programs.md`.
+
+- Added: up to 12 statements in a program (`AGGAPI_MAX_STATEMENTS`). A failure anywhere files nothing, and the 422 gives the failing statement as `statement_index`. A statement that parses and cannot build raises nothing until something refers to it.
+- Breaking, for every client including Excel and Sheets: each of these is now a 422, as it is an error in `build()`: a blank line inside one statement, a blank line before `note{}` or inside its body, and a backslash outside a `note{}`. An unbalanced `[` is a 422 rather than a 500. A single statement that still builds keeps its id.
+- Changed: Sharpen, Hints, P&L, Views, Cede and Reformat refuse a box holding several statements, in the first row of the status strip. The object's readings leave the strip until the next build, and Ctrl+Enter restores them.
+- Changed: `POST /v1/decl/format` echoes several statements byte for byte. Rendering them inlined each reference and left the earlier statements as dead text, so this withdraws what 1.15.0 accepted.
+- Changed: Excel and Sheets refuse a cell holding several statements, since they build one at a time.
+- Added: `POST /v1/decl/statements` counts statements and parses nothing. The audit log gains the status `declared`, one row for the statements filed and not built.
+- Fixed: a backslash in a `note{}` stays in the note. It used to become a space.
+- Changed: a number or text answer from several statements returns with Ctrl+Up, and the rebuild offer after an expired session finds a declaration anywhere in such a program.
+
 ## 1.39.0
 
 [aLL-Named-Laws] **A named stable or tweedie law answers as text and stays in the session.** No object is served: `stable x0 1.5 0` and `tweedie t0 1.5 10 2` show the library's string, and `stable.x0`, `tweedie.t0` and the bare name resolve later in that session. Follows aggregate 1.42.0, `[Stable-Expressions]`; the library's plan is `dev/done/plan-stable-expressions.md` there.

@@ -21,9 +21,8 @@ One test, three places
 ``.lower()`` and refuses any other suffix before the disk is touched, and a DecL
 quoted string has no escapes, so a readable path contains one of
 :data:`READABLE_SUFFIXES` literally. Neither preprocessing pass can assemble one:
-``collapse_program`` replaces continuations and whitespace with spaces and
-deletes nothing, and the library lifts quoted strings out before it strips
-comments. The test ignores position, so labels, ``unit`` clauses, ``note{}``
+``split_program`` collapses whitespace and deletes nothing, and the library
+lifts quoted strings out before it strips comments. The test ignores position, so labels, ``unit`` clauses, ``note{}``
 bodies and comments cannot hide a path from it. A scan for a quoted string in
 the source position would have to agree with the library on where every string
 begins and ends; this one cannot be misled. A false positive (a comment that

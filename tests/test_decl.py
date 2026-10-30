@@ -164,16 +164,12 @@ def test_reformat_still_echoes_an_unknown_reference(client):
     assert _reformat(client, "session-reformat-unknown", decl) == decl
 
 
-def test_reformat_renders_a_program_whose_second_statement_names_the_first(client):
-    """The two statements render whole, and neither collapses."""
+def test_reformat_echoes_a_program_whose_second_statement_names_the_first(client):
+    """Rendering would inline the reference and leave the first statement dead."""
     decl = ("sev MySev lognorm 10 cv 1\n"
             "\n"
             "agg A 2 claims sev sev.MySev poisson")
-    out = _reformat(client, "session-reformat-two", decl)
-    first, second = out.split("\n\n")
-    assert first.startswith("sev MySev")
-    assert second.startswith("agg A\n")
-    assert "sev.MySev" not in second and "lognorm 10 cv 1" in second
+    assert _reformat(client, "session-reformat-two", decl) == decl
 
 
 def test_reformat_keeps_the_hints_sharpen_wrote(client):

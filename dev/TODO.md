@@ -12,6 +12,16 @@ Items oddly from the aggregate list
 
 ## Landed
 
+- **[Multi-Statement-Programs]** DONE (`1.40.0`), plan
+  `dev/done/plan-multi-statement-programs.md`. The box takes several statements,
+  the statements before the last are filed and only the last is built, and the
+  API refuses what `build()` refuses, for every client. Controls that transform
+  the box refuse several statements in the status strip. Left open: Sharpen,
+  Hints and Cede act on the last built object when one statement was edited and
+  not built; `POST /v1/decl/parse` still parses each statement against the
+  default base; Reformat keeping references needs a library plan (option [c] in
+  the plan).
+
 - **[Chfagg-Aggregate-Parity]** DONE (`1.38.0`), no plan: the consumer half of
   aggregate 1.35.0 to 1.41.0. A `chfagg` takes the arithmetic form, Evaluate and
   Sharpen run on it, with the More Sharpen leaf and the `bs_window` and
@@ -1558,6 +1568,11 @@ one version bump each.
       unlabeled.
 
 ## Raised with `aggregate` (not fixed here)
+
+- [ ] **`UnderwritingLexer.preprocess` raises a bare `AssertionError` on an
+      unbalanced `[`**, so `build()` does too. Ask: a `ValueError` with an
+      `ErrorReport`. The catch in `routes/objects.py::split_program` goes once it
+      is. From `[Multi-Statement-Programs]`.
 
 - [ ] **`format_program`'s fallback answers with the preprocessed statement
       rather than the source, so an unreadable program comes back collapsed onto

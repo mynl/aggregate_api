@@ -53,11 +53,19 @@ _Ratio = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 class BuildRequest(BaseModel):
     """Body for ``POST /v1/objects``.
 
-    ``log2`` and ``bs`` are optional -- the underlying ``build()``
-    will choose sensible defaults when they're omitted.
+    ``log2`` and ``bs`` are optional: the underlying ``build()`` chooses
+    sensible defaults when they are omitted.
     """
 
-    decl: str = Field(..., min_length=1, description="DecL source text.")
+    decl: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "DecL source text: one statement, or several separated by a blank "
+            "line or a line-final ';'. The earlier statements are filed in the "
+            "session and only the last is built."
+        ),
+    )
     log2: int | None = Field(
         None,
         ge=4,
@@ -1182,6 +1190,18 @@ class DeclFormatResponse(BaseModel):
     model_config = _RESPONSE_CFG
 
     decl: str
+
+
+class DeclStatementsRequest(BaseModel):
+    decl: str
+
+
+class DeclStatementsResponse(BaseModel):
+    """``POST /v1/decl/statements``: how many statements a program holds."""
+
+    model_config = _RESPONSE_CFG
+
+    statements: int
 
 
 class DeclParseRequest(BaseModel):

@@ -206,10 +206,13 @@ the built SPA at `/` when present.
 | `serializers.py` | DataFrame → JSON (`FrameResponse`) |
 | `routes/` | `meta`, `objects`, `decl`, `examples` APIRouters, mounted `/v1` |
 
-Build pipeline guards: log2 cap (HTTP 422 over the limit), a build semaphore
-plus wall-clock timeout (default 10 s). Parse failures return HTTP 422 with the
+Build pipeline guards: log2 cap (HTTP 422 over the limit), a statement cap
+(`AGGAPI_MAX_STATEMENTS`, default 12), a build semaphore plus wall-clock timeout
+(default 10 s). Parse failures return HTTP 422 with the
 `aggregate.parser_errors` `ErrorReport` dict so the SPA can render a rich error
-pane.
+pane. `POST /v1/objects` parses a program the way `Underwriter.build_many` does
+and nothing else: the statements before the last are filed in the session, and
+only the last is built.
 
 ### Frontend: `web/`
 

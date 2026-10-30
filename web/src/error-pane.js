@@ -136,8 +136,14 @@ export function renderError(err, onRebuild) {
     const parts = [];
 
     if (detail.line && detail.column) {
+        // `line` is relative to the statement, so in a program of several lines
+        // it is always 1. The index is zero-based on the wire, as on the parse
+        // route, and counted from one for the reader.
+        const where = detail.statement_index === undefined
+            ? `at line ${detail.line}`
+            : `in statement ${detail.statement_index + 1}`;
         parts.push(el('div', { className: 'small text-muted' },
-            `Parse error at line ${detail.line}, column ${detail.column}.`));
+            `Parse error ${where}, column ${detail.column}.`));
     }
 
     if (detail.source) {

@@ -584,11 +584,14 @@ async function build() {
     try {
         const res = await api.build(decl, {});
         // A number or a text answer is not an object: no id, no panes, and
-        // nothing for the action row to derive from. Neither is recorded in
-        // history, whose ring is the trail of programs that built something and
-        // which `rebuildMissing` walks looking for declarations.
-        if (res && res.kind === 'value') { renderValue(res); return; }
-        if (res && res.kind === 'text') { renderText(res); return; }
+        // nothing for the action row to derive from. A single statement of
+        // either kind is not recorded in history, whose ring is the trail of
+        // programs that built something and which `rebuildMissing` walks looking
+        // for declarations. Several statements are recorded, since their earlier
+        // statements are declarations and a stable program of several lines
+        // could not otherwise come back with Ctrl+Up.
+        if (res && res.kind === 'value') { renderValue(res); await recordSeveral(decl); return; }
+        if (res && res.kind === 'text') { renderText(res); await recordSeveral(decl); return; }
         adoptBuild(res);
         recordProgram(decl);
         _builtDecl = decl;
@@ -603,6 +606,18 @@ async function build() {
     }
 }
 
+/**
+ * Record a number or text answer in the ring when its box held several statements.
+ *
+ * @param {string} decl the program that was built
+ */
+async function recordSeveral(decl) {
+    try {
+        const { statements } = await api.countStatements(decl);
+        if (statements > 1) recordProgram(decl);
+    } catch { /* the answer is on screen; only the ring entry is lost */ }
+}
+
 // ----------------------------------------------------------------------
 // The action row: Sharpen, PnL, Reset
 // ----------------------------------------------------------------------
@@ -610,6 +625,41 @@ async function build() {
 // the object it builds; the text goes into the editor, so you read what was
 // made, you can edit it, and history, sharing and rebuild all keep working.
 // Nothing is derived behind a cached id.
+
+/**
+ * Refuse a transform of a box holding several statements, in the status bar.
+ *
+ * A control that transforms the box acts on one object and replaces the whole
+ * text, so on a program of several statements it would discard the statements
+ * before the last. The refusal is here rather than on the server because the
+ * derivation routes take an object id, and the cache is keyed by meaning, so one
+ * id is reachable from one statement and from a prelude. Only the box records
+ * which it was.
+ *
+ * The count comes from the box at the moment of the press, so this holds in every
+ * state: built and unchanged, or typed over a built statement and not yet built.
+ * The buttons stay live, since a greyed button removes the press that produces
+ * this feedback, and a tooltip on a disabled button does not exist on a phone.
+ *
+ * The first row of the strip rather than the note slot, which sits behind a
+ * chevron whenever the strip shows an object. The object's readings leave the
+ * strip until the next build; its panes stay.
+ *
+ * @param {string} label the control, for the message
+ * @returns {Promise<boolean>} true when refused
+ */
+async function refusedForSeveral(label) {
+    let statements = 1;
+    try {
+        ({ statements } = await api.countStatements(editor.getText()));
+    } catch { return false; }   // the control's own request reports any failure
+    if (statements <= 1) return false;
+    anchorEditor();              // Cede's button sits far down its pane
+    renderStripLine(`${label} works on one statement at a time; `
+        + `this box holds ${statements}.`, 'warn');
+    flashStrip();
+    return true;
+}
 const sharpenBtn = $('sharpen-btn');
 const hintsBtn = $('hints-btn');
 const pnlBtn = $('pnl-btn');
@@ -885,16 +935,20 @@ function clearNote() {
     renderNote();
 }
 
-sharpenBtn?.addEventListener('click', () => runDerivation(
-    sharpenBtn, 'Sharpening…', (id) => api.sharpen(id)));
+sharpenBtn?.addEventListener('click', async () => {
+    if (await refusedForSeveral('Sharpen')) return;
+    await runDerivation(sharpenBtn, 'Sharpening…', (id) => api.sharpen(id));
+});
 
 // Hints is Sharpen's quiet twin: same shape, no probe. Sharpen asks whether a
 // better grid exists and moves to it; this keeps the grid you have and writes it
 // down. That is the cheaper and more common thing to want, because a declaration
 // another program will reference by name has to state its own resolution, and
 // the library refuses an unpinned one.
-hintsBtn?.addEventListener('click', () => runDerivation(
-    hintsBtn, 'Pinning…', (id) => api.hints(id)));
+hintsBtn?.addEventListener('click', async () => {
+    if (await refusedForSeveral('Hints')) return;
+    await runDerivation(hintsBtn, 'Pinning…', (id) => api.hints(id));
+});
 
 /**
  * The one handler behind all four PnL controls: wrap, rate wrap, or explode.
@@ -921,6 +975,7 @@ async function applyPnl({ form, premiumStyle }) {
     bootstrap.Dropdown.getInstance(pnlCaret)?.hide();
     const decl = editor.getText().trim();
     if (!decl) { renderNothingToBuild(); return; }
+    if (await refusedForSeveral('P&L')) return;
     if (decl !== (_builtDecl ?? '').trim()) {
         await build();
         if (!state.id) return;      // a failed build already rendered itself
@@ -961,6 +1016,7 @@ for (const item of pnlItems) {
 reformatBtn?.addEventListener('click', async () => {
     const before = editor.getText();
     if (!before.trim() || reformatBtn.hasAttribute('disabled')) return;
+    if (await refusedForSeveral('Reformat')) return;
     anchorEditor();                  // the scroll rule: a button under the box
     reformatBtn.disabled = true;
     try {
@@ -1026,6 +1082,7 @@ async function applyViews(kw) {
     // General rule for anything added beside it: do not disable a Bootstrap
     // dropdown toggle while its menu is open.
     bootstrap.Dropdown.getInstance(gcnCaret)?.hide();
+    if (await refusedForSeveral('Views')) return;
     gcnBtn.disabled = true;
     gcnCaret.disabled = true;
     const label = gcnBtn.textContent;
@@ -1402,9 +1459,12 @@ function failureLine(err) {
         return { text: 'build failed', detail: detail.map((e) => e.msg).join('; ') };
     }
     if (detail.line && detail.column && detail.message) {
+        const where = detail.statement_index === undefined
+            ? `line ${detail.line}`
+            : `statement ${detail.statement_index + 1}`;
         return {
             text: 'build failed',
-            detail: `line ${detail.line}, column ${detail.column}: ${detail.message}`,
+            detail: `${where}, column ${detail.column}: ${detail.message}`,
         };
     }
     if (detail.message) return { text: 'build failed', detail: detail.message };
@@ -3602,6 +3662,7 @@ function renderQuoteTable(doc) {
  */
 async function cedeWith(button, compose) {
     if (!state.id || !can('canReins') || !button || button.hasAttribute('disabled')) return;
+    if (await refusedForSeveral('Cede')) return;
     let cession;
     try {
         cession = await compose();

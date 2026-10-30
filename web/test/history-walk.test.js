@@ -25,7 +25,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { canNext, canPrev, clear, next, position, prev, record,
+import { canNext, canPrev, clear, findDeclaring, next, position, prev, record,
          resetCursor } from '../src/history.js';
 
 const A = 'agg A 1 claim dsev [1]';
@@ -193,4 +193,23 @@ test('clear takes the stashed draft with it', () => {
     // against on an edit and this has to guard against too.
     record(B);
     assert.equal(next(), null, 'nothing newer, and no draft to step onto');
+});
+
+test('findDeclaring finds a head at the start, after a blank line and after a line-final ;', () => {
+    const blank = 'sev S1 lognorm 10 cv 1\n\nagg A1 5 claims sev.S1 poisson';
+    const semi = 'sev S2 lognorm 10 cv 1;\nagg A2 5 claims sev.S2 poisson';
+    record(blank);
+    record(semi);
+    assert.equal(findDeclaring('sev', 'S1'), blank);
+    assert.equal(findDeclaring('agg', 'A1'), blank, 'after a blank line');
+    assert.equal(findDeclaring('sev', 'S2'), semi);
+    assert.equal(findDeclaring('agg', 'A2'), semi, 'after a line-final ;');
+    assert.equal(findDeclaring('agg', 'A'), null, 'the name is matched whole');
+});
+
+test('findDeclaring does not match an indented clause inside a port', () => {
+    record('port P1\n  agg Inner 1 claim dsev [1]\n  agg Other 1 claim dsev [2]');
+    assert.equal(findDeclaring('agg', 'Inner'), null,
+        'that rebuild would restore nothing');
+    assert.ok(findDeclaring('port', 'P1'));
 });
