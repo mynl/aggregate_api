@@ -12,6 +12,11 @@ Items oddly from the aggregate list
 
 ## Landed
 
+- **[Follow-Aggregate-1.61]** DONE (`1.41.0`), no plan: the two follow-ups
+  aggregate 1.56.0 and 1.59.0 name for the API. The strip grades each clause of
+  a reinsured verdict, so a clean net view is green, and an unmatched bracket is
+  the library's parse error with its position.
+
 - **[Multi-Statement-Programs]** DONE (`1.40.0`), plan
   `dev/done/plan-multi-statement-programs.md`. The box takes several statements,
   the statements before the last are filed and only the last is built, and the

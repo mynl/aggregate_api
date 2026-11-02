@@ -36,6 +36,7 @@ import {
 import { appsMenuHtml } from './apps-menu.js';
 import { mountIrTable, irToGrid, docTruncated, atFullPrecision } from './tables.js';
 import { renderError, renderRateLimit } from './error-pane.js';
+import { validationState } from './verdict.js';
 import {
     NAV_GROUPS,
     installLabLeaves,
@@ -1240,8 +1241,9 @@ function fmtBs(bs) {
  * left bar and the tinted ground already state it, so on `ok` the word was a
  * third copy of a fact nothing disputed, sitting at the far right of a line that
  * wraps, where its position moved with the window. On `warn` and `bad` it goes
- * right after the name, which is a fixed place. `validationState` is unchanged;
- * only what this function does with its `ok` answer is.
+ * right after the name, which is a fixed place. `validationState` (in
+ * `verdict.js`) grades the verdict; this function decides only what to do with
+ * its `ok` answer.
  *
  * `log2` joined `bs` at a49. They are one fact between them: bs is how fine the
  * grid is, log2 how far it reaches, and neither alone says whether the window
@@ -1363,40 +1365,6 @@ function flashStrip() {
     strip.classList.remove('is-flash');
     void strip.offsetWidth;
     strip.classList.add('is-flash');
-}
-
-/**
- * Grade a validation string into one of the three strip states.
- *
- * The library's verdict is prose, and "not unreasonable" is the *good* one: it
- * is the phrase a clean build reports. Anything mentioning the mean is a hard
- * failure, because a wrong mean means the grid cannot represent the
- * distribution at all; everything else (cv, skew, a defective distribution) is
- * a warning about accuracy rather than about correctness.
- *
- * Under a cession the library prefixes its verdict: an object whose gross is
- * clean reports `reinsurance; subject not unreasonable`, and a failing one
- * `reinsurance; subject fails agg mean`. The realized net view has no
- * independent theoretical to check against, so what it can honestly report is
- * the status of the subject it was built from, and that is what the prefix
- * says.
- *
- * Through a55 none of that was recognized here, so every reinsured object with
- * a perfectly clean gross turned the strip amber. Stripping the prefix and
- * grading the remainder fixes it, and does so for the right reason rather than
- * by adding a second literal: `reinsurance; subject fails agg mean` also grades
- * `bad` because it names the mean, which it would previously have reached only
- * because the substring happened to survive.
- *
- * @param {string} text the `validation` field off the build response.
- * @returns {'ok'|'warn'|'bad'}
- */
-const REINS_VERDICT = /^reinsurance;\s*subject\s+/;
-
-function validationState(text) {
-    const s = String(text).trim().toLowerCase().replace(REINS_VERDICT, '');
-    if (s === 'not unreasonable') return 'ok';
-    return /\bmean\b/.test(s) ? 'bad' : 'warn';
 }
 
 /**

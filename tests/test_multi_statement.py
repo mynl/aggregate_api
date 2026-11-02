@@ -283,12 +283,15 @@ def test_a_backslash_in_a_note_survives(client):
 
 
 def test_an_unbalanced_bracket_is_a_422_not_a_500(client, tmp_path):
+    """The library's parse error, with its position, as any parse failure has."""
     decl = "agg MsOne 5 claims dsev [1 2 poisson"
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError, match="Unmatched"):
         build.fork()(decl, log2=8)
     r = _post(client, "ms-bracket", decl)
     assert r.status_code == 422, r.text
-    assert "unbalanced" in r.json()["detail"]
+    detail = r.json()["detail"]
+    assert detail["message"] == "Unmatched '['."
+    assert (detail["line"], detail["column"], detail["got"]) == (1, 25, "[")
     assert _audit_rows(tmp_path)[-1][0] == "parse_error"
 
 
@@ -337,7 +340,7 @@ def test_collapse_never_joins_statements():
     assert collapse_program(ONE) == ONE
     with pytest.raises(ValueError, match="holds 2"):
         collapse_program(f"{SEV}\n\n{AGG}")
-    with pytest.raises(ValueError, match="unbalanced"):
+    with pytest.raises(ValueError, match="Unmatched"):
         collapse_program("agg MsOne 5 claims dsev [1 2 poisson")
 
 

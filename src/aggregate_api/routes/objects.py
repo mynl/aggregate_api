@@ -1432,9 +1432,10 @@ def split_program(decl: str) -> list[str]:
     Raises
     ------
     ValueError
-        Unbalanced square brackets. ``preprocess`` raises a bare
-        ``AssertionError`` for these, and so does ``build()``. The catch goes
-        when the library raises a ``ValueError`` with an ``ErrorReport``.
+        An unmatched square bracket, from ``preprocess``, with the library's
+        ``ErrorReport`` on ``err.report`` giving its position (``aggregate``
+        1.59.0; a bare ``AssertionError`` before that, which this caught and
+        reworded through 1.40.0).
 
     Notes
     -----
@@ -1462,10 +1463,7 @@ def split_program(decl: str) -> list[str]:
     multi-line ``port`` through the bivariate's nested ``dbvsev`` matrices to a
     ``note{}`` body holding a ``#``.
     """
-    try:
-        statements = UnderwritingLexer.preprocess(decl)
-    except AssertionError:
-        raise ValueError("unbalanced [ ] in this program") from None
+    statements = UnderwritingLexer.preprocess(decl)
     return [re.sub(r"\s+", " ", statement).strip() for statement in statements]
 
 
@@ -1763,14 +1761,16 @@ def post_object(
     try:
         parts = split_program(req.decl)
     except ValueError as exc:
-        message = str(exc)
+        # An unmatched bracket carries an ErrorReport, so it answers with the
+        # same rich body, caret included, as any other parse failure.
+        status, detail, message = _unpreviewable_detail(req.decl, exc)
         elapsed = int((time.monotonic() - t0) * 1000)
         audit.record_build(
             ip=ip, decl=req.decl, log2=eff_log2, bs=eff_bs,
-            status="parse_error", error_msg=message,
+            status=status, error_msg=message,
             elapsed_ms=elapsed, session_id=sid,
         )
-        raise HTTPException(status_code=422, detail=message) from None
+        raise HTTPException(status_code=422, detail=detail) from None
 
     # Every statement, for the empty check, the log2 scan and their audit rows.
     req.decl = " ".join(parts)

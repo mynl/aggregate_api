@@ -19,6 +19,7 @@ import {
 } from './examples.js';
 import { clearGrids } from './grid.js';
 import { mountIrTable } from './tables.js';
+import { validationState } from './verdict.js';
 
 // The curated chips, in display order. One chip plus All examples is what fits
 // a phone row (author, 1.13.3); more wrapped and looked wrong. A name that
@@ -40,21 +41,6 @@ const KIND_LABEL = {
 };
 
 const $ = (id) => document.getElementById(id);
-
-/**
- * Grade the library's validation prose into a strip state.
- *
- * Mirrors `validationState` in `main.js` (see its docstring for the full
- * reasoning): "not unreasonable" is the clean verdict, anything naming the
- * mean is a hard failure, the rest is an accuracy warning. The reinsurance
- * prefix is stripped first so a clean reinsured gross stays green.
- */
-const REINS_VERDICT = /^reinsurance;\s*subject\s+/;
-function validationState(text) {
-    const s = String(text).trim().toLowerCase().replace(REINS_VERDICT, '');
-    if (s === 'not unreasonable') return 'ok';
-    return /\bmean\b/.test(s) ? 'bad' : 'warn';
-}
 
 /** A tile value: grouped integer below a million, else a 3-figure M form. */
 function tileNumber(x) {

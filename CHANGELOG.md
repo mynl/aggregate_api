@@ -4,6 +4,15 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.41.0
+
+[Follow-Aggregate-1.61] **A clean reinsured object reads clean again, and an unmatched bracket gets the parse error pane with its caret.** No plan: the two follow-ups aggregate 1.56.0 and 1.59.0 name for the API. The suite was red against 1.61.0 without the second.
+
+- Fixed: the status strip grades each clause of the verdict. Since aggregate 1.56.0 a reinsured verdict carries a clause for the net or ceded view, `reinsurance; subject not unreasonable; net not unreasonable`, which graded amber on every clean reinsured object. A view whose mean fails is red, and one whose cv fails is amber. Same in aLL Lite.
+- Changed: an unmatched `[` is a 422 with the library's `ErrorReport` (line, column, caret, `Unmatched '['.`), as every other parse failure is, where it was the string `unbalanced [ ] in this program`. Follows aggregate 1.59.0, which raises a `ValueError` with the report where it raised a bare `AssertionError`.
+- Changed: `validationState` lives in `web/src/verdict.js`, shared by aLL and aLL Lite, which each held a copy, and is covered by `web/test/verdict.test.js`.
+- Known: these need aggregate 1.59.0 while the floor stays `aggregate>=1.11.0`; `[API-Editable-Aggregate-Source]`, the next bump, sets it.
+
 ## 1.40.0
 
 [Multi-Statement-Programs] **The playground's box takes several statements, and the API stops accepting text the library refuses.** A blank line or a line-final `;` separates statements, as in `build_many`. The statements before the last are filed in the session and only the last is built, so the result on screen is the last statement. Plan: `dev/done/plan-multi-statement-programs.md`.

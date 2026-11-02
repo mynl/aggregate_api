@@ -113,9 +113,9 @@ def list_examples(
         try:
             payload = load_examples(key)
         except Exception as exc:  # noqa: BLE001 (any load failure is the file's)
-            # A few library failures carry no message (an unbalanced bracket
-            # trips a bare assert in the lexer), and an empty reason is worse
-            # than the exception's name.
+            # A library failure can carry no message (a bare assert, as an
+            # unmatched bracket was before aggregate 1.59.0), and an empty
+            # reason is worse than the exception's name.
             reason = str(exc) or type(exc).__name__
             logger.warning("example database %s did not load: %s", key, reason)
             raise HTTPException(
