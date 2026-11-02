@@ -43,38 +43,26 @@ classifiers = [
     "Framework :: FastAPI",
 ]
 dependencies = [
-    # The library this service wraps. An ordinary registry dependency since
-    # 1.0.0 of this package: `aggregate` 1.0.1 published on 2026-10-07 and the
-    # internals the api imports (`parser_errors`, `parser._PARSER`, `charts`,
-    # `exhibits`, `plugins`, `bounds`, `decl_writer`, `constants`) are all in
-    # it. Before that the whole 1.0.0a line was unpublished and this had to be
-    # an editable path source; see dev/done/plan-1.0.0-release.md.
+    # The library this service wraps. This line states what the code needs and
+    # nothing more: where `aggregate` comes from on the author's machines is the
+    # [tool.uv.sources] table below, and a wheel installer gets it from PyPI.
     #
-    # The floor is 1.11.0 (1.32.0 of this package). 1.10.0 made the format
-    # sheets send each exhibit block only its own columns, without which
-    # greater_tables 7.4 and later raises one warning per absent column, 538 on
-    # one pricing request; 1.11.0 is the first release on PyPI carrying it, and
-    # the release this package is tested on. It also requires greater_tables
-    # 8.1. Before that the floor was 1.6.0, for `aggregate.decl_words`, which
-    # `/v1/decl/words` serves and `web/src/decl-words.json` is generated from
-    # (1.30.0), and before that 1.0.1, because 1.0.0 is not on PyPI at all. A
-    # bare `aggregate` would let a resolver reach 0.30.1, the newest of the old
-    # line, which has none of these modules and fails at import rather than at
-    # install.
+    # The floor is 1.61.0 (1.42.0 of this package), the library the suite runs
+    # against: 1.59.0 for the unmatched bracket parse error the build route
+    # serves, 1.56.0 for the reinsured verdict the strip grades, 1.42.0 and
+    # 1.43.0 for named and arithmetic stable laws. It moves only when the API
+    # starts using something newer, and at a release the library goes to PyPI
+    # first. A bare `aggregate` would let a resolver reach 0.30.1, the newest of
+    # the old line, which has none of these modules and fails at import rather
+    # than at install.
     #
-    # The ceiling is caution about two private names, `parser._PARSER` and
-    # `parser_errors._TERMINAL_LABELS`. The library's API promise covers its
-    # public surface, and a major is exactly where a private name moves.
-    # Re-check both at each library minor rather than trusting the range.
-    "aggregate>=1.11.0,<2",
-    # Secondary uncertainty in an event loss table: an ELT6 `elt` source
-    # without `no2u` imports eltq, and raises ImportError without it. The
-    # library declares it as its `elt` extra from 1.18.0. It is named directly
-    # here because 1.18.0 is not yet on PyPI, and `aggregate[elt]` against
-    # 1.11.0 resolves to no eltq at all, since that release has no such extra.
-    # Once the floor reaches 1.18.0 this line becomes `aggregate[elt]`. The
-    # floor matches the library's ELTQ_MIN_VERSION.
-    "eltq>=2.13",
+    # No ceiling. It was caution about two private names, `parser._PARSER` and
+    # `parser_errors._TERMINAL_LABELS`; tests/test_private_names.py guards them
+    # instead, so a major that moves either fails a test rather than an install.
+    #
+    # The `elt` extra brings eltq, for secondary uncertainty in an event loss
+    # table: an ELT6 `elt` source without `no2u` imports it.
+    "aggregate[elt]>=1.61.0",
     # Static tables (the author's own package). The api asks it for a semantic
     # table document (the IR), never for markup: the browser owns geometry. The
     # same install also ships the walker that renders that IR, which is what
@@ -151,40 +139,33 @@ status = ["psutil>=5.9"]
 aggregate-api = "aggregate_api.__main__:main"
 
 # ---------------------------------------------------------------------------
-# There is deliberately no `[tool.uv.sources]` table.
+# `aggregate` installs editable from the library's worktree, wherever this
+# project is synced: on DOOB `V:\worktrees\aggregate_REFACTOR`, on the VPS
+# `~/worktrees/aggregate_REFACTOR`, a symlink to its clone. Relative, never a
+# drive letter. The editable install includes the library session's
+# uncommitted changes, and `uv sync` keeps it rather than replacing it.
+# uv.lock records the source with no version.
 #
-# It held an editable path source for `aggregate` through 1.0.0a202, because the
-# whole 1.0.0a line was unpublished, and one for `greater-tables` through a53.
-# Both dependencies are on PyPI now, so a fresh clone syncs with nothing checked
-# out beside it.
+# Published wheels never contain this table, so `pip install` from PyPI or from
+# a GitHub release's wheel resolves `aggregate` from PyPI against the floor
+# above. `uv sync --no-sources` does the same from this tree.
 #
-# The table has to go rather than merely being unused, because uv honors it when
-# this project is installed *as a git dependency* and resolves the relative path
-# inside the git repository:
+# What it gives up: uv honors the table when this project is installed as a git
+# dependency and resolves the path inside the git repository, so
 #
 #     uv pip install git+https://github.com/mynl/aggregate_api
-#     x Failed to download and build `aggregate @ git+...#subdirectory=..\..\worktrees\aggregate_REFACTOR`
-#       The source distribution has no subdirectory `..\..\worktrees\aggregate_REFACTOR`
 #
-# So the table did not just fail to help an outside installer, it was fatal to
-# one. pip never saw it, which is why the failure was uv-only and invisible here.
+# fails, as it did before 1.0.0, which is why the table was removed then. That
+# route installed an api whose `/` returns 404, because the built web page is
+# not in git, so nothing that worked is lost; the README points at the wheel.
 #
-# To co-develop either dependency against a local checkout for a session,
-# without editing this file:
-#
-#     uv sync --extra dev                                   # PyPI, the default
-#     uv pip install -e V:/worktrees/aggregate_REFACTOR     # swap in the library
-#     uv pip install -e V:/dev/greatest-tables              # swap in the tables
-#
-# The tables checkout folder is still named `greatest-tables` after the working
-# name it carried for a day; that is deliberate and the path above is correct.
-#
-# Either swap lasts until the next `uv sync`, which reinstalls from the lock and
-# silently puts the released build back without saying so. Since 1.9.1 a
-# version bump runs no sync, so that happens only on a dependency change, after
-# which the swaps are restored by hand. `uv run --no-sync` is the way to work in
-# between, and it is what this repo uses anyway.
+# `greater-tables` stays a registry dependency. To co-develop it for a session,
+# `uv pip install -e V:/dev/greatest-tables` (the folder keeps the working name
+# it carried for a day), which lasts until the next `uv sync`.
 # ---------------------------------------------------------------------------
+
+[tool.uv.sources]
+aggregate = { path = "../../worktrees/aggregate_REFACTOR", editable = true }
 
 # uv caches a local project's metadata keyed on pyproject.toml alone. With the
 # version dynamic it must also watch the file the version lives in, or a lock or

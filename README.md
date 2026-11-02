@@ -89,7 +89,9 @@ the api.
 > built distribution and only there. `pip install git+https://github.com/mynl/aggregate_api`
 > installs a working api whose `/` returns 404, which is a reasonable thing to
 > want if you are putting your own front end in front of the engine, and a
-> baffling one otherwise. The wheel and sdist are also attached to each
+> baffling one otherwise. `uv pip install git+...` fails outright, because uv
+> follows the repository's editable source for `aggregate` (see Develop), which
+> is not in the repository. The wheel and sdist are also attached to each
 > [GitHub release](https://github.com/mynl/aggregate_api/releases).
 
 One footnote, which the pins above handle for you and which bites anyone
@@ -101,8 +103,12 @@ or `IR_VERSION`, which fails at import rather than at install. This package pins
 
 ## Develop
 
-Needs [`uv`](https://docs.astral.sh/uv/) and Node for the web build. A fresh
-clone syncs with nothing checked out beside it.
+Needs [`uv`](https://docs.astral.sh/uv/) and Node for the web build. `uv sync`
+installs `aggregate` editable from a checkout of the library at
+`../../worktrees/aggregate_REFACTOR`, relative to this one, as the
+`[tool.uv.sources]` table in `pyproject.toml` sets. Without that checkout,
+`uv sync --no-sources --extra dev` takes the library from PyPI instead, which
+works once a release at the floor in `pyproject.toml` is there.
 
 ```
 git clone https://github.com/mynl/aggregate_api
@@ -117,11 +123,11 @@ uv run aggregate-api --port 8001 --reload
 serve. For hot reload with a Vite dev server proxying `/v1` to `:8000`, use
 `cd web; npm install; npm run dev` instead.
 
-To develop against a local checkout of `aggregate` or `greater-tables` rather
-than the released build, install it editable over the synced environment:
+To develop against a local checkout of `greater-tables` rather than the
+released build, install it editable over the synced environment:
 
 ```
-uv pip install -e ../aggregate               # or wherever the checkout is
+uv pip install -e ../greater-tables          # or wherever the checkout is
 ```
 
 The next `uv sync` silently reinstalls the released build, so `uv run --no-sync`

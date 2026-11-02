@@ -12,8 +12,7 @@ resolution-markers = [
 
 [[package]]
 name = "aggregate"
-version = "1.11.0"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "../../worktrees/aggregate_REFACTOR" }
 dependencies = [
     { name = "greater-tables" },
     { name = "ipython" },
@@ -25,17 +24,59 @@ dependencies = [
     { name = "pyyaml" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7a/13/0b8944662c3dbae669d953ff866addb476936b39aef65d1437df9012586d/aggregate-1.11.0.tar.gz", hash = "sha256:40542b044ead8d1a701df34127f97742e23dd067c649d675f310d2b93cc07445", size = 1872432, upload-time = "2026-10-22T17:42:30.308Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/48/c9/0f414a7937bf60b0b789c834fc096fc24373f4a2cbfe1e3fb4db8e3ddb76/aggregate-1.11.0-py3-none-any.whl", hash = "sha256:4ae43661a26151de92d32e5f8e5ab314a73ee458588b918afa8f02734948edc3", size = 1359914, upload-time = "2026-10-22T17:42:28.66Z" },
+
+[package.optional-dependencies]
+elt = [
+    { name = "eltq" },
 ]
+
+[package.metadata]
+requires-dist = [
+    { name = "aggregate", extras = ["elt", "massive", "notebook", "numba", "viz"], marker = "extra == 'all'" },
+    { name = "attrs", marker = "extra == 'notebook'" },
+    { name = "bokeh", marker = "extra == 'viz'" },
+    { name = "datashader", marker = "extra == 'viz'" },
+    { name = "docutils", marker = "extra == 'dev'", specifier = ">=0.20,<0.22" },
+    { name = "eltq", marker = "extra == 'elt'", specifier = ">=2.13" },
+    { name = "greater-tables", specifier = ">=8.1.0" },
+    { name = "holoviews", marker = "extra == 'viz'" },
+    { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6" },
+    { name = "ipython" },
+    { name = "ipython-autotime", marker = "extra == 'notebook'" },
+    { name = "ipywidgets", marker = "extra == 'notebook'" },
+    { name = "jupyter-sphinx", marker = "extra == 'dev'", specifier = ">=0.5.3" },
+    { name = "jupyterlab", marker = "extra == 'notebook'" },
+    { name = "jupytext", marker = "extra == 'notebook'" },
+    { name = "lark", specifier = ">=1.1" },
+    { name = "matplotlib", specifier = ">=3.5" },
+    { name = "myst-parser", marker = "extra == 'dev'", specifier = ">=2.0" },
+    { name = "nbsphinx", marker = "extra == 'dev'", specifier = ">=0.9.4" },
+    { name = "numba", marker = "extra == 'numba'" },
+    { name = "numpy", specifier = ">=2.0" },
+    { name = "pandas", specifier = ">=2.2" },
+    { name = "pickleshare", marker = "extra == 'dev'" },
+    { name = "pyarrow", marker = "extra == 'dev'", specifier = ">=15" },
+    { name = "pygments" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7" },
+    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
+    { name = "scipy", specifier = ">=1.11" },
+    { name = "sphinx", marker = "extra == 'dev'", specifier = ">=8.1,<9" },
+    { name = "sphinx-copybutton", marker = "extra == 'dev'", specifier = ">=0.5" },
+    { name = "sphinx-multitoc-numbering", marker = "extra == 'dev'" },
+    { name = "sphinx-rtd-theme", marker = "extra == 'dev'", specifier = ">=2.0" },
+    { name = "sphinx-toggleprompt", marker = "extra == 'dev'", specifier = ">=0.6" },
+    { name = "sphinxcontrib-bibtex", marker = "extra == 'dev'" },
+    { name = "zarr", marker = "extra == 'massive'", specifier = ">=3" },
+]
+provides-extras = ["dev", "notebook", "numba", "massive", "viz", "elt", "all"]
 
 [[package]]
 name = "aggregate-api"
 source = { editable = "." }
 dependencies = [
-    { name = "aggregate" },
-    { name = "eltq" },
+    { name = "aggregate", extra = ["elt"] },
     { name = "fastapi" },
     { name = "greater-tables" },
     { name = "orjson" },
@@ -60,8 +101,7 @@ status = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aggregate", specifier = ">=1.11.0,<2" },
-    { name = "eltq", specifier = ">=2.13" },
+    { name = "aggregate", extras = ["elt"], editable = "../../worktrees/aggregate_REFACTOR" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "greater-tables", specifier = ">=8.1.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },

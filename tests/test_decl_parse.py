@@ -12,7 +12,6 @@ import json
 
 import pytest
 
-from tests.conftest import requires_nttagg
 
 
 # A one-statement aggregate with an occurrence cession, so the spec carries
@@ -252,7 +251,6 @@ def test_reformat_still_echoes_a_malformed_program_unchanged(client):
     assert r.json()["decl"] == spread
 
 
-@requires_nttagg
 def test_exact_probabilities_serialize_as_the_fractions_they_are(client):
     """An ``nttagg``'s probabilities go out as ``"1/4"``, and that is intended.
 

@@ -23,7 +23,6 @@ from aggregate_api.routes.objects import collapse_program, split_program
 from .test_loss_table_files import (  # noqa: F401 (fixtures)
     OUTSIDE, PRIVATE, REFUSAL, elt_file, lan_client,
 )
-from .test_objects import requires_named_laws, requires_stable_arithmetic
 
 SESSION = "X-Aggregate-Session"
 SEV = "sev MsSev lognorm 10 cv 1"
@@ -105,7 +104,6 @@ def test_an_unreferenced_statement_that_cannot_build_goes_unnoticed(client):
     assert r.json()["name"] == "MsOther"
 
 
-@requires_stable_arithmetic
 def test_stable_law_arithmetic_as_the_last_statement_is_text(client):
     r = _post(client, "ms-stable",
               "stable x1 1.3 0;\nstable x2 1.3 1;\nstable.x1 + stable.x2;")
@@ -114,7 +112,6 @@ def test_stable_law_arithmetic_as_the_last_statement_is_text(client):
     assert "1.70436" in r.json()["text"]
 
 
-@requires_named_laws
 def test_a_named_law_in_the_prelude_stays_in_the_session(client):
     assert _post(client, "ms-law", f"stable x3 1.3 0\n\n{OTHER}").status_code == 200
     assert _post(client, "ms-law", "stable.x3").json()["kind"] == "text"

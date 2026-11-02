@@ -9,7 +9,6 @@ import pytest
 
 from aggregate_api.examples import filter_examples, load_examples, load_heroes
 
-from tests.conftest import requires_chfagg
 
 
 def test_examples_is_one_flat_list(client):
@@ -258,7 +257,6 @@ def test_a_library_entry_builds_and_declares_no_note_of_its_own(client, kind, na
     assert not body["tags"], f"{name} built an object carrying tags"
 
 
-@requires_chfagg
 def test_the_shipped_characteristic_function_laws_build(client):
     """Every ``chfagg`` the menu offers builds, under its own kind.
 

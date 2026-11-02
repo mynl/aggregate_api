@@ -4,6 +4,17 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.42.0
+
+[API-Editable-Aggregate-Source] **`aggregate` installs editable from the library worktree, and the dependency states what the code needs: `aggregate[elt]>=1.61.0`, no ceiling.** Plan: `dev/done/plan-api-editable-aggregate-source.md`.
+
+- Changed: `[tool.uv.sources]` points `aggregate` at `../../worktrees/aggregate_REFACTOR`, editable, and `uv.lock` records that source with no version. `uv sync` keeps the worktree library instead of putting PyPI's 1.11.0 back. It still uninstalls the relativity plugin, so its one-line restore follows a sync.
+- Changed: the floor is 1.61.0, the library the suite runs against, and the `<2` ceiling is gone. `eltq` arrives through the `elt` extra instead of its own line. At a release the library goes to PyPI first: until a release at the floor is there, a wheel of this package does not install.
+- Added: `tests/test_private_names.py` guards `parser._PARSER` and `parser_errors._TERMINAL_LABELS`, which the ceiling stood for.
+- Removed: every test skip for a library older than the floor (`nttagg`, `chfagg`, `exact_tail`, `decl_help`, tweedie, stable and named laws).
+- Breaking, for a git install: `uv pip install git+https://github.com/mynl/aggregate_api` fails, since uv follows the source table. That route served a 404 page anyway; the wheel is the route, and a wheel never carries the table. A contributor's clone needs the library at the relative path, or `uv sync --no-sources` once the floor is on PyPI.
+- The VPS needs `~/worktrees/aggregate_REFACTOR`, a symlink to its clone, before its next refresh; `refresh.sh` stops with the command when the link is missing.
+
 ## 1.41.0
 
 [Follow-Aggregate-1.61] **A clean reinsured object reads clean again, and an unmatched bracket gets the parse error pane with its caret.** No plan: the two follow-ups aggregate 1.56.0 and 1.59.0 name for the API. The suite was red against 1.61.0 without the second.

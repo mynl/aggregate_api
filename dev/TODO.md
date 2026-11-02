@@ -12,6 +12,15 @@ Items oddly from the aggregate list
 
 ## Landed
 
+- **[API-Editable-Aggregate-Source]** DONE (`1.42.0`), plan
+  `dev/done/plan-api-editable-aggregate-source.md`. `aggregate` installs
+  editable from `../../worktrees/aggregate_REFACTOR` through
+  `[tool.uv.sources]`, so `uv sync` keeps the worktree library; the dependency
+  is `aggregate[elt]>=1.61.0` with no ceiling, and
+  `tests/test_private_names.py` guards the two private names. Still owed, the
+  author's: the VPS symlink `~/worktrees/aggregate_REFACTOR` before the next
+  `refresh.sh`, and the two skill edits drafted in the plan's log.
+
 - **[Follow-Aggregate-1.61]** DONE (`1.41.0`), no plan: the two follow-ups
   aggregate 1.56.0 and 1.59.0 name for the API. The strip grades each clause of
   a reinsured verdict, so a clean net view is green, and an unmatched bracket is
@@ -30,8 +39,8 @@ Items oddly from the aggregate list
 - **[Chfagg-Aggregate-Parity]** DONE (`1.38.0`), no plan: the consumer half of
   aggregate 1.35.0 to 1.41.0. A `chfagg` takes the arithmetic form, Evaluate and
   Sharpen run on it, with the More Sharpen leaf and the `bs_window` and
-  `tail_behavior` exhibits, and the word list follows 1.41.0. Still owed: the
-  `aggregate>=1.41.0` floor once that is on PyPI.
+  `tail_behavior` exhibits, and the word list follows 1.41.0. The floor landed
+  at 1.42.0, `[API-Editable-Aggregate-Source]`.
 
 - **[Chfagg-Kind]** DONE (`1.37.0`), no plan: the library's `chfagg` law
   (aggregate 1.30.0 to 1.34.0) builds, prices and exports, and the word list
@@ -56,9 +65,9 @@ Items oddly from the aggregate list
 
 - **[ELT-Keywords-And-Eltq]** DONE (`1.34.0`), no plan: the consumer half of
   the library's loss tables, `aggregate` 1.12.0 to 1.18.0. `eltq>=2.13` as a
-  direct dependency and the word list regenerated against 1.18.0. Still owed:
-  `aggregate[elt]` and the `aggregate>=1.18.0` floor once 1.18.0 is on PyPI;
-  until then `release-check.ps1` fails the word list test.
+  direct dependency and the word list regenerated against 1.18.0.
+  `aggregate[elt]` and the floor landed at 1.42.0,
+  `[API-Editable-Aggregate-Source]`.
 
 - **[Menu-Preferences]** DONE (`1.33.0`), no plan: tire kicking on a phone.
   Tables, Perspective and Editor collapse under a Preferences row after Apps,
@@ -957,8 +966,10 @@ and the standing REMINDER below about what is worth plotting.
 ## Backlog / ideas (unordered)
 
 - [ ] CI: GitHub Actions running `uv run pytest` on the private repo.
-- [ ] Decide the canonical `aggregate` dependency story: editable local path for
-      dev vs. a pinned version once the `1.0.0a` line publishes.
+- [x] Decide the canonical `aggregate` dependency story: editable local path for
+      dev vs. a pinned version once the `1.0.0a` line publishes. *(Decided at
+      1.42.0, `[API-Editable-Aggregate-Source]`: editable through
+      `[tool.uv.sources]`, a floor of what the code needs, no ceiling.)*
 - [ ] Packaging (was "Plan E"): rebuild the SPA before `uv build` so the wheel
       ships the bundle; confirm `static/*` package-data works.
 - [ ] Auth / rate limiting if this is ever exposed beyond localhost.

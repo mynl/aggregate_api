@@ -40,42 +40,33 @@ This package **depends on** `aggregate`; it does not vendor it. The api imports:
 This list is not the whole surface. `V:/worktrees/CLAUDE.md` carries the audited
 one, including the three tolerated private names.
 
-`aggregate` **stopped being a path source at 1.0.0 of this package.** Through
-`1.0.0a202` it had to be one: `parser_errors` and the rest lived only in the
-in-development `1.0.0a` line and PyPI stopped at 0.30.1, so a clone needed
-`aggregate_REFACTOR` checked out beside it before `uv sync` could succeed. The
-library published 1.0.1 on 2026-10-07 and that ended. There is no
-`[tool.uv.sources]` table any more, and a fresh clone syncs with nothing beside
-it. The pin is `aggregate>=1.11.0,<2` since 1.32.0: the first release on PyPI
-whose format sheets send each exhibit block only its own columns, without
-which greater_tables 8 warns once per absent column
-(`dev/done/plan-greater-tables-8.md`). The comment at the pin in
-`pyproject.toml` gives the earlier floors;
-`dev/done/plan-1.0.0-release.md` explains the ceiling, and the comment where the
-table used to sit explains why removing it was necessary rather than merely
-tidy.
+**`aggregate` installs editable from the library worktree, since 1.42.0.**
+`[tool.uv.sources]` in `pyproject.toml` points at
+`../../worktrees/aggregate_REFACTOR`, which is `V:\worktrees\aggregate_REFACTOR`
+on DOOB and a symlink to the clone on the VPS, and `uv.lock` records that source
+with no version. So `uv sync` keeps the worktree library rather than replacing
+it, and the editable install carries the library session's uncommitted
+changes. Published wheels never contain the table: `pip install` from PyPI or a
+release wheel resolves `aggregate` from PyPI, and `uv sync --no-sources` does
+the same from this tree. The cost is that `uv pip install git+...` of this
+repository fails, as it did before 1.0.0; that route served a 404 page anyway.
+`dev/done/plan-api-editable-aggregate-source.md` has the reasoning.
 
-**Consequence for co-development, and it is easy to trip over.** `uv sync` now
-installs the *released* library, so working against the sibling worktree is an
-explicit extra step and any `uv sync` silently undoes it. Since 1.9.1 a version
-bump runs no sync, so a sync happens only on a **dependency change**, and the
-restore follows it:
-
-```
-uv pip install -e V:/worktrees/aggregate_REFACTOR     # after a dependency sync
-uv pip install -e V:/dev/aggregate-relativity         # the plugin, likewise
-uv run --no-sync ...                                  # to work in between
-```
+The dependency line, `aggregate[elt]>=1.61.0`, states what the code needs and
+nothing more: no ceiling, and a floor that moves only when the API starts using
+something newer. At a release the library goes to PyPI first, then this
+package. The comment at the line in `pyproject.toml` gives what each part of
+the floor is for.
 
 `/v1/meta` reports `aggregate_version` as the live `aggregate.__version__`, so
-that is where to look when behavior does not match the worktree. This is the
-same recipe `greater-tables` has used since a53.
+that is where to look when behavior does not match the worktree.
 
 Do **not** copy library internals into this repo; depend on them and, if
 something is missing or awkward to import, raise it as an upstream change in
 `aggregate`. The two private names (`parser._PARSER`,
-`parser_errors._TERMINAL_LABELS`) are why the pin has a ceiling: re-check them
-at each library minor rather than trusting the range.
+`parser_errors._TERMINAL_LABELS`) are guarded by `tests/test_private_names.py`,
+which stands where a `<2` ceiling stood through 1.41.0: a library that moves
+either fails that test rather than an install.
 
 `greater-tables` used to be a path source for the same reason and **is not any
 more**: 6.0.0 shipped to PyPI at a53, so it is an ordinary registry dependency,
@@ -96,12 +87,15 @@ setting is needed. To put the environment elsewhere on another machine, set
 `UV_PROJECT_ENVIRONMENT`, which uv honors directly and leaves nothing in the
 tree for git to pick up.
 
-**`--no-sync`, always, in this checkout.** The co-development installs
-(worktree `aggregate`, the relativity plugin) are not in `uv.lock`, and any sync
-replaces or removes them. That includes the inexact sync a plain `uv run` does:
-a dry run on 2026-10-14 showed it swapping the worktree `aggregate` for the
-released 1.0.1. A real sync, for a dependency change, is followed by the restore
-under "Relationship to `aggregate`".
+**`--no-sync`, by habit, in this checkout.** The relativity plugin is the one
+co-development install left outside `uv.lock`, and `uv sync`, which is exact,
+uninstalls it; the inexact sync a plain `uv run` does leaves it alone, and
+leaves the worktree `aggregate` alone too since 1.42.0. So a real sync, for a
+dependency change, is followed by the plugin's restore:
+
+```
+uv pip install -e V:/dev/aggregate-relativity
+```
 
 `uv sync` also fails with `os error 32` on `Scripts/aggregate-api.exe` while a
 server is running, since uv rebuilds the editable package and cannot replace a
@@ -124,7 +118,7 @@ holding the literal Windows path, which dangled on any other machine. The
 directories only and so never matched the link).
 
 **Sync environment (with dev extras)**, on a fresh clone or a dependency change
-only, then restore the co-development installs:
+only, then restore the relativity plugin:
 ```
 uv sync --extra dev
 ```

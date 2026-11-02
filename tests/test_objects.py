@@ -19,7 +19,6 @@ import pytest
 from aggregate_api import models
 from aggregate_api.serializers import display_log2_for
 
-from tests.conftest import requires_chfagg, requires_nttagg
 
 
 _DICE = "agg Dice dfreq [3] dsev [1:6]"
@@ -442,30 +441,11 @@ def test_a_number_takes_no_cache_slot(client):
     assert len(client.get("/v1/objects").json()["objects"]) == before
 
 
-def _conversion_programs():
-    """The conversion statements the installed library has, as pytest params.
-
-    ``tweedie`` arrived in ``aggregate`` 1.22.0 and ``stable`` in 1.23.0. Under
-    an older library each is a parse error, so its case is skipped rather than
-    failed.
-    """
-    import importlib.util
-
-    tweedie = importlib.util.find_spec("aggregate.tweedie") is not None
-    stable = importlib.util.find_spec("aggregate.stable") is not None
-    skip_t = pytest.mark.skipif(not tweedie, reason="aggregate before 1.22.0")
-    skip_s = pytest.mark.skipif(not stable, reason="aggregate before 1.23.0")
-    return [
-        pytest.param("tweedie 1.5 100 2", "tweedie 10 claims sev gamma 10 cv 1",
-                     marks=skip_t, id="tweedie"),
-        pytest.param("stable 1.5 1 2 0", "stable 1.5 1 2 -2 s0",
-                     marks=skip_s, id="stable"),
-        pytest.param("stable 1000 claims sev 100 * lomax 1.5", "Pr(X>mean)",
-                     marks=skip_s, id="stable-compound"),
-    ]
-
-
-@pytest.mark.parametrize("program, fragment", _conversion_programs())
+@pytest.mark.parametrize("program, fragment", [
+    ("tweedie 1.5 100 2", "tweedie 10 claims sev gamma 10 cv 1"),
+    ("stable 1.5 1 2 0", "stable 1.5 1 2 -2 s0"),
+    ("stable 1000 claims sev 100 * lomax 1.5", "Pr(X>mean)"),
+], ids=["tweedie", "stable", "stable-compound"])
 def test_a_conversion_is_answered_as_text(client, program, fragment):
     """A conversion statement serves the library's string, and keeps nothing.
 
@@ -490,20 +470,6 @@ def test_a_conversion_is_answered_as_text(client, program, fragment):
     assert [row["status"] for row in rows] == ["value"]
 
 
-def _stable_has(member):
-    """Whether the installed library's ``Stable`` has ``member``."""
-    try:
-        from aggregate.stable import Stable
-    except ImportError:
-        return False
-    return hasattr(Stable, member)
-
-
-requires_named_laws = pytest.mark.skipif(
-    not _stable_has("from_spec"), reason="aggregate before 1.42.0")
-requires_stable_arithmetic = pytest.mark.skipif(
-    not _stable_has("__truediv__"), reason="aggregate before 1.43.0")
-
 SESSION = "X-Aggregate-Session"
 
 
@@ -513,7 +479,6 @@ def _post(client, session, decl, **opts):
                        headers={SESSION: session})
 
 
-@requires_named_laws
 @pytest.mark.parametrize("program, fragment", [
     ("stable x0 1.5 0", "x0: stable 1.5 0 1 0 ="),
     ("tweedie t0 1.5 10 2", "t0: tweedie 1.5 10 2 ="),
@@ -539,7 +504,6 @@ def test_a_named_law_is_text_kept_in_its_session(client, program, fragment):
     assert (detail["error"], detail["kind"], detail["name"]) == ("recipe_not_found", kind, name)
 
 
-@requires_named_laws
 def test_a_library_law_serves_a_library_only_client_and_an_own_law_does_not(client):
     """``stable.Holtsmark`` is what an Excel client can reference; ``stable.x0`` is not."""
     r = _post(client, "named-one", "stable.Holtsmark", library_references_only=True)
@@ -552,7 +516,6 @@ def test_a_library_law_serves_a_library_only_client_and_an_own_law_does_not(clie
     assert (detail["error"], detail["kind"], detail["name"]) == ("session_reference", "stable", "x0")
 
 
-@requires_stable_arithmetic
 def test_arithmetic_on_a_named_law_is_text(client):
     """An expression is an answer; it files nothing and its operands stay put."""
     assert _post(client, "named-one", "stable x0 1.5 0").status_code == 200
@@ -564,7 +527,6 @@ def test_arithmetic_on_a_named_law_is_text(client):
     assert r.json()["text"].startswith("stable 1.5 0 1 1 =")
 
 
-@requires_named_laws
 def test_an_ambiguous_bare_name_is_a_422_in_the_library_words(client):
     """The preview's ``KeyError`` reaches the client, with no parse report to misread."""
     assert _post(client, "named-one", "stable x0 1.5 0").status_code == 200
@@ -2743,12 +2705,7 @@ def test_exhibit_envelope_contract(client):
 # ----------------------------------------------------------------------
 # The exact compound, nttagg
 # ----------------------------------------------------------------------
-# Gated on the parser rather than on a version string: the pin is
-# ``aggregate>=1.0.1,<2`` and the kind arrived in 1.1.0, so the suite has to
-# stay green on a library that cannot parse any of these programs. See
-# ``tests.conftest._nttagg_is_supported``.
 
-@requires_nttagg
 def test_an_exact_compound_builds_and_names_its_own_kind(client):
     """The four kind touchpoints, end to end.
 
@@ -2778,7 +2735,6 @@ def test_an_exact_compound_builds_and_names_its_own_kind(client):
     models.BuildResponse.model_validate(body)
 
 
-@requires_nttagg
 def test_the_exact_rationals_reach_the_csv_and_no_display_payload(client):
     """No rational reaches a display payload; the two float views do.
 
@@ -2841,7 +2797,6 @@ def test_the_exact_rationals_reach_the_csv_and_no_display_payload(client):
     assert "p_exact_float" in header and "p_exact_log10" in header
 
 
-@requires_nttagg
 def test_an_exact_compound_round_trips_through_the_session_export(client):
     """The ``.agg`` download carries it, in canonical form, and reloads.
 
@@ -2867,7 +2822,6 @@ def test_an_exact_compound_round_trips_through_the_session_export(client):
     assert "nttagg" in kinds
 
 
-@requires_nttagg
 def test_the_exact_logarithm_right_edges_rather_than_summing(client):
     """``p_exact_log10`` is pointwise, so the display binning must not sum it.
 
@@ -2938,7 +2892,6 @@ def test_the_exact_logarithm_right_edges_rather_than_summing(client):
 _CHF = "chfagg Gamma.Chf 25 * gamma 4"
 
 
-@requires_chfagg
 def test_a_characteristic_function_law_builds_and_names_its_own_kind(client):
     """The four kind touchpoints, end to end, as for the exact compound."""
     r = client.post("/v1/objects", json={"decl": _CHF})
@@ -2951,7 +2904,6 @@ def test_a_characteristic_function_law_builds_and_names_its_own_kind(client):
     models.BuildResponse.model_validate(body)
 
 
-@requires_chfagg
 def test_a_characteristic_function_law_prices(client):
     """The preview and the calibration answer, and a named view is a sentence.
 
@@ -2978,7 +2930,6 @@ def test_a_characteristic_function_law_prices(client):
     assert "no reinsurance" in named.json()["detail"]
 
 
-@requires_chfagg
 def test_a_characteristic_function_law_evaluates_a_premium_it_is_given(client):
     """The Evaluate leaf answers, and each refusal is a sentence.
 
@@ -3000,7 +2951,6 @@ def test_a_characteristic_function_law_evaluates_a_premium_it_is_given(client):
     assert "no reinsurance" in named.json()["detail"]
 
 
-@requires_chfagg
 def test_a_law_whose_grid_rings_refuses_an_unanchored_evaluate_in_a_sentence(client):
     """A negative mass is a 400 saying so, and an anchor below the ringing answers."""
     oid = client.post("/v1/objects",
@@ -3013,7 +2963,6 @@ def test_a_law_whose_grid_rings_refuses_an_unanchored_evaluate_in_a_sentence(cli
     assert anchored.status_code == 200, anchored.text
 
 
-@requires_chfagg
 def test_a_confirmed_law_sharpens_once_and_its_audit_serves(client):
     """Sharpen confirms a sound grid, and the More leaf it lights answers.
 
@@ -3041,7 +2990,6 @@ def test_a_confirmed_law_sharpens_once_and_its_audit_serves(client):
     assert rebuilt.json()["id"] == body["id"]
 
 
-@requires_chfagg
 def test_a_law_on_a_short_grid_sharpens_one_log2_and_stays_live(client):
     """A grid short of the budget grows one ``log2``, and Sharpen stays offered.
 
@@ -3064,7 +3012,6 @@ def test_a_law_on_a_short_grid_sharpens_one_log2_and_stays_live(client):
     assert rebuilt.json()["id"] == body["id"]
 
 
-@requires_chfagg
 @pytest.mark.parametrize("old, new", [("gamma 4 25", "25 * gamma 4"),
                                       ("norm 100 30", "30 * norm + 100")])
 def test_a_positional_scale_is_refused_with_the_arithmetic_spelling(client, old, new):
@@ -3074,7 +3021,6 @@ def test_a_positional_scale_is_refused_with_the_arithmetic_spelling(client, old,
     assert new in r.text
 
 
-@requires_chfagg
 def test_the_session_export_writes_a_law_before_the_aggregate_using_it(client):
     """A ``chfagg`` sorts ahead of an ``agg`` that takes it as a severity.
 

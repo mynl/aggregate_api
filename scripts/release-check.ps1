@@ -14,7 +14,9 @@
 #
 #   1. `[tool.uv.sources]` made `uv pip install git+...` fail outright, because
 #      uv honors the table for a git-installed project and looked for the
-#      sibling worktree path inside the GitHub repo.
+#      sibling worktree path inside the GitHub repo. The table came back at
+#      1.42.0, deliberately, since that route served a 404 page anyway; the
+#      wheel is the route, and it never carries the table.
 #   2. `package-data = ["static/*"]` shipped `index.html` and none of the
 #      thirteen scripts and stylesheets it loads, because a package_data glob
 #      does not recurse. The installed app served a 200 for `/` and a 404 for

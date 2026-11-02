@@ -78,8 +78,6 @@ def test_version_parameter_is_ignored(client, with_help):
     assert plain == versioned == FAKE
 
 
-@pytest.mark.skipif(not hasattr(aggregate, "decl_help"),
-                    reason="the installed aggregate has no DecL help")
 def test_contract_with_the_installed_library(client):
     """Each form the library lists is served as its one scoped section.
 

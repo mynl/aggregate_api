@@ -19,9 +19,6 @@ from __future__ import annotations
 
 import pytest
 
-from tests.conftest import (CHFAGG_SUPPORTED, NTTAGG_SUPPORTED, requires_chfagg,
-                            requires_exact_tail, requires_nttagg)
-
 
 # One object of each kind the api builds, small enough to stay quick, plus an
 # aggregate carrying a cession and a P&L walk, since both light exhibits their
@@ -43,32 +40,16 @@ DECLS = {
     "xpnl": ("xpnl CAP.Xpnl 1000 prem less "
              "agg CAP.XpnlL 1000 prem at 70% lr sev lognorm 100 cv 2 "
              "occurrence ceded to 500 xs 500 deposit 100 poisson"),
-    # The exact compound, which is the one fixture the installed library may not
-    # be able to parse: the kind arrived in ``aggregate`` 1.1.0 and the pin is
-    # ``>=1.0.1,<2``. Its cases carry the gate; see ``LABELS`` below.
+    # The exact compound.
     "nttagg": "nttagg CAP.Ntt dfreq [1:6] dsev [1:6]",
-    # The law inverted from its characteristic function, ``aggregate`` 1.30.0,
-    # gated the same way.
+    # The law inverted from its characteristic function.
     "chfagg": "chfagg CAP.Chf 25 * gamma 4",
 }
 
-#: The library-gated kinds: label to (marker, whether the library has it).
-_GATED = {"nttagg": (requires_nttagg, NTTAGG_SUPPORTED),
-          "chfagg": (requires_chfagg, CHFAGG_SUPPORTED)}
-
-#: ``DECLS`` as parametrize cases, with the library-gated kinds marked. One
-#: place for the gate rather than a skip inside each sweep: the sweeps are what
-#: make the new kind worth adding to the table at all, since they assert that
-#: every exhibit and chart the block lights actually serves.
-LABELS = [
-    pytest.param(label, marks=[_GATED[label][0]] if label in _GATED else [])
-    for label in DECLS
-]
-
-#: The labels the installed library can build, for the loops that sweep the dict
-#: directly instead of parametrizing over it.
-BUILDABLE = [label for label in DECLS
-             if label not in _GATED or _GATED[label][1]]
+#: ``DECLS`` as parametrize cases. The sweeps are what make a new kind worth
+#: adding to the table at all, since they assert that every exhibit and chart
+#: the block lights actually serves.
+LABELS = list(DECLS)
 
 
 def _build(client, label):
@@ -254,7 +235,7 @@ def test_the_structure_chart_tracks_a_cession(client):
     one thing a reinsured P&L can show there.
     """
     lists = {label: _build(client, label)[1]["capability"]["charts"]
-             for label in BUILDABLE}
+             for label in DECLS}
     assert "structure" in lists["agg_reins"]
     assert "structure" in lists["xpnl"]
     for label in ("agg", "port", "sev", "distortion", "bvagg", "pnl"):
@@ -543,7 +524,6 @@ def test_capability_survives_the_cache_hit_path(client):
     assert second["capability"] == first["capability"]
 
 
-@requires_nttagg
 def test_an_exact_compound_can_neither_be_wrapped_nor_cede(client):
     """The two flags the kind turns off, and the reason they are not declared here.
 
@@ -581,8 +561,6 @@ def test_an_exact_compound_can_neither_be_wrapped_nor_cede(client):
     assert cap["can_price"] is True
 
 
-@requires_nttagg
-@requires_exact_tail
 def test_an_exact_compound_lists_the_exact_tail_chart(client):
     """An ``nttagg`` lists ``exact_tail``, and its primary chart is still ``agg``.
 
@@ -596,7 +574,6 @@ def test_an_exact_compound_lists_the_exact_tail_chart(client):
     assert body["capability"]["primary_chart"] == "agg"
 
 
-@requires_chfagg
 def test_a_characteristic_function_law_prices_and_sharpens_with_no_reinsurance(client):
     """What a ``chfagg`` answers, read off the library with nothing declared here.
 
@@ -623,7 +600,6 @@ def test_a_characteristic_function_law_prices_and_sharpens_with_no_reinsurance(c
     assert cap["reins_bases"] == []
 
 
-@requires_exact_tail
 def test_a_plain_aggregate_does_not_list_the_exact_tail_chart(client):
     """The float aggregate has no exact answer to draw, so its leaf is dark."""
     _, body = _build(client, "agg")
