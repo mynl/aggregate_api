@@ -19,6 +19,9 @@
 # must request /Q7M4Z9KP/v1/... so Caddy can match the hidden prefix, strip it,
 # and proxy /v1/... to FastAPI.
 #
+# The link preview card in index.html points at https://agg.mynl.com/ (set in
+# web/vite.config.js). For another site, export VITE_PUBLIC_URL before running.
+#
 # npm dependencies are refreshed when node_modules is missing or older than
 # package.json/package-lock.json. That avoids stale deploys where a newly added
 # package is present in git but absent from the VPS node_modules tree.

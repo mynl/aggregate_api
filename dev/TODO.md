@@ -12,6 +12,14 @@ Items oddly from the aggregate list
 
 ## Landed
 
+- **[Short-Links]** DONE (`1.43.0`), plan
+  `dev/done/plan-short-links-and-cards.md`. Copy link copies
+  `agg.mynl.com/x/<code>`, 5 characters for the entry and 3 for the tab, hashed
+  and never stored; long links still work. `/x/<code>` returns a link preview
+  card (name, note, `social-card.png`) and the site has a generic one. Still
+  owed, the author's: deploy, then opengraph.xyz, LinkedIn Post Inspector and
+  Facebook Sharing Debugger on a short link and on the bare site.
+
 - **[API-Editable-Aggregate-Source]** DONE (`1.42.0`), plan
   `dev/done/plan-api-editable-aggregate-source.md`. `aggregate` installs
   editable from `../../worktrees/aggregate_REFACTOR` through

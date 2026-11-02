@@ -1327,6 +1327,10 @@ class ExampleItem(BaseModel):
     topics, then roles. ``tags`` is the same information as full slugs, kept for
     the search haystack and for anyone reading the api directly, and ``kind``
     keeps a field of its own because the recipe's type is not a tag.
+
+    ``link_code`` is the entry part of the entry's short link, ``/x/<code>``:
+    5 characters, a hash of the file's stem and the name. See
+    :mod:`aggregate_api.short_links`.
     """
 
     model_config = _RESPONSE_CFG
@@ -1337,6 +1341,7 @@ class ExampleItem(BaseModel):
     note: str | None = None
     decl: str
     pills: list[Pill] = []
+    link_code: str | None = None
 
 
 class ExamplesResponse(BaseModel):

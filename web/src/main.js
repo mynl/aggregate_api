@@ -27,6 +27,7 @@ import {
     onExamplesViewChange, loadDatabases, selectDatabase, selectedDatabase,
     readDeepLink, clearDeepLink, findLinkedExample, linkFor,
 } from './examples.js';
+import { shortLinkFor } from './short-links.js';
 import { renderInfo } from './renderers.js';
 import { fetchFailed, mountChart, mountChartDoc, notDrawable } from './charts/mount.js';
 import { mountGrid, clearGrids, destroyAllGrids } from './grid.js';
@@ -268,9 +269,9 @@ function recordProgram(text) {
 let _builtDecl = null;
 
 // The library entry last put in the editor, for Menu > Copy link (1.11.0):
-// `{database, name, decl}`, where `database` is the file it came from (null for
-// the default) as it stood at the pick, since the reader may change the menu's
-// file afterward. Set by `pickExample` and `exampleStep`, the two routes a
+// `{database, name, decl, code}`, where `database` is the file it came from (null
+// for the default) as it stood at the pick, since the reader may change the
+// menu's file afterward, and `code` is the item's `link_code` (1.43.0). Set by `pickExample` and `exampleStep`, the two routes a
 // library entry takes into the box, and cleared when the help loads a program.
 // Typing does not clear it: the menu compares the box with `decl` when it
 // opens, so an undone edit makes the link live again.
@@ -1998,17 +1999,26 @@ function applyPendingView() {
     pendingView = null;
     if (!text) return false;
     const view = resolveView(text);
+    // A short link's view is a code, `~k7Q`, which means nothing to a reader;
+    // once resolved it is named by its labels.
+    const coded = text.startsWith('~');
     if (!view) {
-        viewProblem = `view "${text}" not recognized`;
+        viewProblem = coded
+            ? "the short link's tab is not on this server"
+            : `view "${text}" not recognized`;
         return false;
     }
     const { group, leaf } = view;
+    const named = coded
+        ? `tab ${[NAV_GROUPS[group].label, leaf && leafOf(group, leaf)?.label]
+            .filter(Boolean).join(' ▸ ')}`
+        : `view "${text}"`;
     if (!groupAvailable(group)) {
-        viewProblem = `view "${text}" not available: ${whyGroup(group)}`;
+        viewProblem = `${named} not available: ${whyGroup(group)}`;
         return false;
     }
     if (leaf && !leafAvailable(group, leaf)) {
-        viewProblem = `view "${text}" not available: ${whyLeaf(group, leaf)}`;
+        viewProblem = `${named} not available: ${whyLeaf(group, leaf)}`;
         return false;
     }
     // A bare group lands on its first live leaf, whatever it last remembered.
@@ -5064,7 +5074,12 @@ function captionExample(item) {
  * @param {object} item a row from `/v1/examples`, carrying `name` and `decl`.
  */
 function rememberLinkable(item) {
-    _linkable = { database: selectedDatabase(), name: item.name, decl: item.decl.trim() };
+    _linkable = {
+        database: selectedDatabase(),
+        name: item.name,
+        decl: item.decl.trim(),
+        code: item.link_code || null,
+    };
 }
 
 /**
@@ -5539,27 +5554,35 @@ async function copyText(text) {
 }
 
 /**
- * Write the link and put it on the clipboard, or on the strip to copy by hand.
+ * Make the link and put it on the clipboard, or on the strip to copy by hand.
  *
- * Always names `database`, the default's own stem included, because otherwise
- * the recipient's stored file decides where `example` is looked up. The view is
- * written in keys, the stable vocabulary, not labels. When neither clipboard
- * route works, the bare link stays on the strip to select (author, 1.13.1: the
- * URL alone, with no lead-in).
+ * A short link, `/x/<entry code><view code>`, since 1.43.0 (author: the short
+ * form only). The entry code already includes the file, the default's own stem
+ * too, so the recipient's stored file has no say in where the entry is looked
+ * up. The view is hashed from keys, the stable vocabulary, not labels. When
+ * neither clipboard route works, the bare link stays on the strip to select
+ * (author, 1.13.1: the URL alone, with no lead-in).
+ *
+ * An item with no `link_code` gets the long link, which includes `database`
+ * for the same reason the entry code does.
  */
 async function copyLink() {
     if (copyLinkBlocked()) return;
-    let database = _linkable.database;
-    if (!database) {
-        const listed = await loadDatabases().catch(() => null);
-        database = listed?.find((d) => d.default)?.name || 'library';
-    }
+    const base = _publicUrl || `${location.origin}${location.pathname}`;
     const group = activeTabName();
-    const href = linkFor(_publicUrl || `${location.origin}${location.pathname}`, {
-        database,
-        example: _linkable.name,
-        view: `${group}:${activeLeaf(group)}`,
-    });
+    const leaf = activeLeaf(group);
+    const view = leaf ? `${group}:${leaf}` : group;
+    let href;
+    if (_linkable.code) {
+        href = shortLinkFor(base, _linkable.code, view);
+    } else {
+        let database = _linkable.database;
+        if (!database) {
+            const listed = await loadDatabases().catch(() => null);
+            database = listed?.find((d) => d.default)?.name || 'library';
+        }
+        href = linkFor(base, { database, example: _linkable.name, view });
+    }
     noteLink(await copyText(href) ? 'link copied: ' : '', href);
 }
 

@@ -27,8 +27,21 @@ const pkgVersion = (name) => JSON.parse(
     readFileSync(new URL(`./node_modules/${name}/package.json`, import.meta.url)),
 ).version;
 
+// The site's public address, for the link preview card in `index.html`, whose
+// image has to be an absolute URL. The default is the server's own default for
+// `AGGAPI_PUBLIC_URL`; another deployment sets `VITE_PUBLIC_URL` (build-web.ps1
+// -PublicUrl) to its own address.
+const publicUrl = (process.env.VITE_PUBLIC_URL || 'https://agg.mynl.com/').replace(/\/?$/, '/');
+
 export default defineConfig({
     base: './',
+    plugins: [{
+        name: 'public-url',
+        transformIndexHtml: {
+            order: 'pre',
+            handler: (html) => html.replaceAll('%PUBLIC_URL%', publicUrl),
+        },
+    }],
     define: {
         __CSV_GRID_VERSION__: JSON.stringify(pkgVersion('csv-grid')),
         __ECHARTS_VERSION__: JSON.stringify(pkgVersion('echarts')),

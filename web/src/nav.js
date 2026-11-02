@@ -36,6 +36,8 @@
  * See `whyLeaf` / `whyGroup`.
  */
 
+import { viewCode } from './short-links.js';
+
 /**
  * The seven groups, in the order they are drawn.
  *
@@ -606,6 +608,10 @@ function matchKey(entries, token) {
  * view. A colon separates the two because `LOADERS` is keyed `group:leaf`, and a
  * dot would read badly beside a dotted entry name such as `Capstone.Capped`.
  *
+ * A short link's view arrives as `~<view code>` (1.43.0) and resolves to the
+ * first group, or group and leaf, whose keys hash to it. The tilde keeps a code
+ * apart from a word: `PnL` is a group's label and could be a code too.
+ *
  * Parameters
  * ----------
  * text : string
@@ -620,6 +626,7 @@ function matchKey(entries, token) {
  */
 export function resolveView(text) {
     const raw = String(text || '');
+    if (raw.startsWith('~')) return resolveViewCode(raw.slice(1));
     const at = raw.indexOf(':');
     const groupToken = at < 0 ? raw : raw.slice(0, at);
     const leafToken = at < 0 ? '' : raw.slice(at + 1);
@@ -628,6 +635,25 @@ export function resolveView(text) {
     if (!leafToken.trim()) return { group, leaf: null };
     const leaf = matchKey(NAV_GROUPS[group].leaves, leafToken);
     return leaf ? { group, leaf } : null;
+}
+
+/**
+ * The view whose keys hash to `code`, or null.
+ *
+ * Reads `NAV_GROUPS` at call time, so a Lab leaf resolves once
+ * `installLabLeaves` has run, as it does for `resolveView`.
+ *
+ * @param {string} code a view code from a short link.
+ * @returns {{group: string, leaf: string|null}|null}
+ */
+function resolveViewCode(code) {
+    for (const [group, def] of Object.entries(NAV_GROUPS)) {
+        if (viewCode(group) === code) return { group, leaf: null };
+        for (const leaf of Object.keys(def.leaves || {})) {
+            if (viewCode(`${group}:${leaf}`) === code) return { group, leaf };
+        }
+    }
+    return null;
 }
 
 /**

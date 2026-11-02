@@ -3,6 +3,11 @@
 # Usage:
 #   .\scripts\build-web.ps1                                  # same-origin build
 #   .\scripts\build-web.ps1 -ApiBase https://api.mynl.com    # split-origin api
+#   .\scripts\build-web.ps1 -PublicUrl https://host/          # card for another site
+#
+# -PublicUrl becomes VITE_PUBLIC_URL, the absolute address the link preview
+# card in index.html points at (its image cannot be relative). The default,
+# https://agg.mynl.com/, is set in web/vite.config.js.
 #
 # The default (no -ApiBase) is the normal case: the SPA and the api are served
 # from the same origin (localhost, or the agg.mynl.com subdomain in prod), so
@@ -24,7 +29,8 @@
 
 [CmdletBinding()]
 param(
-    [string]$ApiBase = ""
+    [string]$ApiBase = "",
+    [string]$PublicUrl = ""
 )
 
 $ErrorActionPreference = 'Stop'
@@ -39,6 +45,10 @@ try {
         # next build, so changing the Caddy prefix requires rebuilding the SPA.
         $env:VITE_API_BASE_URL = $ApiBase
         Write-Host "Building with VITE_API_BASE_URL=$ApiBase"
+    }
+    if ($PublicUrl) {
+        $env:VITE_PUBLIC_URL = $PublicUrl
+        Write-Host "Building with VITE_PUBLIC_URL=$PublicUrl"
     }
     $installDeps = -not (Test-Path "node_modules")
     if (-not $installDeps) {
@@ -59,4 +69,5 @@ try {
 } finally {
     Pop-Location
     if ($ApiBase) { Remove-Item Env:VITE_API_BASE_URL -ErrorAction SilentlyContinue }
+    if ($PublicUrl) { Remove-Item Env:VITE_PUBLIC_URL -ErrorAction SilentlyContinue }
 }

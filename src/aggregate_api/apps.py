@@ -32,10 +32,11 @@ logger = logging.getLogger(__name__)
 #: files (``index.html``, ``sw.js``, the icons).
 NAME_PATTERN = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 
-#: Paths this server already answers, or may: the routers, the add-in, FastAPI's
-#: documentation, and the SPA's asset and prototype directories. The SPA bundle's
-#: actual top-level entries are added by :func:`reserved_names`.
-RESERVED_NAMES = frozenset({"v1", "excel", "docs", "redoc", "assets", "dev", "static"})
+#: Paths this server already serves, or may: the routers, the add-in, FastAPI's
+#: documentation, the SPA's asset and prototype directories, and short links
+#: (``x``). The SPA bundle's actual top-level entries are added by
+#: :func:`reserved_names`.
+RESERVED_NAMES = frozenset({"v1", "excel", "docs", "redoc", "assets", "dev", "static", "x"})
 
 
 @dataclass(frozen=True)

@@ -72,7 +72,8 @@ from typing import Sequence
 
 from aggregate.decl_writer import format_program, spec_to_decl
 
-from .library import get_database_underwriter, get_underwriter
+from .library import default_database_name, get_database_underwriter, get_underwriter
+from .short_links import entry_code
 
 logger = logging.getLogger(__name__)
 
@@ -280,8 +281,13 @@ def _decl_of(kind: str, name: str, recipe) -> str:
     return text.strip()
 
 
-def _entry(kind: str, name: str, recipe) -> dict:
+def _entry(kind: str, name: str, recipe, database: str) -> dict:
     """One example item from a resolved :class:`Recipe`.
+
+    `database` is the stem of the file the entry was read from, the default's
+    own stem included, for ``link_code``: the 5 character entry part of the
+    entry's short link (see :mod:`aggregate_api.short_links`), so Copy link has
+    it to hand without a request.
 
     ``note`` is **optional**: most library entries carry one and it is preferred,
     but nothing guarantees it, so a missing note serializes as ``None`` and every
@@ -309,6 +315,7 @@ def _entry(kind: str, name: str, recipe) -> dict:
         "note": note.strip() or None,
         "decl": _decl_of(kind, name, recipe),
         "pills": _pills(kind, tags),
+        "link_code": entry_code(database, name),
     }
 
 
@@ -446,6 +453,7 @@ def load_examples(database: str | None = None) -> dict:
             "order to serve; aggregate 1.0.0a320 or newer is required"
         )
 
+    stem = database or default_database_name()
     items = []
     for kind, name in frame.sort_values("seq").index:
         try:
@@ -453,7 +461,7 @@ def load_examples(database: str | None = None) -> dict:
         except Exception:  # noqa: BLE001 (one bad entry must not blank the menu)
             logger.warning("skipping library entry %s.%s: cannot resolve", kind, name)
             continue
-        items.append(_entry(kind, name, recipe))
+        items.append(_entry(kind, name, recipe, stem))
     return {"items": items, "facets": _facets(items)}
 
 
@@ -537,6 +545,7 @@ def load_heroes() -> dict:
     uw = get_underwriter()
     library = set(_library_only(uw.recipes).index.get_level_values("name"))
     found = uw.discover(tags="role:hero")
+    stem = default_database_name()
     ranked = []
     for name in found.index:
         if name not in library:
@@ -546,7 +555,7 @@ def load_heroes() -> dict:
         except Exception:  # noqa: BLE001
             logger.warning("skipping hero %s: cannot resolve", name)
             continue
-        ranked.append((getattr(recipe, "seq", 0), _entry(recipe.kind, name, recipe)))
+        ranked.append((getattr(recipe, "seq", 0), _entry(recipe.kind, name, recipe, stem)))
     ranked.sort(key=lambda pair: pair[0])
     return {"items": [item for _, item in ranked]}
 

@@ -4,6 +4,17 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.43.0
+
+[Short-Links] **Copy link writes a short link, `agg.mynl.com/x/GTDNctfx`, and a pasted link shows a card with the aLL logo.** Plan: `dev/done/plan-short-links-and-cards.md`.
+
+- Added: `/x/<code>` opens what the long link opens. Five characters identify the entry (a hash of its file and name), and three more, optional, pick the tab. Nothing is stored, so every instance makes the same code and a printed link survives a rebuild. Characters are `a-zA-Z0-9` without `0 O 1 l I`.
+- Changed: Menu ▸ Copy link copies the short form. Every long `?database=&example=&view=` link still works.
+- Added: link preview cards for Facebook, LinkedIn, X, Slack, Teams, iMessage and Outlook. A short link's card gives the entry's name and note; the bare site and long links get the generic card. The image is `social-card.png`, drawn by `dev/scripts/make-social-card.py`.
+- Added: `link_code` on each item of `/v1/examples` and the heroes. Additive: the Excel and Sheets clients ignore fields they do not use.
+- Changed: `index.html` takes its absolute card address at build time, `https://agg.mynl.com/` unless set by `build-web.ps1 -PublicUrl` (or `VITE_PUBLIC_URL`). `x` is reserved from `AGGAPI_APPS`.
+- Known: the first link into a non-default file in a fresh process waits for that file's parse (reproductions 0.9 s, decl-testers 2.3 s), once per process. The cards can be checked only on the deployed site.
+
 ## 1.42.1
 
 [About-Server-Limits] **About lists the server's limits under Versions.** No plan: a small request.

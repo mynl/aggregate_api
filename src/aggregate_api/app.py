@@ -36,7 +36,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import __version__ as api_version
-from . import apps, resources, status
+from . import apps, resources, short_links, status
 from .config import Settings, get_settings
 from .cors import install_cors
 from .library import get_underwriter
@@ -221,6 +221,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Caddy block 404s the whole /v1/status prefix before any of that is
     # reached. See routes/status.py.
     app.include_router(status_routes.router, prefix="/v1", tags=["status"])
+
+    # Short links, /x/<code> (1.43.0). Ahead of the ``/`` mount, which matches
+    # every path. Not gated on ``serve_spa``: the page holds the entry's preview
+    # card whether or not this process serves the SPA it sends a browser on to.
+    app.add_route("/x/{code}", short_links.open_short_link, methods=["GET"],
+                  name="short-link", include_in_schema=False)
 
     # The Excel add-in, when ``scripts/build-excel.ps1`` (or ``.sh``) has
     # built it. **Before** the ``/`` mount: Starlette matches mounts in order,
