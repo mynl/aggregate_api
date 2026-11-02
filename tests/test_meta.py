@@ -45,6 +45,17 @@ def test_meta(client):
     assert "plot_default_format" not in body
 
 
+def test_meta_reports_the_server_limits(client):
+    """The About panel's Server limits are the live settings, one for one."""
+    from aggregate_api.config import get_settings
+
+    settings = get_settings()
+    body = client.get("/v1/meta").json()
+    for key in ("log2_cap", "max_statements", "build_timeout_s", "cache_max",
+                "entry_lock_timeout_s"):
+        assert body[key] == getattr(settings, key), key
+
+
 def test_meta_style_comes_from_aggregate(client):
     """The chart style is the library's own, not a second copy of the palette.
 

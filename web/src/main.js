@@ -5389,6 +5389,12 @@ api.meta().then((meta) => {
     }
     // A dependency, so null only on a broken install, which is worth saying.
     $('about-eltq').textContent = meta.eltq_version || 'not installed';
+    // Server limits, under the versions. Only the values come from the server.
+    $('about-log2-cap').textContent = meta.log2_cap;
+    $('about-statements').textContent = meta.max_statements;
+    $('about-build-timeout').textContent = `${meta.build_timeout_s} s`;
+    $('about-cache-max').textContent = meta.cache_max;
+    $('about-lock-timeout').textContent = `${meta.entry_lock_timeout_s} s`;
     // The same two in the header, where they can be read without opening
     // anything. `agg` first, because which library built the numbers is the
     // question this answers most often.

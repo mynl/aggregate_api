@@ -977,6 +977,28 @@
                 <dt>plugins</dt><dd id="about-plugins" class="mono">…</dd>
             </dl>
 
+            <!-- The values come from /v1/meta, so a deployment that sets its
+                 AGGAPI_* variables differently shows its own numbers. The
+                 notes are static. -->
+            <h6>Server limits</h6>
+            <dl class="about-versions about-limits">
+                <dt title="AGGAPI_LOG2_CAP">log2 cap</dt>
+                <dd><span id="about-log2-cap" class="mono">…</span>
+                    <span class="about-note">largest log2 a build may use; above it, 422</span></dd>
+                <dt title="AGGAPI_MAX_STATEMENTS">statements</dt>
+                <dd><span id="about-statements" class="mono">…</span>
+                    <span class="about-note">most statements in one program; above it, 422</span></dd>
+                <dt title="AGGAPI_BUILD_TIMEOUT_S">build timeout</dt>
+                <dd><span id="about-build-timeout" class="mono">…</span>
+                    <span class="about-note">longest one build may run; past it, 504</span></dd>
+                <dt title="AGGAPI_CACHE_MAX">cache max</dt>
+                <dd><span id="about-cache-max" class="mono">…</span>
+                    <span class="about-note">built objects held in memory; the least recently used goes first</span></dd>
+                <dt title="AGGAPI_ENTRY_LOCK_TIMEOUT_S">entry lock timeout</dt>
+                <dd><span id="about-lock-timeout" class="mono">…</span>
+                    <span class="about-note">longest a request waits for an object another request is using; past it, 503</span></dd>
+            </dl>
+
             <!-- The site's terms. The BSD license disclaims warranties for
                  people who copy the code; a visitor here receives a service,
                  not the code, so the service needs its own words. The lede box

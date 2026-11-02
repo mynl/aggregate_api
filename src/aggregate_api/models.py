@@ -1519,6 +1519,9 @@ class MetaResponse(BaseModel):
     log2_default: int
     build_timeout_s: float
     cache_max: int
+    # With the three above, the server limits the About panel lists.
+    max_statements: int
+    entry_lock_timeout_s: float
     # Third-party charts and exhibits, and the tab they land under. On meta
     # rather than on a /v1/plugins route of its own because the SPA already
     # fetches meta unconditionally at boot, on the very path that has to resolve

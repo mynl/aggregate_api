@@ -4,6 +4,13 @@ Running release-notes draft for `aggregate_api`. Newest first. The cadence
 mirrors the main `aggregate` project: every plan-based change bumps the
 `1.0.0a*` version and adds a section here.
 
+## 1.42.1
+
+[About-Server-Limits] **About lists the server's limits under Versions.** No plan: a small request.
+
+- Added: a Server limits section in the About panel giving log2 cap, statements, build timeout, cache max and entry lock timeout, each with a one-line note and the HTTP status a request past it gets. Hovering a name shows its `AGGAPI_*` variable.
+- Added: `max_statements` and `entry_lock_timeout_s` on `/v1/meta`, beside `log2_cap`, `build_timeout_s` and `cache_max`.
+
 ## 1.42.0
 
 [API-Editable-Aggregate-Source] **`aggregate` installs editable from the library worktree, and the dependency states what the code needs: `aggregate[elt]>=1.61.0`, no ceiling.** Plan: `dev/done/plan-api-editable-aggregate-source.md`.

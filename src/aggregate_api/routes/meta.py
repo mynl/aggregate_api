@@ -190,6 +190,8 @@ async def meta(request: Request) -> dict:
         "log2_default": settings.log2_default,
         "build_timeout_s": settings.build_timeout_s,
         "cache_max": settings.cache_max,
+        "max_statements": settings.max_statements,
+        "entry_lock_timeout_s": settings.entry_lock_timeout_s,
         "plugins": _plugin_manifest(),
         "decl_help": decl_help.available_forms(),
         "public_url": settings.public_url.strip() or None,

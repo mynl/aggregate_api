@@ -294,6 +294,7 @@ header .navbar { min-height: 56px; }
   margin: .3rem 0 1.1rem; font-size: .84rem; }
 .about-versions dt { color: var(--mut); font-weight: 600; }
 .about-versions dd { margin: 0; }
+.about-limits .about-note { color: var(--mut); margin-left: .3rem; }
 .help-body h6 { font-size: .66rem; letter-spacing: .08em; text-transform: uppercase;
   color: var(--mut); margin: 1.1rem 0 .4rem; }
 .help-body h6:first-of-type { margin-top: .5rem; }
